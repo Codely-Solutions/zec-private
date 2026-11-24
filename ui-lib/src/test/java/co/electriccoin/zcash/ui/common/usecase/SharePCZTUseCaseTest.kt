@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.ZcashNetwork
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -46,15 +48,18 @@ class SharePCZTUseCaseTest {
             every { distribution } returns DistributionDimension.FOSS
             every { isDebuggable } returns true
         }
-        val version = mockk<GetVersionInfoProvider> { every { invoke() } returns plan }
+        val version = mockk<GetVersionInfoProvider> { every { this@mockk.invoke() } returns plan }
         val files = mutableMapOf<Uri, File>()
         val scheduled = mutableListOf<File>()
-        var allowed = true
-        val share = SharePCZTUseCase(app, proposals, version).apply {
+        val access = AppAccessSession().apply { unlock() }
+        val share = SharePCZTUseCase(app, proposals, version, access, WalletWriteAccess()).apply {
             scheduleCleanup = { staging ->
                 assertTrue(staging.listFiles().orEmpty().isEmpty())
                 scheduled += staging
-                if (scheduled.size == 3) allowed = false
+                if (scheduled.size == 3) {
+                    access.lock()
+                    access.unlock()
+                }
             }
         }
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -66,15 +71,15 @@ class SharePCZTUseCaseTest {
                 files[uri] = file
                 uri
             }
-            share { allowed }
+            share()
             val first = sharedUri(shadowOf(app).nextStartedActivity)
-            share { allowed }
+            share()
             val second = sharedUri(shadowOf(app).nextStartedActivity)
             assertNotEquals(first, second)
             assertEquals("first", files.getValue(first).readText())
             assertEquals("second", files.getValue(second).readText())
 
-            share { allowed }
+            share()
             assertNull(shadowOf(app).nextStartedActivity)
             assertEquals(3, scheduled.size)
             assertFalse(scheduled.last().exists())

@@ -80,6 +80,8 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -697,15 +699,8 @@ class MetadataDataSourceFileTest {
     fun lostTrackingAcknowledgementPersistsFundingNotSentAndRejectsReuse() = runTest {
         val sync = TrackingSync(oneShot = true)
         val quote = fundingQuote(SwapType.EXACT_INPUT)
-        val address = WalletAddress.Unified.new("deposit")
         val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
-        val proposal = mockk<SwapTransactionProposal> {
-            every { this@mockk.quote } returns quote
-            every { destination } returns address
-            every { fundingAccount } returns account
-            every { totalFees } returns Zatoshi(0)
-            every { totalFeesUsd } returns BigDecimal.ZERO
-        }
+        val proposal = outgoingProposal(quote, account)
         val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
         assertFailsWith<IllegalStateException> {
             initial.submitReservedFunding(proposal, {}) { error("SDK must not be entered") }
@@ -719,6 +714,45 @@ class MetadataDataSourceFileTest {
         assertFailsWith<IllegalStateException> {
             restarted.submitReservedFunding(proposal, {}) { error("SDK must not be entered again") }
         }.also { assertEquals("This swap is already tracked. Check its status before funding.", it.message) }
+    }
+
+    @Test
+    fun cancellationDuringTrackingSyncKeepsTheExactNoSubmissionOutcome() = runTest {
+        lateinit var funding: Job
+        var syncs = 0
+        val provider = MetadataProviderImpl(
+            metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
+            directorySync = { if (++syncs == 1) funding.cancel() },
+        )
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val proposal = outgoingProposal(quote, account)
+        val initial = ProcessSwapTransactionUseCase(repository(provider), mockk())
+        var entered = false
+        funding = launch(start = CoroutineStart.LAZY) {
+            initial.submitReservedFunding(proposal, {}) {
+                entered = true
+                error("SDK must not be entered")
+            }
+        }
+        funding.start()
+        funding.join()
+        assertTrue(funding.isCancelled)
+        assertFalse(entered)
+        val saved = assertNotNull(repository(provider).getSwapMetadata("deposit", account))
+        assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
+        assertTrue(saved.fundingNotSubmitted)
+    }
+
+    private suspend fun outgoingProposal(quote: NearSwapQuote, account: WalletAccount): SwapTransactionProposal {
+        val address = WalletAddress.Unified.new("deposit")
+        return mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { destination } returns address
+            every { fundingAccount } returns account
+            every { totalFees } returns Zatoshi(0)
+            every { totalFeesUsd } returns BigDecimal.ZERO
+        }
     }
 
     @Test

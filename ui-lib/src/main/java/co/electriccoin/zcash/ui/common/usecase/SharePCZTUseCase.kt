@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.util.FileShareUtil
@@ -17,7 +19,9 @@ import java.nio.file.Files
 class SharePCZTUseCase(
     private val context: Context,
     private val keystoneProposalRepository: KeystoneProposalRepository,
-    private val versionInfoProvider: GetVersionInfoProvider
+    private val versionInfoProvider: GetVersionInfoProvider,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) {
     internal var scheduleCleanup: (File) -> Unit = {
         DeleteDiagnosticExportWorker.schedulePczt(context, it).result.get()
@@ -25,7 +29,12 @@ class SharePCZTUseCase(
 
     suspend operator fun invoke(isAllowed: () -> Boolean = { true }) =
         withContext(Dispatchers.Main.immediate) {
-            if (!isAllowed()) return@withContext
+            val grant = appAccessSession.grant.value
+            val generation = walletWriteAccess.token()
+            val permitted = {
+                appAccessSession.permits(grant) && walletWriteAccess.permits(generation) && isAllowed()
+            }
+            if (!permitted()) return@withContext
             val pczt = keystoneProposalRepository.getProposalPCZT() ?: return@withContext
             var staged: File? = null
             var shared = false
@@ -47,7 +56,7 @@ class SharePCZTUseCase(
                         sharePickerText = "PCZT",
                         versionInfo = versionInfoProvider(),
                     )
-                    if (isAllowed()) {
+                    if (permitted()) {
                         currentCoroutineContext().ensureActive()
                         context.startActivity(intent)
                         shared = true

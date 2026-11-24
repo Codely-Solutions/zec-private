@@ -43647,20 +43647,28 @@ index b74cbfd37..f97570264 100644
 +        const val MIN_TEMP_FILE_PREFIX_LENGTH = 3
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCase.kt
-index 0fe0198d2..e93e79134 100644
+index 0fe0198d2..a1bdaed5a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCase.kt
-@@ -4,0 +5 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+@@ -3,0 +4 @@ import android.content.Context
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
+@@ -4,0 +6,2 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -6,0 +8 @@ import co.electriccoin.zcash.ui.util.FileShareUtil
+@@ -6,0 +10 @@ import co.electriccoin.zcash.ui.util.FileShareUtil
 +import co.electriccoin.zcash.work.DeleteDiagnosticExportWorker
-@@ -7,0 +10,3 @@ import kotlinx.coroutines.Dispatchers
+@@ -7,0 +12,3 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -9,0 +15 @@ import java.io.File
+@@ -9,0 +17 @@ import java.io.File
 +import java.nio.file.Files
-@@ -16,16 +22,3 @@ class SharePCZTUseCase(
+@@ -14 +22,3 @@ class SharePCZTUseCase(
+-    private val versionInfoProvider: GetVersionInfoProvider
++    private val versionInfoProvider: GetVersionInfoProvider,
++    private val appAccessSession: AppAccessSession,
++    private val walletWriteAccess: WalletWriteAccess,
+@@ -16,16 +26,3 @@ class SharePCZTUseCase(
 -    suspend operator fun invoke() =
 -        withContext(Dispatchers.Main) {
 -            val proposalPczt = keystoneProposalRepository.getProposalPCZT() ?: return@withContext
@@ -43680,12 +43688,17 @@ index 0fe0198d2..e93e79134 100644
 +    internal var scheduleCleanup: (File) -> Unit = {
 +        DeleteDiagnosticExportWorker.schedulePczt(context, it).result.get()
 +    }
-@@ -33,2 +26,34 @@ class SharePCZTUseCase(
+@@ -33,2 +30,39 @@ class SharePCZTUseCase(
 -            runCatching {
 -                context.startActivity(shareIntent)
 +    suspend operator fun invoke(isAllowed: () -> Boolean = { true }) =
 +        withContext(Dispatchers.Main.immediate) {
-+            if (!isAllowed()) return@withContext
++            val grant = appAccessSession.grant.value
++            val generation = walletWriteAccess.token()
++            val permitted = {
++                appAccessSession.permits(grant) && walletWriteAccess.permits(generation) && isAllowed()
++            }
++            if (!permitted()) return@withContext
 +            val pczt = keystoneProposalRepository.getProposalPCZT() ?: return@withContext
 +            var staged: File? = null
 +            var shared = false
@@ -43707,7 +43720,7 @@ index 0fe0198d2..e93e79134 100644
 +                        sharePickerText = "PCZT",
 +                        versionInfo = versionInfoProvider(),
 +                    )
-+                    if (isAllowed()) {
++                    if (permitted()) {
 +                        currentCoroutineContext().ensureActive()
 +                        context.startActivity(intent)
 +                        shared = true
@@ -43717,7 +43730,7 @@ index 0fe0198d2..e93e79134 100644
 +                if (!shared) {
 +                    withContext(NonCancellable + Dispatchers.IO) { staged?.deleteRecursively() }
 +                }
-@@ -37,8 +61,0 @@ class SharePCZTUseCase(
+@@ -37,8 +70,0 @@ class SharePCZTUseCase(
 -
 -    private fun getOrCreateFile(): File {
 -        val file = File(context.filesDir, "pczt")
@@ -63252,7 +63265,7 @@ index 000000000..cd3bbbf96
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..6ca453c7f 100644
+index aa5a81f8c..a8c996a95 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,13 @@ import android.content.Context
@@ -63322,35 +63335,37 @@ index aa5a81f8c..6ca453c7f 100644
 +import co.electriccoin.zcash.ui.R
 @@ -20,0 +76 @@ import com.google.crypto.tink.util.SecretBytes
 +import io.mockk.coEvery
-@@ -22,0 +79,6 @@ import io.mockk.mockk
+@@ -22,0 +79,8 @@ import io.mockk.mockk
 +import io.mockk.mockkObject
 +import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Job
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CancellationException
-@@ -23,0 +86,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -23,0 +88,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -27,0 +96 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -27,0 +98 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
-@@ -30,0 +100 @@ import kotlinx.coroutines.test.runTest
+@@ -30,0 +102 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.serialization.json.Json
-@@ -31,0 +102 @@ import java.io.File
+@@ -31,0 +104 @@ import java.io.File
 +import java.io.IOException
-@@ -37,0 +109 @@ import kotlin.test.assertEquals
+@@ -37,0 +111 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
-@@ -38,0 +111 @@ import kotlin.test.assertFalse
+@@ -38,0 +113 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -47,0 +121 @@ import kotlin.test.assertTrue
+@@ -47,0 +123 @@ import kotlin.test.assertTrue
 +@Suppress("LargeClass") // Quote retention uses the same encrypted file, restart, and tracking fixture.
-@@ -55,0 +130 @@ class MetadataDataSourceFileTest {
+@@ -55,0 +132 @@ class MetadataDataSourceFileTest {
 +            directorySync = DirectorySync {},
-@@ -76,0 +152,623 @@ class MetadataDataSourceFileTest {
+@@ -76,0 +154,655 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun anOpenDetailReloadsSettlementAfterAnotherObserverSavedSuccess() = runTest {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -63899,15 +63914,8 @@ index aa5a81f8c..6ca453c7f 100644
 +    fun lostTrackingAcknowledgementPersistsFundingNotSentAndRejectsReuse() = runTest {
 +        val sync = TrackingSync(oneShot = true)
 +        val quote = fundingQuote(SwapType.EXACT_INPUT)
-+        val address = WalletAddress.Unified.new("deposit")
 +        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
-+        val proposal = mockk<SwapTransactionProposal> {
-+            every { this@mockk.quote } returns quote
-+            every { destination } returns address
-+            every { fundingAccount } returns account
-+            every { totalFees } returns Zatoshi(0)
-+            every { totalFeesUsd } returns BigDecimal.ZERO
-+        }
++        val proposal = outgoingProposal(quote, account)
 +        val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
 +        assertFailsWith<IllegalStateException> {
 +            initial.submitReservedFunding(proposal, {}) { error("SDK must not be entered") }
@@ -63921,6 +63929,45 @@ index aa5a81f8c..6ca453c7f 100644
 +        assertFailsWith<IllegalStateException> {
 +            restarted.submitReservedFunding(proposal, {}) { error("SDK must not be entered again") }
 +        }.also { assertEquals("This swap is already tracked. Check its status before funding.", it.message) }
++    }
++
++    @Test
++    fun cancellationDuringTrackingSyncKeepsTheExactNoSubmissionOutcome() = runTest {
++        lateinit var funding: Job
++        var syncs = 0
++        val provider = MetadataProviderImpl(
++            metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
++            directorySync = { if (++syncs == 1) funding.cancel() },
++        )
++        val quote = fundingQuote(SwapType.EXACT_INPUT)
++        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
++        val proposal = outgoingProposal(quote, account)
++        val initial = ProcessSwapTransactionUseCase(repository(provider), mockk())
++        var entered = false
++        funding = launch(start = CoroutineStart.LAZY) {
++            initial.submitReservedFunding(proposal, {}) {
++                entered = true
++                error("SDK must not be entered")
++            }
++        }
++        funding.start()
++        funding.join()
++        assertTrue(funding.isCancelled)
++        assertFalse(entered)
++        val saved = assertNotNull(repository(provider).getSwapMetadata("deposit", account))
++        assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
++        assertTrue(saved.fundingNotSubmitted)
++    }
++
++    private suspend fun outgoingProposal(quote: NearSwapQuote, account: WalletAccount): SwapTransactionProposal {
++        val address = WalletAddress.Unified.new("deposit")
++        return mockk<SwapTransactionProposal> {
++            every { this@mockk.quote } returns quote
++            every { destination } returns address
++            every { fundingAccount } returns account
++            every { totalFees } returns Zatoshi(0)
++            every { totalFeesUsd } returns BigDecimal.ZERO
++        }
 +    }
 +
 +    @Test
@@ -63974,28 +64021,28 @@ index aa5a81f8c..6ca453c7f 100644
 +        assertEquals(evidence, saved.last().signedQuoteEvidence)
 +    }
 +
-@@ -125 +823 @@ class MetadataDataSourceFileTest {
+@@ -125 +857 @@ class MetadataDataSourceFileTest {
 -    fun deleteWipesEveryFileOfTheKeyAndEmitsNull() =
 +    fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =
-@@ -129,0 +828,3 @@ class MetadataDataSourceFileTest {
+@@ -129,0 +862,3 @@ class MetadataDataSourceFileTest {
 +            val removedKey = metadataKey(9)
 +            write(removedKey.fileIdentifier(), metadata(lastUpdated = 1), removedKey)
 +            val removedEmissions = collectEmissions(dataSource, removedKey)
-@@ -135 +836 @@ class MetadataDataSourceFileTest {
+@@ -135 +870 @@ class MetadataDataSourceFileTest {
 -            dataSource.delete(key)
 +            dataSource.delete()
-@@ -139,0 +841 @@ class MetadataDataSourceFileTest {
+@@ -139,0 +875 @@ class MetadataDataSourceFileTest {
 +            assertNull(removedEmissions.last())
-@@ -143 +845 @@ class MetadataDataSourceFileTest {
+@@ -143 +879 @@ class MetadataDataSourceFileTest {
 -    fun flippingABookmarkTwiceKeepsAnUnbookmarkedEntry() =
 +    fun removingABookmarkKeepsAnUnbookmarkedEntry() =
-@@ -147 +849 @@ class MetadataDataSourceFileTest {
+@@ -147 +883 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", true, key)
-@@ -150 +852 @@ class MetadataDataSourceFileTest {
+@@ -150 +886 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", false, key)
-@@ -154,0 +857,38 @@ class MetadataDataSourceFileTest {
+@@ -154,0 +891,38 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun repeatedBookmarkActionsFinishTheRequestedChangeAfterAnUnacknowledgedRename() = runTest {
 +        val sync = TrackingSync().apply { fail = false }
@@ -64034,7 +64081,7 @@ index aa5a81f8c..6ca453c7f 100644
 +        verify(exactly = 2) { showError(any()) }
 +    }
 +
-@@ -167,0 +908,58 @@ class MetadataDataSourceFileTest {
+@@ -167,0 +942,58 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun noteAndMemoEditsStayWithTheDisplayedAccountAfterSelectionChanges() = runTest {
 +        val owner = AccountUuid.new(ByteArray(16))
@@ -64093,11 +64140,11 @@ index aa5a81f8c..6ca453c7f 100644
 +        assertTrue(otherMetadata.read.isEmpty())
 +    }
 +
-@@ -193 +991,2 @@ class MetadataDataSourceFileTest {
+@@ -193 +1025,2 @@ class MetadataDataSourceFileTest {
 -                amountOutFormatted = BigDecimal.TEN,
 +                amountOutFormatted = BigDecimal.ONE,
 +                executedAmountOut = BigDecimal.TEN,
-@@ -219,0 +1019,45 @@ class MetadataDataSourceFileTest {
+@@ -219,0 +1053,45 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
 +        val reviewedIdentity = "synthetic-reviewed-identity"
@@ -64143,20 +64190,21 @@ index aa5a81f8c..6ca453c7f 100644
 +        assertEquals(saved, storedSwaps().swapIds.single())
 +    }
 +
-@@ -259 +1103,4 @@ class MetadataDataSourceFileTest {
+@@ -259 +1137,4 @@ class MetadataDataSourceFileTest {
 -    private fun TestScope.dataSource() =
 +    private fun TestScope.dataSource(
 +        provider: MetadataProviderImpl = metadataProvider,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
 +    ) =
-@@ -262 +1109 @@ class MetadataDataSourceFileTest {
+@@ -262 +1143 @@ class MetadataDataSourceFileTest {
 -            metadataProvider = metadataProvider,
 +            metadataProvider = provider,
-@@ -264 +1111,2 @@ class MetadataDataSourceFileTest {
+@@ -264 +1145,53 @@ class MetadataDataSourceFileTest {
 -            ioDispatcher = StandardTestDispatcher(testScheduler)
 +            ioDispatcher = StandardTestDispatcher(testScheduler),
 +            walletWriteAccess = ownership
-@@ -266,0 +1115,73 @@ class MetadataDataSourceFileTest {
++        )
++
 +    private fun TestScope.repository(
 +        provider: MetadataProviderImpl,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
@@ -64206,7 +64254,7 @@ index aa5a81f8c..6ca453c7f 100644
 +                }
 +            }
 +            """.trimIndent()
-+        )
+@@ -265,0 +1199,22 @@ class MetadataDataSourceFileTest {
 +        return NearSwapQuote(
 +            response = response.copy(signedEvidence = evidence),
 +            originAsset = origin,
@@ -64229,8 +64277,7 @@ index aa5a81f8c..6ca453c7f 100644
 +            }
 +        )
 +    }
-+
-@@ -280 +1201,8 @@ class MetadataDataSourceFileTest {
+@@ -280 +1235,8 @@ class MetadataDataSourceFileTest {
 -    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
 +    private suspend fun markSwap(
 +        dataSource: MetadataDataSourceImpl,
@@ -64240,15 +64287,15 @@ index aa5a81f8c..6ca453c7f 100644
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        depositAddress: String = "deposit",
 +    ) =
-@@ -282 +1210 @@ class MetadataDataSourceFileTest {
+@@ -282 +1244 @@ class MetadataDataSourceFileTest {
 -            depositAddress = "deposit",
 +            depositAddress = depositAddress,
-@@ -291 +1219,3 @@ class MetadataDataSourceFileTest {
+@@ -291 +1253,3 @@ class MetadataDataSourceFileTest {
 -            key = key
 +            key = key,
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -309,3 +1239,5 @@ class MetadataDataSourceFileTest {
+@@ -309,3 +1273,5 @@ class MetadataDataSourceFileTest {
 -            mockk<SimpleSwapAsset> {
 -                every { tokenTicker } returns token
 -                every { chainTicker } returns chain
@@ -75450,10 +75497,10 @@ index 000000000..c782636f2
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCaseTest.kt
 new file mode 100644
-index 000000000..a411f5820
+index 000000000..b8c618ed9
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SharePCZTUseCaseTest.kt
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,103 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Intent
@@ -75461,9 +75508,11 @@ index 000000000..a411f5820
 +import androidx.core.content.FileProvider
 +import cash.z.ecc.android.sdk.model.Pczt
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.DistributionDimension
 +import co.electriccoin.zcash.ui.common.model.VersionInfo
 +import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import io.mockk.every
 +import io.mockk.mockk
@@ -75502,15 +75551,18 @@ index 000000000..a411f5820
 +            every { distribution } returns DistributionDimension.FOSS
 +            every { isDebuggable } returns true
 +        }
-+        val version = mockk<GetVersionInfoProvider> { every { invoke() } returns plan }
++        val version = mockk<GetVersionInfoProvider> { every { this@mockk.invoke() } returns plan }
 +        val files = mutableMapOf<Uri, File>()
 +        val scheduled = mutableListOf<File>()
-+        var allowed = true
-+        val share = SharePCZTUseCase(app, proposals, version).apply {
++        val access = AppAccessSession().apply { unlock() }
++        val share = SharePCZTUseCase(app, proposals, version, access, WalletWriteAccess()).apply {
 +            scheduleCleanup = { staging ->
 +                assertTrue(staging.listFiles().orEmpty().isEmpty())
 +                scheduled += staging
-+                if (scheduled.size == 3) allowed = false
++                if (scheduled.size == 3) {
++                    access.lock()
++                    access.unlock()
++                }
 +            }
 +        }
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -75522,15 +75574,15 @@ index 000000000..a411f5820
 +                files[uri] = file
 +                uri
 +            }
-+            share { allowed }
++            share()
 +            val first = sharedUri(shadowOf(app).nextStartedActivity)
-+            share { allowed }
++            share()
 +            val second = sharedUri(shadowOf(app).nextStartedActivity)
 +            assertNotEquals(first, second)
 +            assertEquals("first", files.getValue(first).readText())
 +            assertEquals("second", files.getValue(second).readText())
 +
-+            share { allowed }
++            share()
 +            assertNull(shadowOf(app).nextStartedActivity)
 +            assertEquals(3, scheduled.size)
 +            assertFalse(scheduled.last().exists())
