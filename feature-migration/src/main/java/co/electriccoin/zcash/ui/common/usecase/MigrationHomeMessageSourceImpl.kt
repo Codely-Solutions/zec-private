@@ -294,7 +294,7 @@ class MigrationHomeMessageSourceImpl(
         val resume = { navigationRouter.forward(MigrationScheduledArgs(accountKeyId)) }
         return MigrationMessageState(
             phase = MigrationBannerPhase.ATTENTION,
-            title = stringRes(DesignR.string.migrationHome_finishScheduling).getString(context),
+            title = context.getString(DesignR.string.migrationHome_finishScheduling),
             progressLabel = null,
             progressPercent = 0f,
             onClick = resume,

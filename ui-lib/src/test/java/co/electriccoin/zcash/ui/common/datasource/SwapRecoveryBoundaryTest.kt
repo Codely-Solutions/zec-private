@@ -243,6 +243,21 @@ class SwapRecoveryBoundaryTest {
         coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
     }
 
+    @Test
+    fun routeOnlyFingerprintFromOlderStorageStillAllowsSettlementTracking() = runBlocking {
+        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
+        val original = response("tracked-deposit")
+        val legacy = stored.copy(reviewedIdentity = "638f20c229e5df364ff75b845024c9ace70f79b229eb788b184f95299ea98dcc")
+        coEvery { metadata.getSwapMetadata("tracked-deposit") } returns legacy
+        coEvery { api.checkSwapStatus("tracked-deposit") } returns original
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+
+        val status = GetSwapStatusUseCase(metadata, repository)("tracked-deposit")
+        assertEquals(SwapStatus.SUCCESS, status.status?.status)
+        assertNull(status.error)
+        coVerify(exactly = 1) { metadata.updateSwap(legacy, any()) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun zeroPriceDuplicateCannotEnterAnOfferThenFailStatusInEitherOrder() = runTest {

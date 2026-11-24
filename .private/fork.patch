@@ -4308,7 +4308,7 @@ index c2045aa9b..4bae99de4 100644
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        sdk.lockRemainingOrchardBalance()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
-index b76ce6c65..bb054a5c7 100644
+index b76ce6c65..ab4e7835d 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 @@ -20,0 +21 @@ import co.electriccoin.zcash.ui.common.model.migration.toUiKind
@@ -4506,7 +4506,7 @@ index b76ce6c65..bb054a5c7 100644
 +        val resume = { navigationRouter.forward(MigrationScheduledArgs(accountKeyId)) }
 +        return MigrationMessageState(
 +            phase = MigrationBannerPhase.ATTENTION,
-+            title = stringRes(DesignR.string.migrationHome_finishScheduling).getString(context),
++            title = context.getString(DesignR.string.migrationHome_finishScheduling),
 +            progressLabel = null,
 +            progressPercent = 0f,
 +            onClick = resume,
@@ -61500,10 +61500,10 @@ index 000000000..0e58358e4
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
 new file mode 100644
-index 000000000..44111ca6f
+index 000000000..6d67cde91
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
-@@ -0,0 +1,355 @@
+@@ -0,0 +1,370 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -61747,6 +61747,21 @@ index 000000000..44111ca6f
 +        assertEquals(SwapStatus.SUCCESS, accepted.status?.status)
 +        assertEquals(BigDecimal("2.00000001"), accepted.status?.executedAmountOut)
 +        coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
++    }
++
++    @Test
++    fun routeOnlyFingerprintFromOlderStorageStillAllowsSettlementTracking() = runBlocking {
++        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
++        val original = response("tracked-deposit")
++        val legacy = stored.copy(reviewedIdentity = "638f20c229e5df364ff75b845024c9ace70f79b229eb788b184f95299ea98dcc")
++        coEvery { metadata.getSwapMetadata("tracked-deposit") } returns legacy
++        coEvery { api.checkSwapStatus("tracked-deposit") } returns original
++        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
++
++        val status = GetSwapStatusUseCase(metadata, repository)("tracked-deposit")
++        assertEquals(SwapStatus.SUCCESS, status.status?.status)
++        assertNull(status.error)
++        coVerify(exactly = 1) { metadata.updateSwap(legacy, any()) }
 +    }
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
