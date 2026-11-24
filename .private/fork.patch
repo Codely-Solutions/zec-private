@@ -3494,32 +3494,229 @@ index a842c2763..7e537f8a7 100644
 @@ -144,0 +149 @@ val featureMigrationModule =
 +                resetPending = { resetProgress.isPending.value },
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..d5db914af 100644
+index 9451c3bae..eba68bae2 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -70,0 +71 @@ class CheckMigrationRecoveryUseCase(
 +    private val resetPending: () -> Boolean = { false },
-@@ -72 +73,4 @@ class CheckMigrationRecoveryUseCase(
+@@ -72,14 +73,4 @@ class CheckMigrationRecoveryUseCase(
 -    suspend operator fun invoke() {
+-        // Three independent triggers exist (MainActivity.onStart, RootNavGraph unlock, and any
+-        // future caller); without a throttle they cascade — each replaceAll builds a fresh Home
+-        // entry whose composition can re-trigger recovery, observed live as 7 redirects (and 3
+-        // duplicate catch-up shifts) within 8 seconds. One pass per window is enough: routing is
+-        // idempotent for the user and isSyncBlocked() protects sync regardless.
+-        throttleMutex.withLock {
+-            val elapsed = lastRunMark?.elapsedNow()
+-            if (elapsed != null && elapsed < RUN_THROTTLE) {
+-                migrationLog("MigrationRecovery: throttled (ran ${elapsed.inWholeMilliseconds}ms ago)")
+-                return
+-            }
+-            lastRunMark = TimeSource.Monotonic.markNow()
+-        }
 +    suspend operator fun invoke(
 +        requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
 +    ) {
-+        if (resetPending()) return
-@@ -130 +134 @@ class CheckMigrationRecoveryUseCase(
++        if (!startRecovery()) return
+@@ -109,90 +100,2 @@ class CheckMigrationRecoveryUseCase(
+-            // Worker reconciliation + app-open acceleration, for EVERY account (2026-08-0X — was
+-            // selected-account-only; a Keystone account's committed migration must keep getting the
+-            // live-driver fast path and worker revival regardless of which account is selected in
+-            // the UI right now). Self-heals after process kill, device reboot, or an app upgrade
+-            // that cleared WorkManager state, without requiring the user to re-enter the migration
+-            // flow (the worker's re-arm only happens at the end of its own run and its due alarms
+-            // don't survive a package update — see OnMigrationSyncCompletedUseCase; duplicated here
+-            // because the SYNCED hook needs a synced foreground synchronizer, which a freshly
+-            // relaunched app may not reach for minutes).
+-            // Gate on the ENGINE's state, not only the app-side plan cache: the cache can be lost
+-            // (observed live: repository empty while the engine held a run with 8/9 broadcast and the
+-            // last transfer proved) and the engine is the single source of truth — a live in-progress
+-            // migration must always have its worker chain running.
+-            //
+-            // getMigrationStateUnreconciled(), not getMigrationState(): this router never mutates
+-            // (2026-08-07 read/write-separation design) — it starts the live driver below regardless,
+-            // which reconciles on its own first cycle, so any staleness here self-corrects immediately.
+-            accountDataSource.getAllAccounts().filter { it.isSpendable }.forEach { account ->
+-                val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
+-                val accountSdk = getOrchardMigrationSdk(accountKeyId) ?: return@forEach
+-                val engineInProgress = accountSdk.getMigrationStateUnreconciled() is MigrationState.InProgress
 -                if (engineInProgress) {
-+                if (engineInProgress && !resetPending()) {
-@@ -156 +160 @@ class CheckMigrationRecoveryUseCase(
+-                    // The live driver is the fast path while the app is alive — starting it here
+-                    // covers both cold start (process was killed mid-migration) and every subsequent
+-                    // foreground return; it is a no-op if already running for this account. It
+-                    // supersedes the old "accelerate a SCHEDULED worker to run now" logic entirely:
+-                    // the live driver already drives the account forward on its own once running, so
+-                    // there is nothing left to separately nudge.
+-                    migrationLiveDriver.startIfNotRunning(accountKeyId)
+-                    when (getWorkerRunState(accountKeyId)) {
+-                        MigrationWorkerRunState.RUNNING, MigrationWorkerRunState.SCHEDULED -> {
+-                            // Nothing to do — RUNNING is already executing; SCHEDULED will either fire
+-                            // on its own or be superseded by the live driver's own re-arm (reArm's
+-                            // MigrationScheduler.schedule call), whichever comes first.
+-                            migrationLog(
+-                                "MigrationRecovery: migration worker already active (RUNNING or SCHEDULED) " +
+-                                    "for $accountKeyId — nothing to do."
+-                            )
+-                        }
+-
+-                        MigrationWorkerRunState.ABSENT -> {
+-                            // Revival: recovers the DURABLE background chain after process kill, device
+-                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
+-                            // covers speed while alive, but only the worker chain survives process death.
+-                            migrationLog(
+-                                "MigrationRecovery: migration worker absent for $accountKeyId — scheduling now."
+-                            )
 -                            scheduleNow(accountKeyId)
-+                            if (!resetPending()) scheduleNow(accountKeyId)
-@@ -162 +166 @@ class CheckMigrationRecoveryUseCase(
+-                        }
+-                    }
+-                }
+-            }
+-
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
-+            if (!resetPending() && pendingMigrationTorFailureStorageProvider.get()) {
-@@ -190 +194 @@ class CheckMigrationRecoveryUseCase(
+-                // The flag only records THAT a background attempt once failed on Tor, not what the
+-                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
+-                // mining, rescheduling) between when it was set and the next app open, and the flag
+-                // is never invalidated by any of that. Re-verify against the engine's live state
+-                // before trusting it: only navigate when the earliest not-yet-sent transfer is
+-                // actually broadcast-ready. Otherwise this flag is stale (observed live: the flag
+-                // survived from an old Tor failure while the actual next-due transfer was stuck
+-                // needing PROVE for an unrelated reason) — MigrationSendingVM would immediately hit
+-                // AwaitingProof/NothingDue and show a "Couldn't Send" sheet whose message has nothing
+-                // to do with Tor, on every single app open, for a transfer that was never going to
+-                // attempt a network send in the first place. Clear it instead; the transfer's actual
+-                // blocker is already covered by the normal Migration Progress home banner.
+-                val nextTransfer =
+-                    sdk
+-                        .getMigrationTransferStates()
+-                        ?.transfers
+-                        ?.filter { it.isTransfer && !it.isSent }
+-                        ?.minByOrNull { it.scheduledHeight }
+-                if (nextTransfer?.action == MigrationNextAction.BROADCAST) {
+-                    // A background attempt failed specifically because of Tor — route through the Sending
+-                    // screen first rather than straight to MigrationProgressArgs/MigrationTorFailureArgs:
+-                    // MigrationSendingVM's init{} always attempts a send immediately on construction,
+-                    // reproducing the exact condition that failed in the background using the current
+-                    // migration Tor setting. If it fails again, MigrationSendingVM's own existing
+-                    // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
+-                    // that routing here.
+-                    migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
 -                    navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs)
-+                    if (!resetPending()) requestSendingScreen()
-@@ -196 +200 @@ class CheckMigrationRecoveryUseCase(
+-                } else {
+-                    migrationLog(
+-                        "MigrationRecovery: pending background Tor failure flag is stale " +
+-                            "(next transfer action=${nextTransfer?.action}) — clearing."
+-                    )
 -                    pendingMigrationTorFailureStorageProvider.store(false)
-+                    if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(false)
+-                }
+-            }
++            reviveAccountWorkers()
++            recoverBroadcast(sdk, requestSendingScreen)
+@@ -211,0 +115,105 @@ class CheckMigrationRecoveryUseCase(
++    private suspend fun startRecovery(): Boolean = throttleMutex.withLock {
++        val elapsed = lastRunMark?.elapsedNow()
++        if (resetPending() || (elapsed != null && elapsed < RUN_THROTTLE)) {
++            false
++        } else {
++            lastRunMark = TimeSource.Monotonic.markNow()
++            true
++        }
++    }
++
++    private suspend fun reviveAccountWorkers() {
++        // Worker reconciliation + app-open acceleration, for EVERY account (2026-08-0X — was
++        // selected-account-only; a Keystone account's committed migration must keep getting the
++        // live-driver fast path and worker revival regardless of which account is selected in
++        // the UI right now). Self-heals after process kill, device reboot, or an app upgrade
++        // that cleared WorkManager state, without requiring the user to re-enter the migration
++        // flow (the worker's re-arm only happens at the end of its own run and its due alarms
++        // don't survive a package update — see OnMigrationSyncCompletedUseCase; duplicated here
++        // because the SYNCED hook needs a synced foreground synchronizer, which a freshly
++        // relaunched app may not reach for minutes).
++        // Gate on the ENGINE's state, not only the app-side plan cache: the cache can be lost
++        // (observed live: repository empty while the engine held a run with 8/9 broadcast and the
++        // last transfer proved) and the engine is the single source of truth — a live in-progress
++        // migration must always have its worker chain running.
++        //
++        // getMigrationStateUnreconciled(), not getMigrationState(): this router never mutates
++        // (2026-08-07 read/write-separation design) — it starts the live driver below regardless,
++        // which reconciles on its own first cycle, so any staleness here self-corrects immediately.
++        accountDataSource.getAllAccounts().filter { it.isSpendable }.forEach { account ->
++            val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
++            val accountSdk = getOrchardMigrationSdk(accountKeyId) ?: return@forEach
++            val engineInProgress = accountSdk.getMigrationStateUnreconciled() is MigrationState.InProgress
++            if (engineInProgress && !resetPending()) {
++                // The live driver is the fast path while the app is alive — starting it here
++                // covers both cold start (process was killed mid-migration) and every subsequent
++                // foreground return; it is a no-op if already running for this account. It
++                // supersedes the old "accelerate a SCHEDULED worker to run now" logic entirely:
++                // the live driver already drives the account forward on its own once running, so
++                // there is nothing left to separately nudge.
++                migrationLiveDriver.startIfNotRunning(accountKeyId)
++                when (getWorkerRunState(accountKeyId)) {
++                    MigrationWorkerRunState.RUNNING, MigrationWorkerRunState.SCHEDULED -> {
++                        // Nothing to do — RUNNING is already executing; SCHEDULED will either fire
++                        // on its own or be superseded by the live driver's own re-arm (reArm's
++                        // MigrationScheduler.schedule call), whichever comes first.
++                        migrationLog(
++                            "MigrationRecovery: migration worker already active (RUNNING or SCHEDULED) " +
++                                "for $accountKeyId — nothing to do."
++                        )
++                    }
++
++                    MigrationWorkerRunState.ABSENT -> {
++                        // Revival: recovers the DURABLE background chain after process kill, device
++                        // reboot, or an app upgrade that cleared WorkManager state — the live driver
++                        // covers speed while alive, but only the worker chain survives process death.
++                        migrationLog(
++                            "MigrationRecovery: migration worker absent for $accountKeyId — scheduling now."
++                        )
++                        if (!resetPending()) scheduleNow(accountKeyId)
++                    }
++                }
++            }
++        }
++    }
++
++    private suspend fun recoverBroadcast(sdk: OrchardMigrationSdk, requestSendingScreen: () -> Unit) {
++        if (!resetPending() && pendingMigrationTorFailureStorageProvider.get()) {
++            // The flag only records THAT a background attempt once failed on Tor, not what the
++            // engine's next due transfer needs NOW — the plan moves on (proving, dependency
++            // mining, rescheduling) between when it was set and the next app open, and the flag
++            // is never invalidated by any of that. Re-verify against the engine's live state
++            // before trusting it: only navigate when the earliest not-yet-sent transfer is
++            // actually broadcast-ready. Otherwise this flag is stale (observed live: the flag
++            // survived from an old Tor failure while the actual next-due transfer was stuck
++            // needing PROVE for an unrelated reason) — MigrationSendingVM would immediately hit
++            // AwaitingProof/NothingDue and show a "Couldn't Send" sheet whose message has nothing
++            // to do with Tor, on every single app open, for a transfer that was never going to
++            // attempt a network send in the first place. Clear it instead; the transfer's actual
++            // blocker is already covered by the normal Migration Progress home banner.
++            val nextTransfer =
++                sdk
++                    .getMigrationTransferStates()
++                    ?.transfers
++                    ?.filter { it.isTransfer && !it.isSent }
++                    ?.minByOrNull { it.scheduledHeight }
++            if (nextTransfer?.action == MigrationNextAction.BROADCAST) {
++                // A background attempt failed specifically because of Tor — route through the Sending
++                // screen first rather than straight to MigrationProgressArgs/MigrationTorFailureArgs:
++                // MigrationSendingVM's init{} always attempts a send immediately on construction,
++                // reproducing the exact condition that failed in the background using the current
++                // migration Tor setting. If it fails again, MigrationSendingVM's own existing
++                // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
++                // that routing here.
++                migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
++                if (!resetPending()) requestSendingScreen()
++            } else {
++                migrationLog(
++                    "MigrationRecovery: pending background Tor failure flag is stale " +
++                        "(next transfer action=${nextTransfer?.action}) — clearing."
++                )
++                if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(false)
++            }
++        }
++    }
++
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
 index c91da0f38..4a7b17d5d 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
@@ -26706,7 +26903,7 @@ index 996645a58..0a3659205 100644
 +
 +    fun committedBirthday(): CommittedEnrollmentBirthday?
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-index b7227e48f..9fd2b0223 100644
+index b7227e48f..450f695a6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 @@ -76,2 +76,8 @@ class ActivityMapper {
@@ -26727,23 +26924,7 @@ index b7227e48f..9fd2b0223 100644
 +        if (data.swap.mode != FLEX_INPUT) {
 +            stringRes(getUnmatchedFundingTitle(data))
 +        } else stringRes(
-@@ -97,0 +107,15 @@ class ActivityMapper {
-+    private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
-+        val isPayment = data.swap.mode == EXACT_OUTPUT
-+        return when (data.swap.status) {
-+            PENDING -> R.string.private_swap_funding_unconfirmed
-+            INCOMPLETE_DEPOSIT -> {
-+                if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
-+            }
-+            PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
-+            SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
-+            REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
-+            FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
-+            EXPIRED -> R.string.swapAndPay_expiredTitle
-+        }
-+    }
-+
-@@ -99 +123,7 @@ class ActivityMapper {
+@@ -99 +108,7 @@ class ActivityMapper {
 -        when (data.swap.status) {
 +        if (data.swap.mode != FLEX_INPUT) {
 +            when (data.swap.status) {
@@ -26752,7 +26933,7 @@ index b7227e48f..9fd2b0223 100644
 +                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
 +            }
 +        } else when (data.swap.status) {
-@@ -166,13 +196,7 @@ class ActivityMapper {
+@@ -166,13 +181,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> R.drawable.ic_transaction_send_failed
@@ -26773,9 +26954,9 @@ index b7227e48f..9fd2b0223 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
 +                                SUCCESS -> R.drawable.ic_transaction_sent
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
-@@ -179,0 +204 @@ class ActivityMapper {
+@@ -179,0 +189 @@ class ActivityMapper {
 +                        }
-@@ -181,6 +206,5 @@ class ActivityMapper {
+@@ -181,6 +191,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
@@ -26787,7 +26968,7 @@ index b7227e48f..9fd2b0223 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
 +                                SUCCESS -> R.drawable.ic_transaction_paid
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
-@@ -249,12 +273,7 @@ class ActivityMapper {
+@@ -249,12 +258,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -26807,22 +26988,22 @@ index b7227e48f..9fd2b0223 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_swapping)
-@@ -262 +281 @@ class ActivityMapper {
+@@ -262 +266 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -264 +283 @@ class ActivityMapper {
+@@ -264 +268 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -266 +285 @@ class ActivityMapper {
+@@ -266 +270 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -268,2 +287 @@ class ActivityMapper {
+@@ -268,2 +272 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -270,0 +289 @@ class ActivityMapper {
+@@ -270,0 +274 @@ class ActivityMapper {
 +                        }
-@@ -272,5 +291,5 @@ class ActivityMapper {
+@@ -272,5 +276,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT,
@@ -26833,27 +27014,43 @@ index b7227e48f..9fd2b0223 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_paying)
-@@ -278 +297 @@ class ActivityMapper {
+@@ -278 +282 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -280 +299 @@ class ActivityMapper {
+@@ -280 +284 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -282 +301 @@ class ActivityMapper {
+@@ -282 +286 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -284,2 +303 @@ class ActivityMapper {
+@@ -284,2 +288 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -386,4 +403,0 @@ class ActivityMapper {
+@@ -386,4 +388,0 @@ class ActivityMapper {
 -                        data.transaction is SendTransaction.Failed -> {
 -                            StringResourceColor.NEGATIVE
 -                        }
 -
-@@ -391 +405 @@ class ActivityMapper {
+@@ -391 +390 @@ class ActivityMapper {
 -                            when (data.metadata.swapMetadata.status) {
 +                            when (data.metadata.swapMetadata.outgoingStatus(data.transaction)) {
+@@ -410,0 +410,15 @@ private const val MONTH_THRESHOLD = 30
++
++private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
++    val isPayment = data.swap.mode == EXACT_OUTPUT
++    return when (data.swap.status) {
++        PENDING -> R.string.private_swap_funding_unconfirmed
++        INCOMPLETE_DEPOSIT -> {
++            if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
++        }
++        PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
++        SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
++        REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
++        FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
++        EXPIRED -> R.string.swapAndPay_expiredTitle
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
 index befe3b652..151ce4e81 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt

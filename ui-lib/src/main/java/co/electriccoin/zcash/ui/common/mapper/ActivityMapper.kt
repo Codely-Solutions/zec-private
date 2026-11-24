@@ -104,21 +104,6 @@ class ActivityMapper {
             }
         )
 
-    private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
-        val isPayment = data.swap.mode == EXACT_OUTPUT
-        return when (data.swap.status) {
-            PENDING -> R.string.private_swap_funding_unconfirmed
-            INCOMPLETE_DEPOSIT -> {
-                if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
-            }
-            PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
-            SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
-            REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
-            FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
-            EXPIRED -> R.string.swapAndPay_expiredTitle
-        }
-    }
-
     private fun getSwapBigIcon(data: ActivityData.BySwap): Int =
         if (data.swap.mode != FLEX_INPUT) {
             when (data.swap.status) {
@@ -422,3 +407,18 @@ class ActivityMapper {
 }
 
 private const val MONTH_THRESHOLD = 30
+
+private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
+    val isPayment = data.swap.mode == EXACT_OUTPUT
+    return when (data.swap.status) {
+        PENDING -> R.string.private_swap_funding_unconfirmed
+        INCOMPLETE_DEPOSIT -> {
+            if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
+        }
+        PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
+        SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
+        REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
+        FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
+        EXPIRED -> R.string.swapAndPay_expiredTitle
+    }
+}
