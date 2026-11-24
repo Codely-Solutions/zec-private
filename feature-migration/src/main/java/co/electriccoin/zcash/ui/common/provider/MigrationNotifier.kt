@@ -9,7 +9,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import co.electriccoin.zcash.ui.MainActivity
 import co.electriccoin.zcash.ui.R
-import co.electriccoin.zcash.ui.common.model.accountIdOffset
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier.Companion.CHANNEL_ID
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier.Companion.LEGACY_DEFAULT_IMPORTANCE_CHANNEL_ID
 
@@ -32,31 +31,31 @@ class MigrationNotifier(
     // NOTE (reviewer: "an intent for a given activity should be built ONLY by a factory in that
     // activity's companion object"): the two intents below target MainActivity, which lives in
     // ui-lib. feature-migration depends on ui-lib (not vice versa), and the extra keys
-    // (EXTRA_OPEN_MIGRATION / EXTRA_RUN_STEP / EXTRA_ACCOUNT_KEY_ID) plus the per-account
-    // PendingIntent request codes are migration concerns. Moving construction into
+    // (EXTRA_OPEN_MIGRATION / EXTRA_RUN_STEP / EXTRA_ACCOUNT_KEY_ID) and the scoped PendingIntent
+    // identities are migration concerns. Moving construction into
     // MainActivity.Companion would force ui-lib to reference feature-migration constants — a
     // circular dependency — so the factory stays here by necessity. See the deferred-factory note
     // in the review report.
 
     /**
-     * Tap target that simply opens the migration UI for [accountKeyId] on the correct account. Uses
-     * a per-account request code so re-issuing it updates (rather than duplicates) the existing
+     * Tap target that opens the migration UI for [accountKeyId]. The full account key in the action
+     * lets re-issuing it update the existing
      * [PendingIntent].
      *
      * @param accountKeyId storage-key id ([toStorageKeyId]) of the migrating account; carried as an
-     *   Intent extra (String because Intents can't hold an `AccountUuid`) and used to derive the
-     *   per-account request code.
+     *   Intent extra (String because Intents can't hold an `AccountUuid`) and included in the action.
      */
     private fun mainActivityIntent(accountKeyId: String): PendingIntent {
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                action = migrationIntentAction(EXTRA_OPEN_MIGRATION, accountKeyId)
                 putExtra(EXTRA_OPEN_MIGRATION, true)
                 putExtra(EXTRA_ACCOUNT_KEY_ID, accountKeyId)
             }
         return PendingIntent.getActivity(
             context,
-            REQUEST_CODE_MIGRATION_BASE + accountIdOffset(accountKeyId),
+            REQUEST_CODE_MIGRATION,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -70,22 +69,17 @@ class MigrationNotifier(
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                action = migrationIntentAction(EXTRA_RUN_STEP, accountKeyId)
                 putExtra(EXTRA_RUN_STEP, true)
                 putExtra(EXTRA_ACCOUNT_KEY_ID, accountKeyId)
             }
         return PendingIntent.getActivity(
             context,
-            REQUEST_CODE_TRANSFER_READY_BASE + accountIdOffset(accountKeyId),
+            REQUEST_CODE_TRANSFER_READY,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
-
-    private fun stepDueNotificationId(accountKeyId: String): Int =
-        NOTIFICATION_ID_STEP_DUE_BASE + accountIdOffset(accountKeyId)
-
-    private fun progressNotificationId(accountKeyId: String): Int =
-        NOTIFICATION_ID_PROGRESS_BASE + accountIdOffset(accountKeyId)
 
     /**
      * Registers the notification channel every migration notification posts to. Must be called once
@@ -156,7 +150,7 @@ class MigrationNotifier(
                 .setOnlyAlertOnce(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
@@ -179,7 +173,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
@@ -214,7 +208,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
@@ -250,7 +244,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
@@ -270,7 +264,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
@@ -294,7 +288,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(stepDueNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_STEP_DUE, notification)
     }
 
     /**
@@ -304,7 +298,7 @@ class MigrationNotifier(
      *   notification (posted by [notifyMigrationStepDue]) should be dismissed.
      */
     fun cancelStepDue(accountKeyId: String) {
-        NotificationManagerCompat.from(context).cancel(stepDueNotificationId(accountKeyId))
+        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_STEP_DUE)
     }
 
     // Spec §6.2 (Migration Plan Update) — notes were spent outside the migration flow, invalidating
@@ -331,7 +325,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     // Spec §6.3 (Transfer(s) Expired) — one or more transfers expired without executing (the app
@@ -355,12 +349,12 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     /**
      * Dismisses whatever migration notification is currently showing for [accountKeyId]. All
-     * notify* methods above share the single per-account [progressNotificationId], so one cancel
+     * notify* methods above share the same per-account progress notification, so one cancel
      * covers them all — used when the migration itself is discarded (debug "Migration restart"),
      * where a leftover "ready to send"/"Tor failure" notification would tap into a migration that
      * no longer exists.
@@ -369,7 +363,7 @@ class MigrationNotifier(
      *   notification should be dismissed.
      */
     fun cancel(accountKeyId: String) {
-        NotificationManagerCompat.from(context).cancel(progressNotificationId(accountKeyId))
+        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_PROGRESS)
     }
 
     /**
@@ -389,7 +383,7 @@ class MigrationNotifier(
                 .setAutoCancel(true)
                 .build()
 
-        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
+        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
     }
 
     companion object {
@@ -411,15 +405,12 @@ class MigrationNotifier(
          */
         const val EXTRA_ACCOUNT_KEY_ID = "co.electriccoin.zcash.migration.account_key_id"
 
-        // Notification-id namespace (NotificationManager ids). Independent of the PendingIntent
-        // request-code namespace below — sharing the same numeric base value across the two namespaces
-        // does not collide. Per-account via `+ accountIdOffset(...)` (range 0..0xFFFF).
-        private const val NOTIFICATION_ID_PROGRESS_BASE = 0x10_0000
-        private const val NOTIFICATION_ID_STEP_DUE_BASE = 0x40_0000
-
-        // PendingIntent request-code namespace. The two bases are spaced 0x10_0000 apart — far more than
-        // accountIdOffset's 0..0xFFFF range — so per-account request-code ranges can never overlap.
-        private const val REQUEST_CODE_MIGRATION_BASE = 0x10_0000
-        private const val REQUEST_CODE_TRANSFER_READY_BASE = 0x20_0000
+        private const val NOTIFICATION_ID_PROGRESS = 0x10_0000
+        private const val NOTIFICATION_ID_STEP_DUE = 0x40_0000
+        private const val REQUEST_CODE_MIGRATION = 0x10_0000
+        private const val REQUEST_CODE_TRANSFER_READY = 0x20_0000
     }
 }
+
+// Android ignores extras when comparing pending intents.
+internal fun migrationIntentAction(kind: String, accountKeyId: String): String = "$kind.$accountKeyId"

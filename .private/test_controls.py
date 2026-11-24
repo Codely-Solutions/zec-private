@@ -109,8 +109,9 @@ for clear in (False, True):
             p=root/checks.COMMON/'usecase/RequestSwapQuoteUseCase.kt'
             original=p.read_text()
             for before, after, expected in (
-                ('requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest',
-                 'requestFreshAddress(canNavigateToSwapQuote)!!', 'Fresh shielded recipient/refund derivation changed'),
+                ('requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest',
+                 'requestFreshAddress(canNavigateToSwapQuote, owner.account)!!',
+                 'Fresh shielded recipient/refund derivation changed'),
                 ('requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest',
                  'requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest',
                  'Fresh shielded recipient/refund derivation changed'),

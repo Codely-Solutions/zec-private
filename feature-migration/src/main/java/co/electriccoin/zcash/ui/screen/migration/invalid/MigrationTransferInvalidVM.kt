@@ -47,27 +47,29 @@ class MigrationTransferInvalidVM(
     // snapshot is read alongside it (same load pass) so affectedTransferIndices() correlates by
     // the transfer's stable engine id.
     private data class RecoveryInfo(
+        val owner: String,
         val reason: AttentionReason?,
         val snapshot: LiveMigrationSnapshot?
     )
 
-    private val recoveryInfo = MutableStateFlow(RecoveryInfo(null, null))
+    private val recoveryInfo = MutableStateFlow<RecoveryInfo?>(null)
 
     init {
         loadLce.execute {
-            val sdk = getOrchardMigrationSdk()
+            val owner = selectedOwner()
+            val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
             // getMigrationStateUnreconciled(), not getMigrationState(): this screen only reads,
             // never mutates (2026-08-07 read/write-separation design), and RequiresAttention's
             // reason doesn't depend on the mark-mined promotion pass — this screen is only
             // reachable after the state was already observed as RequiresAttention elsewhere.
             val reason = (sdk.getMigrationStateUnreconciled() as? MigrationState.RequiresAttention)?.reason
-            recoveryInfo.value = RecoveryInfo(reason, getMigrationSnapshot())
+            recoveryInfo.value = RecoveryInfo(owner, reason, getMigrationSnapshot(owner))
         }
     }
 
     val state: StateFlow<LceState<MigrationTransferInvalidState>> =
         recoveryInfo
-            .map { info -> buildState(info) }
+            .map { info -> info?.let(::buildState) }
             .withLce(groupLce(loadLce, restartLce), errorStateMapper::mapToState)
             .stateIn(this)
 
@@ -96,23 +98,23 @@ class MigrationTransferInvalidVM(
             totalCount = total,
             remainingCount = affectedIndices.size.takeIf { it > 0 } ?: (total - completed),
             invalidRange = stringRes(rangeText),
-            onContinue = ::onContinue,
+            onContinue = { onContinue(info.owner) },
             onBack = ::onBack,
         )
     }
 
-    private fun onContinue() =
+    private fun onContinue(owner: String) =
         restartLce.execute {
-            val sdk = getOrchardMigrationSdk()
+            check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
+            val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
             // restartCurrentMigrationStep()'s own doc requires its returned schedule to go through the
             // normal user confirmation flow rather than being discarded — hand it to MigrationReviewVM
             // instead of letting it independently re-propose (see RestartMigrationScheduleRepository's
             // doc for why this is a separate slot from the Keystone sign/scan hand-off).
             when (val outcome = sdk.restartCurrentMigrationStep()) {
                 is MigrationRestartOutcome.Replanned -> {
-                    val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-                    restartMigrationScheduleRepository.set(accountKeyId, outcome.schedule)
-                    navigationRouter.replace(MigrationReviewArgs(MigrationMode.AUTOMATIC))
+                    restartMigrationScheduleRepository.set(owner, outcome.schedule)
+                    navigationRouter.replace(MigrationReviewArgs(MigrationMode.AUTOMATIC, owner))
                 }
 
                 is MigrationRestartOutcome.CancelledUntilNetworkUpgrade -> {
@@ -120,6 +122,8 @@ class MigrationTransferInvalidVM(
                 }
             }
         }
+
+    private suspend fun selectedOwner() = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 
     private fun onBack() = navigationRouter.back()
 }

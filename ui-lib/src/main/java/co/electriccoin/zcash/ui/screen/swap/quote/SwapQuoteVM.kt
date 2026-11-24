@@ -91,7 +91,7 @@ internal class SwapQuoteVM(
                 SwapQuoteData.Loading -> null
                 is SwapQuoteData.Error -> createErrorState(quote)
                 is SwapQuoteData.Success -> if (account == null || quote.quote.requiresLocalProposal &&
-                    (proposal as? SwapTransactionProposal)?.quote !== quote.quote) unavailableState()
+                    !proposal.matchesFunding(quote.quote, account)) unavailableState()
                 else createState(proposal, quote, account, check, now)
             }
         }.stateIn(
@@ -244,6 +244,10 @@ internal class SwapQuoteVM(
 
     private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 }
+
+private fun TransactionProposal?.matchesFunding(quote: SwapQuote, account: WalletAccount): Boolean =
+    this is SwapTransactionProposal && this.quote === quote &&
+        fundingAccount.sdkAccount.accountUuid == account.sdkAccount.accountUuid
 
 private val SwapQuote.requiresLocalProposal: Boolean
     get() = co.electriccoin.zcash.ui.common.model.ZecSwapComposition.funding(mode) ==

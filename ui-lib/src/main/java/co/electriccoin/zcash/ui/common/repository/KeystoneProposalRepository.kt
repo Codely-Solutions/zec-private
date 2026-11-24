@@ -61,10 +61,18 @@ interface KeystoneProposalRepository {
     suspend fun createProposal(zecSend: ZecSend)
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactInputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactInputSwapTransactionProposal
+    suspend fun createExactInputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactInputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactOutputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactOutputSwapTransactionProposal
+    suspend fun createExactOutputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
@@ -182,10 +190,11 @@ class KeystoneProposalRepositoryImpl(
     override suspend fun createExactInputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactInputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactInputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )
@@ -194,10 +203,11 @@ class KeystoneProposalRepositoryImpl(
     override suspend fun createExactOutputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactOutputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactOutputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )

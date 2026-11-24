@@ -126,12 +126,12 @@ class RequestSwapQuoteUseCaseTest {
         }
         val proposalStarted = CompletableDeferred<Unit>()
         val finishProposal = CompletableDeferred<Unit>()
-        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } coAnswers {
+        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } coAnswers {
             proposalStarted.complete(Unit)
             finishProposal.await()
             mockk(relaxed = true)
         }
-        coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } coAnswers {
+        coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } coAnswers {
             proposalStarted.complete(Unit)
             finishProposal.await()
             mockk(relaxed = true)
@@ -182,7 +182,7 @@ class RequestSwapQuoteUseCaseTest {
     fun exactInputZashiCreatesProposalAndForwards() =
         runBlocking {
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), zodl()).exactInput()
-            coVerify { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
+            coVerify { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
             assertForwardedToQuote()
         }
 
@@ -190,8 +190,8 @@ class RequestSwapQuoteUseCaseTest {
     fun exactInputKeystoneCreatesProposalAndPcztAndForwards() =
         runBlocking {
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), keystone()).exactInput()
-            coVerify { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) }
-            coVerify { keystoneProposalRepository.createPCZTFromProposal() }
+            coVerify { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
+            coVerify { keystoneProposalRepository.createPCZTFromProposal(any()) }
             assertForwardedToQuote()
         }
 
@@ -199,7 +199,7 @@ class RequestSwapQuoteUseCaseTest {
     fun exactInputLedgerCreatesProposalAndPcztAndForwards() =
         runBlocking {
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
-            coVerify { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) }
+            coVerify { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) }
             coVerify { ledgerProposalPipeline.createPCZTFromProposal() }
             assertForwardedToQuote()
         }
@@ -207,7 +207,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputZashiInsufficientFunds() =
         runBlocking {
-            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws
+            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
                 InsufficientFundsException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), zodl()).exactInput()
             assertNavigatedToInsufficientFunds()
@@ -216,7 +216,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputKeystoneInsufficientFunds() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws
+            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
                 InsufficientFundsException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), keystone()).exactInput()
             assertNavigatedToInsufficientFunds()
@@ -225,7 +225,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputLedgerInsufficientFundsClearsEveryRepository() =
         runBlocking {
-            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws
+            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws
                 InsufficientFundsException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToInsufficientFunds()
@@ -237,7 +237,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputKeystoneTexUnsupported() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws
+            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
                 TexUnsupportedOnKSException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), keystone()).exactInput()
             assertNavigatedToTexUnsupported()
@@ -246,7 +246,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputLedgerTexUnsupportedNamesTheLedgerInTheCopy() =
         runBlocking {
-            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws
+            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws
                 TexUnsupportedOnKSException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToTexUnsupported(isLedger = true)
@@ -256,7 +256,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputZashiGenericError() =
         runBlocking {
-            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws TestException()
+            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws TestException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), zodl()).exactInput()
             assertNavigatedToError()
         }
@@ -264,7 +264,8 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputKeystoneGenericError() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws TestException()
+            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
+                TestException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), keystone()).exactInput()
             assertNavigatedToError()
         }
@@ -272,7 +273,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactInputLedgerGenericErrorClearsEveryRepository() =
         runBlocking {
-            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws TestException()
+            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws TestException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToError()
             coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
@@ -294,7 +295,7 @@ class RequestSwapQuoteUseCaseTest {
     fun exactOutputZashiCreatesProposalAndForwards() =
         runBlocking {
             useCase(exactOutputQuote(), zodl()).exactOutput()
-            coVerify { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) }
+            coVerify { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
             assertForwardedToQuote()
         }
 
@@ -302,8 +303,8 @@ class RequestSwapQuoteUseCaseTest {
     fun exactOutputKeystoneCreatesProposalAndPcztAndForwards() =
         runBlocking {
             useCase(exactOutputQuote(), keystone()).exactOutput()
-            coVerify { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) }
-            coVerify { keystoneProposalRepository.createPCZTFromProposal() }
+            coVerify { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
+            coVerify { keystoneProposalRepository.createPCZTFromProposal(any()) }
             assertForwardedToQuote()
         }
 
@@ -311,7 +312,7 @@ class RequestSwapQuoteUseCaseTest {
     fun exactOutputLedgerCreatesProposalAndPcztAndForwards() =
         runBlocking {
             useCase(exactOutputQuote(), ledger()).exactOutput()
-            coVerify { ledgerProposalPipeline.createExactOutputSwapProposal(any(), any()) }
+            coVerify { ledgerProposalPipeline.createExactOutputSwapProposal(any(), any(), any()) }
             coVerify { ledgerProposalPipeline.createPCZTFromProposal() }
             assertForwardedToQuote()
         }
@@ -319,7 +320,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactOutputZashiInsufficientFunds() =
         runBlocking {
-            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
+            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
                 InsufficientFundsException()
             useCase(exactOutputQuote(), zodl()).exactOutput()
             assertNavigatedToInsufficientFunds()
@@ -328,7 +329,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactOutputKeystoneInsufficientFunds() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
+            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
                 InsufficientFundsException()
             useCase(exactOutputQuote(), keystone()).exactOutput()
             assertNavigatedToInsufficientFunds()
@@ -337,7 +338,7 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactOutputKeystoneTexUnsupported() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
+            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
                 TexUnsupportedOnKSException()
             useCase(exactOutputQuote(), keystone()).exactOutput()
             assertNavigatedToTexUnsupported()
@@ -346,7 +347,8 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactOutputZashiGenericError() =
         runBlocking {
-            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } throws TestException()
+            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
+                TestException()
             useCase(exactOutputQuote(), zodl()).exactOutput()
             assertNavigatedToError()
         }
@@ -354,7 +356,8 @@ class RequestSwapQuoteUseCaseTest {
     @Test
     fun exactOutputKeystoneGenericError() =
         runBlocking {
-            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws TestException()
+            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
+                TestException()
             useCase(exactOutputQuote(), keystone()).exactOutput()
             assertNavigatedToError()
         }
@@ -373,8 +376,8 @@ class RequestSwapQuoteUseCaseTest {
     fun flexForwardsWithoutCreatingAProposal() =
         runBlocking {
             useCase(flexQuote()).flex()
-            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) }
+            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
             assertForwardedToQuote()
         }
 
@@ -389,7 +392,7 @@ class RequestSwapQuoteUseCaseTest {
         runBlocking {
             useCase(flexQuote(), ledger()).exactInput()
             assertNavigatedToError()
-            coVerify(exactly = 0) { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) }
+            coVerify(exactly = 0) { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) }
             coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
             coVerify(exactly = 1) { keystoneProposalRepository.clear() }
             coVerify(exactly = 1) { zashiProposalRepository.clear() }
@@ -531,7 +534,7 @@ class RequestSwapQuoteUseCaseTest {
     fun outgoingQuotesUseIndependentShieldedRefunds() =
         runBlocking {
             val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
-            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any()) } returnsMany
                 listOf("refund-first", "refund-second")
             instance.exactInput()
             instance.exactInput()
@@ -588,7 +591,7 @@ class RequestSwapQuoteUseCaseTest {
         verify(exactly = 0) { swapRepository.clearQuote() }
         verify(exactly = 0) { navigateToError(any(), any()) }
         verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
-        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
+        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
     }
 
     // region helpers
@@ -667,7 +670,8 @@ class RequestSwapQuoteUseCaseTest {
 
     @Test
     fun proposalCancellationPropagatesWithoutErrorNavigation() = runBlocking {
-        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws CancellationException()
+        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
+            CancellationException()
         val instance = useCase(swapQuote(zec, btc))
         assertFailsWith<CancellationException> { instance.exactInput() }
         verify(exactly = 0) { navigateToError(any(), any()) }
@@ -723,6 +727,44 @@ class RequestSwapQuoteUseCaseTest {
 
     private fun assertNavigatedToTexUnsupported(isLedger: Boolean = false) {
         verify { navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger)) }
+        verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
+    }
+
+    @Test
+    fun providerDelayCannotBindAnOutgoingRefundToOneAccountAndDebitAnother() = runTest {
+        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
+            val first = EditAccountFixtures.zodl()
+            val second = EditAccountFixtures.keystone()
+            var account: WalletAccount = first
+            val quote = swapQuote(originAsset = zec, destinationAsset = btc, mode = mode)
+            val request = useCase(quote, first)
+            coEvery { accountDataSource.getSelectedAccount() } answers { account }
+            val result = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Loading)
+            every { swapRepository.quote } returns result
+            val entered = CompletableDeferred<Unit>()
+            coEvery { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) } answers {
+                entered.complete(Unit)
+                Unit
+            }
+            coEvery { swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any()) } answers {
+                entered.complete(Unit)
+                Unit
+            }
+            val job = launch {
+                if (mode == SwapMode.EXACT_INPUT) request.exactInput() else request.exactOutput()
+            }
+
+            entered.await()
+            account = second
+            result.value = SwapQuoteData.Success(quote)
+            job.join()
+
+            coVerify { accountDataSource.requestNextShieldedAddress(true, first) }
+            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
+            coVerify(exactly = 0) { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
+        }
         verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
     }
 

@@ -35,6 +35,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.model.toLedgerIssue
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.LEDGER_SCAN_TIMEOUT
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -176,10 +177,11 @@ class LedgerProposalRepositoryImpl(
     override suspend fun createExactInputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactInputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactInputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )
@@ -188,10 +190,11 @@ class LedgerProposalRepositoryImpl(
     override suspend fun createExactOutputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactOutputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactOutputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )
@@ -218,7 +221,8 @@ class LedgerProposalRepositoryImpl(
         val result =
             try {
                 proposalDataSource.createPcztFromProposal(
-                    account = accountDataSource.getSelectedAccount(),
+                    account = (transactionProposal as? SwapTransactionProposal)?.fundingAccount
+                        ?: accountDataSource.getSelectedAccount(),
                     proposal = transactionProposal.proposal
                 )
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {

@@ -21,6 +21,52 @@ with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
     from integrate_release import state_commit
 
 
+class UpgradeSimulationControlTest(unittest.TestCase):
+    def test_diagnostic_signing_is_scoped_to_the_protected_dispatch(self):
+        controller = 'b' * 40
+        source = 'a' * 40
+        event = {
+            'GITHUB_WORKFLOW_REF': f'{publish.REPO}/.github/workflows/upgrade-acceptance.yml@refs/heads/main',
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        }
+        with patch_environment(event):
+            publish.require_simulation_context(source, controller, False, '')
+            for invalid in [(controller, controller, False, ''), (source, controller, True, ''),
+                            (source, controller, False, '5')]:
+                with self.assertRaisesRegex(ValueError, 'protected upgrade simulation'):
+                    publish.require_simulation_context(*invalid)
+        with patch_environment({**event, 'GITHUB_WORKFLOW_REF': event['GITHUB_WORKFLOW_REF'].replace('main', 'review')}):
+            with self.assertRaisesRegex(ValueError, 'protected upgrade simulation'):
+                publish.require_simulation_context(source, controller, False, '')
+
+    def test_quote_negative_control_uses_pinned_resource_bytes(self):
+        from test_quote_rendering_regression import RESOURCE, malformed_fee_resource
+
+        original = RESOURCE.read_bytes()
+        malformed = malformed_fee_resource(original)
+        self.assertIn(b'0.25% platform fee', malformed)
+        self.assertNotIn(b'0.25%% included in quote', malformed)
+        with self.assertRaisesRegex(RuntimeError, 'Corrected fee resource'):
+            malformed_fee_resource(malformed)
+        proof = {'source_sha': 'a' * 40}
+        negative = {
+            'source_sha': proof['source_sha'],
+            'original_crash_reproduced': True,
+            'quote_modes_tested': 3,
+            'source_restored': True,
+            'restored_resource_sha256': hashlib.sha256(original).hexdigest(),
+        }
+        with tempfile.TemporaryDirectory() as scratch, patch.object(publish, 'ROOT', Path(scratch)):
+            report = Path(scratch) / 'artifact/quote-rendering-negative.json'
+            report.parent.mkdir()
+            report.write_text(json.dumps(negative))
+            with patch.object(publish.subprocess, 'check_output', return_value=original):
+                publish.verify_simulation_negative_control(proof)
+            with patch.object(publish.subprocess, 'check_output', return_value=malformed):
+                with self.assertRaisesRegex(ValueError, 'quote-crash regression evidence'):
+                    publish.verify_simulation_negative_control(proof)
+
+
 class PublishMetadataTest(unittest.TestCase):
     def test_publication_recovery_integrates_actual_sibling_graph(self):
         with tempfile.TemporaryDirectory() as scratch:

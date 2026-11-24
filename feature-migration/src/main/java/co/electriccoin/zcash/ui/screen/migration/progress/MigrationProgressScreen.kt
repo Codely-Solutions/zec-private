@@ -51,6 +51,7 @@ import co.electriccoin.zcash.ui.design.util.scaffoldPadding
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.migration.component.MigrationPreparationDetailsBottomSheet
+import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
@@ -61,36 +62,16 @@ fun MigrationProgressScreen(args: MigrationProgressArgs) {
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.content?.onBack?.invoke() ?: vm.navigateBack() }
     if (state.content == null && !state.isLoading && state.error == null) {
-        MigrationProgressUnavailable(onBack = vm::navigateBack, onRetry = vm::retryReadout)
+        MigrationUnavailable(
+            message = stringRes(DesignR.string.migrationProgress_unavailable),
+            onBack = vm::navigateBack,
+            onRetry = vm::retryReadout,
+        )
     } else {
         LceRenderer(
             state = state,
             loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
         ) { MigrationProgressView(it) }
-    }
-}
-
-@Composable
-private fun MigrationProgressUnavailable(onBack: () -> Unit, onRetry: () -> Unit) {
-    BlankBgScaffold(
-        topBar = {
-            ZashiSmallTopAppBar(navigationAction = { ZashiTopAppBarCloseNavigation(onBack = onBack) })
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxWidth().scaffoldPadding(padding).verticalScroll(rememberScrollState()),
-        ) {
-            Text(
-                text = stringRes(DesignR.string.migrationProgress_unavailable).getValue(),
-                style = ZashiTypography.textLg,
-                color = ZashiColors.Text.textPrimary,
-            )
-            Spacer(Modifier.height(16.dp))
-            ZashiButton(
-                modifier = Modifier.fillMaxWidth(),
-                state = ButtonState(text = stringRes(DesignR.string.migration_common_tryAgain), onClick = onRetry),
-            )
-        }
     }
 }
 

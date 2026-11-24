@@ -67,7 +67,7 @@ class RestartMigrationUseCaseTest {
                     accountDataSource = accountDataSource,
                     getOrchardMigrationSdk =
                         mockk<GetOrchardMigrationSdkUseCase> {
-                            coEvery { this@mockk() } returns fakeSdk
+                            coEvery { this@mockk(accountKeyId) } returns fakeSdk
                         },
                     migrationScheduler = scheduler,
                     pendingMigrationTorFailureStorageProvider = torFailure,
@@ -84,7 +84,7 @@ class RestartMigrationUseCaseTest {
             verify { scheduler.cancel(accountKeyId) }
             coVerify { torFailure.store(accountKeyId, false) }
             verify { restartSchedule.consume(accountKeyId) }
-            verify { keystonePczt.clear() }
+            verify(exactly = 0) { keystonePczt.clear() }
             verify { notifier.cancel(accountKeyId) }
             verify { liveDriver.stop(accountKeyId) }
             verify { transferStateRepository.clear(accountKeyId) }
@@ -118,7 +118,7 @@ class RestartMigrationUseCaseTest {
                     accountDataSource = accountDataSource,
                     getOrchardMigrationSdk =
                         mockk<GetOrchardMigrationSdkUseCase> {
-                            coEvery { this@mockk() } returns fakeSdk
+                            coEvery { this@mockk(accountKeyId) } returns fakeSdk
                         },
                     migrationScheduler = mockk(relaxed = true),
                     pendingMigrationTorFailureStorageProvider = mockk(relaxed = true),

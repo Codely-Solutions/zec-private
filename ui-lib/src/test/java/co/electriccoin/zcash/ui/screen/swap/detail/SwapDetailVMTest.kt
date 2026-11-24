@@ -467,7 +467,7 @@ class SwapDetailVMTest {
         val router = mockk<NavigationRouter>(relaxed = true)
         val vm = SwapDetailVM(
             source, SwapDetailArgs(DEPOSIT, accountKeyId), router, clipboard,
-            CommonTransactionDetailMapper(), SwapSupportMapper()
+            CommonTransactionDetailMapper(), SwapSupportMapper(), mockk()
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
         return Harness(vm, upstream, reload, router, collector) { requests }.also(harnesses::add)

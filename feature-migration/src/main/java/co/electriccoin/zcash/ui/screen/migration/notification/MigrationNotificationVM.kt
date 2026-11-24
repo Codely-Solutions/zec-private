@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 
 class MigrationNotificationVM(
+    private val args: MigrationNotificationArgs,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val context: Context,
@@ -68,7 +69,7 @@ class MigrationNotificationVM(
 
     // The Tor privacy check already happened earlier in the flow (How This Works, ahead of
     // Battery/Notification).
-    private fun reviewArgs() = MigrationReviewArgs(mode = MigrationMode.AUTOMATIC)
+    private fun reviewArgs() = MigrationReviewArgs(MigrationMode.AUTOMATIC, args.accountKeyId, args.useTor)
 
     private fun onBack() = navigationRouter.back()
 }

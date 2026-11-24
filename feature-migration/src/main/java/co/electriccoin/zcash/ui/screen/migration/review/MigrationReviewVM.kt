@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.migration.review
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
@@ -149,6 +150,9 @@ class MigrationReviewVM(
             migrationLog("MIGRATION_DIAG ReviewVM: propose start (mode=${args.mode})")
             val account = getSelectedWalletAccount()
             val key = account.sdkAccount.accountUuid.toStorageKeyId()
+            check(args.accountKeyId == null || args.accountKeyId == key) {
+                "The migration draft belongs to a different account"
+            }
             reviewedOwnerKey = key
             val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
             val result =
@@ -401,7 +405,12 @@ class MigrationReviewVM(
     private suspend fun confirmAutomatic(sched: MigrationSchedule) {
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        val newTorPreference = args.useTor?.takeUnless {
+            sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
+        }
         if (account is KeystoneAccount) {
+            newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
             // Keystone can't sign in-process — hand the unsigned schedule off to the QR
             // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
             // instead (MigrationKeystoneScanVM), not here.
@@ -409,7 +418,6 @@ class MigrationReviewVM(
             navigationRouter.forward(MigrationKeystoneSignArgs(mode = args.mode))
             return
         }
-        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
         // Note-split is the first step of this confirm action (design spec §7) — a schedule with
         // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
         // balance on the first transfer, leaving every subsequent transfer InsufficientFunds. Per
@@ -426,9 +434,13 @@ class MigrationReviewVM(
         // construction may already be consuming as one of its own inputs (a real double-spend
         // found live on testnet). Re-deriving the schedule from the split's own realized output
         // plan makes every crossing value provably match a note this split actually produces.
+        val needsSplit = sdk.isNoteSplitNeeded()
+        if (needsSplit && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
+            throw PrivateNoteSplitUnavailable()
+        }
+        newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
         val scheduleToSign =
-            if (sdk.isNoteSplitNeeded()) {
-                if (migrationTorEnabled.get(accountKeyId)) throw PrivateNoteSplitUnavailable()
+            if (needsSplit) {
                 val proposal = sdk.prepareNoteSplit()
                 // Derive the from-split schedule BEFORE submitting the split, not after: submitNoteSplit()
                 // signs the split through the SDK's commit_or_reuse, which clears the in-memory

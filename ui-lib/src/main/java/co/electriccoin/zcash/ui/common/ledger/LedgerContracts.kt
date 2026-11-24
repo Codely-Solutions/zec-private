@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedE
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
 import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import kotlinx.coroutines.flow.Flow
@@ -45,10 +46,18 @@ interface LedgerProposalPipeline {
     suspend fun createProposal(zecSend: ZecSend)
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactInputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactInputSwapTransactionProposal
+    suspend fun createExactInputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactInputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactOutputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactOutputSwapTransactionProposal
+    suspend fun createExactOutputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal

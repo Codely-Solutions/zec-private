@@ -274,8 +274,8 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
             composable<MigrationKeystoneSignArgs> { MigrationKeystoneSignScreen(it.toRoute()) }
             composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute()) }
-            composable<MigrationBatteryArgs> { MigrationBatteryScreen() }
-            composable<MigrationNotificationArgs> { MigrationNotificationScreen() }
+            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
+            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
             dialogComposable<MigrationPrivacyArgs> { MigrationPrivacyScreen(it.toRoute()) }
             dialogComposable<MigrationCustomServerTorArgs> { MigrationCustomServerTorScreen(it.toRoute()) }
             dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }

@@ -35,10 +35,15 @@ class RestartMigrationUseCase(
                 .getSelectedAccount()
                 .sdkAccount.accountUuid
                 .toStorageKeyId()
+        invoke(accountKeyId)
+    }
+
+    suspend operator fun invoke(accountKeyId: String) {
         // clearMigration() (SDK, 2026-08-07) now delegates to zcash_client_sqlite's real
         // cancel_migration primitive (PR #2926) instead of the old manual status-only swap to
         // Failed — the account genuinely reads back NotStarted afterward, not RequiresAttention.
-        getOrchardMigrationSdk().clearMigration()
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        sdk.clearMigration()
         // Cancel the self-rechaining background worker chain for a run that no longer exists.
         // Cascades to the dead-man's-switch alarm (MigrationDueAlarmScheduler) and the worker
         // heartbeat too — see MigrationScheduler.cancel()'s own kdoc.
@@ -67,7 +72,9 @@ class RestartMigrationUseCase(
         // An unconsumed restart schedule would otherwise be reused in place of a fresh proposal.
         restartMigrationScheduleRepository.consume(accountKeyId)
         // A pending Keystone sign/scan hand-off points at the deleted run.
-        pendingKeystoneMigrationPcztsRepository.clear()
+        pendingKeystoneMigrationPcztsRepository.peek(accountKeyId)?.let {
+            pendingKeystoneMigrationPcztsRepository.clear(accountKeyId, it)
+        }
         // Dismiss any migration notification whose tap routes into the deleted run.
         migrationNotifier.cancel(accountKeyId)
     }

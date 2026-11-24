@@ -558,6 +558,7 @@ class NearSwapDataSourceTest {
                     every { quote } returns mockk { every { depositAddress } returns "deposit" }
                     every { quoteRequest } returns
                         mockk {
+                            every { dry } returns false
                             every { originAsset } returns originAssetId
                             every { destinationAsset } returns destinationAssetId
                         }

@@ -20,7 +20,6 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
-import co.electriccoin.zcash.wallet.foundation.FundingCapability
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
@@ -93,6 +92,8 @@ class RequestSwapQuoteUseCase(
 
     private class RequestOwner(val caller: Job, val child: Job)
 
+    private data class FundingOwner(val account: WalletAccount, val writeToken: Long)
+
     suspend fun requestExactInput(
         amount: BigDecimal,
         address: String,
@@ -104,7 +105,9 @@ class RequestSwapQuoteUseCase(
         val recipient = validatedRecipient(
             address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
-        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
+        val owner = fundingOwner()
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
+        if (!walletWriteAccess.permits(owner.writeToken)) return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactInputQuote(
@@ -115,7 +118,7 @@ class RequestSwapQuoteUseCase(
                     slippage = slippage
                 )
             },
-            funding = ZecSwapComposition.funding(EXACT_INPUT),
+            fundingOwner = owner,
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
@@ -138,7 +141,9 @@ class RequestSwapQuoteUseCase(
                 }
                 null
             } ?: return@runRequest
-        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
+        val owner = fundingOwner()
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
+        if (!walletWriteAccess.permits(owner.writeToken)) return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactOutputQuote(
@@ -149,7 +154,7 @@ class RequestSwapQuoteUseCase(
                     slippage = slippage
                 )
             },
-            funding = ZecSwapComposition.funding(EXACT_OUTPUT),
+            fundingOwner = owner,
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
@@ -181,12 +186,16 @@ class RequestSwapQuoteUseCase(
                         owner = owner,
                     )
             },
-            funding = ZecSwapComposition.funding(FLEX_INPUT),
             canNavigateToSwapQuote = { walletWriteAccess.permits(token) && canNavigateToSwapQuote() }
         )
     }
 
-    private suspend fun requestFreshAddress(canNavigate: () -> Boolean, account: WalletAccount? = null): String? =
+    private suspend fun fundingOwner(): FundingOwner {
+        val token = walletWriteAccess.token()
+        return FundingOwner(accountDataSource.getSelectedAccount(), token)
+    }
+
+    private suspend fun requestFreshAddress(canNavigate: () -> Boolean, account: WalletAccount): String? =
         try {
             diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
                 accountDataSource.requestNextShieldedAddress(requireFresh = true, account = account)
@@ -224,24 +233,10 @@ class RequestSwapQuoteUseCase(
         return null
     }
 
-    private suspend fun rejectUnsupportedFunding(
-        funding: FundingCapability,
-        result: SwapQuoteData,
-        canNavigate: () -> Boolean
-    ): Boolean {
-        if (funding != FundingCapability.LOCAL_TRANSACTION || accountDataSource.getSelectedAccount().isSpendable) {
-            return false
-        }
-        onPreparationFailure(result, canNavigate) {
-            navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
-        }
-        return true
-    }
-
     private suspend fun requestQuote(
         requestQuote: suspend () -> Unit,
-        funding: FundingCapability,
-        canNavigateToSwapQuote: () -> Boolean
+        canNavigateToSwapQuote: () -> Boolean,
+        fundingOwner: FundingOwner? = null,
     ) {
         currentCoroutineContext().ensureActive()
         requestQuote()
@@ -258,7 +253,7 @@ class RequestSwapQuoteUseCase(
             return
         }
 
-        if (result is SwapQuoteData.Success && !prepareForReview(result, funding, canNavigateToSwapQuote)) {
+        if (result is SwapQuoteData.Success && !prepareForReview(result, fundingOwner, canNavigateToSwapQuote)) {
             return
         }
 
@@ -268,13 +263,12 @@ class RequestSwapQuoteUseCase(
 
     private suspend fun prepareForReview(
         result: SwapQuoteData.Success,
-        funding: FundingCapability,
+        owner: FundingOwner?,
         canNavigate: () -> Boolean
     ): Boolean {
-        if (rejectUnsupportedFunding(funding, result, canNavigate)) return false
         currentCoroutineContext().ensureActive()
         return swapRepository.quote.value === result && validateComposition(result, canNavigate) &&
-            (funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate))
+            (owner == null || prepareProposal(result, owner, canNavigate))
     }
 
     private fun validateComposition(result: SwapQuoteData.Success, canNavigate: () -> Boolean): Boolean =
@@ -292,15 +286,18 @@ class RequestSwapQuoteUseCase(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun prepareProposal(
         result: SwapQuoteData.Success,
+        owner: FundingOwner,
         canNavigate: () -> Boolean
     ): Boolean =
         try {
-            diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote) }
+            owner.requireCurrent()
+            diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote, owner.account) }
+            owner.requireCurrent()
             true
         } catch (e: CancellationException) {
             throw e
         } catch (_: TexUnsupportedOnKSException) {
-            val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
+            val isLedger = owner.account is LedgerAccount
             onPreparationFailure(result, canNavigate) {
                 navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
             }
@@ -334,13 +331,18 @@ class RequestSwapQuoteUseCase(
         }
     }
 
-    /**
-     * Spends from the selected account, so an account that cannot spend is refused before anything
-     * is derived from the quote.
-     */
+    private suspend fun FundingOwner.requireCurrent() {
+        check(walletWriteAccess.permits(writeToken)) { "The wallet for this quote was reset." }
+        val current = accountDataSource.getSelectedAccount()
+        val sameOwner = current === account || current.sdkAccount.accountUuid == account.sdkAccount.accountUuid
+        check(sameOwner && walletWriteAccess.permits(writeToken)) {
+            "The wallet account for this quote changed. Request a new quote."
+        }
+    }
+
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")
-    private suspend fun createProposal(quote: SwapQuote) {
-        val account = accountDataSource.getSelectedAccount().requireSpendable()
+    private suspend fun createProposal(quote: SwapQuote, account: WalletAccount) {
+        account.requireSpendable()
         val send =
             ZecSend(
                 destination = getWalletAddress(quote.depositAddress.address),
@@ -352,17 +354,17 @@ class RequestSwapQuoteUseCase(
         when (account) {
             is KeystoneAccount -> {
                 when (quote.mode) {
-                    EXACT_INPUT -> keystoneProposalRepository.createExactInputSwapProposal(send, quote)
-                    EXACT_OUTPUT -> keystoneProposalRepository.createExactOutputSwapProposal(send, quote)
+                    EXACT_INPUT -> keystoneProposalRepository.createExactInputSwapProposal(send, quote, account)
+                    EXACT_OUTPUT -> keystoneProposalRepository.createExactOutputSwapProposal(send, quote, account)
                     FLEX_INPUT -> throw UnsupportedOperationException("Flex input swap not supported")
                 }
-                keystoneProposalRepository.createPCZTFromProposal()
+                keystoneProposalRepository.createPCZTFromProposal(account)
             }
 
             is LedgerAccount -> {
                 when (quote.mode) {
-                    EXACT_INPUT -> ledgerProposalPipeline.createExactInputSwapProposal(send, quote)
-                    EXACT_OUTPUT -> ledgerProposalPipeline.createExactOutputSwapProposal(send, quote)
+                    EXACT_INPUT -> ledgerProposalPipeline.createExactInputSwapProposal(send, quote, account)
+                    EXACT_OUTPUT -> ledgerProposalPipeline.createExactOutputSwapProposal(send, quote, account)
                     FLEX_INPUT -> throw UnsupportedOperationException("Flex input swap not supported")
                 }
                 ledgerProposalPipeline.createPCZTFromProposal()
@@ -374,8 +376,8 @@ class RequestSwapQuoteUseCase(
 
             is ZodlAccount -> {
                 when (quote.mode) {
-                    EXACT_INPUT -> zashiProposalRepository.createExactInputSwapProposal(send, quote)
-                    EXACT_OUTPUT -> zashiProposalRepository.createExactOutputSwapProposal(send, quote)
+                    EXACT_INPUT -> zashiProposalRepository.createExactInputSwapProposal(send, quote, account)
+                    EXACT_OUTPUT -> zashiProposalRepository.createExactOutputSwapProposal(send, quote, account)
                     FLEX_INPUT -> throw UnsupportedOperationException("Flex input swap not supported")
                 }
             }

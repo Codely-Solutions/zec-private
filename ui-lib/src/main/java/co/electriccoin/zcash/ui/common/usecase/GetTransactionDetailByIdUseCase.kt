@@ -51,6 +51,22 @@ class GetTransactionDetailByIdUseCase(
             }.distinctUntilChanged()
 
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeSwapFunding(txId: String, accountKeyId: String, depositAddress: String): Flow<Boolean> =
+        accountDataSource.selectedAccount
+            .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+            .flatMapLatest { account ->
+                val owner = account?.sdkAccount?.accountUuid
+                if (owner == null || owner.toStorageKeyId() != accountKeyId) {
+                    flowOf(false)
+                } else {
+                    transactionRepository.observeTransaction(txId).map { transaction ->
+                        transaction != null && transaction.accountUuid == owner &&
+                            transaction.recipient == depositAddress
+                    }
+                }
+            }.distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeForAccount(txId: String, account: WalletAccount): Flow<DetailedTransactionData?> =
         channelFlow<DetailedTransactionData?> {
             val requestSwipeReloadPipeline = MutableSharedFlow<Unit>()

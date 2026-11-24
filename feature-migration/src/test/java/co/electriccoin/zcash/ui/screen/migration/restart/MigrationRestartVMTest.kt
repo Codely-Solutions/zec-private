@@ -1,6 +1,12 @@
 package co.electriccoin.zcash.ui.screen.migration.restart
 
 import cash.z.ecc.android.sdk.model.Zatoshi
+import cash.z.ecc.android.sdk.fixture.AccountFixture
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import io.mockk.every
+import java.util.UUID
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
@@ -47,6 +53,7 @@ class MigrationRestartVMTest {
     @Test
     fun nextOpensConfirmationAndConfirmRunsUseCaseAndNavigatesBack() =
         runTest {
+            val owner = account("00000000-0000-0000-0000-000000000001")
             val restart = mockk<RestartMigrationUseCase>(relaxed = true)
             val router = mockk<NavigationRouter>(relaxed = true)
             val vm =
@@ -54,6 +61,7 @@ class MigrationRestartVMTest {
                     restartMigration = restart,
                     getMigrationSnapshot = fakeSnapshot(completed = 7, total = 11),
                     getOrchardBalance = fakeBalance(Zatoshi(307_000_000)),
+                    getSelectedWalletAccount = mockk { coEvery { this@mockk() } returns owner },
                     navigationRouter = router,
                     errorStateMapper = fakeErrorMapper(),
                 )
@@ -82,9 +90,34 @@ class MigrationRestartVMTest {
             // Confirm restart runs the use case and pops back.
             dialog.primaryAction.onClick()
             advanceUntilIdle()
-            coVerify { restart.invoke() }
+            coVerify { restart.invoke(owner.sdkAccount.accountUuid.toStorageKeyId()) }
             verify { router.back() }
         }
+
+    @Test
+    fun confirmationRejectsAccountChangeWithoutCancellingTheOtherPlan() = runTest {
+        var selected = account("00000000-0000-0000-0000-000000000001")
+        val restart = mockk<RestartMigrationUseCase>(relaxed = true)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = MigrationRestartVM(
+            restartMigration = restart,
+            getMigrationSnapshot = fakeSnapshot(completed = 1, total = 3),
+            getOrchardBalance = fakeBalance(Zatoshi(307_000_000)),
+            getSelectedWalletAccount = mockk { coEvery { this@mockk() } answers { selected } },
+            navigationRouter = router,
+            errorStateMapper = fakeErrorMapper(),
+        )
+        requireNotNull(vm.state.first { it.content != null }.content).nextButton.onClick()
+        val dialog = checkNotNull(
+            vm.state.first { it.content?.confirmationDialog != null }.content?.confirmationDialog
+        )
+        selected = account("00000000-0000-0000-0000-000000000002")
+        dialog.primaryAction.onClick()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { restart.invoke(any()) }
+        verify(exactly = 0) { router.back() }
+    }
 
     private fun fakeSnapshot(
         completed: Int,
@@ -107,11 +140,15 @@ class MigrationRestartVMTest {
                 )
             }
         val snapshot = LiveMigrationSnapshot(transfers = transfers, preparations = emptyList(), tipHeight = 1_000L)
-        return mockk { coEvery { this@mockk(null) } returns snapshot }
+        return mockk { coEvery { this@mockk(any()) } returns snapshot }
     }
 
     private fun fakeBalance(zatoshi: Zatoshi): GetOrchardBalanceUseCase =
-        mockk { coEvery { this@mockk() } returns zatoshi }
+        mockk { coEvery { this@mockk(any()) } returns zatoshi }
+
+    private fun account(uuid: String): WalletAccount = mockk {
+        every { sdkAccount } returns AccountFixture.new(accountUuid = UUID.fromString(uuid))
+    }
 
     private fun fakeErrorMapper(): ErrorMapperUseCase = mockk(relaxed = true)
 }

@@ -26,13 +26,13 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import co.electriccoin.zcash.ui.design.R as DesignR
 
@@ -58,13 +58,14 @@ class MigrationScheduledVM(
     // Defaults true so the snapshot flow below never races the init{} check below it.
     val isFinalizing = MutableStateFlow(true)
     val failureSheet = MutableStateFlow<MigrationTransferFailureState?>(null)
+    val finalizationError = MutableStateFlow<StringResource?>(null)
 
     init {
         viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
         // Fires exactly once — isFinalizing only ever transitions true -> false, never back.
         viewModelScope.launch {
             isFinalizing.first { !it }
-            loadLce.execute { getMigrationSnapshot(args.accountKeyId) }
+            retrySnapshot()
         }
     }
 
@@ -89,16 +90,7 @@ class MigrationScheduledVM(
                         NetworkPrivacyOptions(useTor = useTor),
                     )
                 if (splitResult !is TransferResult.Success) {
-                    failureSheet.update {
-                        MigrationTransferFailureState(
-                            message = migrationFailureMessage(splitResult),
-                            onRetry = {
-                                failureSheet.value = null
-                                viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
-                            },
-                            onDismiss = { failureSheet.value = null },
-                        )
-                    }
+                    showFinalizationError(migrationFailureMessage(splitResult))
                     return
                 }
                 // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
@@ -133,32 +125,35 @@ class MigrationScheduledVM(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            // An unguarded failure here (e.g. a transient "database is locked" from the migration
-            // engine mutex) would otherwise crash the app right after the user completes a
-            // physical Keystone signing ceremony, with the signed batch already applied. Surface
-            // it as a retryable failure instead — isFinalizing deliberately stays true, so the
-            // screen keeps showing its loading state underneath the sheet rather than racing the
-            // snapshot flow against a schedule that was never finalized.
-            migrationLog("MigrationScheduled: finalizeIfPendingKeystoneBatch failed: $e")
-            failureSheet.update {
-                MigrationTransferFailureState(
-                    message = stringRes(DesignR.string.migrationScheduled_finalizeErrorMessage),
-                    onRetry = {
-                        failureSheet.value = null
-                        viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
-                    },
-                    onDismiss = { failureSheet.value = null },
-                )
-            }
+            migrationLog("MigrationScheduled: finalizeIfPendingKeystoneBatch failed: ${e::class.simpleName}")
+            showFinalizationError(stringRes(DesignR.string.migrationScheduled_finalizeErrorMessage))
         }
     }
+
+    private fun showFinalizationError(message: StringResource) {
+        finalizationError.value = message
+        failureSheet.value = MigrationTransferFailureState(
+            message = message,
+            onRetry = ::retryFinalization,
+            onDismiss = { failureSheet.value = null },
+        )
+    }
+
+    fun retryFinalization() {
+        if (finalizationError.value == null) return
+        finalizationError.value = null
+        failureSheet.value = null
+        viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
+    }
+
+    fun retrySnapshot() = loadLce.execute { getMigrationSnapshot(args.accountKeyId) }
+
+    fun navigateBack() = navigationRouter.back()
 
     val state: StateFlow<LceState<MigrationScheduledState>> =
         loadLce.state
             .map { it.success }
             .map { snapshot ->
-                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
-                // instead of rendering zeroed stats (review L3).
                 if (snapshot == null) return@map null
                 val total = snapshot.transfers.sumOf { it.amountZatoshi }
                 val count = snapshot.totalCount

@@ -91,6 +91,9 @@ class SubmitProposalUseCase(
                 "The reviewed transaction changed. Review it again before sending."
             }
             if (proposal is SwapTransactionProposal) {
+                check(proposal.fundingAccount.sdkAccount.accountUuid == account.sdkAccount.accountUuid) {
+                    "The reviewed swap belongs to a different funding account."
+                }
                 check(swapRepository.quote.value === reviewedQuote) { "The reviewed swap quote changed." }
                 proposal.requireFundingApproval(reviewedQuote)
             }

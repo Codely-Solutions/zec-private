@@ -26,6 +26,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -222,7 +223,8 @@ class MigrationScheduledVMTest {
                     }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
-                    coEvery { storeSignedSchedulePczts(any()) } throws RuntimeException("database is locked")
+                    coEvery { storeSignedSchedulePczts(any()) } throws
+                        RuntimeException("database is locked") andThen Unit
                 }
             val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
             val vm =
@@ -235,13 +237,45 @@ class MigrationScheduledVMTest {
 
             advanceUntilIdle()
 
-            assertNotNull(vm.failureSheet.value)
+            val sheet = assertNotNull(vm.failureSheet.value)
             assertTrue(vm.isFinalizing.value)
             coVerify(exactly = 0) { finalize(any(), any(), any()) }
             // Still pending — a retry should be able to pick this back up.
             assertNotNull(pendingSchedule.get(testAccountKeyId))
             assertNotNull(pendingPczts.get(testAccountKeyId))
+            sheet.onDismiss()
+            assertNull(vm.failureSheet.value)
+            assertNotNull(vm.finalizationError.value)
+            vm.retryFinalization()
+            vm.retryFinalization()
+            advanceUntilIdle()
+            assertFalse(vm.isFinalizing.value)
+            assertNull(vm.finalizationError.value)
+            assertNull(pendingPczts.peek(testAccountKeyId))
+            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, false) }
         }
+
+
+    @Test
+    fun missingSnapshotCanBeReadAgainWithoutFinalizingThePlan() = runTest {
+        val snapshot = co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot(
+            transfers = emptyList(), preparations = emptyList(), tipHeight = 1L
+        )
+        val vm = vm(
+            getMigrationSnapshot = mockk {
+                coEvery { this@mockk(testAccountKeyId) } returns null andThen snapshot
+            },
+        )
+        val observer = launch { vm.state.collect {} }
+        advanceUntilIdle()
+        assertFalse(vm.isFinalizing.value)
+        assertFalse(vm.state.value.isLoading)
+        assertNull(vm.state.value.content)
+        vm.retrySnapshot()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.content)
+        observer.cancel()
+    }
 
     @Suppress("LongParameterList")
     private fun vm(

@@ -45,14 +45,14 @@ class LedgerProposalPreparationCancellationTest : LedgerProposalRepositoryTestBa
                 // Match an SDK operation that completes independently of coroutine cancellation.
                 suspendCoroutine { gate.complete(it) }
             }
-            val request = launch { repository.createExactInputSwapProposal(oldSend, quote) }
+            val request = launch { repository.createExactInputSwapProposal(oldSend, quote, account) }
             runCurrent()
             assertTrue(gate.isCompleted)
             request.cancel()
             val replacement = proposal(newSend)
             coEvery { proposalDataSource.createExactInputProposal(account, newSend, quote) } returns replacement
             try {
-                repository.createExactInputSwapProposal(newSend, quote)
+                repository.createExactInputSwapProposal(newSend, quote, account)
             } finally {
                 gate.await().resumeWith(result)
             }

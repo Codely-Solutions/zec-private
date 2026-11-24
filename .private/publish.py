@@ -89,11 +89,27 @@ def record_integration(path, upstream):
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(upstream,indent=2)+'\n')
 
+def require_simulation_context(source, controller, hosted, recover_run):
+    workflow = f'{REPO}/.github/workflows/upgrade-acceptance.yml@refs/heads/main'
+    require(os.environ.get('GITHUB_WORKFLOW_REF') == workflow and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+            and source != controller and not hosted and not recover_run,
+            'Only the protected upgrade simulation can use diagnostic signing')
+
+
+def verify_simulation_negative_control(proof):
+    negative = json.loads((ROOT/'artifact/quote-rendering-negative.json').read_text())
+    resource_path = 'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml'
+    resource = subprocess.check_output(
+        ['git', 'show', f'{proof["source_sha"]}:{resource_path}'], cwd=ROOT, timeout=120)
+    require(negative.get('source_sha') == proof['source_sha']
+            and negative.get('original_crash_reproduced') is True
+            and negative.get('quote_modes_tested') == 3
+            and negative.get('source_restored') is True
+            and negative.get('restored_resource_sha256') == hashlib.sha256(resource).hexdigest(),
+            'Missing original quote-crash regression evidence')
+
+
 def simulation_receipt(proof, signed, digest, dist):
-    negative=json.loads((ROOT/'artifact/quote-rendering-negative.json').read_text())
-    if (negative.get('source_sha')!=proof['source_sha'] or not negative.get('original_crash_reproduced') or
-            negative.get('quote_modes_tested')!=3 or not negative.get('source_restored')):
-        raise RuntimeError('Missing original quote-crash regression evidence')
     original_state=(ROOT/'.private/upstream.json').read_bytes()
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temp:
         temp=Path(temp)
@@ -178,6 +194,9 @@ def main():
     if reuse_funded and not hosted:
         raise RuntimeError('Funded evidence reuse requires hosted acceptance')
     recover_run = os.environ.get('RECOVER_RUN', '')
+    simulation = os.environ.get('SIMULATION') == 'true'
+    if simulation:
+        require_simulation_context(expected, controller, hosted, recover_run)
     if recover_run:
         if not hosted:
             raise RuntimeError('Quote recovery requires hosted acceptance')
@@ -207,7 +226,9 @@ def main():
         raise RuntimeError('Missing versioned candidate product-runtime binding')
     quote_inputs=input_fingerprint(expected,profile='production-quotes')
     reused_evidence = []
-    if hosted:
+    if simulation:
+        verify_simulation_negative_control(proof)
+    elif hosted:
         from hosted_release import read_receipts
         from maintenance_cadence import admit_cadence
         from maintenance_watch import api
@@ -260,14 +281,14 @@ def main():
     changes = None
     if hosted:
         changes = hosted_changes(ROOT, expected, recovery['original_controller'] if recovery else controller)
-    notes_text = release_notes(proof, changes)
+    notes_text = release_notes(proof, changes) if not simulation else None
     # Existing published tags/assets are immutable, including duplicate polling.
     origin = publication_origin(expected, controller, recovery, hosted)
     if recovery:
         origin['quote_recovery'] = {'original_controller': recovery['original_controller'],
                                     'quote_run_id': quote['workflow_run_id']}
     archive_binding = {'production_artifact': quote['production_artifact']} if hosted else {}
-    if os.environ.get('SIMULATION') != 'true':
+    if not simulation:
         if release_for_tag(tag):
             raise RuntimeError('Release already exists; use reconciliation with its original attestation')
         require_advancing_version(proof['versionCode'], tag)
@@ -299,21 +320,19 @@ def main():
     signed=dist/'zec-private-latest.apk'
     sign_apk(apk, signed, tools)
     signed_bytes = signed.read_bytes()
-    if os.environ.get('SIMULATION') != 'true':
+    if not simulation:
         require(0 < len(signed_bytes) <= PUBLIC_APK_LIMIT and payload(signed_bytes) == payload(checked_apk),
                 'Signed APK exceeds the public budget or differs from the validated payload')
     digest = hashlib.sha256(signed_bytes).hexdigest()
-    checksum = dist / 'SHA256SUMS'
-    checksum.write_bytes(checksum_bytes(digest))
-    notes=dist/'release-notes.md'
-    notes.write_text(notes_text, encoding='utf-8')
-    if os.environ.get('SIMULATION')=='true':
+    if simulation:
         try:
             simulation_receipt(proof,signed,digest,dist)
         finally:
             signed.unlink(missing_ok=True)
         print('Removed signed test APK after its final verification.')
         return
+    (dist/'SHA256SUMS').write_bytes(checksum_bytes(digest))
+    (dist/'release-notes.md').write_text(notes_text, encoding='utf-8')
     attestation = dict(release_tag=tag, versionCode=proof['versionCode'], versionName=proof['versionName'],
                        upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
                        publisher={'run': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT']},

@@ -177,11 +177,11 @@ class SwapRequestCancellationTest {
                 coEvery { validateAddress(any()) } returns AddressType.Unified
             }
             val proposals = mockk<ZashiProposalRepository>(relaxed = true)
-            coEvery { proposals.createExactOutputSwapProposal(any(), firstQuote) } coAnswers {
+            coEvery { proposals.createExactOutputSwapProposal(any(), firstQuote, any()) } coAnswers {
                 finishFirst()
                 mockk(relaxed = true)
             }
-            coEvery { proposals.createExactOutputSwapProposal(any(), nextQuote) } returns mockk(relaxed = true)
+            coEvery { proposals.createExactOutputSwapProposal(any(), nextQuote, any()) } returns mockk(relaxed = true)
             val request = RequestSwapQuoteUseCase(
                 navigationRouter = router,
                 navigateToErrorUseCase = NavigateToErrorUseCase(router),

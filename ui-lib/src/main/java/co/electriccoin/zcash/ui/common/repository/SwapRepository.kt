@@ -555,6 +555,9 @@ class SwapRepositoryImpl(
             val response = requireNotNull((result as? NearSwapQuoteStatus)?.response?.quoteResponse)
             response.requireSimpleChainRouting()
             require(response.reviewedIdentity() == expectedIdentity) { "Swap status reviewed identity mismatch" }
+            swapMetadata.quotedAmountOut?.let { approved ->
+                require(result.quotedAmountOut.compareTo(approved) == 0) { "Swap status quoted output mismatch" }
+            }
         }
         requireMatchingAsset(
             name = "origin",

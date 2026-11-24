@@ -73,7 +73,7 @@ class ViewOnlySpendGuardTest {
         mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns viewOnly
             every { allAccounts } returns MutableStateFlow(listOf(viewOnly))
-            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
+            coEvery { requestNextShieldedAddress(requireFresh = true, account = any()) } returns "u"
         }
 
     private val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
@@ -419,7 +419,7 @@ class ViewOnlySpendGuardTest {
     private fun assertNoProposalCreated() {
         coVerify(exactly = 0) { zashiProposalRepository.createProposal(any()) }
         coVerify(exactly = 0) { zashiProposalRepository.createZip321Proposal(any()) }
-        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
+        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
         coVerify(exactly = 0) { keystoneProposalRepository.createProposal(any()) }
         coVerify(exactly = 0) { keystoneProposalRepository.createZip321Proposal(any()) }
         coVerify(exactly = 0) { ledgerProposalPipeline.createProposal(any()) }

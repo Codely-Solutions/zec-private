@@ -192,7 +192,7 @@ class MetadataDataSourceFileTest {
         val vm = SwapDetailVM(
             GetReloadableSwapQuoteUseCase(useCase),
             SwapDetailArgs("deposit"), mockk(), mockk(),
-            CommonTransactionDetailMapper(), SwapSupportMapper(),
+            CommonTransactionDetailMapper(), SwapSupportMapper(), mockk(),
         )
         val firstJob = backgroundScope.launch { vm.state.collect {} }
         fun pump(condition: () -> Boolean) {

@@ -329,6 +329,32 @@ class MigrationReviewVMTest {
     }
 
     @Test
+    fun newTorDraftCannotInheritAFormerDirectPreference() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { isNoteSplitNeeded() } returns true
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+        }
+        val tor = mockk<IsMigrationTorEnabledStorageProvider> {
+            coEvery { get(any<String>()) } returns false
+        }
+        val vm = vm(
+            router = FakeNavigationRouter(),
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            migrationTorEnabled = tor,
+            mode = MigrationMode.AUTOMATIC,
+            draftTor = true,
+        )
+
+        invokeOnConfirmAutomatic(vm, mockk(relaxed = true))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
+        coVerify(exactly = 0) { tor.get(any<String>()) }
+        coVerify(exactly = 0) { tor.store(any<String>(), any()) }
+        coVerify(exactly = 0) { sdk.prepareNoteSplit() }
+    }
+
+    @Test
     fun immediateConfirmOnAViewOnlyAccountIsRefusedWithoutSigningOrAdopting() =
         runTest {
             val proposal = mockk<Proposal> { coEvery { totalFeeRequired() } returns Zatoshi(1_000L) }
@@ -460,11 +486,12 @@ class MigrationReviewVMTest {
         finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
         migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
         mode: MigrationMode = MigrationMode.IMMEDIATE,
+        draftTor: Boolean? = null,
         restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
             mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
         synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
     ) = MigrationReviewVM(
-        args = MigrationReviewArgs(mode = mode),
+        args = MigrationReviewArgs(mode = mode, useTor = draftTor),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
         restartMigrationScheduleRepository = restartMigrationScheduleRepository,

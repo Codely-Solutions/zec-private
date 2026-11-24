@@ -1,5 +1,5 @@
 """Reproduce the reported resource crash in unsigned CI, then restore exact source bytes."""
-import hashlib,json,subprocess,xml.etree.ElementTree as ET
+import hashlib,json,re,subprocess,xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -12,15 +12,21 @@ EXPECTED={
     'outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure',
 }
 
+def malformed_fee_resource(original):
+    pattern = rb'(<string\b[^>]*\bname="private_provider_costs_included"[^>]*>)([^<]*)(</string>)'
+    matches = list(re.finditer(pattern, original))
+    if len(matches) != 1 or b'0.25%%' not in matches[0][2]:
+        raise RuntimeError('Corrected fee resource is required before negative-control testing')
+    start, end = matches[0].span(2)
+    return original[:start] + b'Unauthenticated quotes may include an extra 0.25% platform fee.' + original[end:]
+
+
 def main():
     original=RESOURCE.read_bytes()
-    if b'0.25%% where applicable' not in original:
-        raise RuntimeError('Corrected fee text is required before negative-control testing')
+    mutated=malformed_fee_resource(original)
     REPORT.unlink(missing_ok=True)
     try:
-        RESOURCE.write_bytes(original.replace(
-            b'Anonymous API platform fee: 0.25%% where applicable. Other swap costs may apply; review the quoted amount received.',
-            b'Unauthenticated quotes may include an extra 0.25% platform fee.'))
+        RESOURCE.write_bytes(mutated)
         result=subprocess.run([
             str(ROOT/'gradlew'),'--no-daemon','--no-watch-fs','--max-workers=2',
             '-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g',

@@ -50,15 +50,16 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import org.koin.compose.koinInject
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data object MigrationBatteryArgs
+data class MigrationBatteryArgs(val accountKeyId: String, val useTor: Boolean)
 
 @Composable
-fun MigrationBatteryScreen() {
-    val vm = koinViewModel<MigrationBatteryVM>()
+fun MigrationBatteryScreen(args: MigrationBatteryArgs) {
+    val vm = koinViewModel<MigrationBatteryVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val isBackgroundExecutionAvailableProvider = koinInject<IsBackgroundExecutionAvailableProvider>()

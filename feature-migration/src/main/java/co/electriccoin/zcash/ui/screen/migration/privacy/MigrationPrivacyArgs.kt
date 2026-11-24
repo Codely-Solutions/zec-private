@@ -60,7 +60,8 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
 data class MigrationPrivacyArgs(
-    val mode: MigrationMode
+    val mode: MigrationMode,
+    val accountKeyId: String,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -219,11 +219,30 @@ class SwapActivityStatusTest {
 
         ViewTransactionDetailAfterSuccessfulProposalUseCase(
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), router,
-        )(proposal)
+        )(proposal, id.txIdString())
 
         verify(exactly = 1) {
-            router.replaceAll(SwapDetailArgs(deposit, owner.sdkAccount.accountUuid.toStorageKeyId()))
+            router.replaceAll(SwapDetailArgs(deposit, owner.sdkAccount.accountUuid.toStorageKeyId(), id.txIdString()))
         }
+    }
+
+    @Test
+    fun progressUsesWalletFundingOnlyAfterTheMatchingOwnerAndDepositAppear() = runTest {
+        val selection = MutableStateFlow<WalletAccount?>(owner)
+        val history = MutableStateFlow<Transaction?>(null)
+        val transactions = mockk<TransactionRepository> {
+            every { observeTransaction(id.txIdString()) } returns history
+        }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selection }
+        val useCase = GetTransactionDetailByIdUseCase(transactions, mockk(), mockk(), mockk(), accounts)
+        val key = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val matches = useCase.observeSwapFunding(id.txIdString(), key, deposit)
+        assertEquals(false, matches.first())
+        history.value = confirmed
+        assertEquals(true, matches.first())
+        assertEquals(false, useCase.observeSwapFunding(id.txIdString(), key, "other-deposit").first())
+        selection.value = EditAccountFixtures.keystone()
+        assertEquals(false, matches.first())
     }
 
     @Test

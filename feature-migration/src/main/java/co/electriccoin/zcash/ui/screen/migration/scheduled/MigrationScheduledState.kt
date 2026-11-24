@@ -42,6 +42,7 @@ import co.electriccoin.zcash.ui.design.util.scaffoldPadding
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.migration.component.MigrationFailureBottomSheet
+import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
@@ -60,10 +61,23 @@ fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
     val state by vm.state.collectAsStateWithLifecycle()
     val isFinalizing by vm.isFinalizing.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()
-    if (isFinalizing) {
-        MigrationSchedulingView()
-    } else {
-        LceRenderer(
+    val finalizationError by vm.finalizationError.collectAsStateWithLifecycle()
+    when {
+        finalizationError != null -> MigrationUnavailable(
+            message = checkNotNull(finalizationError),
+            onBack = vm::navigateBack,
+            onRetry = vm::retryFinalization,
+        )
+
+        isFinalizing -> MigrationSchedulingView()
+
+        !state.isLoading && state.content == null -> MigrationUnavailable(
+            message = stringRes(DesignR.string.migrationProgress_unavailable),
+            onBack = vm::navigateBack,
+            onRetry = { vm.retrySnapshot() },
+        )
+
+        else -> LceRenderer(
             state = state,
             loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
         ) { MigrationScheduledView(it) }

@@ -8,10 +8,12 @@ import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestartMigrationUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ZashiConfirmationState
@@ -32,10 +34,12 @@ class MigrationRestartVM(
     private val restartMigration: RestartMigrationUseCase,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val getOrchardBalance: GetOrchardBalanceUseCase,
+    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
 ) : ViewModel() {
     private data class Summary(
+        val owner: String,
         val completed: Int,
         val total: Int,
         val remaining: Zatoshi,
@@ -48,12 +52,15 @@ class MigrationRestartVM(
 
     init {
         loadLce.execute {
-            val snapshot = getMigrationSnapshot()
+            val uuid = getSelectedWalletAccount().sdkAccount.accountUuid
+            val owner = uuid.toStorageKeyId()
+            val snapshot = getMigrationSnapshot(owner)
             summaryFlow.value =
                 Summary(
+                    owner = owner,
                     completed = snapshot?.completedCount ?: 0,
                     total = snapshot?.totalCount ?: 0,
-                    remaining = getOrchardBalance(),
+                    remaining = getOrchardBalance(uuid),
                 )
         }
     }
@@ -96,7 +103,7 @@ class MigrationRestartVM(
                         summary.completed,
                     ),
                 primaryText = stringRes(DesignR.string.restartMigration_confirmPrimary),
-                onPrimary = ::onConfirmRestart,
+                onPrimary = { onConfirmRestart(summary.owner) },
                 onBack = ::onDismissConfirmation,
             )
     }
@@ -105,10 +112,13 @@ class MigrationRestartVM(
         confirmationDialogFlow.value = null
     }
 
-    private fun onConfirmRestart() {
+    private fun onConfirmRestart(owner: String) {
         confirmationDialogFlow.value = null
         restartLce.execute {
-            restartMigration()
+            check(getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId() == owner) {
+                "The migration restart belongs to a different account"
+            }
+            restartMigration(owner)
             navigationRouter.back()
         }
     }

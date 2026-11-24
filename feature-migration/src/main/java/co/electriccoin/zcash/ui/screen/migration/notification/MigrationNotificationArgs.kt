@@ -46,14 +46,15 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data object MigrationNotificationArgs
+data class MigrationNotificationArgs(val accountKeyId: String, val useTor: Boolean)
 
 @Composable
-fun MigrationNotificationScreen() {
-    val vm = koinViewModel<MigrationNotificationVM>()
+fun MigrationNotificationScreen(args: MigrationNotificationArgs) {
+    val vm = koinViewModel<MigrationNotificationVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(
         state = state,

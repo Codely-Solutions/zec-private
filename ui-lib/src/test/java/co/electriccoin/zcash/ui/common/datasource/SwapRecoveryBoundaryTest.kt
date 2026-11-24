@@ -207,6 +207,35 @@ class SwapRecoveryBoundaryTest {
         coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
     }
 
+    @Test
+    fun trackedReviewRejectsDryOrRequotedSettlementAndKeepsTheApprovedAmount() = runBlocking {
+        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
+        val original = response("tracked-deposit")
+        val echo = original.quoteResponse
+        val bound = stored.copy(reviewedIdentity = echo.reviewedIdentity(), quotedAmountOut = BigDecimal("2.00"))
+        coEvery { metadata.getSwapMetadata("tracked-deposit") } returns bound
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+        val useCase = GetSwapStatusUseCase(metadata, repository)
+        val dry = original.copy(quoteResponse = echo.copy(quoteRequest = echo.quoteRequest.copy(dry = true)))
+        val requoted = original.copy(quoteResponse = echo.copy(quote = echo.quote.copy(
+            amountOut = BigDecimal("210000000"), amountOutFormatted = BigDecimal("2.1"),
+        )))
+        for (response in listOf(dry, requoted)) {
+            coEvery { api.checkSwapStatus("tracked-deposit") } returns response
+            val refused = useCase("tracked-deposit")
+            assertIs<IllegalArgumentException>(refused.error)
+            assertEquals(bound, refused.savedMetadata)
+            assertNull(refused.status)
+        }
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
+
+        coEvery { api.checkSwapStatus("tracked-deposit") } returns original
+        val accepted = useCase("tracked-deposit")
+        assertEquals(SwapStatus.SUCCESS, accepted.status?.status)
+        assertEquals(BigDecimal("2.00000001"), accepted.status?.executedAmountOut)
+        coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun zeroPriceDuplicateCannotEnterAnOfferThenFailStatusInEitherOrder() = runTest {

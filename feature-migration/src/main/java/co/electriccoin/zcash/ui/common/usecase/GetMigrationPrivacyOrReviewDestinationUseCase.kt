@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
@@ -23,17 +24,19 @@ import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
  * regardless of the answer, since background delivery is scheduled unconditionally either way.
  */
 class GetMigrationPrivacyOrReviewDestinationUseCase(
+    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val automaticServerRepository: AutomaticServerRepository,
 ) {
     suspend operator fun invoke(mode: MigrationMode): Any {
         val walletUsesTor = isTorEnabledStorageProvider.get() == true
+        val owner = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
         return when {
-            mode == MigrationMode.IMMEDIATE && walletUsesTor -> MigrationReviewArgs(mode = mode)
-            mode == MigrationMode.IMMEDIATE -> MigrationPrivacyArgs(mode = mode)
-            automaticServerRepository.isServerCustom() -> MigrationCustomServerTorArgs(mode = mode)
-            walletUsesTor -> MigrationBatteryArgs
-            else -> MigrationPrivacyArgs(mode = mode)
+            mode == MigrationMode.IMMEDIATE && walletUsesTor -> MigrationReviewArgs(mode, owner)
+            mode == MigrationMode.IMMEDIATE -> MigrationPrivacyArgs(mode, owner)
+            automaticServerRepository.isServerCustom() -> MigrationCustomServerTorArgs(mode, owner)
+            walletUsesTor -> MigrationBatteryArgs(owner, useTor = true)
+            else -> MigrationPrivacyArgs(mode, owner)
         }
     }
 }

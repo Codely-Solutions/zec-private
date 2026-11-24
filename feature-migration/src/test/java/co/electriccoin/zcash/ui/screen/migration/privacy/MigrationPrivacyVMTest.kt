@@ -2,8 +2,7 @@ package co.electriccoin.zcash.ui.screen.migration.privacy
 
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
-import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-import io.mockk.coVerify
+import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import io.mockk.mockk
@@ -36,32 +35,11 @@ class MigrationPrivacyVMTest {
         Dispatchers.resetMain()
     }
 
-    // Toggling the checkbox must only update local VM state — this is a migration-scoped choice,
-    // not the app's global Tor setting, and must not be persisted until the user actually commits
-    // via Confirm.
     @Test
-    fun togglingCheckboxDoesNotPersistAnything() =
+    fun confirmCarriesOptOutOnlyInTheCurrentAccountDraft() =
         runTest {
-            val torProvider = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
-            val vm = vm(torProvider = torProvider)
-            val collectJob = launch { vm.state.collect {} }
-            advanceUntilIdle()
-
-            vm.state.value
-                ?.checkbox
-                ?.onClick
-                ?.invoke()
-            advanceUntilIdle()
-
-            coVerify(exactly = 0) { torProvider.store(any()) }
-            collectJob.cancel()
-        }
-
-    @Test
-    fun confirmPersistsTheCurrentToggleValueIntoTheMigrationScopedProvider() =
-        runTest {
-            val torProvider = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
-            val vm = vm(torProvider = torProvider)
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val vm = vm(router = router)
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
 
@@ -76,15 +54,15 @@ class MigrationPrivacyVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { torProvider.store(false) }
+            verify(exactly = 1) { router.forward(MigrationBatteryArgs(owner, useTor = false)) }
             collectJob.cancel()
         }
 
     @Test
-    fun confirmWithoutTogglingPersistsDefaultTrue() =
+    fun confirmCarriesThePrivacyPreferredDefault() =
         runTest {
-            val torProvider = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
-            val vm = vm(torProvider = torProvider)
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val vm = vm(router = router)
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
 
@@ -93,7 +71,7 @@ class MigrationPrivacyVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { torProvider.store(true) }
+            verify(exactly = 1) { router.forward(MigrationBatteryArgs(owner, useTor = true)) }
             collectJob.cancel()
         }
 
@@ -115,9 +93,8 @@ class MigrationPrivacyVMTest {
 
     @Test
     fun immediateDirectReviewDisclosesWalletTorAndLeavesMigrationPreferenceAlone() = runTest {
-        val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
         val router = mockk<NavigationRouter>(relaxed = true)
-        val vm = vm(mode = MigrationMode.IMMEDIATE, torProvider = tor, router = router)
+        val vm = vm(mode = MigrationMode.IMMEDIATE, router = router)
         val observer = launch { vm.state.collect {} }
         advanceUntilIdle()
         val state = assertNotNull(vm.state.value)
@@ -127,18 +104,17 @@ class MigrationPrivacyVMTest {
         state.onConfirm()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { tor.store(any()) }
-        verify(exactly = 1) { router.forward(MigrationReviewArgs(mode = MigrationMode.IMMEDIATE)) }
+        verify(exactly = 1) { router.forward(MigrationReviewArgs(MigrationMode.IMMEDIATE, owner)) }
         observer.cancel()
     }
+
+    private val owner = "reviewed-account"
 
     private fun vm(
         mode: MigrationMode = MigrationMode.AUTOMATIC,
         router: NavigationRouter = mockk(relaxed = true),
-        torProvider: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
     ) = MigrationPrivacyVM(
-        args = MigrationPrivacyArgs(mode = mode),
+        args = MigrationPrivacyArgs(mode, owner),
         navigationRouter = router,
-        isMigrationTorEnabledStorageProvider = torProvider,
     )
 }

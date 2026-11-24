@@ -17,10 +17,11 @@ class ViewTransactionDetailAfterSuccessfulProposalUseCase(
 ) {
     operator fun invoke(txId: String) = open(TransactionDetailArgs(txId))
 
-    operator fun invoke(proposal: SwapTransactionProposal) = open(
+    operator fun invoke(proposal: SwapTransactionProposal, fundingTxId: String? = null) = open(
         SwapDetailArgs(
             proposal.quote.depositAddress.address,
             proposal.fundingAccount.sdkAccount.accountUuid.toStorageKeyId(),
+            fundingTxId,
         )
     )
 

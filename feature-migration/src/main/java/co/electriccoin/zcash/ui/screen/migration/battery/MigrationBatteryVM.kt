@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 
 class MigrationBatteryVM(
+    private val args: MigrationBatteryArgs,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val isBackgroundExecutionAvailableProvider: IsBackgroundExecutionAvailableProvider,
@@ -46,16 +47,18 @@ class MigrationBatteryVM(
         ).withLce(lce, errorStateMapper::mapToState)
             .stateIn(this)
 
-    private fun onAllow() = navigationRouter.forward(MigrationNotificationArgs)
+    private fun onAllow() = navigationRouter.forward(notificationArgs())
 
     // Declining only makes background delivery less reliable (Doze may defer it more) — it does
     // not disable it, so this doesn't change what happens downstream at all.
-    private fun onSkip() = navigationRouter.forward(MigrationNotificationArgs)
+    private fun onSkip() = navigationRouter.forward(notificationArgs())
 
     // Used when this screen skips itself without ever being shown (permission already granted) —
     // replace instead of forward so it doesn't linger in the back stack and bounce the user
     // straight back here when they press back from a later screen.
-    private fun onAutoSkip() = navigationRouter.replace(MigrationNotificationArgs)
+    private fun onAutoSkip() = navigationRouter.replace(notificationArgs())
+
+    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
 
     private fun onBack() = navigationRouter.back()
 }

@@ -42,6 +42,8 @@ jobs:
           python3 .private/test_controls.py
           python3 .private/test_sync.py
       - id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 .private/create_simulation.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

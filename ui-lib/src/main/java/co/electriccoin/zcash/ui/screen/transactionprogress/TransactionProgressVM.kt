@@ -266,7 +266,7 @@ class TransactionProgressVM(
                 when (proposal) {
                     is SwapTransactionProposal -> ButtonState(
                         text = stringRes(R.string.swapAndPay_checkStatus),
-                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
+                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal, txId) },
                         style = ButtonStyle.PRIMARY
                     )
 
@@ -378,7 +378,7 @@ class TransactionProgressVM(
                 when (proposal) {
                     is SwapTransactionProposal -> ButtonState(
                         text = stringRes(R.string.swapAndPay_checkStatus),
-                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
+                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal, txId) },
                         style = ButtonStyle.PRIMARY
                     )
 

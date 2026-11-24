@@ -95,7 +95,7 @@ class MigrationTransferInvalidVMTest {
             val vm =
                 vm(
                     snapshot = snap,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
                 )
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -131,7 +131,7 @@ class MigrationTransferInvalidVMTest {
             val vm =
                 vm(
                     snapshot = snap,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
                 )
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -175,7 +175,7 @@ class MigrationTransferInvalidVMTest {
             val vm =
                 vm(
                     snapshot = snapshot(emptyList()),
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
                     restartMigrationScheduleRepository = restartRepo,
                     router = router,
                 )
@@ -207,7 +207,7 @@ class MigrationTransferInvalidVMTest {
             val vm =
                 vm(
                     snapshot = snapshot(emptyList()),
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
                     restartMigrationScheduleRepository = restartRepo,
                     router = router,
                 )
@@ -223,9 +223,9 @@ class MigrationTransferInvalidVMTest {
         }
 
     private fun invokeOnContinue(vm: MigrationTransferInvalidVM) {
-        val method = MigrationTransferInvalidVM::class.java.getDeclaredMethod("onContinue")
+        val method = MigrationTransferInvalidVM::class.java.getDeclaredMethod("onContinue", String::class.java)
         method.isAccessible = true
-        method.invoke(vm)
+        method.invoke(vm, "00000000000000000000000000000001")
     }
 
     private fun vm(
@@ -251,7 +251,7 @@ class MigrationTransferInvalidVMTest {
             getSelectedWalletAccount = getSelectedWalletAccount,
             getMigrationSnapshot =
                 mockk<GetMigrationSnapshotUseCase> {
-                    coEvery { this@mockk(null) } returns snapshot
+                    coEvery { this@mockk(any()) } returns snapshot
                 },
             restartMigrationScheduleRepository = restartMigrationScheduleRepository,
             navigationRouter = router,

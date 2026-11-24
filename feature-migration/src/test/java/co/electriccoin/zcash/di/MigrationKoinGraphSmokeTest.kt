@@ -62,6 +62,7 @@ import co.electriccoin.zcash.ui.common.usecase.ScheduleNextMigrationWindowUseCas
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccessfulProposalUseCase
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryVM
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteVM
@@ -74,6 +75,7 @@ import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneS
 import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignArgs
 import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignVM
 import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExplainerVM
+import co.electriccoin.zcash.ui.screen.migration.notification.MigrationNotificationArgs
 import co.electriccoin.zcash.ui.screen.migration.notification.MigrationNotificationVM
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyArgs
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
@@ -185,10 +187,12 @@ class MigrationKoinGraphSmokeTest {
 
                 // Args data-classes (carried as constructor params for VMs that accept navigation args).
                 // Providing a canonical instance is the simplest way to satisfy the Koin type lookup.
-                factory { MigrationCustomServerTorArgs(mode = MigrationMode.AUTOMATIC) }
+                factory { MigrationCustomServerTorArgs(MigrationMode.AUTOMATIC, "review-account") }
                 factory { MigrationKeystoneScanArgs(mode = MigrationMode.AUTOMATIC) }
                 factory { MigrationKeystoneSignArgs(mode = MigrationMode.AUTOMATIC) }
-                factory { MigrationPrivacyArgs(mode = MigrationMode.AUTOMATIC) }
+                factory { MigrationBatteryArgs("review-account", useTor = true) }
+                factory { MigrationNotificationArgs("review-account", useTor = true) }
+                factory { MigrationPrivacyArgs(MigrationMode.AUTOMATIC, "review-account") }
                 factory { MigrationReviewArgs(mode = MigrationMode.AUTOMATIC) }
                 factory { MigrationSuccessArgs(txId = null) }
                 factory { MigrationCompleteArgs() }

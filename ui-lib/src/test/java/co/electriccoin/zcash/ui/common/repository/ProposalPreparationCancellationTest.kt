@@ -41,7 +41,7 @@ class ProposalPreparationCancellationTest {
     fun cancelledSoftwareProposalCannotReplaceOrClearTheNewProposal() = runTest {
         val repository = ZashiProposalRepositoryImpl(accounts, dataSource, mockk(), mockk())
         assertLateProposalCannotMutateReplacement(repository.transactionProposal) {
-            repository.createExactInputSwapProposal(it, quote)
+            repository.createExactInputSwapProposal(it, quote, account)
         }
     }
 
@@ -49,7 +49,7 @@ class ProposalPreparationCancellationTest {
     fun cancelledKeystoneProposalCannotReplaceOrClearTheNewProposal() = runTest {
         val repository = keystone()
         assertLateProposalCannotMutateReplacement(repository.transactionProposal) {
-            repository.createExactInputSwapProposal(it, quote)
+            repository.createExactInputSwapProposal(it, quote, account)
         }
     }
 
@@ -59,7 +59,7 @@ class ProposalPreparationCancellationTest {
         val newSend = send("synthetic-new")
         val currentProposal = proposal(newSend)
         coEvery { dataSource.createExactInputProposal(account, newSend, quote) } returns currentProposal
-        repository.createExactInputSwapProposal(newSend, quote)
+        repository.createExactInputSwapProposal(newSend, quote, account)
         val gate = CompletableDeferred<Continuation<Pczt>>()
         coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal) } coAnswers {
             suspendCoroutine { gate.complete(it) }

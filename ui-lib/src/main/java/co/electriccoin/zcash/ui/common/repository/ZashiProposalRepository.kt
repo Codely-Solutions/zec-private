@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,10 +48,18 @@ interface ZashiProposalRepository {
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactInputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactInputSwapTransactionProposal
+    suspend fun createExactInputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactInputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createExactOutputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactOutputSwapTransactionProposal
+    suspend fun createExactOutputSwapProposal(
+        zecSend: ZecSend,
+        quote: SwapQuote,
+        account: WalletAccount,
+    ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createShieldProposal()
@@ -113,10 +122,11 @@ class ZashiProposalRepositoryImpl(
     override suspend fun createExactInputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactInputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactInputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )
@@ -125,10 +135,11 @@ class ZashiProposalRepositoryImpl(
     override suspend fun createExactOutputSwapProposal(
         zecSend: ZecSend,
         quote: SwapQuote,
+        account: WalletAccount,
     ): ExactOutputSwapTransactionProposal =
         createProposalInternal {
             proposalDataSource.createExactOutputProposal(
-                account = accountDataSource.getSelectedAccount(),
+                account = account,
                 send = zecSend,
                 quote = quote
             )

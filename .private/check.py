@@ -27,8 +27,8 @@ def check(root=ROOT):
     need('QuoteRequestStage.CLIENT_CLOSE' in provider and 'client.close()' in provider,
          'Quote client cleanup changed')
     usecase=(root/COMMON/'usecase/RequestSwapQuoteUseCase.kt').read_text()
-    need(usecase.count('val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest')==2
-         and 'requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest' in usecase,
+    fresh_address = 'val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest'
+    need(usecase.count(fresh_address) == 3,
          'Fresh shielded recipient/refund derivation changed')
     need('accountDataSource.requestNextShieldedAddress(requireFresh = true, account = account)' in usecase,
          'Swap address requests may fall back to an existing address')

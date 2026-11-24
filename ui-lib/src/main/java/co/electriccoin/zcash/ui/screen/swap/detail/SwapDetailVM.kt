@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
@@ -39,6 +40,7 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatu
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
@@ -51,7 +53,14 @@ class SwapDetailVM(
     private val copyToClipboard: CopyToClipboardUseCase,
     private val mapper: CommonTransactionDetailMapper,
     private val getSwapMessage: SwapSupportMapper,
+    transactionDetails: GetTransactionDetailByIdUseCase,
 ) : ViewModel() {
+    val fundingInWallet = if (args.fundingTxId != null && args.accountKeyId != null) {
+        transactionDetails.observeSwapFunding(args.fundingTxId, args.accountKeyId, args.depositAddress)
+    } else {
+        flowOf(false)
+    }
+
     val state: StateFlow<SwapDetailState?> =
         getReloadableSwapQuote
             .observe(args.depositAddress, args.accountKeyId)

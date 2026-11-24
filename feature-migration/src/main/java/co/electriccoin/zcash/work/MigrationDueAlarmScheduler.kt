@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import co.electriccoin.zcash.migration.migrationLog
-import co.electriccoin.zcash.ui.common.model.accountIdOffset
+import co.electriccoin.zcash.ui.common.provider.migrationIntentAction
 import kotlin.time.Duration
 
 /**
@@ -48,11 +48,12 @@ class MigrationDueAlarmScheduler(
     private fun pendingIntent(accountKeyId: String): PendingIntent {
         val intent =
             Intent(context, MigrationTransferDueReceiver::class.java).apply {
+                action = migrationIntentAction(ACTION_TRANSFER_DUE, accountKeyId)
                 putExtra(EXTRA_ACCOUNT_KEY_ID, accountKeyId)
             }
         return PendingIntent.getBroadcast(
             context,
-            ALARM_REQUEST_CODE_BASE + accountIdOffset(accountKeyId),
+            ALARM_REQUEST_CODE,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -61,11 +62,7 @@ class MigrationDueAlarmScheduler(
     companion object {
         const val EXTRA_ACCOUNT_KEY_ID = "co.electriccoin.zcash.migration.account_key_id"
 
-        // Per-account request code = base + accountIdOffset(...) (offset range 0..0xFFFF). Hex base,
-        // same self-documenting scheme as MigrationNotifier's request-code bases (0x10_0000/0x20_0000),
-        // spaced ≥ 0x10000 from them so the ranges can't overlap even by accident. (A getBroadcast
-        // PendingIntent is a separate namespace from the notifier's getActivity ones anyway, but
-        // keeping one legible scheme avoids a future edit reintroducing an overlap.)
-        private const val ALARM_REQUEST_CODE_BASE = 0x30_0000
+        private const val ALARM_REQUEST_CODE = 0x30_0000
+        private const val ACTION_TRANSFER_DUE = "co.electriccoin.zcash.migration.transfer_due"
     }
 }
