@@ -66,7 +66,7 @@ class ReceiveVM(
                 val current = selectedAccount.value
                 appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
                     current?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid &&
-                    current?.receiveAddress(type) == address
+                    current.receiveAddress(type) == address
             }
             val icon =
                 if (account is ZodlAccount) {

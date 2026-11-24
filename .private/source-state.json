@@ -2064,7 +2064,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveAddressType.kt": "f30a576a8d21a7a83781cba24af3ce98347a5d6e35c8c65e40e965447d99fb39",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveScreen.kt": "e24771a8883fdfd5e8e781697b99e27af50dbf584225cb62da8b973321f43053",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveState.kt": "91e98663b0007e5a5d3b2cbc2a22b11ef002eeb7d9054b6eaf22fddff2a1d95a",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt": "40f2429d29c695d847f9c676efdec166fd0b6ba5d20fd7b7ff4159504d42e436",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt": "ab9fcb751651225aceb9e7400d2608fe75c069787f031d5d6584ffdd93f3cd45",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt": "f821c96c0d8ed8e18236bfe9e065b0d1de4df08d94471d6fdb2c35e042519405",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/info/ShieldedAddressInfoScreen.kt": "8e449df6222d92b0e2e8ca12b03e9a355f99e2b8b256f0e2e9aa442aee1801c1",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/info/TransparentAddressInfoScreen.kt": "4390983071ba17fc5fffe54c7e24c44660be3cedeb723141867c10bd4a84955e",

@@ -49311,7 +49311,7 @@ index 5a1f9928f..44b726caf 100644
 -    val receiveVM = koinActivityViewModel<ReceiveVM>()
 +    val receiveVM = koinViewModel<ReceiveVM>()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt
-index 329b3718c..d22a2b299 100644
+index 329b3718c..f7adb64a5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVM.kt
 @@ -5 +4,0 @@ import androidx.lifecycle.viewModelScope
@@ -49346,7 +49346,7 @@ index 329b3718c..d22a2b299 100644
 +                val current = selectedAccount.value
 +                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
 +                    current?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid &&
-+                    current?.receiveAddress(type) == address
++                    current.receiveAddress(type) == address
 +            }
 @@ -69,2 +85,3 @@ class ReceiveVM(
 -                            isExpanded = expandedIndex == 0,
