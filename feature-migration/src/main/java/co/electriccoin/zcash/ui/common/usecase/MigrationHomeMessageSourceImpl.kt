@@ -244,13 +244,13 @@ class MigrationHomeMessageSourceImpl(
                             BannerCopy(MigrationBannerPhase.COMPLETE, null, "Tap to review the details")
                         }
 
-                        // Spec §6.4: numbered per the due transfer, matching the convention used
-                        // elsewhere (e.g. Progress's "Transfer ${completedCount + 1}").
+                        // The due transfer's index is independent of the number already mined.
                         data.isReadyToSend -> {
+                            val nextNumber = (data.nextTransferIndex ?: data.completedCount) + 1
                             BannerCopy(
                                 phase = MigrationBannerPhase.READY_TO_SEND,
                                 title = null,
-                                subtitle = "Transfer ${data.completedCount + 1} is ready to send",
+                                subtitle = "Transfer $nextNumber is ready to send",
                             )
                         }
 
@@ -480,6 +480,7 @@ internal fun migrationMessageFor(
                 completedCount = snapshot.minedCount,
                 totalCount = snapshot.totalCount,
                 isReadyToSend = true,
+                nextTransferIndex = next.index,
             )
         }
 

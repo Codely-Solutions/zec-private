@@ -91,6 +91,7 @@ data class NearSwapQuoteStatus(
     override val originAsset: SwapAsset = origin
     override val destinationAsset: SwapAsset = destination
     override val deadline = quote.deadline
+    override val observedAtProvider = response.observedAtProvider
 
     override val timestamp: Instant = response.quoteResponse.timestamp.toJavaInstant()
 

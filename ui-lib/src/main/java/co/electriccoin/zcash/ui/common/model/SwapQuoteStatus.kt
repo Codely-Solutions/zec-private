@@ -11,6 +11,7 @@ interface SwapQuoteStatus {
 
     val timestamp: Instant
     val deadline: kotlin.time.Instant
+    val observedAtProvider: kotlin.time.Instant? get() = null
 
     val status: SwapStatus
 

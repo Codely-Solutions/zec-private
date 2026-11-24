@@ -6,6 +6,8 @@ import co.electriccoin.zcash.ui.common.serialization.NearSwapStatusSerializer
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import kotlin.time.Instant
 import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 import java.math.BigDecimal
 
@@ -20,7 +22,8 @@ data class SwapStatusResponseDto(
     @SerialName("updatedAt")
     val updatedAt: String,
     @SerialName("swapDetails")
-    val swapDetails: SwapDetails? = null
+    val swapDetails: SwapDetails? = null,
+    @Transient internal val observedAtProvider: Instant? = null,
 )
 
 @JsonIgnoreUnknownKeys

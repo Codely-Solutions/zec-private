@@ -41,6 +41,8 @@ class KtorNearApiProviderTest {
     private var responseStatus = HttpStatusCode.OK
     private var responseBody = "[]"
     private var responseContentType = "application/json"
+    private var responseDate: String? = null
+    private var responseAge: String? = null
 
     private var createCalls = 0
     private var createTorCalls = 0
@@ -131,6 +133,23 @@ class KtorNearApiProviderTest {
         assertNull(untrusted.signedEvidence)
         responseBody = syntheticSignedQuote.replace("\"signature\":\"ed25519:", "\"signature\":\"untrusted:")
         assertEquals(untrusted, provider.requestQuote(quoteRequest()))
+    }
+
+    @Test
+    fun freshStatusCarriesProviderTimeAndCachedOrMissingDatesDoNot() = runBlocking {
+        responseBody = """{
+            "status":"INCOMPLETE_DEPOSIT","updatedAt":"2026-11-22T00:00:00Z","quoteResponse":$boundedNearQuoteWire
+        }"""
+        responseDate = "Tue, 24 Nov 2026 19:00:00 GMT"
+        val fresh = provider.checkSwapStatus("synthetic-deposit")
+        assertEquals(Instant.parse("2026-11-24T19:00:00Z"), fresh.observedAtProvider)
+        assertEquals("no-cache", requests.last().headers[HttpHeaders.CacheControl])
+
+        responseAge = "30"
+        assertNull(provider.checkSwapStatus("synthetic-deposit").observedAtProvider)
+        responseAge = null
+        responseDate = null
+        assertNull(provider.checkSwapStatus("synthetic-deposit").observedAtProvider)
     }
 
     @Test
@@ -239,7 +258,11 @@ class KtorNearApiProviderTest {
                     respond(
                         content = responseBody,
                         status = responseStatus,
-                        headers = headersOf(HttpHeaders.ContentType, responseContentType)
+                        headers = headersOf(*listOfNotNull(
+                            HttpHeaders.ContentType to listOf(responseContentType),
+                            responseDate?.let { HttpHeaders.Date to listOf(it) },
+                            responseAge?.let { HttpHeaders.Age to listOf(it) },
+                        ).toTypedArray())
                     )
                 }
             ) {

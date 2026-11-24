@@ -77,9 +77,19 @@ def read_timestamp(value):
 
 
 def read_decimal(value):
-    if type(value) not in (Decimal, int, str) or not re.fullmatch(r'[+-]?[0-9]{1,128}(\.[0-9]{1,128})?', str(value)):
+    wire = str(value)
+    if type(value) not in (Decimal, int, str) or len(wire) > 512 or not re.fullmatch(
+        r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,3})?', wire
+    ):
         raise RuntimeError('Invalid NEAR response decimal')
-    return Decimal(str(value))
+    raw_exponent = int(re.split(r'[eE]', wire)[-1]) if 'e' in wire.lower() else 0
+    parsed = Decimal(wire)
+    coefficient = parsed.as_tuple()
+    digits = len(coefficient.digits)
+    scale = -coefficient.exponent
+    if abs(raw_exponent) > 512 or not -127 <= scale <= 320 or digits > 128 or digits - scale > 128:
+        raise RuntimeError('NEAR response decimal is outside the wallet precision budget')
+    return parsed
 
 
 def reviewed_request(request):
@@ -88,6 +98,11 @@ def reviewed_request(request):
     if (type(request['dry']) is not bool or type(request['slippageTolerance']) is not int
             or request.get('depositMode', 'SIMPLE') != 'SIMPLE'):
         raise RuntimeError('Unsupported NEAR quote request terms')
+    waiting = request.get('quoteWaitingTimeMs')
+    if waiting is not None and (type(waiting) is not int or not -(2 ** 31) <= waiting < 2 ** 31):
+        raise RuntimeError('Invalid NEAR quote waiting time')
+    if request.get('referral') is not None and type(request['referral']) is not str:
+        raise RuntimeError('Invalid NEAR quote referral field')
     fees = request['appFees']
     if not isinstance(fees, list) or any(
         type(entry.get('recipient')) is not str or type(entry.get('fee')) is not int or entry['fee'] != 0
@@ -106,9 +121,14 @@ def reviewed_quote(result, require_deposit=True):
     read_timestamp(request['deadline'])
     address = quote['depositAddress'] if require_deposit else quote.get('depositAddress')
     extra_fields = ('virtualChainRecipient', 'virtualChainRefundRecipient', 'customRecipientMsg')
+    chain_deposits = quote.get('chainDepositAddresses')
+    if chain_deposits is not None and (not isinstance(chain_deposits, list) or any(
+        not isinstance(item, dict) or type(item.get('address')) is not str
+        or (item.get('memo') is not None and type(item['memo']) is not str) for item in chain_deposits
+    )):
+        raise RuntimeError('Invalid NEAR chain deposit list')
     if (quote.get('depositMemo') is not None
-            or any(item['address'] == address and item.get('memo') is not None
-                   for item in quote.get('chainDepositAddresses') or [])
+            or any(item['address'] == address and item.get('memo') is not None for item in chain_deposits or [])
             or any(part.get(field) is not None for part in (request, quote) for field in extra_fields)):
         raise RuntimeError('Unsupported NEAR deposit or recipient instructions')
     if any(read_decimal(quote[field]) < 0 for field in ('amountInUsd', 'amountOutUsd')):
@@ -149,11 +169,14 @@ def require_status_details(details):
                 raise RuntimeError('NEAR status amount is not a whole number of base units')
         if formatted is not None:
             formatted = read_decimal(formatted)
-            if formatted < 0 or (raw is not None and formatted != Decimal(f'{int(raw)}e-8')):
+            if (formatted < 0 or (field == 'amountIn' and formatted == 0)
+                    or 100_000_000 % formatted.as_integer_ratio()[1] != 0
+                    or (raw is not None and formatted != Decimal(f'{int(raw)}e-8'))):
                 raise RuntimeError('NEAR status value does not match base units')
         if usd is not None:
             read_decimal(usd)
-    if details.get('slippage') is not None and type(details['slippage']) is not int:
+    slippage = details.get('slippage')
+    if slippage is not None and (type(slippage) is not int or not -(2 ** 31) <= slippage < 2 ** 31):
         raise RuntimeError('Invalid NEAR status slippage')
     for field in ('originChainTxHashes', 'destinationChainTxHashes'):
         hashes = details.get(field)

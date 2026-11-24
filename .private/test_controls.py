@@ -186,6 +186,13 @@ for clear in (False, True):
             ('quoteRequest', 'appFees', [{'fee': 0}]),
             ('status', 'swapDetails', {'depositedAmount': '0.5'}),
             ('status', 'swapDetails', {'amountOut': '500000', 'amountOutFormatted': '1'}),
+            ('status', 'swapDetails', {'amountIn': '0', 'amountInFormatted': '0'}),
+            ('status', 'swapDetails', {'slippage': 2 ** 31}),
+            ('status', 'swapDetails', {'depositedAmountUsd': '9' * 128 + '.1'}),
+            ('status', 'swapDetails', {'amountOutFormatted': '0.000000001'}),
+            ('quote', 'chainDepositAddresses', {}),
+            ('quoteRequest', 'quoteWaitingTimeMs', {}),
+            ('quoteRequest', 'referral', {}),
         )
         with fixture_directory() as temp:
             root = Path(temp)

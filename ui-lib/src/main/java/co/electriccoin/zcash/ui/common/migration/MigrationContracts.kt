@@ -73,6 +73,8 @@ interface MigrationAppHooks {
      * account-gone kill switch backs this up for anything already in flight.
      */
     suspend fun cancelMigrationWork(accountKeyId: String? = null)
+
+    suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit)
 }
 
 /** Installs the migration destinations into the wallet nav graph. */

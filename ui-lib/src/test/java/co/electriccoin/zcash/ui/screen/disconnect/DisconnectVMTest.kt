@@ -334,7 +334,11 @@ class DisconnectVMTest {
         DisconnectUseCase(
             accountDataSource = accountDataSource,
             biometricRepository = mockk(relaxed = true),
-            migrationAppHooks = mockk(relaxed = true),
+            migrationAppHooks = mockk {
+                coEvery { retireHardwareAccount(any(), any()) } coAnswers {
+                    secondArg<suspend () -> Unit>().invoke()
+                }
+            },
         )
 
     private fun vm(

@@ -48,6 +48,8 @@ interface MigrationLiveDriver {
      */
     fun stop(accountKeyId: String)
 
+    suspend fun stopAndJoin(accountKeyId: String)
+
     /** Cancel and drain process-owned work before wallet erasure. */
     suspend fun stopAll()
 }
@@ -63,7 +65,9 @@ class MigrationLiveDriverImpl(
 
     @Synchronized
     override fun startIfNotRunning(accountKeyId: String) {
-        if (resetPending() || runningJobs[accountKeyId]?.isCompleted == false) return
+        if (resetPending() || MigrationAccountRetirement.blocks(accountKeyId) ||
+            runningJobs[accountKeyId]?.isCompleted == false
+        ) return
         val candidate = scope.launch(start = CoroutineStart.LAZY) { loop(accountKeyId) }
         runningJobs[accountKeyId] = candidate
         candidate.invokeOnCompletion { runningJobs.remove(accountKeyId, candidate) }
@@ -72,6 +76,13 @@ class MigrationLiveDriverImpl(
 
     override fun stop(accountKeyId: String) {
         runningJobs[accountKeyId]?.cancel()
+    }
+
+    override suspend fun stopAndJoin(accountKeyId: String) {
+        runningJobs[accountKeyId]?.let {
+            it.cancel()
+            it.join()
+        }
     }
 
     override suspend fun stopAll() {

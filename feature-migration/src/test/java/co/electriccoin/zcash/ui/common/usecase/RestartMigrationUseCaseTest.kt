@@ -78,8 +78,8 @@ class RestartMigrationUseCaseTest {
                     migrationLiveDriver = liveDriver,
                     migrationTransferStateRepository = transferStateRepository,
                     drive = mockk<MigrationDriveOnce> {
-                        coEvery { withExclusiveAccess<Unit>(any()) } coAnswers {
-                            firstArg<suspend () -> Unit>().invoke()
+                        coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers {
+                            secondArg<suspend () -> Unit>().invoke()
                         }
                     },
                     pendingSchedule = mockk(relaxed = true),
@@ -137,8 +137,8 @@ class RestartMigrationUseCaseTest {
                     migrationLiveDriver = liveDriver,
                     migrationTransferStateRepository = transferStateRepository,
                     drive = mockk<MigrationDriveOnce> {
-                        coEvery { withExclusiveAccess<Unit>(any()) } coAnswers {
-                            if (busy) null else firstArg<suspend () -> Unit>().invoke()
+                        coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers {
+                            if (busy) null else secondArg<suspend () -> Unit>().invoke()
                         }
                     },
                     pendingSchedule = mockk(relaxed = true),

@@ -88,7 +88,8 @@ class GetSwapStatusUseCase(
                             donationPreferences?.recordSuccessfulTransaction()
                         }
                         val fundingTimeLeft = result.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }
-                            ?.let { it.deadline - fundingClock.now() }?.takeIf { it.isPositive() }
+                            ?.observedAtProvider?.let { result.deadline - maxOf(it, fundingClock.now()) }
+                            ?.takeIf { it.isPositive() }
                         fundingExpiry?.cancel()
                         data.update {
                             it.copy(
@@ -101,7 +102,13 @@ class GetSwapStatusUseCase(
                         }
                         fundingExpiry = fundingTimeLeft?.let { remaining ->
                             launch {
-                                delay(remaining)
+                                val displayUntil = fundingClock.now() + remaining
+                                var timeLeft = displayUntil - fundingClock.now()
+                                while (timeLeft.isPositive()) {
+                                    // Re-evaluate device time on resume or after a clock correction.
+                                    delay(minOf(timeLeft, 1.seconds))
+                                    timeLeft = displayUntil - fundingClock.now()
+                                }
                                 data.update { it.copy(isFundingWindowOpen = false) }
                             }
                         }

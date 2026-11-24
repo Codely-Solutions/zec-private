@@ -219,7 +219,7 @@ class TransactionProgressVM(
                     }
 
                     is MigrationSweepTransactionProposal -> {
-                        stringRes("Your ZEC was successfully\nmigrated to Ironwood.").withStyle()
+                        stringRes(co.electriccoin.zcash.ui.design.R.string.migrationSuccess_subtitle).withStyle()
                     }
 
                     else -> {

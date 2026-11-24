@@ -43,7 +43,7 @@ class RestartMigrationUseCase(
     }
 
     suspend operator fun invoke(accountKeyId: String) {
-        checkNotNull(drive.withExclusiveAccess { clearAndStop(accountKeyId) }) {
+        checkNotNull(drive.withExclusiveAccess(accountKeyId) { clearAndStop(accountKeyId) }) {
             "A migration step is still in progress. Try restarting again when it finishes."
         }
     }

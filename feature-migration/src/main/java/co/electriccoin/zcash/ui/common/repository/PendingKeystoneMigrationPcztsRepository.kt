@@ -54,6 +54,8 @@ interface PendingKeystoneMigrationPcztsRepository {
 
     fun peek(accountKeyId: String): PendingKeystoneMigrationPczts?
 
+    fun observeBatch(accountKeyId: String): Flow<PendingKeystoneMigrationPczts?>
+
     fun observeReadyToFinalize(accountKeyId: String): Flow<Boolean>
 
     fun clear()
@@ -76,8 +78,11 @@ class PendingKeystoneMigrationPcztsRepositoryImpl : PendingKeystoneMigrationPczt
 
     override fun peek(accountKeyId: String): PendingKeystoneMigrationPczts? = pending.value[accountKeyId]
 
+    override fun observeBatch(accountKeyId: String): Flow<PendingKeystoneMigrationPczts?> =
+        pending.map { it[accountKeyId] }.distinctUntilChanged()
+
     override fun observeReadyToFinalize(accountKeyId: String): Flow<Boolean> =
-        pending.map { it[accountKeyId]?.isFullySigned == true }.distinctUntilChanged()
+        observeBatch(accountKeyId).map { it?.isFullySigned == true }.distinctUntilChanged()
 
     override fun clear() {
         pending.value = emptyMap()

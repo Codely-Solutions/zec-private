@@ -1130,7 +1130,7 @@
     <string name="migrationKeystoneScan_firmwareUnsupported">El firmware de tu Keystone todavía no admite la migración. Actualiza tu dispositivo Keystone y vuelve a intentarlo.</string>
 
     <string name="migrationSuccess_title">¡Enviado!</string>
-    <string name="migrationSuccess_subtitle">Tus ZEC se migraron\ncorrectamente a Ironwood.</string>
+    <string name="migrationSuccess_subtitle">Migración enviada. Consulta Actividad para ver la confirmación.</string>
     <string name="migrationSuccess_viewTransaction">Ver transacción</string>
 
     <string name="migrationSending_title">Enviando...</string>

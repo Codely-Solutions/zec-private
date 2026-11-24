@@ -323,6 +323,7 @@ class GetSwapStatusUseCaseTest {
         }
         val incomplete = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
         every { incomplete.deadline } returns start + 95_000.milliseconds
+        every { incomplete.observedAtProvider } answers { start + testScheduler.currentTime.milliseconds }
         val stalledPoll = CompletableDeferred<SwapQuoteStatus>()
         var attempts = 0
         val provider = mockk<SwapRepository> {
@@ -363,6 +364,38 @@ class GetSwapStatusUseCaseTest {
         assertFalse(states.last().isFundingWindowOpen)
         observer.cancel()
         assertFalse(useCase("deposit").isFundingWindowOpen)
+        val restarted = GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
+        assertFalse(restarted("deposit").isFundingWindowOpen)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun clockChangeClosesVisibleAdviceBeforeTheNextProviderPoll() = runTest {
+        val start = Instant.parse("2026-11-24T00:00:00Z")
+        var wall = start
+        val clock = object : Clock { override fun now() = wall }
+        val saved = mockk<TransactionSwapMetadata>()
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit") } returns saved
+            coEvery { updateSwap(saved, any()) } returns saved
+        }
+        val status = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
+        every { status.deadline } returns start + 60_000.milliseconds
+        every { status.observedAtProvider } returns start
+        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } returns status }
+        val states = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch {
+            GetSwapStatusUseCase(metadata, repository, clock = clock, timeSource = testScheduler.timeSource)
+                .observe("deposit").collect { states += it }
+        }
+        runCurrent()
+        assertTrue(states.last().isFundingWindowOpen)
+        wall += 61_000.milliseconds
+        advanceTimeBy(1_001)
+        runCurrent()
+
+        assertFalse(states.last().isFundingWindowOpen)
+        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
     }
 
     private fun swapStatusResult(

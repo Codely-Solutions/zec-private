@@ -21,6 +21,7 @@ data class MigrationHomeMessageData(
     // has arrived, background execution is unavailable, and the SDK doesn't yet count it as
     // overdue — a narrower, earlier window than the general missed-transfer/overdue state.
     val isReadyToSend: Boolean = false,
+    val nextTransferIndex: Int? = null,
     // Non-null exactly when the SDK's MigrationState is RequiresAttention (spec §6.2/§6.3) —
     // see MigrationAttentionKind's doc for why the two causes must never collapse into one
     // generic message again. attentionRangeText is only meaningful for TRANSFER_EXPIRED.

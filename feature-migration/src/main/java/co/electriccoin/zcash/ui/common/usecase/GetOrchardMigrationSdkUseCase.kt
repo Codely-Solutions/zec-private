@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationGateBypassStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.work.MigrationAccountRetirement
 
 /**
  * Resolves the real, Rust-backed [OrchardMigrationSdk] for the wallet account the migration flow
@@ -46,7 +47,12 @@ class GetOrchardMigrationSdkUseCase(
 ) {
     /** Resolves the SDK for the currently selected wallet account. */
     suspend operator fun invoke(): OrchardMigrationSdk =
-        buildFor(getSelectedWalletAccount())
+        getSelectedWalletAccount().let { account ->
+            check(!MigrationAccountRetirement.blocks(account.sdkAccount.accountUuid.toStorageKeyId())) {
+                "The migration account has been removed"
+            }
+            buildFor(account)
+        }
 
     /**
      * Like [invoke], but distinguishes WHY the SDK is unavailable so self-rechaining workers can
@@ -54,13 +60,20 @@ class GetOrchardMigrationSdkUseCase(
      * a worker retrying forever for an account that no longer exists is a zombie).
      */
     suspend fun lookup(accountKeyId: String): MigrationSdkLookup {
-        persistableWalletProvider.getPersistableWallet()
-            ?: return MigrationSdkLookup.Gone // the wallet itself was deleted
+        val canResolve = !MigrationAccountRetirement.blocks(accountKeyId) &&
+            persistableWalletProvider.getPersistableWallet() != null
+        if (!canResolve) return MigrationSdkLookup.Gone
         val accounts = runCatching { accountDataSource.getAllAccounts() }.getOrNull()
-        if (accounts.isNullOrEmpty()) return MigrationSdkLookup.NotReady // boot race — accounts not loaded yet
-        val account = accounts.findByAccountKeyId(accountKeyId) ?: return MigrationSdkLookup.Gone
-        val sdk = buildFor(account)
-        return MigrationSdkLookup.Ready(sdk)
+        val account = accounts?.findByAccountKeyId(accountKeyId)
+        return when {
+            accounts.isNullOrEmpty() -> MigrationSdkLookup.NotReady
+            account == null -> MigrationSdkLookup.Gone
+            else -> {
+                val sdk = buildFor(account)
+                MigrationAccountRetirement.admit(accountKeyId) { MigrationSdkLookup.Ready(sdk) }
+                    ?: MigrationSdkLookup.Gone
+            }
+        }
     }
 
     /**
@@ -71,12 +84,14 @@ class GetOrchardMigrationSdkUseCase(
      * must exist right now and simply degrade on absence.
      */
     suspend operator fun invoke(accountKeyId: String): OrchardMigrationSdk? {
+        if (MigrationAccountRetirement.blocks(accountKeyId)) return null
         val account =
             accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId) ?: run {
                 migrationLog("GetOrchardMigrationSdk: no account for keyId=$accountKeyId")
                 return null
             }
-        return buildFor(account)
+        val sdk = buildFor(account)
+        return MigrationAccountRetirement.admit(accountKeyId) { sdk }
     }
 
     @OptIn(InternalTestingApi::class)

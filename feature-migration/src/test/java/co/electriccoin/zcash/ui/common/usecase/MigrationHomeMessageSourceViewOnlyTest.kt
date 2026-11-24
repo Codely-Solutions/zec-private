@@ -102,6 +102,16 @@ class MigrationHomeMessageSourceViewOnlyTest {
         verify(exactly = 1) { router.forward(MigrationRestartArgs(ownerKey)) }
     }
 
+    @Test
+    fun readyTransferNumberUsesItsIndexWhileEarlierTransfersStillConfirm() {
+        val state = MigrationHomeMessageData(
+            isRunActive = true, completedCount = 0, totalCount = 2,
+            isReadyToSend = true, nextTransferIndex = 1,
+        )
+        val message = assertIs<MigrationMessageState>(source(zodl()).createMessageState(state))
+        assertEquals("Transfer 2 is ready to send", message.progressLabel)
+    }
+
     private fun TestScope.collectEmissions(source: MigrationHomeMessageSourceImpl): List<MigrationHomeMessage?> {
         val emissions = mutableListOf<MigrationHomeMessage?>()
         backgroundScope.launch { source.observe().toList(emissions) }

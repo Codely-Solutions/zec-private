@@ -25,7 +25,10 @@ import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -52,11 +55,17 @@ class MigrationKeystoneScanVM(
 
     val failureSheet = MutableStateFlow<MigrationTransferFailureState?>(null)
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val isScanReady = getSelectedWalletAccount.observe()
-        .map { account ->
-            val key = account?.sdkAccount?.accountUuid?.toStorageKeyId() ?: return@map null
-            (args.accountKeyId == null || args.accountKeyId == key) &&
-                pendingSchedule.peek(key) != null && pendingKeystonePczts.peek(key)?.isFullySigned == false
+        .flatMapLatest { account ->
+            val key = account?.sdkAccount?.accountUuid?.toStorageKeyId() ?: return@flatMapLatest flowOf(null)
+            if (args.accountKeyId != null && args.accountKeyId != key) {
+                flowOf(false)
+            } else {
+                pendingKeystonePczts.observeBatch(key).map { batch ->
+                    pendingSchedule.peek(key) != null && batch?.isFullySigned == false
+                }
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), null)
 
     private var isProcessing = false

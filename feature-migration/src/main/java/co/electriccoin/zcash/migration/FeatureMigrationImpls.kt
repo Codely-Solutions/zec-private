@@ -72,6 +72,7 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.work.MigrationScheduler
+import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
@@ -79,6 +80,8 @@ import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class MigrationGateImpl(
@@ -231,6 +234,35 @@ class MigrationAppHooksImpl(
                 launchNavigation.requestMigrationRecovery(
                     NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
                 )
+            }
+        }
+    }
+
+    override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
+        val generation = walletWriteAccess.token()
+        MigrationAccountRetirement.begin(accountKeyId)
+        var deleted = false
+        try {
+            // Admission is closed first. Let any already-held native operation finish before deleting.
+            migrationDriveOnce.awaitIdle()
+            migrationLiveDriver.stopAndJoin(accountKeyId)
+            MigrationScheduler(context).cancelAndWait(accountKeyId)
+            withContext(NonCancellable) {
+                migrationDriveOnce.withIdleDrive {
+                    checkNotNull(walletWriteAccess.write(generation) { deleteAccount() }) {
+                        "The wallet changed before the account could be removed"
+                    }
+                    deleted = true
+                }
+                pendingMigrationSchedule.peek(accountKeyId)?.let { pendingMigrationSchedule.clear(accountKeyId, it) }
+                pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
+                migrationNotifier.cancel(accountKeyId)
+                migrationNotifier.cancelStepDue(accountKeyId)
+            }
+        } finally {
+            if (!deleted) {
+                MigrationAccountRetirement.restore(accountKeyId)
+                migrationLiveDriver.startIfNotRunning(accountKeyId)
             }
         }
     }

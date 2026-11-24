@@ -138,7 +138,7 @@ class MigrationSendingVM(
         while (!acquired && lockAttempt < SEND_MAX_ATTEMPTS) {
             if (lockAttempt > 0) delay(SEND_RETRY_DELAY_MS)
             val result =
-                migrationDriveOnce.withExclusiveAccess {
+                migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
                     acquired = true
                     sendReadinessLoop(sdk, useTor)
                 }

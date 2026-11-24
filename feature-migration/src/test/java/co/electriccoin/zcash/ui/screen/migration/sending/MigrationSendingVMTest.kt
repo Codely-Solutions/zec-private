@@ -339,8 +339,8 @@ class MigrationSendingVMTest {
         useTor: Boolean = false,
         migrationDriveOnce: MigrationDriveOnce =
             mockk {
-                coEvery { withExclusiveAccess<Any?>(any()) } coAnswers {
-                    firstArg<suspend () -> Any?>().invoke()
+                coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
+                    secondArg<suspend () -> Any?>().invoke()
                 }
             },
     ) = MigrationSendingVM(

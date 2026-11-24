@@ -240,7 +240,8 @@ class MigrationKeystoneSignVM(
                 positiveButton =
                     ButtonState(
                         text = stringRes(DesignR.string.migrationKeystoneSign_getSignature),
-                        onClick = ::onGetSignature
+                        isEnabled = !parts.isNullOrEmpty(),
+                        onClick = { onGetSignature(accountKeyId) },
                     ),
                 negativeButton =
                     ButtonState(text = stringRes(DesignR.string.migrationKeystoneSign_reject), onClick = ::onReject),
@@ -255,7 +256,10 @@ class MigrationKeystoneSignVM(
             initialValue = null,
         )
 
-    private fun onGetSignature() = navigationRouter.forward(MigrationKeystoneScanArgs(args.mode, args.accountKeyId))
+    private fun onGetSignature(accountKeyId: String) {
+        if (qrParts.value.isNullOrEmpty() || pendingKeystonePczts.peek(accountKeyId)?.isFullySigned != false) return
+        navigationRouter.forward(MigrationKeystoneScanArgs(args.mode, accountKeyId))
+    }
 
     private fun onReject() {
         val owner = args.accountKeyId

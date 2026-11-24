@@ -91,6 +91,8 @@ class MigrationDriveOnce(
 ) {
     suspend fun awaitIdle() = DRIVE_LOCK.withLock { Unit }
 
+    internal suspend fun <T> withIdleDrive(block: suspend () -> T): T = DRIVE_LOCK.withLock { block() }
+
     /**
      * @param allowForcedBroadcastWindow Only `true` for [MigrationLiveDriver] — the worker (via
      * [MigrationWorker.doWork]) must NEVER pass `true`: forcing a broadcast window can wait
@@ -111,7 +113,9 @@ class MigrationDriveOnce(
         }
         liveLoopActive = driveByLiveLoop
         try {
-            if (resetProgress.isPending.value) return DriveOnceResult.Terminal
+            if (resetProgress.isPending.value || MigrationAccountRetirement.blocks(accountKeyId)) {
+                return DriveOnceResult.Terminal
+            }
             // This IS a run — stamp the heartbeat regardless of which caller drove it, so the
             // dead-man's-switch alarm (MigrationTransferDueReceiver) never fires a spurious
             // "step due" notification just because the WORKER specifically didn't fire (the live
@@ -179,12 +183,13 @@ class MigrationDriveOnce(
      * executing) instead of suspending — callers that need to wait should retry using their own
      * existing backoff, not add a second one here.
      */
-    suspend fun <T> withExclusiveAccess(block: suspend () -> T): T? {
+    suspend fun <T> withExclusiveAccess(accountKeyId: String, block: suspend () -> T): T? {
         if (!DRIVE_LOCK.tryLock()) {
             return null
         }
         try {
-            return if (resetProgress.isPending.value) null else block()
+            val canRun = !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
+            return if (canRun) block() else null
         } finally {
             DRIVE_LOCK.unlock()
         }

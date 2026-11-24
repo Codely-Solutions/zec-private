@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
+import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationScheduler
@@ -41,10 +42,81 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationAppHooksResetTest {
+    @Test
+    fun hardwareRetirementBlocksOnlyItsOwnerUntilDrainAndDeletionComplete() = runTest {
+        val key = "retirement-owner"
+        val drain = CompletableDeferred<Unit>()
+        val cancel = CompletableDeferred<Unit>()
+        val removed = CompletableDeferred<Unit>()
+        val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        val drive = mockk<MigrationDriveOnce> {
+            coEvery { awaitIdle() } coAnswers { drain.await() }
+            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+        }
+        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), mockk(), reset, driver, drive,
+            mockk(relaxed = true), mockk(relaxed = true),
+        )
+        mockkConstructor(MigrationScheduler::class)
+        try {
+            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers { cancel.await() }
+            val retirement = launch { hooks.retireHardwareAccount(key) { removed.complete(Unit) } }
+            runCurrent()
+
+            assertTrue(MigrationAccountRetirement.blocks(key))
+            assertFalse(MigrationAccountRetirement.blocks("other-owner"))
+            assertFalse(removed.isCompleted)
+            coVerify(exactly = 0) { driver.stopAndJoin(any()) }
+
+            drain.complete(Unit)
+            runCurrent()
+            coVerify(exactly = 1) { driver.stopAndJoin(key) }
+            assertFalse(removed.isCompleted)
+
+            cancel.complete(Unit)
+            runCurrent()
+            assertTrue(retirement.isCompleted && removed.isCompleted)
+            assertTrue(MigrationAccountRetirement.blocks(key))
+            coVerify(exactly = 0) { driver.startIfNotRunning(key) }
+        } finally {
+            MigrationAccountRetirement.restore(key)
+            unmockkConstructor(MigrationScheduler::class)
+        }
+    }
+
+    @Test
+    fun failedDeletionReopensOnlyTheOriginalAccountsMigration() = runTest {
+        val key = "failed-retirement-owner"
+        val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        val drive = mockk<MigrationDriveOnce>(relaxed = true) {
+            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+        }
+        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), mockk(), mockk(), mockk(), mockk(), reset, driver, drive,
+            mockk(relaxed = true), mockk(relaxed = true),
+        )
+        mockkConstructor(MigrationScheduler::class)
+        try {
+            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } returns Unit
+
+            assertFailsWith<IllegalStateException> {
+                hooks.retireHardwareAccount(key) { error("Synthetic account deletion failed") }
+            }
+            assertFalse(MigrationAccountRetirement.blocks(key))
+            coVerify(exactly = 1) { driver.startIfNotRunning(key) }
+        } finally {
+            MigrationAccountRetirement.restore(key)
+            unmockkConstructor(MigrationScheduler::class)
+        }
+    }
+
     @Test
     fun resetCancelsWorkerTagAndWaitsForAcknowledgementWithoutALiveAccount() = runTest {
         val context = mockk<Context> {

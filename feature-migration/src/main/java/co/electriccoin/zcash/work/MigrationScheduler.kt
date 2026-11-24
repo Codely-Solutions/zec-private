@@ -45,11 +45,14 @@ class MigrationScheduler(
 
     internal suspend fun runNotificationStep(accountKeyId: String) {
         if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-            enqueue(accountKeyId, Duration.ZERO).result.await()
+            enqueue(accountKeyId, Duration.ZERO)?.result?.await()
         }
     }
 
-    private fun enqueue(accountKeyId: String, delay: Duration): Operation {
+    private fun enqueue(accountKeyId: String, delay: Duration): Operation? =
+        MigrationAccountRetirement.admit(accountKeyId) { enqueueAllowed(accountKeyId, delay) }
+
+    private fun enqueueAllowed(accountKeyId: String, delay: Duration): Operation {
         migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
         val operation = WorkManager.getInstance(context).enqueueUniqueWork(
             workId(accountKeyId),
@@ -70,10 +73,19 @@ class MigrationScheduler(
     }
 
     fun cancel(accountKeyId: String) {
+        cancelWork(accountKeyId)
+    }
+
+    suspend fun cancelAndWait(accountKeyId: String) {
+        cancelWork(accountKeyId).result.await()
+    }
+
+    private fun cancelWork(accountKeyId: String): Operation {
         migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
-        WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
+        val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
         migrationDueAlarmScheduler.cancel(accountKeyId)
         MigrationWorkerHeartbeat.clear(context, accountKeyId)
+        return operation
     }
 
     companion object {

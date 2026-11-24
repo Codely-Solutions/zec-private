@@ -94,7 +94,10 @@ class MigrationScheduledVM(
                 isFinalizing.value = false
                 return
             }
-            checkNotNull(drive.withExclusiveAccess { finalizeSignedBatch(accountKeyId, sched, pending) }) {
+            val finalized = drive.withExclusiveAccess(accountKeyId) {
+                finalizeSignedBatch(accountKeyId, sched, pending)
+            }
+            checkNotNull(finalized) {
                 "Another migration step is in progress"
             }
         } catch (e: CancellationException) {

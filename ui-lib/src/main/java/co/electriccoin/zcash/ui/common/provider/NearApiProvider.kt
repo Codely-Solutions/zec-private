@@ -11,11 +11,17 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.HttpResponse
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import kotlin.time.toKotlinInstant
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,10 +83,12 @@ class KtorNearApiProvider(
 
     override suspend fun checkSwapStatus(depositAddress: String): SwapStatusResponseDto =
         execute {
-            get("https://1click.chaindefuser.com/v0/status") {
+            val response = get("https://1click.chaindefuser.com/v0/status") {
                 contentType(ContentType.Application.Json)
+                header(HttpHeaders.CacheControl, "no-cache")
                 parameter("depositAddress", depositAddress)
-            }.body()
+            }
+            response.body<SwapStatusResponseDto>().copy(observedAtProvider = response.freshProviderTime())
         }
 
     // Cleanup preserves the primary failure; a close-only failure must still reach the caller.
@@ -116,4 +124,13 @@ class KtorNearApiProvider(
                 }
             }
         }
+}
+
+private fun HttpResponse.freshProviderTime(): kotlin.time.Instant? {
+    val age = headers[HttpHeaders.Age]
+    val date = headers[HttpHeaders.Date]
+    if ((age != null && age.toLongOrNull() != 0L) || date == null) return null
+    return runCatching {
+        ZonedDateTime.parse(date, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toKotlinInstant()
+    }.getOrNull()
 }

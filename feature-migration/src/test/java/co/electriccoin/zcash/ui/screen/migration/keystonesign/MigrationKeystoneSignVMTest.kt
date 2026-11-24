@@ -24,6 +24,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -400,6 +402,32 @@ class MigrationKeystoneSignVMTest {
     // -------------------------------------------------------------------------
     // onGetSignature (positive button / "Get Signature")
     // -------------------------------------------------------------------------
+
+    @Test
+    fun getSignatureWaitsForTheOwnerBoundQrToFinishPreparing() = runTest {
+        val sdk = fakeSdk()
+        val frames = CompletableDeferred<List<String>>()
+        coEvery { sdk.buildKeystoneSignBatchQrParts(any(), any(), any(), any()) } coAnswers { frames.await() }
+        val schedules = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, schedule()) }
+        val router = FakeNavigationRouter()
+        val vm = vm(sdk, schedules, PendingKeystoneMigrationPcztsRepositoryImpl(), router)
+        val collection = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        val loadingButton = assertNotNull(vm.state.value?.positiveButton)
+        assertFalse(loadingButton.isEnabled)
+        loadingButton.onClick()
+        assertTrue(router.forwardedRoutes.isEmpty())
+
+        frames.complete(listOf("fixture-frame"))
+        advanceUntilIdle()
+        val readyButton = assertNotNull(vm.state.value?.positiveButton)
+        assertTrue(readyButton.isEnabled)
+        readyButton.onClick()
+        assertEquals(1, router.forwardedRoutes.size)
+        assertEquals(testAccountKeyId, (router.forwardedRoutes.single() as MigrationKeystoneScanArgs).accountKeyId)
+        collection.cancel()
+    }
 
     @Test
     fun onGetSignatureNavigatesForwardToScanScreenWithCorrectArgs() =

@@ -514,7 +514,7 @@ class MigrationScheduledVMTest {
             coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
         },
         drive = mockk<MigrationDriveOnce> {
-            coEvery { withExclusiveAccess<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+            coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
         },
     )
 

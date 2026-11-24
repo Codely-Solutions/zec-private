@@ -34,19 +34,14 @@ class DisconnectUseCase(
                 BiometricRequest(message = stringRes(R.string.disconnect_hardware_wallet_biometric_message))
             )
 
-            migrationAppHooks.cancelMigrationWork(hwAccount.sdkAccount.accountUuid.toStorageKeyId())
-
-            val wasSelected =
-                accountDataSource
-                    .getAllAccounts()
-                    .firstOrNull { it.sdkAccount.accountUuid == hwAccount.sdkAccount.accountUuid }
-                    ?.isSelected
-                    ?: hwAccount.isSelected
-
-            logger("deleteAccount $hwAccount")
-            accountDataSource.deleteAccount(hwAccount)
-
-            logger("deleteAccount success")
+            val uuid = hwAccount.sdkAccount.accountUuid
+            var wasSelected = false
+            migrationAppHooks.retireHardwareAccount(uuid.toStorageKeyId()) {
+                wasSelected = accountDataSource.getAllAccounts()
+                    .firstOrNull { it.sdkAccount.accountUuid == uuid }?.isSelected ?: hwAccount.isSelected
+                accountDataSource.deleteAccount(hwAccount)
+            }
+            logger("Hardware account removed")
 
             if (wasSelected) {
                 val zashiAccount = accountDataSource.getZashiAccount()
