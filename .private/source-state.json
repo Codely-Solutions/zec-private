@@ -593,7 +593,7 @@
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidState.kt": "2c7cde3a673d553f72b5552b6eef3b9ff2560513a0eabd607b2383f4a53f8be8",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVM.kt": "0a94af576774472fa39d4f4d1650e0fadf39eaeabd97a940854e653758d7f5f8",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanArgs.kt": "9849aa05e633d6698157d28744740afa9bfe5fbe9bcab426ccff9df7c556a9ab",
-  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt": "4494ddc468021d2c668965f5a402d0bed359e28454194f8612f0943c1ffb1a0c",
+  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt": "a7ea846667ca92ca664d7f75bc3efbc86e7e654ee69c21e4fb1b54b5d349172e",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/KeystoneBatchRoundSlice.kt": "ae7a014c16b53fbfe76e3efbe690f2b6098bab6fc709d4e248e72baff695c934",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt": "d566ef283eb4b12cfab4e0c73c98c62a0a74417e50b800b9a1518cf24ebab984",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt": "5ba09ffd1c43f9747cb590467dd311f64d0fdf84057b9c3ce9b1ce8063400f1f",

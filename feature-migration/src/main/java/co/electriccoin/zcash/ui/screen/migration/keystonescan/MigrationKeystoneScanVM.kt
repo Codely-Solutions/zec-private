@@ -54,7 +54,7 @@ class MigrationKeystoneScanVM(
 
     val isScanReady = getSelectedWalletAccount.observe()
         .map { account ->
-            val key = account.sdkAccount.accountUuid.toStorageKeyId()
+            val key = account?.sdkAccount?.accountUuid?.toStorageKeyId() ?: return@map null
             (args.accountKeyId == null || args.accountKeyId == key) &&
                 pendingSchedule.peek(key) != null && pendingKeystonePczts.peek(key)?.isFullySigned == false
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), null)

@@ -5389,7 +5389,7 @@ index 50c737dbd..419865035 100644
 +        return
 +    }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
-index 2bf341dca..08014c266 100644
+index 2bf341dca..337093935 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
 @@ -27,0 +28,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
@@ -5399,7 +5399,7 @@ index 2bf341dca..08014c266 100644
 @@ -51,0 +55,7 @@ class MigrationKeystoneScanVM(
 +    val isScanReady = getSelectedWalletAccount.observe()
 +        .map { account ->
-+            val key = account.sdkAccount.accountUuid.toStorageKeyId()
++            val key = account?.sdkAccount?.accountUuid?.toStorageKeyId() ?: return@map null
 +            (args.accountKeyId == null || args.accountKeyId == key) &&
 +                pendingSchedule.peek(key) != null && pendingKeystonePczts.peek(key)?.isFullySigned == false
 +        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), null)
