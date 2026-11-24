@@ -206,10 +206,10 @@ class TransactionDetailRowLayoutTest {
 
     private fun assertCompleteText(text: String) {
         val layouts = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
-            action(layouts)
-        }
+        compose.onNodeWithText(text, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
         val layout = layouts.single()
+        assertEquals(text, layout.layoutInput.text.text)
         assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
         for (line in 0 until layout.lineCount) {
             assertFalse(layout.isLineEllipsized(line), "$text must remain complete")

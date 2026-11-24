@@ -88280,7 +88280,7 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..33d74cd42
+index 000000000..6f588db59
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 @@ -0,0 +1,284 @@
@@ -88492,10 +88492,10 @@ index 000000000..33d74cd42
 +
 +    private fun assertCompleteText(text: String) {
 +        val layouts = mutableListOf<TextLayoutResult>()
-+        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
-+            action(layouts)
-+        }
++        compose.onNodeWithText(text, useUnmergedTree = true)
++            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
 +        val layout = layouts.single()
++        assertEquals(text, layout.layoutInput.text.text)
 +        assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
 +        for (line in 0 until layout.lineCount) {
 +            assertFalse(layout.isLineEllipsized(line), "$text must remain complete")
