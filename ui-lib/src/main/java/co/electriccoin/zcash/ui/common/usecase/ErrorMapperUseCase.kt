@@ -57,7 +57,7 @@ class ErrorMapperUseCase(
         secondaryStyle: ButtonStyle? = null,
         isSupportFirst: Boolean = false,
         @DrawableRes icon: Int? = null,
-        walletlessOnboarding: Boolean = false,
+        supportWithoutDiagnostics: Boolean = false,
     ): LceError.BottomSheet {
         val unsupported = (error.cause as? AccountOperationUnsupportedException)?.kind?.errorCopy(viewOnlyContent)
         val isMigrationPaused = error.cause.isMigrationPausedUntilNetworkUpgrade()
@@ -105,8 +105,8 @@ class ErrorMapperUseCase(
             secondaryStyle = secondaryStyle,
             isSupportFirst = isSupportFirst,
             icon = icon,
-            onReport = if (walletlessOnboarding) {
-                { sendEmail.sendOnboardingSupport() }
+            onReport = if (supportWithoutDiagnostics) {
+                { sendEmail.sendBlankSupport() }
             } else {
                 val allowed = reportAccess.captureWallet()
                 val onClick: () -> Unit = {

@@ -339,14 +339,14 @@ class MaintenanceWatchTest(unittest.TestCase):
             with self.subTest(attempt=attempt, artifact=artifact):
                 inputs = {'inputs.reconciliation_run': '7', 'inputs.reconciliation_attempt': attempt,
                           'inputs.reconciliation_artifact': artifact, 'needs.reconcile.outputs.attestation_attempt': '',
-                          'needs.reconcile.outputs.attestation_id': ''}
+                          'needs.reconcile.outputs.attestation_id': '', 'needs.reconcile_input.result': 'success'}
                 verified = dict(inputs, **{'needs.reconcile.outputs.attestation_attempt': '1',
                                            'needs.reconcile.outputs.attestation_id': '73'})
                 self.assertEqual(selector(failure, **inputs), f'publisher:7:{attempt}:{artifact}')
                 self.assertEqual(selector(failure, **verified), 'publisher:7:1:73')
                 self.assertEqual(selector(notification, **verified), 'publisher:7:1:73')
 
-    def test_malformed_reconciliation_dispatch_leaves_no_publisher_blocker_after_exact_recovery(self):
+    def test_reconciliation_selector_outcome_controls_publisher_blockers(self):
         from reconcile_release import main as reconcile
         from test_notify import NotifyTest
 
@@ -360,11 +360,14 @@ class MaintenanceWatchTest(unittest.TestCase):
 
         self.assertIn("CHECK_RECONCILIATION_SELECTOR: 'true'", admission['block'])
         self.assertIn('python3 -B .private/reconcile_release.py', admission['block'])
-        for run, attempt, artifact, draft, valid in (
-            ('7', '1', '', False, False), ('7', '', '73', False, False),
-            ('7', '01', '73', False, False), ('7', '1', 'invalid', False, False),
-            ('bad', '', '', False, False), ('', '1', '', False, False),
-            ('7', '', '', True, False), ('7', '', '', False, True), ('7', '1', '73', False, True),
+        self.assertIn("if: steps.selector.outputs.invalid == 'true'\n        run: exit 1", admission['block'])
+        for run, attempt, artifact, draft, conflict, valid in (
+            ('7', '1', '', False, False, False), ('7', '', '73', False, False, False),
+            ('7', '01', '73', False, False, False), ('7', '1', 'invalid', False, False, False),
+            ('bad', '', '', False, False, False), ('', '1', '', False, False, False),
+            ('7', '', '', True, False, False), ('7', '1', '73', False, True, False),
+            ('7', '', '', False, False, True), ('7', '1', '73', False, False, True),
+            ('7', '1', '73', True, False, True),
         ):
             with self.subTest(run=run, attempt=attempt, artifact=artifact, draft=draft):
                 inputs = {'inputs.reconciliation_run': run, 'inputs.reconciliation_attempt': attempt,
@@ -374,23 +377,28 @@ class MaintenanceWatchTest(unittest.TestCase):
                           'needs.publish.outputs.attestation_id': '', 'inputs.source_sha': '',
                           'inputs.candidate_run': ''}
                 self.assertTrue(job_activates(admission, {}, **inputs))
-                with patch_environment(dict(CHECK_RECONCILIATION_SELECTOR='true', RECONCILIATION_RUN=run,
-                                            RECONCILIATION_ATTEMPT=attempt, RECONCILIATION_ARTIFACT=artifact,
-                                            RESUME_DRAFT=str(draft).lower())), \
-                        patch('reconcile_release.gh', side_effect=AssertionError('Unexpected remote I/O')):
-                    if valid:
+                with tempfile.TemporaryDirectory() as temporary:
+                    output = Path(temporary)/'output'
+                    with patch_environment(dict(CHECK_RECONCILIATION_SELECTOR='true', RECONCILIATION_RUN=run,
+                                                RECONCILIATION_ATTEMPT=attempt, RECONCILIATION_ARTIFACT=artifact,
+                                                RESUME_DRAFT=str(draft).lower(), GITHUB_OUTPUT=str(output),
+                                                CONFLICTING_INPUTS=str(conflict).lower())), \
+                            patch('reconcile_release.gh', side_effect=AssertionError('Unexpected remote I/O')), \
+                            patch('builtins.print'):
                         reconcile()
-                    else:
-                        with self.assertRaises(ValueError):
-                            reconcile()
-                notify_failure = job_activates(failed, dict(reconcile='failure',
-                                               reconcile_input='success' if valid else 'failure'), **inputs)
+                    invalid = output.read_text().strip() if output.exists() else ''
+                self.assertEqual(invalid, '' if valid else 'invalid=true')
+                inputs['needs.reconcile_input.outputs.invalid'] = invalid.removeprefix('invalid=')
+                inputs['needs.reconcile_input.result'] = 'success' if valid else 'failure'
+                notify_failure = job_activates(failed, dict(reconcile='failure' if valid else 'skipped',
+                                               reconcile_input=inputs['needs.reconcile_input.result']), **inputs)
                 self.assertEqual(notify_failure, valid)
                 fixture = NotifyTest()
                 fixture.setUp()
                 fixture.run_notice('Unrelated blocker', BLOCKER_CANDIDATE='unrelated', NTFY_URL='')
                 if notify_failure:
                     fixture.run_notice('Reconciliation stopped', BLOCKER_OPERATION='reconciliation',
+                                       MAKE_ISSUE=field(failed, 'MAKE_ISSUE', inputs),
                                        BLOCKER_CANDIDATE=field(failed, 'BLOCKER_CANDIDATE', inputs),
                                        BLOCKER_ATTESTATION=field(failed, 'BLOCKER_ATTESTATION', inputs), NTFY_URL='')
                 self.assertEqual(len(fixture.blockers()), 2 if valid else 1)
@@ -403,6 +411,37 @@ class MaintenanceWatchTest(unittest.TestCase):
                                    BLOCKER_CANDIDATE=field(recovered, 'BLOCKER_CANDIDATE', verified),
                                    BLOCKER_ATTESTATION=field(recovered, 'BLOCKER_ATTESTATION', verified))
                 self.assertEqual(set(fixture.blockers()), {('release', 'unrelated', '')})
+
+    def test_operational_reconciliation_admission_failure_sends_a_notice_without_publisher_scope(self):
+        from test_notify import NotifyTest
+
+        failed = workflow_job('build-release.yml', 'failed')
+        self.assertIn('reconciliation admission result is $RECONCILIATION_ADMISSION', failed['block'])
+        for result in ('failure', 'cancelled'):
+            for run in ('7', 'unvalidated'):
+                with self.subTest(result=result, run=run):
+                    inputs = {'inputs.reconciliation_run': run, 'inputs.reconciliation_attempt': '1',
+                              'inputs.reconciliation_artifact': '73', 'inputs.resume_draft': False,
+                              'inputs.source_sha': '', 'inputs.candidate_run': '', 'github.sha': 'controller',
+                              'needs.reconcile_input.result': result, 'needs.reconcile_input.outputs.invalid': ''}
+                    jobs = dict(reconcile_input=result)
+                    self.assertTrue(job_activates(failed, jobs, **inputs))
+                    self.assertFalse(job_activates(failed, jobs, workflow_cancelled=True, **inputs))
+                    self.assertFalse(job_activates(failed, jobs, **inputs, **{'github.ref': 'refs/heads/Main'}))
+
+                    def field(key):
+                        return evaluate_expression(re.search(r'^          '+key+r': (.+)$', failed['block'], re.M)[1],
+                                                   inputs)
+
+                    self.assertEqual(field('BLOCKER_CANDIDATE'), 'controller')
+                    fixture = NotifyTest()
+                    fixture.setUp()
+                    fixture.run_notice('Reconciliation admission stopped', MAKE_ISSUE=field('MAKE_ISSUE'),
+                                       BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE=field('BLOCKER_CANDIDATE'))
+                    self.assertEqual(fixture.commands, [])
+                    self.assertEqual(fixture.blockers(), {})
+                    self.assertEqual(len(fixture.messages), 1)
+                    self.assertIn('Reconciliation admission stopped', fixture.messages[0])
 
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
         recovery = workflow_job('sync-upstream-main.yml', 'discovery_recovered')

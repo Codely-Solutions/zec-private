@@ -39,7 +39,7 @@ class RestoreDateVM(
     val state: StateFlow<LceState<BirthdayPickerState>> =
         combine(selection, estimateLce.state) { yearMonth, estimate ->
             createState(yearMonth, estimate.loading)
-        }.withLce(estimateLce) { errorStateMapper.mapToState(it, walletlessOnboarding = true) }
+        }.withLce(estimateLce) { errorStateMapper.mapToState(it, supportWithoutDiagnostics = true) }
             .stateIn(this, LceState(content = createState(selection.value, false)))
 
     private fun createState(selection: YearMonth, isLoading: Boolean) =

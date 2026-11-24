@@ -57,6 +57,16 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Fast screen and provider checks
 
+### Corrections after a96a38dbd
+
+| Area | Maintained regression |
+| --- | --- |
+| Signing smoke | `test_packaging` changes each signing workflow in a real disposable Git tree and uses the resulting preflight output with the checked-in smoke job condition. An unrelated workflow edit preserves the stored result. |
+| Swap and Pay details | `TransactionDetailVMTest` covers saved pending and terminal outcomes, missing status, loading, retry, local funding and provider recovery. `TransactionDetailRowLayoutTest` composes the outgoing details and checks the saved and unavailable labels. Refund amounts still require an accepted provider observation because saved metadata has no refund amount. |
+| Release 30 tax cache | `ExportTaxUseCaseTest` places all four legacy filenames beside a current export registered with the scheduler stub. Startup removes the legacy CSVs and preserves the staged bytes and unrelated files. `ResetZashiVMTest` checks the same deletion boundary through confirmed reset with retention enabled. Android's WorkManager dispatch and recipient delivery require platform evidence. |
+| Pending reset support | `ResetZashiVMTest` taps the actual error sheet action, checks the chooser's blank draft and verifies that wallet diagnostics remain blocked. The same case resumes the pending reset. |
+| Reconciliation admission | `test_maintenance_watch` checks the production selector validation, checked-in job conditions and notifier with synthetic I/O. Malformed and conflicting inputs stay in dispatch diagnostics. An operational admission failure sends a push without issue I/O. Admitted run-only and exact scopes keep verified recovery. |
+
 ### Corrections after 28f11edfc
 
 | Boundary | Maintained checks |

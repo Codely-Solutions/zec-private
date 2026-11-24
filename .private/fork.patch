@@ -161,23 +161,29 @@ index 000000000..d6f306286
 +OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 +SOFTWARE.
 diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
-index 6e68fc9c5..574aabbe8 100644
+index 6e68fc9c5..2478c8bde 100644
 --- a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 +++ b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 @@ -26 +25,0 @@ import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -34 +33 @@ import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
+@@ -29,0 +29 @@ import co.electriccoin.zcash.ui.common.repository.WalletSnapshotRepository
++import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+@@ -34 +34 @@ import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
 -import co.electriccoin.zcash.voting.di.featureVotingModule
 +import co.electriccoin.zcash.di.excludedVotingModule
-@@ -44 +42,0 @@ class ZcashApplication : CoroutineApplication() {
+@@ -44 +43,0 @@ class ZcashApplication : CoroutineApplication() {
 -    private val flexaRepository by inject<FlexaRepository>()
-@@ -80,0 +79 @@ class ZcashApplication : CoroutineApplication() {
+@@ -57,0 +57 @@ class ZcashApplication : CoroutineApplication() {
++    private val deleteLegacyTaxExports: DeleteLegacyTaxExportsUseCase by inject()
+@@ -80,0 +81 @@ class ZcashApplication : CoroutineApplication() {
 +                zecPrivateProductModule,
-@@ -88 +87 @@ class ZcashApplication : CoroutineApplication() {
+@@ -88 +89 @@ class ZcashApplication : CoroutineApplication() {
 -                featureVotingModule,
 +                excludedVotingModule,
-@@ -99 +97,0 @@ class ZcashApplication : CoroutineApplication() {
+@@ -99 +99,0 @@ class ZcashApplication : CoroutineApplication() {
 -        flexaRepository.init()
+@@ -107,0 +108 @@ class ZcashApplication : CoroutineApplication() {
++        applicationScope.launch { deleteLegacyTaxExports.onStartup() }
 diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt b/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt
 new file mode 100644
 index 000000000..6d760951c
@@ -23229,7 +23235,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..5152f2de2 100644
+index f41234151..c53feeb1c 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -23796,8 +23802,9 @@ index f41234151..5152f2de2 100644
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1629,0 +1463,5 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1463,6 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
++    <string name="private_swap_status_unavailable">Unavailable</string>
 +    <string name="private_swap_created_at">Swap created</string>
 +    <string name="private_swap_saved_output">Saved output</string>
 +    <string name="private_swap_refresh_unavailable">Status refresh unavailable.</string>
@@ -24790,65 +24797,69 @@ index 1c2a8787c..9a180202c 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..40d9a4c55 100644
+index c9262f680..182c0fe78 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 +import co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase
 @@ -12 +12,0 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 -import co.electriccoin.zcash.ui.common.usecase.CreateFlexaTransactionUseCase
-@@ -26,0 +27 @@ import co.electriccoin.zcash.ui.common.usecase.ExportTaxUseCase
+@@ -19,0 +20 @@ import co.electriccoin.zcash.ui.common.usecase.DeleteABContactUseCase
++import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+@@ -26,0 +28 @@ import co.electriccoin.zcash.ui.common.usecase.ExportTaxUseCase
 +import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
-@@ -31 +31,0 @@ import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
+@@ -31 +32,0 @@ import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
 -import co.electriccoin.zcash.ui.common.usecase.FlipTransactionBookmarkUseCase
-@@ -42 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
+@@ -42 +42,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
-@@ -72 +70,0 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
+@@ -72 +71,0 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
 -import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
-@@ -75 +72,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
+@@ -75 +73,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
-@@ -77 +74 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
+@@ -77 +75 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToExportPrivateDataUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ExportPrivateDataUseCase
-@@ -117 +113,0 @@ import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
+@@ -117 +114,0 @@ import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneUrToZashiAccountsUseCase
-@@ -137 +132,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -137 +133,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -139,0 +135 @@ import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
+@@ -139,0 +136 @@ import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
-@@ -164,0 +161 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
+@@ -164,0 +162 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -188,0 +186 @@ val useCaseModule =
+@@ -188,0 +187 @@ val useCaseModule =
 +        singleOf(::CopyRecoveryToClipboardUseCase)
-@@ -201 +198,0 @@ val useCaseModule =
+@@ -190,0 +190 @@ val useCaseModule =
++        singleOf(::DeleteLegacyTaxExportsUseCase)
+@@ -201 +200,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -214 +210,0 @@ val useCaseModule =
+@@ -214 +212,0 @@ val useCaseModule =
 -        factoryOf(::ParseKeystoneUrToZashiAccountsUseCase)
-@@ -246 +241,0 @@ val useCaseModule =
+@@ -246 +243,0 @@ val useCaseModule =
 -        factoryOf(::NavigateToAddressBookUseCase)
-@@ -249 +244 @@ val useCaseModule =
+@@ -249 +246 @@ val useCaseModule =
 -        factoryOf(::FlipTransactionBookmarkUseCase)
 +        factoryOf(::SetTransactionBookmarkUseCase)
-@@ -254,0 +250 @@ val useCaseModule =
+@@ -254,0 +252 @@ val useCaseModule =
 +        factoryOf(::WalletReportAccess)
-@@ -256 +251,0 @@ val useCaseModule =
+@@ -256 +253,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +255,0 @@ val useCaseModule =
+@@ -261 +257,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -289 +283 @@ val useCaseModule =
+@@ -289 +285 @@ val useCaseModule =
 -        factoryOf(::RequestSwapQuoteUseCase)
 +        singleOf(::RequestSwapQuoteUseCase)
-@@ -309 +303 @@ val useCaseModule =
+@@ -309 +305 @@ val useCaseModule =
 -        factoryOf(::NavigateToExportPrivateDataUseCase)
 +        singleOf(::ExportPrivateDataUseCase)
-@@ -320 +314,2 @@ val useCaseModule =
+@@ -320 +316,2 @@ val useCaseModule =
 -        factoryOf(::ResetZashiUseCase)
 +        singleOf(::ResetProgressStore)
 +        singleOf(::ResetZashiUseCase)
-@@ -325 +320 @@ val useCaseModule =
+@@ -325 +322 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        single { GetSwapStatusUseCase(get(), get(), get()) }
-@@ -330 +324,0 @@ val useCaseModule =
+@@ -330 +326,0 @@ val useCaseModule =
 -        factoryOf(::IsServerAutomaticUseCase)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
 index 50bcc0da8..904bf2920 100644
@@ -33124,6 +33135,42 @@ index b174f50af..f307a8a7e 100644
 -    }
 +    suspend operator fun invoke(contact: EnhancedABContact): ABContactSaveResult =
 +        persistABContact(navigationRouter) { addressBookRepository.deleteContact(contact) }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt
+new file mode 100644
+index 000000000..1eaeb6fcb
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt
+@@ -0,0 +1,30 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.Context
++import co.electriccoin.zcash.spackle.Twig
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
++import co.electriccoin.zcash.work.DeleteDiagnosticExportWorker
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import java.io.File
++import java.nio.file.Files
++import java.nio.file.LinkOption.NOFOLLOW_LINKS
++
++class DeleteLegacyTaxExportsUseCase(private val context: Context) {
++    suspend fun onStartup() {
++        runCatchingRecoverable { invoke() }.onFailure { Twig.warn(it) { "Could not remove legacy tax exports" } }
++    }
++
++    suspend operator fun invoke() = withContext(Dispatchers.IO) {
++        val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).toPath()
++        if (Files.isDirectory(directory, NOFOLLOW_LINKS)) {
++            Files.newDirectoryStream(directory) { path ->
++                LEGACY_CSV.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
++            }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
++        }
++    }
++
++    private companion object {
++        val LEGACY_CSV = Regex("(Zodl|Keystone|Ledger|View_Only)_Transaction_History_[0-9]{4}\\.csv")
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteSharedQRImagesUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteSharedQRImagesUseCase.kt
 index d7bbe4c3c..a693fc126 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteSharedQRImagesUseCase.kt
@@ -33190,7 +33237,7 @@ index 7407f5c7f..2066c062e 100644
 +        currentCoroutineContext().ensureActive()
 +        if (isDeleted) navigationRouter.back()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
-index 565cd3bea..494b6fdef 100644
+index 565cd3bea..59eb3f925 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
 @@ -17 +17,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
@@ -33204,10 +33251,10 @@ index 565cd3bea..494b6fdef 100644
 +    private val scope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 +
 @@ -54,0 +60 @@ class ErrorMapperUseCase(
-+        walletlessOnboarding: Boolean = false,
++        supportWithoutDiagnostics: Boolean = false,
 @@ -101,0 +108,13 @@ class ErrorMapperUseCase(
-+            onReport = if (walletlessOnboarding) {
-+                { sendEmail.sendOnboardingSupport() }
++            onReport = if (supportWithoutDiagnostics) {
++                { sendEmail.sendBlankSupport() }
 +            } else {
 +                val allowed = reportAccess.captureWallet()
 +                val onClick: () -> Unit = {
@@ -34886,7 +34933,7 @@ index 548d25575..bb14d237e 100644
 +                walletWriteToken = owner?.walletWriteToken,
 +            )) { "Unable to save swap tracking before funding" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
-index 51caa9e19..eb44446ce 100644
+index 51caa9e19..6ef8ab7dd 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -34939,8 +34986,8 @@ index 51caa9e19..eb44446ce 100644
 +        }
 +    }
 +
-+    /** A restore screen can open a blank support draft before a wallet grant exists. */
-+    internal fun sendOnboardingSupport() {
++    /** Opens support without collecting wallet data. */
++    internal fun sendBlankSupport() {
 +        sendSupportEmail(context.getString(R.string.app_name), "")
 @@ -103 +114 @@ class SendEmailUseCase(
 -    operator fun invoke(submitResult: SubmitResult.Failure) {
@@ -37154,29 +37201,31 @@ index d50537e7f..b00724448 100644
 @@ -11,0 +12 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..78839700a 100644
+index eb47e1885..47ebef074 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 @@ -15 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+@@ -18,0 +19,2 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
++import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
 +import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
-@@ -19,0 +21,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -19,0 +22,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
-@@ -20,0 +25,2 @@ import kotlinx.coroutines.flow.first
+@@ -20,0 +26,2 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.withContext
-@@ -27 +32,0 @@ class ResetZashiUseCase(
+@@ -27 +33,0 @@ class ResetZashiUseCase(
 -    private val flexaRepository: FlexaRepository,
-@@ -36,0 +42,3 @@ class ResetZashiUseCase(
+@@ -36,0 +43,4 @@ class ResetZashiUseCase(
 +    private val progressStore: ResetProgressStore,
 +    private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
++    private val deleteLegacyTaxExports: DeleteLegacyTaxExportsUseCase,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -38 +46,6 @@ class ResetZashiUseCase(
+@@ -38 +48,6 @@ class ResetZashiUseCase(
 -    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
 +    private val resetMutex = Mutex()
 +    private val running = MutableStateFlow(false)
@@ -37184,10 +37233,10 @@ index eb47e1885..78839700a 100644
 +    val isPending = progressStore.isPending
 +
 +    @Suppress("TooGenericExceptionCaught", "ReturnCount")
-@@ -39,0 +53,2 @@ class ResetZashiUseCase(
+@@ -39,0 +55,2 @@ class ResetZashiUseCase(
 +        if (!resetMutex.tryLock()) return
 +        running.value = true
-@@ -41,12 +56,18 @@ class ResetZashiUseCase(
+@@ -41,12 +58,18 @@ class ResetZashiUseCase(
 -            requestBiometrics()
 -            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
 -            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
@@ -37218,10 +37267,10 @@ index eb47e1885..78839700a 100644
 +                progressStore.store(null)
 +                walletWriteAccess.finishReset()
 +            }
-@@ -54 +75 @@ class ResetZashiUseCase(
+@@ -54 +77 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
-@@ -56 +77,20 @@ class ResetZashiUseCase(
+@@ -56 +79,21 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
 +        } finally {
@@ -37237,18 +37286,19 @@ index eb47e1885..78839700a 100644
 +            if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
 +            giftCardRepository.quiesceForWalletReset()
 +            deleteSharedQRImages.deleteViewingKeyImages()
++            deleteLegacyTaxExports()
 +            if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
 +                addressBookRepository.delete()
 +                metadataRepository.delete()
 +                progressStore.store(ResetStage.ERASE_SDK)
 +            }
 +            true
-@@ -57,0 +98 @@ class ResetZashiUseCase(
+@@ -57,0 +101 @@ class ResetZashiUseCase(
 +        check(prepared == true) { "Timed out preparing wallet reset" }
-@@ -76 +117 @@ class ResetZashiUseCase(
+@@ -76 +120 @@ class ResetZashiUseCase(
 -     * [deleteLocalFiles] already ran. When no synchronizer materializes in time, this is a no-op —
 +     * local files were already removed. When no synchronizer materializes in time, this is a no-op —
-@@ -84,7 +124,0 @@ class ResetZashiUseCase(
+@@ -84,7 +127,0 @@ class ResetZashiUseCase(
 -    private fun deleteLocalFiles(keepFiles: Boolean) {
 -        if (!keepFiles) {
 -            addressBookRepository.delete()
@@ -37256,11 +37306,11 @@ index eb47e1885..78839700a 100644
 -        }
 -    }
 -
-@@ -92 +126,2 @@ class ResetZashiUseCase(
+@@ -92 +129,2 @@ class ResetZashiUseCase(
 -        walletCoordinator.deleteSdkDataFlow().first()
 +        val erased = withTimeoutOrNull(ERASE_SDK_TIMEOUT) { walletCoordinator.deleteSdkDataFlow().first() }
 +        check(erased == true) { "Could not erase wallet data" }
-@@ -96,7 +131,4 @@ class ResetZashiUseCase(
+@@ -96,7 +134,4 @@ class ResetZashiUseCase(
 -        standardPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider.purgeQuarantine()
@@ -37272,11 +37322,11 @@ index eb47e1885..78839700a 100644
 +        val encryptedPreferences = encryptedPreferenceProvider()
 +        check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
 +        check(encryptedPreferences.clearPreferences()) { "Could not clear encrypted wallet preferences" }
-@@ -105,0 +138,2 @@ class ResetZashiUseCase(
+@@ -105,0 +141,2 @@ class ResetZashiUseCase(
 +        private val PREPARE_RESET_TIMEOUT = 30.seconds
 +        private val ERASE_SDK_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
-index 4d406e6c2..5e4b72a1b 100644
+index 4d406e6c2..06f3552a0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.model.LceState
@@ -37290,11 +37340,15 @@ index 4d406e6c2..5e4b72a1b 100644
 -                isLoading = lce.loading,
 +                isLoading = lce.loading || running,
 +                isPending = pending,
-@@ -41,2 +45,13 @@ class ResetZashiVM(
+@@ -41,2 +45,17 @@ class ResetZashiVM(
 -        }.withLce(resetLce, errorStateMapper::mapToState)
 -            .stateIn(this, LceState(content = createState(isKeepFilesChecked.value, null, false)))
 +        }.withLce(resetLce) { error ->
-+            errorStateMapper.mapToState(error, message = stringRes(R.string.wallet_reset_failed))
++            errorStateMapper.mapToState(
++                error,
++                message = stringRes(R.string.wallet_reset_failed),
++                supportWithoutDiagnostics = resetZashi.isPending.value,
++            )
 +        }.stateIn(
 +            this,
 +            LceState(
@@ -37306,25 +37360,25 @@ index 4d406e6c2..5e4b72a1b 100644
 +                )
 +            )
 +        )
-@@ -47,0 +63 @@ class ResetZashiVM(
+@@ -47,0 +67 @@ class ResetZashiVM(
 +        isPending: Boolean,
-@@ -49 +65 @@ class ResetZashiVM(
+@@ -49 +69 @@ class ResetZashiVM(
 -        onBack = { navigationRouter.back() },
 +        onBack = { if (!resetZashi.isRunning.value && !resetZashi.isPending.value) navigationRouter.back() },
-@@ -59 +75,5 @@ class ResetZashiVM(
+@@ -59 +79,5 @@ class ResetZashiVM(
 -                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
 +                text = if (isPending) {
 +                    stringRes(R.string.wallet_initialization_retry)
 +                } else {
 +                    stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
 +                },
-@@ -63,0 +84 @@ class ResetZashiVM(
+@@ -63,0 +88 @@ class ResetZashiVM(
 +        isPending = isPending,
-@@ -69 +90,2 @@ class ResetZashiVM(
+@@ -69 +94,2 @@ class ResetZashiVM(
 -        confirmationDialogFlow.value = createConfirmationState()
 +        if (resetZashi.isRunning.value) return
 +        if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
-@@ -88,2 +110,3 @@ class ResetZashiVM(
+@@ -88,2 +114,3 @@ class ResetZashiVM(
 -        resetLce.execute {
 -            resetZashi(keepFiles = isKeepFilesChecked.value)
 +        resetLce.guardLoading {
@@ -41015,12 +41069,12 @@ index 8d15e2f2b..76a8f37cb 100644
 -    val seed: String
 +    val sessionId: String
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateVM.kt
-index a6d2baca8..d882b0288 100644
+index a6d2baca8..3facc2ec0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateVM.kt
 @@ -42 +42 @@ class RestoreDateVM(
 -        }.withLce(estimateLce, errorStateMapper::mapToState)
-+        }.withLce(estimateLce) { errorStateMapper.mapToState(it, walletlessOnboarding = true) }
++        }.withLce(estimateLce) { errorStateMapper.mapToState(it, supportWithoutDiagnostics = true) }
 @@ -82 +82 @@ class RestoreDateVM(
 -            navigationRouter.forward(RestoreEstimationArgs(seed = args.seed, blockHeight = bday.value))
 +            navigationRouter.forward(RestoreEstimationArgs(sessionId = args.sessionId, blockHeight = bday.value))
@@ -41308,7 +41362,7 @@ index c8c0c3bda..b3ddf2021 100644
 -    val seed: String,
 +    val sessionId: String,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVM.kt
-index e656c298f..51dffd117 100644
+index e656c298f..7c5cee488 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVM.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.model.BlockHeight
@@ -41329,7 +41383,7 @@ index e656c298f..51dffd117 100644
 +                } else {
 +                    R.string.wallet_initialization_failed
 +                }
-+            errorStateMapper.mapToState(it, message = stringRes(message), walletlessOnboarding = true)
++            errorStateMapper.mapToState(it, message = stringRes(message), supportWithoutDiagnostics = true)
 +        }
 @@ -44 +55 @@ class RestoreTorVM(
 -                    onClick = { this.isChecked.update { !it } }
@@ -43374,7 +43428,7 @@ index 22fac8c3b..1bbebad53 100644
 +    val showLiveDetails: Boolean = true,
 +    val supportButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..25aa58143 100644
+index a874453ef..806939b78 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -43386,6 +43440,10 @@ index a874453ef..25aa58143 100644
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
 @@ -22,0 +25 @@ import co.electriccoin.zcash.ui.design.util.loadingImageRes
 +import co.electriccoin.zcash.ui.design.util.StringResource
+@@ -33 +35,0 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
+-import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
+@@ -34,0 +37 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
++import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
 @@ -39,0 +43 @@ import kotlinx.coroutines.flow.stateIn
 +import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 @@ -53,0 +58 @@ class SwapDetailVM(
@@ -43394,27 +43452,24 @@ index a874453ef..25aa58143 100644
 -                                destinationAsset = swapData.status?.destinationAsset
 +                                destinationAsset = swapData.status?.destinationAsset,
 +                                savedMetadata = swapData.savedMetadata,
-@@ -65,2 +71,8 @@ class SwapDetailVM(
+@@ -63,6 +69 @@ class SwapDetailVM(
+-                    status =
+-                        TransactionDetailSwapStatusRowState(
 -                            title = stringRes(R.string.swapAndPay_status),
 -                            status = swapData.status?.status,
-+                            title = stringRes(
-+                                if (hasDetails && (swapData.status == null || swapData.error != null)) {
-+                                    R.string.private_swap_saved_status
-+                                } else {
-+                                    R.string.swapAndPay_status
-+                                }
-+                            ),
-+                            status = swapData.status?.status ?: swapData.savedMetadata?.status,
-@@ -71 +83 @@ class SwapDetailVM(
+-                            mode = SWAP_INTO_ZEC
+-                        ),
++                    status = swapData.data.toDetailStatusRow(mode = SWAP_INTO_ZEC),
+@@ -71 +72 @@ class SwapDetailVM(
 -                            title = stringRes(R.string.swapToZec_depositTo),
 +                            title = stringRes(R.string.private_swap_deposit_reference),
-@@ -73,2 +84,0 @@ class SwapDetailVM(
+@@ -73,2 +73,0 @@ class SwapDetailVM(
 -                            trailingIcon = R.drawable.ic_transaction_detail_info_copy,
 -                            onClick = ::onCopyDepositAddressClick
-@@ -77 +87 @@ class SwapDetailVM(
+@@ -77 +76 @@ class SwapDetailVM(
 -                    totalFees = createTotalFeesState(swapData),
 +                    totalFees = createQuotedOutputState(swapData),
-@@ -81 +91,7 @@ class SwapDetailVM(
+@@ -81 +80,7 @@ class SwapDetailVM(
 -                            title = stringRes(R.string.transactionHistory_timestamp),
 +                            title = stringRes(
 +                                if (swapData.status == null && hasDetails) {
@@ -43423,11 +43478,11 @@ index a874453ef..25aa58143 100644
 +                                    R.string.transactionHistory_timestamp
 +                                }
 +                            ),
-@@ -83,2 +99 @@ class SwapDetailVM(
+@@ -83,2 +88 @@ class SwapDetailVM(
 -                                swapData.status
 -                                    ?.timestamp
 +                                (swapData.status?.timestamp ?: swapData.savedMetadata?.lastUpdated)
-@@ -94,4 +109,7 @@ class SwapDetailVM(
+@@ -94,4 +98,7 @@ class SwapDetailVM(
 -                    errorFooter = mapper.createTransactionDetailErrorFooter(swapData.error),
 -                    infoFooter =
 -                        stringRes(R.string.deposits_info)
@@ -43439,13 +43494,13 @@ index a874453ef..25aa58143 100644
 +                        swapData.status?.status == PENDING -> stringRes(R.string.deposits_info)
 +                        else -> null
 +                    },
-@@ -98,0 +117,5 @@ class SwapDetailVM(
+@@ -98,0 +106,5 @@ class SwapDetailVM(
 +                    supportButton = if (swapData.error != null) {
 +                        swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
 +                    } else {
 +                        null
 +                    },
-@@ -99,0 +123,29 @@ class SwapDetailVM(
+@@ -99,0 +112,29 @@ class SwapDetailVM(
 +                    showLiveDetails = swapData.status != null || !hasDetails && swapData.error == null,
 +                    explorerLinks = swapData.status?.let { status ->
 +                        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
@@ -43475,13 +43530,13 @@ index a874453ef..25aa58143 100644
 +                    donationBasisZec = swapData.status?.takeIf {
 +                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
 +                    }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
-@@ -111 +163 @@ class SwapDetailVM(
+@@ -111 +152 @@ class SwapDetailVM(
 -    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
 +    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
-@@ -113 +165 @@ class SwapDetailVM(
+@@ -113 +154 @@ class SwapDetailVM(
 -            title = stringRes(R.string.swapAndPay_totalFees),
 +            title = stringRes(R.string.private_quoted_output),
-@@ -115,14 +167,3 @@ class SwapDetailVM(
+@@ -115,14 +156,3 @@ class SwapDetailVM(
 -                if (swapData.status != null) {
 -                    val text =
 -                        stringResByCurrencyNumber(
@@ -43499,7 +43554,7 @@ index a874453ef..25aa58143 100644
 +                (swapData.savedMetadata?.quotedAmountOut ?: swapData.status?.quotedAmountOut)?.let {
 +                    stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER).withStyle()
 +                }
-@@ -168,0 +210,7 @@ class SwapDetailVM(
+@@ -168,0 +199,7 @@ class SwapDetailVM(
 +        if (swapData.error != null && (swapData.status != null || swapData.savedMetadata != null)) {
 +            return ButtonState(
 +                text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
@@ -43507,13 +43562,13 @@ index a874453ef..25aa58143 100644
 +                style = ButtonStyle.SECONDARY,
 +            )
 +        }
-@@ -179 +227 @@ class SwapDetailVM(
+@@ -179 +216 @@ class SwapDetailVM(
 -                return mapper.createTransactionDetailErrorButtonState(
 +                mapper.createTransactionDetailErrorButtonState(
-@@ -186 +234 @@ class SwapDetailVM(
+@@ -186 +223 @@ class SwapDetailVM(
 -                null
 +                swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
-@@ -193,11 +241 @@ class SwapDetailVM(
+@@ -193,11 +230 @@ class SwapDetailVM(
 -            title =
 -                when (swapData.status?.status) {
 -                    EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
@@ -43526,7 +43581,7 @@ index a874453ef..25aa58143 100644
 -                    null -> null
 -                },
 +            title = createHeaderTitle(swapData),
-@@ -205,2 +243,5 @@ class SwapDetailVM(
+@@ -205,2 +232,5 @@ class SwapDetailVM(
 -                swapData.status
 -                    ?.amountOutFormatted
 +                (swapData.status?.executedAmountOut
@@ -43534,10 +43589,10 @@ index a874453ef..25aa58143 100644
 +                    ?: swapData.savedMetadata?.legacySuccessfulOutput
 +                    ?: swapData.status?.amountOutFormatted
 +                    ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
-@@ -212 +253 @@ class SwapDetailVM(
+@@ -212 +242 @@ class SwapDetailVM(
 -                        ?.tokenIcon ?: loadingImageRes(),
 +                        ?.tokenIcon ?: swapData.savedMetadata?.origin?.tokenIcon ?: loadingImageRes(),
-@@ -218 +259,11 @@ class SwapDetailVM(
+@@ -218 +248,11 @@ class SwapDetailVM(
 -    private fun onBack() = navigationRouter.back()
 +    private fun createHeaderTitle(swapData: SwapData): StringResource? =
 +        when (swapData.status?.status ?: swapData.savedMetadata?.status) {
@@ -43550,7 +43605,7 @@ index a874453ef..25aa58143 100644
 +            FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +            null -> null
 +        }
-@@ -220 +271,13 @@ class SwapDetailVM(
+@@ -220 +260,13 @@ class SwapDetailVM(
 -    private fun onCopyDepositAddressClick() = copyToClipboard(args.depositAddress)
 +    private fun createSuccessfulOutputTitle(swapData: SwapData): StringResource =
 +        stringRes(
@@ -45129,7 +45184,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..6089cbb5e 100644
+index 00fe60557..c0682e015 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -45141,32 +45196,34 @@ index 00fe60557..6089cbb5e 100644
 -import co.electriccoin.zcash.ui.common.usecase.FlipTransactionBookmarkUseCase
 @@ -31,0 +34 @@ import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
-@@ -58,0 +62 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -48,0 +52 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
++import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
+@@ -58,0 +63 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.Job
-@@ -76 +80 @@ class TransactionDetailVM(
+@@ -76 +81 @@ class TransactionDetailVM(
 -    private val flipTransactionBookmark: FlipTransactionBookmarkUseCase,
 +    private val setTransactionBookmark: SetTransactionBookmarkUseCase,
-@@ -80,0 +85 @@ class TransactionDetailVM(
+@@ -80,0 +86 @@ class TransactionDetailVM(
 +    private var bookmarkJob: Job? = null
-@@ -96,0 +102 @@ class TransactionDetailVM(
+@@ -96,0 +103 @@ class TransactionDetailVM(
 +                    explorerLinks = createExplorerLinks(transaction),
-@@ -110 +116 @@ class TransactionDetailVM(
+@@ -110 +117 @@ class TransactionDetailVM(
 -                            onClick = ::onBookmarkClick,
 +                            onClick = { onBookmarkClick(transaction) },
-@@ -117 +123,4 @@ class TransactionDetailVM(
+@@ -117 +124,4 @@ class TransactionDetailVM(
 -                        ),
 +                        ).takeIf {
 +                            transaction.transaction.accountUuid != null &&
 +                                transaction.metadata.bookmarkWriteToken != null
 +                        },
-@@ -133,2 +142,4 @@ class TransactionDetailVM(
+@@ -133,2 +143,4 @@ class TransactionDetailVM(
 -                if (transaction.transaction.memoCount > 0) {
 -                    markTxMemoAsRead(transactionDetailArgs.transactionId)
 +                val accountUuid = transaction.transaction.accountUuid
 +                val token = transaction.metadata.bookmarkWriteToken
 +                if (transaction.transaction.memoCount > 0 && accountUuid != null && token != null) {
 +                    markTxMemoAsRead(transactionDetailArgs.transactionId, accountUuid, token)
-@@ -162,2 +173,29 @@ class TransactionDetailVM(
+@@ -162,2 +174,29 @@ class TransactionDetailVM(
 -    private fun onAddOrEditNoteClick() {
 -        navigationRouter.forward(TransactionNote(transactionDetailArgs.transactionId))
 +    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
@@ -45198,21 +45255,26 @@ index 00fe60557..6089cbb5e 100644
 +            testnet = testnet,
 +            router = navigationRouter
 +        )
-@@ -184 +222,2 @@ class TransactionDetailVM(
+@@ -178 +217,3 @@ class TransactionDetailVM(
+-                            status = transaction.swap.status?.status,
++                            statusRow = transaction.swap.toDetailStatusRow(
++                                metadata = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata,
++                            ),
+@@ -184 +225,2 @@ class TransactionDetailVM(
 -                                    destinationAsset = transaction.swap.destinationAsset
 +                                    destinationAsset = transaction.swap.destinationAsset,
 +                                    savedMetadata = transaction.swap.savedMetadata,
-@@ -191,2 +230 @@ class TransactionDetailVM(
+@@ -191,2 +233 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -202 +240 @@ class TransactionDetailVM(
+@@ -202 +243 @@ class TransactionDetailVM(
 -                                    ?.refundedFormatted
 +                                    ?.positiveRefund
-@@ -205,2 +242,0 @@ class TransactionDetailVM(
+@@ -205,2 +245,0 @@ class TransactionDetailVM(
 -                                    }?.takeIf {
 -                                        transaction.swap.status.status == REFUNDED
-@@ -227,0 +264,10 @@ class TransactionDetailVM(
+@@ -227,0 +267,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -45223,10 +45285,10 @@ index 00fe60557..6089cbb5e 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -388 +434 @@ class TransactionDetailVM(
+@@ -388 +437 @@ class TransactionDetailVM(
 -                null
 +                data.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
-@@ -420,2 +466,5 @@ class TransactionDetailVM(
+@@ -420,2 +469,5 @@ class TransactionDetailVM(
 -        fun createAddNoteButtonState() =
 -            ButtonState(
 +        fun createAddNoteButtonState(): ButtonState? {
@@ -45234,20 +45296,20 @@ index 00fe60557..6089cbb5e 100644
 +            val token = transaction.metadata.bookmarkWriteToken
 +            if (accountUuid == null || token == null) return null
 +            return ButtonState(
-@@ -428 +477,5 @@ class TransactionDetailVM(
+@@ -428 +480,5 @@ class TransactionDetailVM(
 -                onClick = ::onAddOrEditNoteClick
 +                onClick = {
 +                    navigationRouter.forward(
 +                        TransactionNote(transactionDetailArgs.transactionId, accountUuid.toStorageKeyId(), token)
 +                    )
 +                }
-@@ -429,0 +483 @@ class TransactionDetailVM(
+@@ -429,0 +486 @@ class TransactionDetailVM(
 +        }
-@@ -431,0 +486,3 @@ class TransactionDetailVM(
+@@ -431,0 +489,3 @@ class TransactionDetailVM(
 +            transaction.swap?.error != null && transaction.swap.status == null ->
 +                transaction.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
 +
-@@ -520,12 +577,7 @@ class TransactionDetailVM(
+@@ -520,12 +580,7 @@ class TransactionDetailVM(
 -                            if (transaction is SendTransaction.Failed) {
 -                                when (data.metadata.swapMetadata.mode) {
 -                                    EXACT_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -45267,25 +45329,25 @@ index 00fe60557..6089cbb5e 100644
 +                                    when (swapStatus) {
 +                                        PROCESSING,
 +                                        PENDING -> stringRes(R.string.swapStatus_swapping)
-@@ -533 +585 @@ class TransactionDetailVM(
+@@ -533 +588 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
-@@ -535 +587 @@ class TransactionDetailVM(
+@@ -535 +590 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -537 +589 @@ class TransactionDetailVM(
+@@ -537 +592 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -539 +591 @@ class TransactionDetailVM(
+@@ -539 +594 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                        FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -541,2 +593 @@ class TransactionDetailVM(
+@@ -541,2 +596 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                        }
 +                                        EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -543,0 +595 @@ class TransactionDetailVM(
+@@ -543,0 +598 @@ class TransactionDetailVM(
 +                                }
-@@ -545,4 +597,4 @@ class TransactionDetailVM(
+@@ -545,4 +600,4 @@ class TransactionDetailVM(
 -                                    EXACT_OUTPUT -> {
 -                                        when (data.metadata.swapMetadata.status) {
 -                                            PROCESSING,
@@ -45294,31 +45356,31 @@ index 00fe60557..6089cbb5e 100644
 +                                    when (swapStatus) {
 +                                        PROCESSING,
 +                                        PENDING -> stringRes(R.string.swapStatus_paying)
-@@ -550 +602 @@ class TransactionDetailVM(
+@@ -550 +605 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
-@@ -552 +604 @@ class TransactionDetailVM(
+@@ -552 +607 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -554 +606 @@ class TransactionDetailVM(
+@@ -554 +609 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -556 +608 @@ class TransactionDetailVM(
+@@ -556 +611 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                        FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -558,2 +610 @@ class TransactionDetailVM(
+@@ -558,2 +613 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                        }
 +                                        EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -560,0 +612 @@ class TransactionDetailVM(
+@@ -560,0 +615 @@ class TransactionDetailVM(
 +                                }
-@@ -562,3 +614,2 @@ class TransactionDetailVM(
+@@ -562,3 +617,2 @@ class TransactionDetailVM(
 -                                    FLEX_INPUT -> {
 -                                        throw UnsupportedOperationException("FLEX_INPUT not supported")
 -                                    }
 +                                FLEX_INPUT -> {
 +                                    throw UnsupportedOperationException("FLEX_INPUT not supported")
-@@ -626,3 +677,9 @@ class TransactionDetailVM(
+@@ -626,3 +680,9 @@ class TransactionDetailVM(
 -    private fun onBookmarkClick() =
 -        viewModelScope.launch {
 -            flipTransactionBookmark(transactionDetailArgs.transactionId)
@@ -45331,9 +45393,9 @@ index 00fe60557..6089cbb5e 100644
 +                    data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token
 +                )
 +            }
-@@ -629,0 +687 @@ class TransactionDetailVM(
+@@ -629,0 +690 @@ class TransactionDetailVM(
 +    }
-@@ -630,0 +689,2 @@ class TransactionDetailVM(
+@@ -630,0 +692,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
@@ -45410,18 +45472,34 @@ index 13b042bd7..60b0df221 100644
 -                                    stringRes(R.string.transactionDetail_feeSummary),
 +                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..ef0012736 100644
+index ad8bc8549..b8bba5bc5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-@@ -83 +83 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -60,5 +60 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+-                state =
+-                    TransactionDetailSwapStatusRowState(
+-                        title = stringRes(R.string.swapAndPay_status),
+-                        status = state.status
+-                    )
++                state = state.statusRow,
+@@ -83 +79 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                    if (state.status == SwapStatus.REFUNDED) {
 +                    if (state.refundedAmount != null) {
-@@ -90 +90 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -90 +86 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                    message = state.refundedAmount?.withStyle(),
 +                                    message = state.refundedAmount.withStyle(),
-@@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -94 +90 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+-                    if (state.status != SwapStatus.REFUNDED) {
++                    if (state.statusRow.status != SwapStatus.REFUNDED) {
+@@ -123 +119 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
+@@ -182 +178,4 @@ private fun Preview() =
+-                        status = SwapStatus.REFUNDED,
++                        statusRow = TransactionDetailSwapStatusRowState(
++                            title = stringRes(R.string.swapAndPay_status),
++                            status = SwapStatus.REFUNDED,
++                        ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
 index 4dc191b75..c21b7c20a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
@@ -45437,9 +45515,16 @@ index bf4730e36..791e10475 100644
 -                        title = stringRes(R.string.transactionDetail_feeSummary),
 +                        title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
-index 553c98db2..52c82ce4f 100644
+index 553c98db2..1ff05c81e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
+@@ -3 +2,0 @@ package co.electriccoin.zcash.ui.screen.transactiondetail.info
+-import co.electriccoin.zcash.ui.common.model.SwapStatus
+@@ -7,0 +7 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
+@@ -25 +25 @@ data class SendSwapState(
+-    val status: SwapStatus?,
++    val statusRow: TransactionDetailSwapStatusRowState,
 @@ -40,0 +41 @@ data class SendSwapState(
 +    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
@@ -45452,7 +45537,7 @@ index d9b22b066..3d99d9553 100644
 -                    maxLines = 1,
 +                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
-index fa3022a69..0de8b54e5 100644
+index fa3022a69..0f5f30fca 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
 @@ -3,0 +4,2 @@ import androidx.compose.foundation.layout.Box
@@ -45465,7 +45550,10 @@ index fa3022a69..0de8b54e5 100644
 +import androidx.compose.foundation.layout.padding
 @@ -9,0 +12 @@ import androidx.compose.runtime.Composable
 +import androidx.compose.ui.Alignment
-@@ -47,4 +50,5 @@ fun TransactionDetailSwapStatusRow(
+@@ -21,0 +25,2 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
++import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
++import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
+@@ -47,4 +52,5 @@ fun TransactionDetailSwapStatusRow(
 -    TransactionDetailRowSurface(
 -        onClick = null,
 -        modifier = modifier,
@@ -45475,14 +45563,43 @@ index fa3022a69..0de8b54e5 100644
 +        horizontalArrangement = Arrangement.SpaceBetween,
 +        verticalArrangement = Arrangement.spacedBy(8.dp),
 +        itemVerticalAlignment = Alignment.CenterVertically,
-@@ -53,2 +57 @@ fun TransactionDetailSwapStatusRow(
+@@ -53,2 +59 @@ fun TransactionDetailSwapStatusRow(
 -            modifier = Modifier.weight(1f),
 -            maxLines = 1,
 +            modifier = Modifier.padding(end = 16.dp),
-@@ -60 +62,0 @@ fun TransactionDetailSwapStatusRow(
+@@ -60 +64,0 @@ fun TransactionDetailSwapStatusRow(
 -            Spacer(Modifier.width(16.dp))
-@@ -63 +64,0 @@ fun TransactionDetailSwapStatusRow(
+@@ -62,2 +66 @@ fun TransactionDetailSwapStatusRow(
+-        } else {
 -            Spacer(Modifier.width(16.dp))
++        } else if (state.isLoading) {
+@@ -79,0 +83,6 @@ fun TransactionDetailSwapStatusRow(
++        } else {
++            Text(
++                text = stringResource(R.string.private_swap_status_unavailable),
++                style = ZashiTypography.textSm,
++                color = ZashiColors.Text.textTertiary,
++            )
+@@ -160,0 +170 @@ data class TransactionDetailSwapStatusRowState(
++    val isLoading: Boolean = false,
+@@ -167,0 +178,15 @@ data class TransactionDetailSwapStatusRowState(
++internal fun SwapQuoteStatusData.toDetailStatusRow(
++    mode: TransactionDetailSwapStatusRowState.Mode = SWAP_FROM_ZEC,
++    metadata: TransactionSwapMetadata? = savedMetadata,
++): TransactionDetailSwapStatusRowState {
++    val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
++    val value = status?.status ?: savedStatus
++    val isSaved = value != null && (status == null || error != null)
++    return TransactionDetailSwapStatusRowState(
++        title = stringRes(if (isSaved) R.string.private_swap_saved_status else R.string.swapAndPay_status),
++        status = value,
++        mode = mode,
++        isLoading = value == null && isLoading && error == null,
++    )
++}
++
+@@ -192,0 +218 @@ private fun LoadingPreview() =
++                        isLoading = true,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
 index b1f6403cd..30ee1cd5d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
@@ -53141,10 +53258,10 @@ index 000000000..e31b465e9
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
 new file mode 100644
-index 000000000..cbabece9c
+index 000000000..3e08374a9
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,386 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.CloseableSynchronizer
@@ -53510,6 +53627,7 @@ index 000000000..cbabece9c
 +            giftCardRepository = repository,
 +            progressStore = progressStore,
 +            deleteSharedQRImages = mockk(relaxed = true),
++            deleteLegacyTaxExports = mockk(relaxed = true),
 +        )
 +
 +        fun assertPreparationPending(expected: ResetStage, attempts: Int = 1) {
@@ -62353,10 +62471,10 @@ index 000000000..b8a1b9401
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 new file mode 100644
-index 000000000..88b1027e6
+index 000000000..45728da48
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,163 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -62405,6 +62523,11 @@ index 000000000..88b1027e6
 +    fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runTest {
 +        val context = RuntimeEnvironment.getApplication()
 +        val year = Year.now().minusYears(1).value
++        val taxCache = File(context.cacheDir, "tax_exports").apply { mkdirs() }
++        val legacy = listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
++            File(taxCache, "${prefix}_Transaction_History_$year.csv").apply { writeText("old export") }
++        }
++        val unrelated = File(taxCache, "Unrelated_Transaction_History_$year.csv").apply { writeText("unrelated") }
 +        val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
 +        val belowGroupingBoundary = mockk<ReceiveTransaction.Pending> {
 +            every { timestamp } returns transactionTime
@@ -62460,6 +62583,10 @@ index 000000000..88b1027e6
 +
 +        assertTrue(registered)
 +        assertEquals(android.content.Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
++        DeleteLegacyTaxExportsUseCase(context).onStartup()
++        assertTrue(legacy.none { it.exists() })
++        assertEquals("unrelated", unrelated.readText())
++        assertEquals(taxCache, output.parentFile?.parentFile)
 +        val rows = output.readLines().map { it.split(',') }
 +        val date = "06/15/$year 12:00:00"
 +        assertEquals(
@@ -66705,10 +66832,10 @@ index 514e2b2bc..23da3fe6b 100644
 +            verify(exactly = 1) { navigationRouter.back() }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt
 new file mode 100644
-index 000000000..1d99b90c9
+index 000000000..8ff5e98d5
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt
-@@ -0,0 +1,308 @@
+@@ -0,0 +1,309 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -67013,16 +67140,17 @@ index 000000000..1d99b90c9
 +            giftCardRepository = mockk(relaxed = true),
 +            progressStore = progressStore(),
 +            deleteSharedQRImages = DeleteSharedQRImagesUseCase(context),
++            deleteLegacyTaxExports = mockk(relaxed = true),
 +            walletWriteAccess = writeAccess,
 +        )
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..bf53e57bc
+index 000000000..9178ddecf
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,454 @@
+@@ -0,0 +1,455 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -67473,19 +67601,21 @@ index 000000000..bf53e57bc
 +            giftCardRepository = giftRepository,
 +            progressStore = progress,
 +            deleteSharedQRImages = mockk(relaxed = true),
++            deleteLegacyTaxExports = mockk(relaxed = true),
 +            walletWriteAccess = writeAccess,
 +        )
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..6408ed50e
+index 000000000..52e6c97ee
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,234 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
++import android.content.Intent
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.CloseableSynchronizer
 +import cash.z.ecc.android.sdk.WalletCoordinator
@@ -67495,12 +67625,18 @@ index 000000000..6408ed50e
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.LceError
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.LceState
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
++import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
++import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
++import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
++import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import io.mockk.coEvery
@@ -67523,6 +67659,12 @@ index 000000000..6408ed50e
 +import kotlinx.coroutines.withTimeout
 +import org.junit.Rule
 +import org.junit.rules.TemporaryFolder
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++import java.io.File
 +import kotlin.test.AfterTest
 +import kotlin.test.BeforeTest
 +import kotlin.test.Test
@@ -67536,6 +67678,8 @@ index 000000000..6408ed50e
 +import co.electriccoin.zcash.ui.design.R as UIR
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
 +class ResetZashiVMTest {
 +    @get:Rule val directory = TemporaryFolder()
 +
@@ -67544,6 +67688,8 @@ index 000000000..6408ed50e
 +    private val biometrics = mockk<BiometricRepository>(relaxed = true)
 +    private val contacts = mockk<AddressBookRepository>(relaxed = true)
 +    private val metadata = mockk<MetadataRepository>(relaxed = true)
++    private val diagnostics = mockk<GetSupportUseCase>()
++    private lateinit var reportAccess: WalletReportAccess
 +    private lateinit var progress: ResetProgressStore
 +    private lateinit var vm: ResetZashiVM
 +
@@ -67561,6 +67707,14 @@ index 000000000..6408ed50e
 +        val erase = CompletableDeferred<Boolean>()
 +        every { coordinator.deleteSdkDataFlow() } returns flow { emit(erase.await()) }
 +        createViewModel()
++        val legacy = File(directory.root, "tax_exports/Zodl_Transaction_History_2025.csv").apply {
++            parentFile?.mkdirs()
++            writeText("legacy")
++        }
++        val staged = File(directory.root, "tax_exports/tax-current/Zodl_Transaction_History_2025.csv").apply {
++            parentFile?.mkdirs()
++            writeText("current")
++        }
 +
 +        val initial = assertNotNull(vm.state.value.content)
 +        assertTrue(initial.checkboxState.isChecked)
@@ -67575,6 +67729,8 @@ index 000000000..6408ed50e
 +
 +        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
 +        assertNull(progress.getStage())
++        assertFalse(legacy.exists())
++        assertEquals("current", staged.readText())
 +        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
 +        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
 +        coVerify(exactly = 0) { contacts.delete() }
@@ -67629,7 +67785,14 @@ index 000000000..6408ed50e
 +        }
 +        val retried = awaitState { it.error != null }
 +        verify(exactly = 2) { coordinator.deleteSdkDataFlow() }
-+        assertIs<LceError.BottomSheet>(retried.error).state.onBack()
++        assertFalse(reportAccess.captureWallet()())
++        assertNotNull(assertIs<LceError.BottomSheet>(retried.error).state.secondaryAction).onClick()
++        val application = RuntimeEnvironment.getApplication()
++        val chooser = assertNotNull(shadowOf(application).nextStartedActivity)
++        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
++        val draft = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
++        assertEquals("", draft.getStringExtra(Intent.EXTRA_TEXT))
++        coVerify(exactly = 0) { diagnostics() }
 +        val dismissed = assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content)
 +        dismissed.buttonState.onClick()
 +
@@ -67644,8 +67807,14 @@ index 000000000..6408ed50e
 +    }
 +
 +    private fun createViewModel() {
-+        val context = mockk<Context> { every { noBackupFilesDir } returns directory.root }
++        val context = mockk<Context> {
++            every { noBackupFilesDir } returns directory.root
++            every { cacheDir } returns directory.root
++        }
 +        progress = ResetProgressStore(context, DirectorySync {})
++        val writeAccess = WalletWriteAccess(progress)
++        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk())
++        assertTrue(reportAccess.captureWallet()())
 +        val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
 +        val reset = ResetZashiUseCase(
 +            walletCoordinator = coordinator,
@@ -67667,8 +67836,11 @@ index 000000000..6408ed50e
 +            giftCardRepository = mockk(relaxed = true),
 +            progressStore = progress,
 +            deleteSharedQRImages = mockk(relaxed = true),
++            deleteLegacyTaxExports = DeleteLegacyTaxExportsUseCase(context),
++            walletWriteAccess = writeAccess,
 +        )
-+        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(mockk(), mockk(), mockk(relaxed = true)))
++        val sendEmail = SendEmailUseCase(RuntimeEnvironment.getApplication(), diagnostics, mockk())
++        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(sendEmail, mockk(), reportAccess))
 +    }
 +
 +    private suspend fun awaitState(predicate: (LceState<ResetZashiState>) -> Boolean) =
@@ -68345,7 +68517,7 @@ index dec0b8db0..1f2fb5248 100644
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt
 new file mode 100644
-index 000000000..65181d607
+index 000000000..7bd7cde99
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt
 @@ -0,0 +1,161 @@
@@ -68427,7 +68599,7 @@ index 000000000..65181d607
 +        val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk())
 +        val mapper = ErrorMapperUseCase(SendEmailUseCase(application, diagnostics, mockk()), mockk(), access)
 +        val failure = LceContent.Error(IllegalStateException("synthetic private detail"), {}, {})
-+        requireNotNull(mapper.mapToState(failure, walletlessOnboarding = true).state.secondaryAction).onClick()
++        requireNotNull(mapper.mapToState(failure, supportWithoutDiagnostics = true).state.secondaryAction).onClick()
 +        val chooser = shadowOf(application).nextStartedActivity
 +        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
 +        val draft = requireNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
@@ -74393,10 +74565,10 @@ index 000000000..f12495eaa
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
 new file mode 100644
-index 000000000..8a5843613
+index 000000000..975e69dcf
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
-@@ -0,0 +1,467 @@
+@@ -0,0 +1,485 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail
 +
 +import androidx.lifecycle.viewModelScope
@@ -74426,6 +74598,7 @@ index 000000000..8a5843613
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.stringResByDateTime
++import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
 +import co.electriccoin.zcash.ui.design.util.withStyle
@@ -74725,6 +74898,23 @@ index 000000000..8a5843613
 +                assertEquals(input.fiatAmount, harness.state().quoteHeader.from?.fiatAmount)
 +            }
 +        }
++    }
++
++    @Test
++    fun offlineRefundShowsItsSavedStatusUntilTheProviderSuppliesTheAmount() = runTest {
++        val saved = saved(SwapStatus.REFUNDED)
++        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
++        assertEquals(SwapStatus.REFUNDED, harness.state().status.status)
++        assertEquals(stringRes(R.string.private_swap_saved_status), harness.state().status.title)
++        assertNull(harness.state().refundedAmount)
++
++        val live = status(SwapStatus.REFUNDED)
++        val amount = BigDecimal("0.001")
++        every { live.refundedFormatted } returns amount
++        harness.emit(SwapQuoteStatusData(status = live, isLoading = false, savedMetadata = saved))
++        runCurrent()
++        val refund = assertNotNull(harness.state().refundedAmount)
++        assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
 +    }
 +
 +    @Test
@@ -77021,24 +77211,34 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..276dd90aa
+index 000000000..3b7070542
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,187 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
++import android.graphics.Bitmap
 +import androidx.compose.foundation.layout.width
 +import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.asAndroidBitmap
 +import androidx.compose.ui.platform.LocalDensity
 +import androidx.compose.ui.semantics.SemanticsActions
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.captureToImage
++import androidx.compose.ui.test.onRoot
 +import androidx.compose.ui.test.onNodeWithText
 +import androidx.compose.ui.test.performSemanticsAction
 +import androidx.compose.ui.text.TextLayoutResult
 +import androidx.compose.ui.unit.Density
 +import androidx.compose.ui.unit.dp
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
++import co.electriccoin.zcash.ui.design.component.BlankSurface
++import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 +import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.withStyle
@@ -77047,11 +77247,15 @@ index 000000000..276dd90aa
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRow
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwap
++import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
 +import org.junit.Rule
 +import org.junit.runner.RunWith
 +import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
 +import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
++import java.io.File
 +import kotlin.test.Test
 +import kotlin.test.assertFalse
 +import kotlin.test.assertEquals
@@ -77063,6 +77267,77 @@ index 000000000..276dd90aa
 +class TransactionDetailRowLayoutTest {
 +    @get:Rule
 +    val compose = createComposeRule()
++
++    @Test
++    fun outgoingDetailsRenderSavedStatusAndUnavailableWithoutHidingFunding() {
++        val saved = TransactionDetailSwapStatusRowState(
++            stringRes(R.string.private_swap_saved_status),
++            SwapStatus.REFUNDED,
++        )
++        val unavailable = TransactionDetailSwapStatusRowState(stringRes(R.string.swapAndPay_status), null)
++        val status = mutableStateOf(saved)
++        val theme = mutableStateOf("light")
++        val fontScale = mutableStateOf(1f)
++        compose.setContent {
++            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale.value)) {
++                ZcashTheme(
++                    appearanceMode = if (theme.value == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
++                    isOledEnabled = theme.value == "oled",
++                ) {
++                    BlankSurface {
++                        SendSwap(
++                            state = SendSwapState(
++                                statusRow = status.value,
++                                message = null,
++                                quoteHeader = SwapQuoteHeaderState(null, null),
++                                depositAddress = stringRes("Synthetic deposit").withStyle(),
++                                totalFees = stringRes("0.0001 ZEC"),
++                                recipientAddress = null,
++                                transactionId = stringRes("Synthetic funding transaction"),
++                                refundedAmount = null,
++                                onTransactionIdClick = {},
++                                onDepositAddressClick = {},
++                                onRecipientAddressClick = null,
++                                maxSlippage = null,
++                                note = null,
++                                isSlippageRealized = false,
++                                isPending = false,
++                                completedTimestamp = stringRes("Synthetic timestamp"),
++                            ),
++                            modifier = Modifier.width(320.dp),
++                        )
++                    }
++                }
++            }
++        }
++        val application = RuntimeEnvironment.getApplication()
++        val configs = listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)
++        for ((appearance, scale) in configs) {
++            compose.runOnIdle {
++                theme.value = appearance
++                fontScale.value = scale
++                status.value = saved
++            }
++            compose.onNodeWithText("Saved status").assertIsDisplayed()
++            compose.onNodeWithText(application.getString(R.string.swapAndPay_status_refunded)).assertIsDisplayed()
++            compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
++            capture("outgoing-saved-$appearance-$scale")
++            compose.runOnIdle { status.value = unavailable }
++            compose.onNodeWithText("Saved status").assertDoesNotExist()
++            compose.onNodeWithText("Unavailable").assertIsDisplayed()
++            compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
++            capture("outgoing-unavailable-$appearance-$scale")
++        }
++    }
++
++    private fun capture(name: String) {
++        val directory = System.getProperty("private.review.captureDir")?.let(::File) ?: return
++        check(directory.isDirectory || directory.mkdirs())
++        val image = compose.onRoot().captureToImage().asAndroidBitmap()
++        val output = File(directory, "$name.png")
++        check(output.createNewFile())
++        output.outputStream().use { check(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
++    }
 +
 +    @Test
 +    fun savedStatusAndLabelRemainCompleteAtTwoHundredPercentText() {
@@ -77129,10 +77404,10 @@ index 000000000..276dd90aa
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..087a96042
+index 000000000..6de3b5624
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
-@@ -0,0 +1,396 @@
+@@ -0,0 +1,451 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.lifecycle.ViewModelStore
@@ -77202,6 +77477,7 @@ index 000000000..087a96042
 +import kotlin.test.assertIs
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
++import kotlin.test.assertTrue
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class TransactionDetailVMTest {
@@ -77294,7 +77570,9 @@ index 000000000..087a96042
 +        assertEquals(stringRes(R.string.swapStatus_swapping), state.header.title)
 +        assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
 +        val info = assertIs<SendSwapState>(state.info)
-+        assertNull(info.status)
++        assertEquals(SwapStatus.PENDING, info.statusRow.status)
++        assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
++        assertFalse(info.statusRow.isLoading)
 +        assertNull(info.message)
 +        assertEquals(stringRes(Zatoshi(10_000)), info.totalFees)
 +        assertEquals(stringResByTransactionId(sent.id.txIdString(), abbreviated = true), info.transactionId)
@@ -77341,7 +77619,9 @@ index 000000000..087a96042
 +
 +            assertLocalFunding(failedRefresh, assetId)
 +            val savedInfo = assertIs<SendSwapState>(failedRefresh.info, assetId)
-+            assertNull(savedInfo.status, assetId)
++            assertEquals(SwapStatus.PENDING, savedInfo.statusRow.status, assetId)
++            assertEquals(stringRes(R.string.private_swap_saved_status), savedInfo.statusRow.title, assetId)
++            assertFalse(savedInfo.statusRow.isLoading, assetId)
 +            assertNull(savedInfo.donationBasisZec, assetId)
 +            assertNotNull(failedRefresh.errorFooter, assetId)
 +            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
@@ -77357,13 +77637,15 @@ index 000000000..087a96042
 +            upstream.value = unavailable.copy(swap = SwapQuoteStatusData(fresh, isLoading = false))
 +            val recovered = assertNotNull(
 +                withTimeoutOrNull(10_000) {
-+                    vm.state.first { (it.info as? SendSwapState)?.status == SwapStatus.SUCCESS }
++                    vm.state.first { (it.info as? SendSwapState)?.statusRow?.status == SwapStatus.SUCCESS }
 +                },
 +                assetId,
 +            )
 +
 +            assertLocalFunding(recovered, assetId)
 +            val liveInfo = assertIs<SendSwapState>(recovered.info, assetId)
++            assertEquals(stringRes(R.string.swapAndPay_status), liveInfo.statusRow.title, assetId)
++            assertFalse(liveInfo.statusRow.isLoading, assetId)
 +            val quoteDestination = assertNotNull(liveInfo.quoteHeader.to, assetId)
 +            assertEquals(destination.tokenIcon, quoteDestination.bigIcon, assetId)
 +            assertEquals(destination.chainIcon, quoteDestination.smallIcon, assetId)
@@ -77377,13 +77659,61 @@ index 000000000..087a96042
 +    }
 +
 +    @Test
++    fun outgoingPaymentsShowSavedTerminalOutcomesWithoutInventingRefundAmounts() = runTest(dispatcher) {
++        val error = IllegalStateException("fixture-provider-unavailable")
++        for (outcome in listOf(SwapStatus.SUCCESS, SwapStatus.REFUNDED)) {
++            val metadata = swapMetadata(outcome).copy(mode = SwapMode.EXACT_OUTPUT)
++            val detail = state(data(sent, metadata, SwapQuoteStatusData(isLoading = false, error = error)))
++            val info = assertIs<SendSwapState>(detail.info)
++            assertEquals(outcome, info.statusRow.status)
++            assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
++            assertFalse(info.statusRow.isLoading)
++            assertNull(info.refundedAmount)
++            assertNull(info.donationBasisZec)
++            assertLocalFunding(detail, outcome.name)
++            assertNotNull(detail.primaryButton)
++            store.clear()
++        }
++    }
++
++    @Test
++    fun outgoingStatusWithoutASavedResultStopsLoadingAfterFailure() = runTest(dispatcher) {
++        val metadata = swapMetadata(SwapStatus.PENDING).copy(
++            recordedStatus = null,
++            amountOutFormatted = BigDecimal.ZERO,
++        )
++        val loading = data(sent, metadata, SwapQuoteStatusData(savedMetadata = metadata))
++        val upstream = MutableStateFlow(loading)
++        val vm = viewModel(loading, upstream)
++        val initial = assertIs<SendSwapState>(vm.state.first { it.info != null }.info)
++        assertNull(initial.statusRow.status)
++        assertTrue(initial.statusRow.isLoading)
++
++        upstream.value =
++            loading.copy(
++                swap = SwapQuoteStatusData(
++                    isLoading = false,
++                    error = IllegalStateException("fixture-provider-unavailable"),
++                    savedMetadata = metadata,
++                )
++            )
++        val failed = vm.state.first { it.errorFooter != null }
++        val info = assertIs<SendSwapState>(failed.info)
++        assertNull(info.statusRow.status)
++        assertFalse(info.statusRow.isLoading)
++        assertEquals(stringRes(R.string.swapAndPay_status), info.statusRow.title)
++        assertLocalFunding(failed, "unavailable")
++        assertNotNull(failed.primaryButton)
++    }
++
++    @Test
 +    fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
 +        val remote = status(SwapStatus.FAILED, SwapAssetTestFixture.zecAsset(), SwapAssetTestFixture.asset())
 +        val state = state(data(sent, swapMetadata(SwapStatus.PENDING), SwapQuoteStatusData(remote, false)))
 +        assertEquals(stringRes(R.string.swapStatus_swapFailed), state.header.title)
 +        assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
 +        val info = assertIs<SendSwapState>(state.info)
-+        assertEquals(SwapStatus.FAILED, info.status)
++        assertEquals(SwapStatus.FAILED, info.statusRow.status)
 +        assertEquals(stringRes(R.string.swapAndPay_failedTitle), info.message?.title)
 +        assertNull(info.donationBasisZec)
 +        assertNull(state.errorFooter)

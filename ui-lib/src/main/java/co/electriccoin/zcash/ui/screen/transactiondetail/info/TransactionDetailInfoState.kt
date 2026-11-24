@@ -1,10 +1,10 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail.info
 
-import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 
 sealed interface TransactionDetailInfoState
 
@@ -22,7 +22,7 @@ data class SendShieldedState(
 ) : TransactionDetailInfoState
 
 data class SendSwapState(
-    val status: SwapStatus?,
+    val statusRow: TransactionDetailSwapStatusRowState,
     val message: ZashiMessageState?,
     val quoteHeader: SwapQuoteHeaderState,
     val depositAddress: StyledStringResource,

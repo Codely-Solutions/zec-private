@@ -57,11 +57,7 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
         TransactionDetailInfoContainer {
             TransactionDetailSwapStatusRow(
                 modifier = Modifier.fillMaxWidth(),
-                state =
-                    TransactionDetailSwapStatusRowState(
-                        title = stringRes(R.string.swapAndPay_status),
-                        status = state.status
-                    )
+                state = state.statusRow,
             )
             ZashiHorizontalDivider(thickness = 2.dp)
             TransactionDetailInfoRow(
@@ -91,7 +87,7 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                                 )
                         )
                     }
-                    if (state.status != SwapStatus.REFUNDED) {
+                    if (state.statusRow.status != SwapStatus.REFUNDED) {
                         ZashiHorizontalDivider(thickness = 2.dp)
                         TransactionDetailInfoRow(
                             modifier = Modifier.fillMaxWidth(),
@@ -179,7 +175,10 @@ private fun Preview() =
             SendSwap(
                 state =
                     SendSwapState(
-                        status = SwapStatus.REFUNDED,
+                        statusRow = TransactionDetailSwapStatusRowState(
+                            title = stringRes(R.string.swapAndPay_status),
+                            status = SwapStatus.REFUNDED,
+                        ),
                         message = ZashiMessageState.preview,
                         quoteHeader = SwapQuoteHeaderState(from = null, to = null),
                         depositAddress = stringResByAddress(value = "Address"),

@@ -41,7 +41,7 @@ class RestoreTorVM(
                 } else {
                     R.string.wallet_initialization_failed
                 }
-            errorStateMapper.mapToState(it, message = stringRes(message), walletlessOnboarding = true)
+            errorStateMapper.mapToState(it, message = stringRes(message), supportWithoutDiagnostics = true)
         }
             .stateIn(this, LceState(content = createState(isChecked.value, false)))
 

@@ -1,17 +1,27 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
+import co.electriccoin.zcash.ui.design.component.BlankSurface
+import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
@@ -20,11 +30,15 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwap
+import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertEquals
@@ -36,6 +50,77 @@ import kotlin.test.assertTrue
 class TransactionDetailRowLayoutTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun outgoingDetailsRenderSavedStatusAndUnavailableWithoutHidingFunding() {
+        val saved = TransactionDetailSwapStatusRowState(
+            stringRes(R.string.private_swap_saved_status),
+            SwapStatus.REFUNDED,
+        )
+        val unavailable = TransactionDetailSwapStatusRowState(stringRes(R.string.swapAndPay_status), null)
+        val status = mutableStateOf(saved)
+        val theme = mutableStateOf("light")
+        val fontScale = mutableStateOf(1f)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale.value)) {
+                ZcashTheme(
+                    appearanceMode = if (theme.value == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
+                    isOledEnabled = theme.value == "oled",
+                ) {
+                    BlankSurface {
+                        SendSwap(
+                            state = SendSwapState(
+                                statusRow = status.value,
+                                message = null,
+                                quoteHeader = SwapQuoteHeaderState(null, null),
+                                depositAddress = stringRes("Synthetic deposit").withStyle(),
+                                totalFees = stringRes("0.0001 ZEC"),
+                                recipientAddress = null,
+                                transactionId = stringRes("Synthetic funding transaction"),
+                                refundedAmount = null,
+                                onTransactionIdClick = {},
+                                onDepositAddressClick = {},
+                                onRecipientAddressClick = null,
+                                maxSlippage = null,
+                                note = null,
+                                isSlippageRealized = false,
+                                isPending = false,
+                                completedTimestamp = stringRes("Synthetic timestamp"),
+                            ),
+                            modifier = Modifier.width(320.dp),
+                        )
+                    }
+                }
+            }
+        }
+        val application = RuntimeEnvironment.getApplication()
+        val configs = listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)
+        for ((appearance, scale) in configs) {
+            compose.runOnIdle {
+                theme.value = appearance
+                fontScale.value = scale
+                status.value = saved
+            }
+            compose.onNodeWithText("Saved status").assertIsDisplayed()
+            compose.onNodeWithText(application.getString(R.string.swapAndPay_status_refunded)).assertIsDisplayed()
+            compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
+            capture("outgoing-saved-$appearance-$scale")
+            compose.runOnIdle { status.value = unavailable }
+            compose.onNodeWithText("Saved status").assertDoesNotExist()
+            compose.onNodeWithText("Unavailable").assertIsDisplayed()
+            compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
+            capture("outgoing-unavailable-$appearance-$scale")
+        }
+    }
+
+    private fun capture(name: String) {
+        val directory = System.getProperty("private.review.captureDir")?.let(::File) ?: return
+        check(directory.isDirectory || directory.mkdirs())
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val output = File(directory, "$name.png")
+        check(output.createNewFile())
+        output.outputStream().use { check(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+    }
 
     @Test
     fun savedStatusAndLabelRemainCompleteAtTwoHundredPercentText() {

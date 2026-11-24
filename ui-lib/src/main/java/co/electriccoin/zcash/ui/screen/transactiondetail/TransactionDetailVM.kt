@@ -49,6 +49,7 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveShieldedSta
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveTransparentState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendShieldedState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendTransparentState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.ShieldingState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.TransactionDetailInfoState
@@ -213,7 +214,9 @@ class TransactionDetailVM(
                                 ?.destinationAddress
                                 ?.address
                         SendSwapState(
-                            status = transaction.swap.status?.status,
+                            statusRow = transaction.swap.toDetailStatusRow(
+                                metadata = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata,
+                            ),
                             message = getSwapMessage.getMessage(transaction.swap.status),
                             quoteHeader =
                                 mapper.createTransactionDetailQuoteHeaderState(

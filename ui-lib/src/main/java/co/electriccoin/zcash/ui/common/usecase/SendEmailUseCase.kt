@@ -97,8 +97,8 @@ class SendEmailUseCase(
         }
     }
 
-    /** A restore screen can open a blank support draft before a wallet grant exists. */
-    internal fun sendOnboardingSupport() {
+    /** Opens support without collecting wallet data. */
+    internal fun sendBlankSupport() {
         sendSupportEmail(context.getString(R.string.app_name), "")
     }
 

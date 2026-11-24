@@ -67,6 +67,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransactionDetailVMTest {
@@ -159,7 +160,9 @@ class TransactionDetailVMTest {
         assertEquals(stringRes(R.string.swapStatus_swapping), state.header.title)
         assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
         val info = assertIs<SendSwapState>(state.info)
-        assertNull(info.status)
+        assertEquals(SwapStatus.PENDING, info.statusRow.status)
+        assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
+        assertFalse(info.statusRow.isLoading)
         assertNull(info.message)
         assertEquals(stringRes(Zatoshi(10_000)), info.totalFees)
         assertEquals(stringResByTransactionId(sent.id.txIdString(), abbreviated = true), info.transactionId)
@@ -206,7 +209,9 @@ class TransactionDetailVMTest {
 
             assertLocalFunding(failedRefresh, assetId)
             val savedInfo = assertIs<SendSwapState>(failedRefresh.info, assetId)
-            assertNull(savedInfo.status, assetId)
+            assertEquals(SwapStatus.PENDING, savedInfo.statusRow.status, assetId)
+            assertEquals(stringRes(R.string.private_swap_saved_status), savedInfo.statusRow.title, assetId)
+            assertFalse(savedInfo.statusRow.isLoading, assetId)
             assertNull(savedInfo.donationBasisZec, assetId)
             assertNotNull(failedRefresh.errorFooter, assetId)
             val retry = assertNotNull(failedRefresh.primaryButton, assetId)
@@ -222,13 +227,15 @@ class TransactionDetailVMTest {
             upstream.value = unavailable.copy(swap = SwapQuoteStatusData(fresh, isLoading = false))
             val recovered = assertNotNull(
                 withTimeoutOrNull(10_000) {
-                    vm.state.first { (it.info as? SendSwapState)?.status == SwapStatus.SUCCESS }
+                    vm.state.first { (it.info as? SendSwapState)?.statusRow?.status == SwapStatus.SUCCESS }
                 },
                 assetId,
             )
 
             assertLocalFunding(recovered, assetId)
             val liveInfo = assertIs<SendSwapState>(recovered.info, assetId)
+            assertEquals(stringRes(R.string.swapAndPay_status), liveInfo.statusRow.title, assetId)
+            assertFalse(liveInfo.statusRow.isLoading, assetId)
             val quoteDestination = assertNotNull(liveInfo.quoteHeader.to, assetId)
             assertEquals(destination.tokenIcon, quoteDestination.bigIcon, assetId)
             assertEquals(destination.chainIcon, quoteDestination.smallIcon, assetId)
@@ -242,13 +249,61 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun outgoingPaymentsShowSavedTerminalOutcomesWithoutInventingRefundAmounts() = runTest(dispatcher) {
+        val error = IllegalStateException("fixture-provider-unavailable")
+        for (outcome in listOf(SwapStatus.SUCCESS, SwapStatus.REFUNDED)) {
+            val metadata = swapMetadata(outcome).copy(mode = SwapMode.EXACT_OUTPUT)
+            val detail = state(data(sent, metadata, SwapQuoteStatusData(isLoading = false, error = error)))
+            val info = assertIs<SendSwapState>(detail.info)
+            assertEquals(outcome, info.statusRow.status)
+            assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
+            assertFalse(info.statusRow.isLoading)
+            assertNull(info.refundedAmount)
+            assertNull(info.donationBasisZec)
+            assertLocalFunding(detail, outcome.name)
+            assertNotNull(detail.primaryButton)
+            store.clear()
+        }
+    }
+
+    @Test
+    fun outgoingStatusWithoutASavedResultStopsLoadingAfterFailure() = runTest(dispatcher) {
+        val metadata = swapMetadata(SwapStatus.PENDING).copy(
+            recordedStatus = null,
+            amountOutFormatted = BigDecimal.ZERO,
+        )
+        val loading = data(sent, metadata, SwapQuoteStatusData(savedMetadata = metadata))
+        val upstream = MutableStateFlow(loading)
+        val vm = viewModel(loading, upstream)
+        val initial = assertIs<SendSwapState>(vm.state.first { it.info != null }.info)
+        assertNull(initial.statusRow.status)
+        assertTrue(initial.statusRow.isLoading)
+
+        upstream.value =
+            loading.copy(
+                swap = SwapQuoteStatusData(
+                    isLoading = false,
+                    error = IllegalStateException("fixture-provider-unavailable"),
+                    savedMetadata = metadata,
+                )
+            )
+        val failed = vm.state.first { it.errorFooter != null }
+        val info = assertIs<SendSwapState>(failed.info)
+        assertNull(info.statusRow.status)
+        assertFalse(info.statusRow.isLoading)
+        assertEquals(stringRes(R.string.swapAndPay_status), info.statusRow.title)
+        assertLocalFunding(failed, "unavailable")
+        assertNotNull(failed.primaryButton)
+    }
+
+    @Test
     fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
         val remote = status(SwapStatus.FAILED, SwapAssetTestFixture.zecAsset(), SwapAssetTestFixture.asset())
         val state = state(data(sent, swapMetadata(SwapStatus.PENDING), SwapQuoteStatusData(remote, false)))
         assertEquals(stringRes(R.string.swapStatus_swapFailed), state.header.title)
         assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
         val info = assertIs<SendSwapState>(state.info)
-        assertEquals(SwapStatus.FAILED, info.status)
+        assertEquals(SwapStatus.FAILED, info.statusRow.status)
         assertEquals(stringRes(R.string.swapAndPay_failedTitle), info.message?.title)
         assertNull(info.donationBasisZec)
         assertNull(state.errorFooter)

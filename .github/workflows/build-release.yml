@@ -97,13 +97,16 @@ jobs:
     if: needs.admit.outputs.main == 'true' && (inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft)
     runs-on: ubuntu-24.04
     timeout-minutes: 3
+    outputs:
+      invalid: ${{ steps.selector.outputs.invalid }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Validate the reconciliation dispatch
+      - id: selector
+        name: Validate the reconciliation dispatch
         env:
           CHECK_RECONCILIATION_SELECTOR: 'true'
           RECONCILIATION_RUN: ${{ inputs.reconciliation_run }}
@@ -111,12 +114,10 @@ jobs:
           RECONCILIATION_ARTIFACT: ${{ inputs.reconciliation_artifact }}
           RESUME_DRAFT: ${{ inputs.resume_draft }}
           CONFLICTING_INPUTS: ${{ !!inputs.candidate_run || inputs.build_emulator || inputs.validation_only || inputs.preflight_only }}
-        run: |
-          if [[ "$CONFLICTING_INPUTS" == true ]]; then
-            echo '::error::Reconciliation cannot be combined with build or validation requests.'
-            exit 1
-          fi
-          python3 -B .private/reconcile_release.py
+        run: python3 -B .private/reconcile_release.py
+      - name: Reject invalid dispatch inputs
+        if: steps.selector.outputs.invalid == 'true'
+        run: exit 1
   admit_hosted:
     needs: admit
     if: inputs.hosted && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && needs.admit.outputs.main == 'true'
@@ -820,7 +821,7 @@ jobs:
           BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
         run: python3 -B .private/notify.py 'ZEC Private candidate validation passed.'
   failed:
-    if: ${{ always() && !cancelled() && !inputs.preflight_only && needs.admit.outputs.main == 'true' && (!(inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft) || needs.reconcile_input.result == 'success') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    if: ${{ always() && !cancelled() && needs.admit.outputs.main == 'true' && needs.reconcile_input.outputs.invalid != 'true' && (!inputs.preflight_only || needs.reconcile_input.result == 'failure' || needs.reconcile_input.result == 'cancelled') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration, admit, reconcile_input]
     concurrency:
       group: zec-private-blocker
@@ -837,20 +838,23 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
-          MAKE_ISSUE: 'true'
-          BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || inputs.validation_only && 'validation' || 'release' }}
-          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, needs.reconcile.outputs.attestation_attempt || inputs.reconciliation_attempt, needs.reconcile.outputs.attestation_id || inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          MAKE_ISSUE: ${{ (!(inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft) || needs.reconcile_input.result == 'success') && 'true' || 'false' }}
+          BLOCKER_OPERATION: ${{ needs.reconcile_input.result == 'success' && 'reconciliation' || inputs.validation_only && 'validation' || 'release' }}
+          BLOCKER_CANDIDATE: ${{ needs.reconcile_input.result == 'success' && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, needs.reconcile.outputs.attestation_attempt || inputs.reconciliation_attempt, needs.reconcile.outputs.attestation_id || inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
           BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
           PUBLICATION: ${{ needs.publish.result }}
           RECONCILIATION: ${{ needs.reconcile.result }}
+          RECONCILIATION_ADMISSION: ${{ needs.reconcile_input.result }}
           PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
           INTEGRATION: ${{ needs.record_integration.result }}
           HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
           QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}
           BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
         run: |
-          if [[ "$PUBLIC_VERIFICATION" == failure || "$PUBLIC_VERIFICATION" == cancelled ]]; then
+          if [[ "$RECONCILIATION_ADMISSION" == failure || "$RECONCILIATION_ADMISSION" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private reconciliation admission result is $RECONCILIATION_ADMISSION. Check the workflow and retry the dispatch."
+          elif [[ "$PUBLIC_VERIFICATION" == failure || "$PUBLIC_VERIFICATION" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification result is $PUBLIC_VERIFICATION."
           elif [[ "$INTEGRATION" == failure || "$INTEGRATION" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. The verified release is public. The integration result is $INTEGRATION."

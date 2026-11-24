@@ -363,6 +363,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             giftCardRepository = repository,
             progressStore = progressStore,
             deleteSharedQRImages = mockk(relaxed = true),
+            deleteLegacyTaxExports = mockk(relaxed = true),
         )
 
         fun assertPreparationPending(expected: ResetStage, attempts: Int = 1) {

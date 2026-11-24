@@ -14,6 +14,7 @@ PATHS = (
     '.github/workflows/custom-release.yml',
     '.github/workflows/sync-upstream.yml',
     '.github/workflows/sync-upstream-main.yml',
+    '.github/workflows/upgrade-acceptance.yml',
     '.github/workflows/verify-signing-environment.yml',
     '.private/publish.py',
     '.private/reconcile_release.py',

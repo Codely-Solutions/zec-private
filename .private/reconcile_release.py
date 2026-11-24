@@ -221,9 +221,17 @@ def main():
     args = (os.environ['RECONCILIATION_RUN'], os.environ.get('RECONCILIATION_ATTEMPT', ''),
             os.environ.get('RECONCILIATION_ARTIFACT', ''))
     draft = os.environ.get('RESUME_DRAFT') == 'true'
-    validate_selector(*args, allow_draft=draft)
     if os.environ.get('CHECK_RECONCILIATION_SELECTOR') == 'true':
+        try:
+            require(os.environ.get('CONFLICTING_INPUTS') != 'true',
+                    'Reconciliation cannot be combined with build or validation requests')
+            validate_selector(*args, allow_draft=draft)
+        except ValueError as error:
+            with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8', newline='\n') as output:
+                output.write('invalid=true\n')
+            print(f'::error::{error}')
         return
+    validate_selector(*args, allow_draft=draft)
     proof = resume_draft(*args) if draft else resolve(*args)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8', newline='\n') as output:
         output.writelines(f'{key}={value}\n' for key, value in proof.items())

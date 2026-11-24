@@ -1,14 +1,16 @@
 """Packaging boundary regressions use tiny archives, never wallet state."""
 import json
 import runpy
+import subprocess
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from contextlib import chdir
 from unittest.mock import Mock, patch
 from apk_architecture import check_apk
 from compare_runtime import compare
-from signing_wiring import environment_wiring
+from signing_wiring import PATHS, environment_wiring, fingerprint, main as select_signing_smoke
 from test_maintenance_watch import job_activates, workflow_job
 from test_support import patch_environment
 
@@ -183,6 +185,58 @@ class PackagingTests(unittest.TestCase):
                 environment_wiring(metadata)
         metadata.pages.return_value = [main]
         self.assertEqual([main], environment_wiring(metadata)['branches'])
+
+    def test_signing_workflow_edits_invalidate_the_reusable_smoke_result(self):
+        workflows = [
+            '.github/workflows/build-release.yml',
+            '.github/workflows/custom-release.yml',
+            '.github/workflows/sync-upstream.yml',
+            '.github/workflows/sync-upstream-main.yml',
+            '.github/workflows/upgrade-acceptance.yml',
+            '.github/workflows/verify-signing-environment.yml',
+        ]
+        unrelated = '.github/workflows/automation-test.yml'
+        wiring = dict(environment=5, rules=[], branches=[dict(type='branch', name='main')])
+        smoke = workflow_job('build-release.yml', 'signing_smoke')
+
+        def git(*args):
+            return subprocess.check_output(['git', *args], stderr=subprocess.STDOUT, timeout=15)
+
+        with tempfile.TemporaryDirectory() as temporary, chdir(temporary):
+            git('init', '-q')
+            for name in set(PATHS) | set(workflows) | {unrelated}:
+                path = Path(name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'fixture\n')
+            git('add', '.github', '.private')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit', '-qm', 'Baseline wiring')
+            Path('.private/signing-smoke.json').write_text(json.dumps(dict(fingerprint=fingerprint(wiring), run_id=7)))
+            baseline = git('rev-parse', 'HEAD').decode().strip()
+
+            for name in [None, unrelated, *workflows]:
+                with self.subTest(path=name):
+                    if name is not None:
+                        git('reset', '--hard', baseline)
+                        Path(name).write_bytes(b'changed fixture\n')
+                        git('add', name)
+                        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                            'commit', '-qm', 'Change one path')
+                    output = Path('smoke-output')
+                    output.unlink(missing_ok=True)
+                    with patch_environment(dict(GITHUB_OUTPUT=str(output))), \
+                            patch('signing_wiring.environment_wiring', return_value=wiring), \
+                            patch('signing_wiring.Metadata'), patch('builtins.print'):
+                        select_signing_smoke()
+                    key, changed = output.read_text(encoding='utf-8').strip().split('=')
+                    self.assertEqual(key, 'changed')
+                    expected = name in workflows
+                    self.assertEqual(changed, str(expected).lower())
+                    self.assertEqual(
+                        job_activates(smoke, dict(preflight='success', admit='success'),
+                                      **{'needs.preflight.outputs.signing_changed': changed}),
+                        expected,
+                    )
 
     def test_release_rejects_extra_abis_and_missing_engine(self):
         with tempfile.TemporaryDirectory() as temporary:

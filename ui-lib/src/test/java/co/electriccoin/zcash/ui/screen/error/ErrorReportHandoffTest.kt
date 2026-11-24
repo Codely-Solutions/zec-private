@@ -76,7 +76,7 @@ class ErrorReportHandoffTest {
         val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk())
         val mapper = ErrorMapperUseCase(SendEmailUseCase(application, diagnostics, mockk()), mockk(), access)
         val failure = LceContent.Error(IllegalStateException("synthetic private detail"), {}, {})
-        requireNotNull(mapper.mapToState(failure, walletlessOnboarding = true).state.secondaryAction).onClick()
+        requireNotNull(mapper.mapToState(failure, supportWithoutDiagnostics = true).state.secondaryAction).onClick()
         val chooser = shadowOf(application).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         val draft = requireNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))

@@ -33,8 +33,8 @@ import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
-import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -66,18 +66,7 @@ class SwapDetailVM(
                                 destinationAsset = swapData.status?.destinationAsset,
                                 savedMetadata = swapData.savedMetadata,
                             ),
-                    status =
-                        TransactionDetailSwapStatusRowState(
-                            title = stringRes(
-                                if (hasDetails && (swapData.status == null || swapData.error != null)) {
-                                    R.string.private_swap_saved_status
-                                } else {
-                                    R.string.swapAndPay_status
-                                }
-                            ),
-                            status = swapData.status?.status ?: swapData.savedMetadata?.status,
-                            mode = SWAP_INTO_ZEC
-                        ),
+                    status = swapData.data.toDetailStatusRow(mode = SWAP_INTO_ZEC),
                     depositTo =
                         TransactionDetailInfoRowState(
                             title = stringRes(R.string.private_swap_deposit_reference),

@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.design.util.*
 import co.electriccoin.zcash.ui.screen.swap.quote.*
 import co.electriccoin.zcash.ui.screen.transactiondetail.*
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 
 /** Inert synthetic scenes for review; no wallet/network dependencies or approval actions. */
 @Composable
@@ -96,7 +97,10 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                     onBack = onBack, bookmarkButton = null,
                     header = TransactionDetailHeaderState(stringRes(if (refunded) "Refunded" else "Paid"), stringRes("0.0101"), listOf(imageRes(R.drawable.ic_transaction_received))),
                     info = SendSwapState(
-                        status = if (refunded) SwapStatus.REFUNDED else SwapStatus.SUCCESS,
+                        statusRow = TransactionDetailSwapStatusRowState(
+                            title = stringRes(R.string.swapAndPay_status),
+                            status = if (refunded) SwapStatus.REFUNDED else SwapStatus.SUCCESS,
+                        ),
                         message = null, quoteHeader = SwapQuoteHeaderState(
                             if (screen == "sprint-refund" || screen == "sprint-multiple-links") zec.copy(amount = stringRes("0.0098"), fiatAmount = stringRes("$0.392")) else zec,
                             btc,

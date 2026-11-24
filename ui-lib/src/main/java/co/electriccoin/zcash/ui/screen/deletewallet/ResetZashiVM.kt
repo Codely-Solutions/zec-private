@@ -43,7 +43,11 @@ class ResetZashiVM(
                 isPending = pending,
             )
         }.withLce(resetLce) { error ->
-            errorStateMapper.mapToState(error, message = stringRes(R.string.wallet_reset_failed))
+            errorStateMapper.mapToState(
+                error,
+                message = stringRes(R.string.wallet_reset_failed),
+                supportWithoutDiagnostics = resetZashi.isPending.value,
+            )
         }.stateIn(
             this,
             LceState(

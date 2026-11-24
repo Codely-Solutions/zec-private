@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
@@ -10,12 +11,18 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceError
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
+import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
+import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.coEvery
@@ -38,6 +45,12 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -51,6 +64,8 @@ import kotlin.time.Duration.Companion.seconds
 import co.electriccoin.zcash.ui.design.R as UIR
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class ResetZashiVMTest {
     @get:Rule val directory = TemporaryFolder()
 
@@ -59,6 +74,8 @@ class ResetZashiVMTest {
     private val biometrics = mockk<BiometricRepository>(relaxed = true)
     private val contacts = mockk<AddressBookRepository>(relaxed = true)
     private val metadata = mockk<MetadataRepository>(relaxed = true)
+    private val diagnostics = mockk<GetSupportUseCase>()
+    private lateinit var reportAccess: WalletReportAccess
     private lateinit var progress: ResetProgressStore
     private lateinit var vm: ResetZashiVM
 
@@ -76,6 +93,14 @@ class ResetZashiVMTest {
         val erase = CompletableDeferred<Boolean>()
         every { coordinator.deleteSdkDataFlow() } returns flow { emit(erase.await()) }
         createViewModel()
+        val legacy = File(directory.root, "tax_exports/Zodl_Transaction_History_2025.csv").apply {
+            parentFile?.mkdirs()
+            writeText("legacy")
+        }
+        val staged = File(directory.root, "tax_exports/tax-current/Zodl_Transaction_History_2025.csv").apply {
+            parentFile?.mkdirs()
+            writeText("current")
+        }
 
         val initial = assertNotNull(vm.state.value.content)
         assertTrue(initial.checkboxState.isChecked)
@@ -90,6 +115,8 @@ class ResetZashiVMTest {
 
         awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
         assertNull(progress.getStage())
+        assertFalse(legacy.exists())
+        assertEquals("current", staged.readText())
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
         verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
         coVerify(exactly = 0) { contacts.delete() }
@@ -144,7 +171,14 @@ class ResetZashiVMTest {
         }
         val retried = awaitState { it.error != null }
         verify(exactly = 2) { coordinator.deleteSdkDataFlow() }
-        assertIs<LceError.BottomSheet>(retried.error).state.onBack()
+        assertFalse(reportAccess.captureWallet()())
+        assertNotNull(assertIs<LceError.BottomSheet>(retried.error).state.secondaryAction).onClick()
+        val application = RuntimeEnvironment.getApplication()
+        val chooser = assertNotNull(shadowOf(application).nextStartedActivity)
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        val draft = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+        assertEquals("", draft.getStringExtra(Intent.EXTRA_TEXT))
+        coVerify(exactly = 0) { diagnostics() }
         val dismissed = assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content)
         dismissed.buttonState.onClick()
 
@@ -159,8 +193,14 @@ class ResetZashiVMTest {
     }
 
     private fun createViewModel() {
-        val context = mockk<Context> { every { noBackupFilesDir } returns directory.root }
+        val context = mockk<Context> {
+            every { noBackupFilesDir } returns directory.root
+            every { cacheDir } returns directory.root
+        }
         progress = ResetProgressStore(context, DirectorySync {})
+        val writeAccess = WalletWriteAccess(progress)
+        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk())
+        assertTrue(reportAccess.captureWallet()())
         val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val reset = ResetZashiUseCase(
             walletCoordinator = coordinator,
@@ -182,8 +222,11 @@ class ResetZashiVMTest {
             giftCardRepository = mockk(relaxed = true),
             progressStore = progress,
             deleteSharedQRImages = mockk(relaxed = true),
+            deleteLegacyTaxExports = DeleteLegacyTaxExportsUseCase(context),
+            walletWriteAccess = writeAccess,
         )
-        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(mockk(), mockk(), mockk(relaxed = true)))
+        val sendEmail = SendEmailUseCase(RuntimeEnvironment.getApplication(), diagnostics, mockk())
+        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(sendEmail, mockk(), reportAccess))
     }
 
     private suspend fun awaitState(predicate: (LceState<ResetZashiState>) -> Boolean) =

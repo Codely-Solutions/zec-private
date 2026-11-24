@@ -22,6 +22,8 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
+import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.component.ShimmerRectangle
 import co.electriccoin.zcash.ui.design.component.ZashiBadge
@@ -61,7 +63,7 @@ fun TransactionDetailSwapStatusRow(
         )
         if (state.status != null) {
             StatusChip(state)
-        } else {
+        } else if (state.isLoading) {
             Box(
                 modifier = Modifier.shimmer(rememberZashiShimmer())
             ) {
@@ -78,6 +80,12 @@ fun TransactionDetailSwapStatusRow(
                     shape = CircleShape
                 )
             }
+        } else {
+            Text(
+                text = stringResource(R.string.private_swap_status_unavailable),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textTertiary,
+            )
         }
     }
 }
@@ -159,11 +167,27 @@ data class TransactionDetailSwapStatusRowState(
     val title: StringResource,
     val status: SwapStatus?,
     val mode: Mode = SWAP_FROM_ZEC,
+    val isLoading: Boolean = false,
 ) {
     enum class Mode {
         SWAP_FROM_ZEC,
         SWAP_INTO_ZEC
     }
+}
+
+internal fun SwapQuoteStatusData.toDetailStatusRow(
+    mode: TransactionDetailSwapStatusRowState.Mode = SWAP_FROM_ZEC,
+    metadata: TransactionSwapMetadata? = savedMetadata,
+): TransactionDetailSwapStatusRowState {
+    val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
+    val value = status?.status ?: savedStatus
+    val isSaved = value != null && (status == null || error != null)
+    return TransactionDetailSwapStatusRowState(
+        title = stringRes(if (isSaved) R.string.private_swap_saved_status else R.string.swapAndPay_status),
+        status = value,
+        mode = mode,
+        isLoading = value == null && isLoading && error == null,
+    )
 }
 
 @PreviewScreens
@@ -191,6 +215,7 @@ private fun LoadingPreview() =
                     TransactionDetailSwapStatusRowState(
                         title = stringRes("Title"),
                         status = null,
+                        isLoading = true,
                     )
             )
         }

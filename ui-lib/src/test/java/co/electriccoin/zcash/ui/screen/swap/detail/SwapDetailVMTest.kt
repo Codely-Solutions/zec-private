@@ -27,6 +27,7 @@ import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
@@ -326,6 +327,23 @@ class SwapDetailVMTest {
                 assertEquals(input.fiatAmount, harness.state().quoteHeader.from?.fiatAmount)
             }
         }
+    }
+
+    @Test
+    fun offlineRefundShowsItsSavedStatusUntilTheProviderSuppliesTheAmount() = runTest {
+        val saved = saved(SwapStatus.REFUNDED)
+        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
+        assertEquals(SwapStatus.REFUNDED, harness.state().status.status)
+        assertEquals(stringRes(R.string.private_swap_saved_status), harness.state().status.title)
+        assertNull(harness.state().refundedAmount)
+
+        val live = status(SwapStatus.REFUNDED)
+        val amount = BigDecimal("0.001")
+        every { live.refundedFormatted } returns amount
+        harness.emit(SwapQuoteStatusData(status = live, isLoading = false, savedMetadata = saved))
+        runCurrent()
+        val refund = assertNotNull(harness.state().refundedAmount)
+        assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
     }
 
     @Test
