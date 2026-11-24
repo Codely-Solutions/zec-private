@@ -27,6 +27,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -98,6 +99,35 @@ class RequestVMTest {
         }
 
     @Test
+    fun aFinalizedQrKeepsItsOriginalAddressAcrossRotationAndRetiresOnOwnerChange() = runTest {
+        val original = EditAccountFixtures.zodl().copy(unifiedAddress = "original-address")
+        val rotated = original.copy(unifiedAddress = "rotated-address")
+        val accounts = MutableStateFlow<WalletAccount?>(original)
+        val share = mockk<ShareQRUseCase> {
+            coEvery { this@mockk(any(), any(), any(), any(), any(), any()) } coAnswers {
+                assertEquals("zcash:original-address", firstArg())
+                assertTrue(arg<() -> Boolean>(5)())
+                true
+            }
+        }
+        val vm = startedRequest(original, share, accounts = accounts, encode = { "zcash:$it" })
+        assertIs<RequestState.Memo>(vm.state.value).onDone()
+        val old = assertIs<RequestState.QrCode>(vm.state.value)
+        accounts.value = rotated
+        val ready = assertIs<RequestState.QrCode>(vm.state.value)
+        assertEquals(original.unifiedAddress, ready.walletAddress.address)
+        ready.onQrCodeShare(mockk(), 1, ready.request.qrCodeState.requestUri)
+        coVerify(exactly = 1) { share(any(), any(), any(), any(), any(), any()) }
+
+        accounts.value = EditAccountFixtures.keystone(isSelected = true)
+        assertIs<RequestState.Amount>(vm.state.value)
+        old.onQrCodeShare(mockk(), 1, old.request.qrCodeState.requestUri)
+        accounts.value = original
+        assertIs<RequestState.Amount>(vm.state.value)
+        coVerify(exactly = 1) { share(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun requestSharesOnlyTheDisplayedUriAndRefusesARevokedGrant() = runTest {
         val access = AppAccessSession().apply { unlock() }
         val share = mockk<ShareQRUseCase> {
@@ -127,6 +157,8 @@ class RequestVMTest {
         account: WalletAccount,
         share: ShareQRUseCase = mockk(relaxed = true),
         access: AppAccessSession = AppAccessSession().apply { unlock() },
+        accounts: Flow<WalletAccount?> = flowOf(account),
+        encode: (String) -> String = { "zcash:fixture" },
     ): RequestVM {
         val vm =
             RequestVM(
@@ -138,11 +170,11 @@ class RequestVMTest {
                     },
                 getZcashCurrency = mockk(relaxed = true),
                 zip321BuildUriUseCase = mockk<Zip321BuildUriUseCase> {
-                    every { this@mockk(any<String>(), any<BigDecimal>(), any<String>()) } returns "zcash:fixture"
+                    every { this@mockk(any<String>(), any<BigDecimal>(), any<String>()) } answers { encode(firstArg()) }
                 },
                 observeSelectedWalletAccount =
                     mockk<ObserveSelectedWalletAccountUseCase> {
-                        every { this@mockk() } returns flowOf(account)
+                        every { this@mockk() } returns accounts
                     },
                 navigationRouter = mockk(relaxed = true),
                 shareQR = share,

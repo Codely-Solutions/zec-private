@@ -34,6 +34,7 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+import co.electriccoin.zcash.ui.common.repository.SwapAssetsUnavailableException
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
@@ -330,8 +331,15 @@ class RequestSwapQuoteUseCase(
         if (canNavigate()) navigate()
     }
 
-    private fun navigateToPreparedReview(result: SwapQuoteData, canNavigateToSwapQuote: () -> Boolean) {
-        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) return
+    private suspend fun navigateToPreparedReview(result: SwapQuoteData, canNavigateToSwapQuote: () -> Boolean) {
+        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) {
+            if (swapRepository.quote.value === result && !swapRepository.isReviewCurrent(result)) {
+                onPreparationFailure(result, canNavigateToSwapQuote) {
+                    navigateToErrorUseCase(ErrorArgs.General(SwapAssetsUnavailableException()))
+                }
+            }
+            return
+        }
         if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
             navigationRouter.forward(SwapQuoteArgs)
         }

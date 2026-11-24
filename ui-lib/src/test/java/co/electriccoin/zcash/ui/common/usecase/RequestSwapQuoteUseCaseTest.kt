@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
+import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
@@ -32,10 +33,12 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
@@ -107,11 +110,13 @@ class RequestSwapQuoteUseCaseTest {
         val quoteFlow = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Loading)
         every { swapRepository.quote } returns quoteFlow
         val readiness = co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl(mockk(), mockk())
+        readiness.assets.value = SwapAssetsData(data = listOf(btc), zecAsset = zec)
         every { swapRepository.markReviewReady(any()) } answers {
             readiness.quote.value = quoteFlow.value
             readiness.markReviewReady(firstArg())
         }
         every { swapRepository.consumeReview(any()) } answers { readiness.consumeReview(firstArg()) }
+        every { swapRepository.isReviewCurrent(any()) } answers { readiness.isReviewCurrent(firstArg()) }
         every { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) } answers {
             quoteFlow.value = SwapQuoteData.Success(quote)
         }
@@ -175,6 +180,48 @@ class RequestSwapQuoteUseCaseTest {
         }
     }
         }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun catalogDriftWhilePreparingTheProposalRejectsSwapAndPayReview() = runTest(dispatcher) {
+        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
+            var tokens = listOf(zec, btc)
+            val quote = swapQuote(originAsset = zec, destinationAsset = btc, mode = mode)
+            val source = mockk<SwapDataSource> {
+                coEvery { getSupportedTokens() } answers { tokens }
+                coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
+            }
+            val cache = mockk<SwapAssetCacheProvider>(relaxed = true) { coEvery { get() } returns emptyList() }
+            val repository = SwapRepositoryImpl(source, cache).also { it.scope = backgroundScope }
+            repository.requestRefreshAssetsOnce()
+            val request = useCase(SwapQuoteData.Success(quote), zodl(), repository)
+            val started = CompletableDeferred<Unit>()
+            val finish = CompletableDeferred<Unit>()
+            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } coAnswers {
+                started.complete(Unit)
+                finish.await()
+                mockk(relaxed = true)
+            }
+            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } coAnswers {
+                started.complete(Unit)
+                finish.await()
+                mockk(relaxed = true)
+            }
+            val pending = launch { if (mode == SwapMode.EXACT_INPUT) request.exactInput() else request.exactOutput() }
+            try {
+                started.await()
+                tokens = listOf(zec, btc, SwapAssetTestFixture.asset(usdPrice = null))
+                repository.requestRefreshAssetsOnce()
+                finish.complete(Unit)
+                pending.join()
+                assertEquals(null, repository.quote.value)
+                assertEquals(null, repository.consumeReview())
+                verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
+            } finally {
+                finish.complete(Unit)
+            }
+        }
+    }
 
     // region requestExactInput — proposal happy + failures
 
@@ -806,7 +853,8 @@ class RequestSwapQuoteUseCaseTest {
 
     private suspend fun useCase(
         quoteData: SwapQuoteData,
-        selectedAccount: WalletAccount = zodl()
+        selectedAccount: WalletAccount = zodl(),
+        repository: SwapRepository = swapRepository,
     ): RequestSwapQuoteUseCase {
         every { swapRepository.quote } returns MutableStateFlow(quoteData)
         every { swapRepository.markReviewReady(any()) } returns true
@@ -826,7 +874,7 @@ class RequestSwapQuoteUseCaseTest {
         return RequestSwapQuoteUseCase(
             navigationRouter = navigationRouter,
             navigateToErrorUseCase = navigateToError,
-            swapRepository = swapRepository,
+            swapRepository = repository,
             zashiProposalRepository = zashiProposalRepository,
             keystoneProposalRepository = keystoneProposalRepository,
             ledgerProposalPipeline = ledgerProposalPipeline,

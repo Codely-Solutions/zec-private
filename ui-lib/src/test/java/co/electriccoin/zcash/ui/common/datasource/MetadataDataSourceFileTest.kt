@@ -694,6 +694,34 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun lostTrackingAcknowledgementPersistsFundingNotSentAndRejectsReuse() = runTest {
+        val sync = TrackingSync(oneShot = true)
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val address = WalletAddress.Unified.new("deposit")
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val proposal = mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { destination } returns address
+            every { fundingAccount } returns account
+            every { totalFees } returns Zatoshi(0)
+            every { totalFeesUsd } returns BigDecimal.ZERO
+        }
+        val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
+        assertFailsWith<IllegalStateException> {
+            initial.submitReservedFunding(proposal, {}) { error("SDK must not be entered") }
+        }.also { assertEquals("Unable to save swap tracking before funding", it.message) }
+
+        val reopened = repository(sync.provider)
+        val saved = assertNotNull(reopened.getSwapMetadata("deposit", account))
+        assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
+        assertTrue(saved.fundingNotSubmitted)
+        val restarted = ProcessSwapTransactionUseCase(reopened, mockk())
+        assertFailsWith<IllegalStateException> {
+            restarted.submitReservedFunding(proposal, {}) { error("SDK must not be entered again") }
+        }.also { assertEquals("This swap is already tracked. Check its status before funding.", it.message) }
+    }
+
+    @Test
     fun aRefusedFirstBroadcastPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
         val quote = fundingQuote(SwapType.EXACT_INPUT)
         val address = WalletAddress.Unified.new("deposit")
@@ -1145,14 +1173,14 @@ class MetadataDataSourceFileTest {
         )
     }
 
-    private class TrackingSync {
+    private class TrackingSync(private val oneShot: Boolean = false) {
         var fail = true
         var attempts = 0
         val provider = MetadataProviderImpl(
             metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
             directorySync = {
                 attempts++
-                if (fail) throw IOException("Synthetic metadata directory sync failure")
+                if (fail && (!oneShot || attempts == 1)) throw IOException("Synthetic metadata directory sync failure")
             }
         )
     }

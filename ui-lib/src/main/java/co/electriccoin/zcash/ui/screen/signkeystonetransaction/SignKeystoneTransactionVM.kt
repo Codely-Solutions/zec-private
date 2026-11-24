@@ -137,7 +137,7 @@ class SignKeystoneTransactionVM(
                         text = stringRes("Share PCZT"),
                         onClick = {
                             if (attempt != null && ready) {
-                                viewModelScope.launch { if (isReady(attempt)) sharePCZT() }
+                                viewModelScope.launch { sharePCZT { isReady(attempt) } }
                             }
                         },
                         isEnabled = ready

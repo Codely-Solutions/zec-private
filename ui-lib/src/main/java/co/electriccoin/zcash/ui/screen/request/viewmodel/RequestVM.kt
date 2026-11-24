@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.request.viewmodel
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
@@ -26,7 +27,6 @@ import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORM
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
-import co.electriccoin.zcash.ui.screen.qrcode.ext.receiveAddress
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import co.electriccoin.zcash.ui.screen.request.model.AmountState
@@ -94,7 +94,9 @@ class RequestVM(
             )
         )
 
-    private class Step(val stage: RequestStage, val recipient: String? = null)
+    private class Step(val stage: RequestStage, val recipient: Recipient? = null)
+
+    private data class Recipient(val address: WalletAddress, val owner: AccountUuid, val wallet: Long)
 
     private val step = MutableStateFlow(Step(RequestStage.AMOUNT))
 
@@ -111,8 +113,15 @@ class RequestVM(
         ) { draft, currentStep, exchangeRate, access, colors ->
             val (account, grant, token) = access
             val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
-            val walletAddress = account?.fromReceiveAddressType(addressType)
-            if (account == null || walletAddress == null) return@combine RequestState.Loading
+            if (account == null) return@combine RequestState.Loading
+            val savedRecipient = currentStep.recipient
+            if (savedRecipient != null && !savedRecipient.isCurrent()) {
+                step.compareAndSet(currentStep, Step(RequestStage.AMOUNT))
+                return@combine RequestState.Loading
+            }
+            val walletAddress = savedRecipient?.address ?: account.fromReceiveAddressType(addressType)
+                ?: return@combine RequestState.Loading
+            val recipient = savedRecipient ?: Recipient(walletAddress, account.sdkAccount.accountUuid, token)
 
             when (currentStep.stage) {
                 RequestStage.AMOUNT -> {
@@ -133,8 +142,8 @@ class RequestVM(
                         },
                         onBack = { if (step.value === currentStep) onBack() },
                     ) {
-                        if (step.value === currentStep) {
-                            onNextClick(walletAddress, zip321BuildUriUseCase, amount, zecAmount)
+                        if (step.value === currentStep && recipient.isCurrent()) {
+                            onNextClick(recipient, zip321BuildUriUseCase, amount, zecAmount)
                         }
                     }
                 }
@@ -151,8 +160,8 @@ class RequestVM(
                         request = draft,
                         onMemo = { if (step.value === currentStep) onMemo(it) },
                         onDone = {
-                            if (step.value === currentStep) {
-                                onMemoDone(walletAddress.address, zip321BuildUriUseCase)
+                            if (step.value === currentStep && recipient.isCurrent()) {
+                                onMemoDone(recipient, zip321BuildUriUseCase)
                             }
                         },
                         onBack = { if (step.value === currentStep) onBack() },
@@ -172,11 +181,7 @@ class RequestVM(
                         request = draft,
                         onQrCodeShare = { _, _, uri ->
                             val permitted = {
-                                val current = selectedAccount.value
-                                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
-                                    current != null &&
-                                    current.sdkAccount.accountUuid == account.sdkAccount.accountUuid &&
-                                    current.receiveAddress(addressType) == currentStep.recipient &&
+                                appAccessSession.permits(grant) && recipient.isCurrent() &&
                                     step.value === currentStep && uri.isNotBlank() &&
                                     request.value.qrCodeState === draft.qrCodeState &&
                                     uri == draft.qrCodeState.requestUri
@@ -212,7 +217,7 @@ class RequestVM(
         )
 
     private fun onNextClick(
-        walletAddress: WalletAddress,
+        recipient: Recipient,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
         displayedAmount: AmountState,
         displayedZecAmount: BigDecimal?,
@@ -224,10 +229,10 @@ class RequestVM(
             RequestCurrency.ZEC -> amount.amount
             RequestCurrency.FIAT -> represented.formatRequestZec(application)
         }
-        when (walletAddress) {
+        when (recipient.address) {
             is WalletAddress.Transparent -> {
                 onAmountAndMemoDone(
-                    walletAddress.address,
+                    recipient,
                     zip321BuildUriUseCase,
                     zecAmount
                 )
@@ -242,6 +247,9 @@ class RequestVM(
             }
         }
     }
+
+    private fun Recipient.isCurrent(): Boolean =
+        selectedAccount.value?.sdkAccount?.accountUuid == owner && walletWriteAccess.permits(wallet)
 
     private fun resolveExchangeRateValue(state: ExchangeRateState): FiatCurrencyConversion? =
         (state as? ExchangeRateState.Data)?.eligibleConversion()
@@ -414,7 +422,7 @@ class RequestVM(
         step.value = Step(RequestStage.MEMO)
     }
 
-    private fun onMemoDone(address: String, zip321BuildUriUseCase: Zip321BuildUriUseCase) {
+    private fun onMemoDone(recipient: Recipient, zip321BuildUriUseCase: Zip321BuildUriUseCase) {
         if (!request.value.memoState.isValid()) return
         request.update {
             it.copy(
@@ -422,7 +430,7 @@ class RequestVM(
                     QrCodeState(
                         requestUri =
                             createZip321Uri(
-                                address = address,
+                                address = recipient.address.address,
                                 amount = it.memoState.zecAmount,
                                 memo = it.memoState.text,
                                 zip321BuildUriUseCase = zip321BuildUriUseCase
@@ -432,11 +440,11 @@ class RequestVM(
                     )
             )
         }
-        step.value = Step(RequestStage.QR_CODE, address)
+        step.value = Step(RequestStage.QR_CODE, recipient)
     }
 
     private fun onAmountAndMemoDone(
-        address: String,
+        recipient: Recipient,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
         qrCodeAmount: String,
     ) {
@@ -446,7 +454,7 @@ class RequestVM(
                     QrCodeState(
                         requestUri =
                             createZip321Uri(
-                                address = address,
+                                address = recipient.address.address,
                                 amount = qrCodeAmount,
                                 memo = DEFAULT_MEMO,
                                 zip321BuildUriUseCase = zip321BuildUriUseCase
@@ -457,7 +465,7 @@ class RequestVM(
             )
         }
 
-        step.value = Step(RequestStage.QR_CODE, address)
+        step.value = Step(RequestStage.QR_CODE, recipient)
     }
 
     private fun onSwitch(

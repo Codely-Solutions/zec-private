@@ -109,6 +109,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
         mockk<SwapRepository>(relaxed = true) {
             every { this@mockk.quote } returns MutableStateFlow(quote)
             every { consumeReview(any()) } returns quote.takeIf { it != SwapQuoteData.Loading }
+            every { isReviewCurrent(any()) } answers { firstArg<SwapQuoteData>() === quote }
         }
 
     private fun mismatchError() =

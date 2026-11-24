@@ -117,7 +117,11 @@ interface AccountDataSource {
         birthday: BlockHeight? = null
     ): Account
 
-    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String
+    /**
+     * A best-effort request uses the selected account if it is ready, or returns null while it
+     * loads. A strict request throws when it cannot obtain a fresh address from the requested account.
+     */
+    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String?
 
     suspend fun deleteAccount(account: WalletAccount)
 
@@ -353,33 +357,34 @@ class AccountDataSourceImpl(
             throw ViewOnlyAccountImportException()
         }
 
-    @Suppress("TooGenericExceptionCaught")
-    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String {
-        val requestedAccount = account ?: getSelectedAccount()
-        val responseChannel = Channel<String>(1)
-        log("requesting a fresh shielded address")
-        val result =
-            try {
-                withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) {
-                    requestNextShieldedAddressChannel.emit(
-                        AddressRequest(requestedAccount.sdkAccount.accountUuid, responseChannel)
-                    )
-                    responseChannel.receive()
-                }.also {
-                    if (it == null) log("timed out waiting for a shielded address")
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log("failed to receive a shielded address (${e.javaClass.simpleName})")
-                null
-            } finally {
-                responseChannel.close()
-            }
-        return result ?: if (requireFresh) {
+    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String? {
+        val requestedAccount = account ?: allAccounts.value?.firstOrNull { it.isSelected }
+        val address = requestedAccount?.let { rotateShieldedAddress(it) }
+        return address ?: if (requireFresh) {
             throw FreshShieldedAddressUnavailableException()
         } else {
-            requestedAccount.unifiedAddress
+            requestedAccount?.unifiedAddress
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun rotateShieldedAddress(account: WalletAccount): String? {
+        val responseChannel = Channel<String>(1)
+        log("requesting a fresh shielded address")
+        return try {
+            withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) {
+                requestNextShieldedAddressChannel.emit(AddressRequest(account.sdkAccount.accountUuid, responseChannel))
+                responseChannel.receive()
+            }.also {
+                if (it == null) log("timed out waiting for a shielded address")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("failed to receive a shielded address (${e.javaClass.simpleName})")
+            null
+        } finally {
+            responseChannel.close()
         }
     }
 

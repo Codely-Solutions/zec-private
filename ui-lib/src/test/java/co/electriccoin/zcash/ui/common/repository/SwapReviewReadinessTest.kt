@@ -1,12 +1,16 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
+import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUseCase
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import io.mockk.coEvery
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -57,6 +61,7 @@ class SwapReviewReadinessTest {
     @Test
     fun clearedOrSupersededRequestsCannotPublishOrConsumeOldReviewReadiness() = runTest {
         val repository = SwapRepositoryImpl(mockk(), mockk())
+        repository.assets.value = SwapAssetsData(data = listOf(btc), zecAsset = zec)
         val old = SwapQuoteData.Success(quote())
         val replacement = SwapQuoteData.Success(quote())
         repository.quote.value = old
@@ -70,6 +75,23 @@ class SwapReviewReadinessTest {
         repository.clearQuote()
         assertFalse(repository.markReviewReady(replacement))
         assertNull(repository.consumeReview())
+    }
+
+    @Test
+    fun readyQuoteIsRecheckedAfterDismissal() = runTest {
+        val repository = preparedRepository(this)
+        repository.requestExactInputQuote(BigDecimal.ONE, "destination", "refund", btc, BigDecimal("2"))
+        runCurrent()
+        val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
+        kotlin.test.assertTrue(repository.markReviewReady(current))
+        val router = mockk<NavigationRouter>(relaxed = true)
+
+        NavigateToSwapQuoteIfAvailableUseCase(repository, router).invoke {
+            repository.assets.value = SwapAssetsData(data = emptyList(), zecAsset = zec)
+        }
+
+        verify(exactly = 0) { router.forward(SwapQuoteArgs) }
+        assertNull(repository.quote.value)
     }
 
 }

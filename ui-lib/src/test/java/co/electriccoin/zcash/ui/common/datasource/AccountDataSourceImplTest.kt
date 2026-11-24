@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.WalletBalance
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccountBindingData
@@ -17,11 +18,14 @@ import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
+import co.electriccoin.zcash.ui.screen.receive.ReceiveArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -115,6 +119,28 @@ class AccountDataSourceImplTest {
             context = mockk(relaxed = true),
             scope = scope,
         )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun receiveOpensWhileTheFirstAddressIsStillLoading() = runTest {
+        val initialAddress = CompletableDeferred<String>()
+        val source = dataSource(MutableStateFlow(null), scope = backgroundScope) { initialAddress.await() }
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        runCurrent()
+        assertNull(source.allAccounts.value)
+
+        val receive = launch { NavigateToReceiveUseCase(navigation, source)() }
+        runCurrent()
+        assertTrue(receive.isCompleted)
+        verify(exactly = 1) { navigation.forward(ReceiveArgs) }
+        assertFailsWith<FreshShieldedAddressUnavailableException> {
+            source.requestNextShieldedAddress(requireFresh = true)
+        }
+
+        initialAddress.complete("initial-address")
+        runCurrent()
+        assertEquals("initial-address", assertNotNull(source.allAccounts.value).single().unifiedAddress)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

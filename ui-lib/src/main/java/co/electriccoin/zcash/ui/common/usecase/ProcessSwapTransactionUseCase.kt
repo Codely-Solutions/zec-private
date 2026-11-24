@@ -11,6 +11,8 @@ import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -46,7 +48,11 @@ class ProcessSwapTransactionUseCase(
             "This swap is already tracked. Check its status before funding."
         }
         validateFunding()
-        writePendingTracking(transactionProposal, walletWriteToken)
+        if (walletWriteToken == null) {
+            writePendingTracking(transactionProposal)
+        } else {
+            writeFundingReservation(transactionProposal, walletWriteToken)
+        }
         reservedReferences += reference
         val selectedSwapAsset = transactionProposal.quote.destinationAsset
         metadataRepository.addSwapAssetToHistory(
@@ -77,14 +83,29 @@ class ProcessSwapTransactionUseCase(
         } finally {
             if (entryResolved.compareAndSet(false, true)) {
                 // Only a still-closed gate proves that no SDK endpoint was entered.
-                withContext(NonCancellable) {
-                    runCatchingRecoverable { recordUnsubmittedFunding(proposal, generation) }.onFailure { error ->
-                        Twig.warn { "Unable to record unsubmitted swap funding (${error.javaClass.simpleName})" }
-                    }
-                }
+                recordUnsubmittedFundingSafely(proposal, generation)
             }
         }
     }
+
+    private suspend fun writeFundingReservation(proposal: SwapTransactionProposal, generation: Long) {
+        var acknowledged = false
+        try {
+            // Finish the write before inspecting it if the caller loses its acknowledgement.
+            withContext(NonCancellable) { writePendingTracking(proposal, generation) }
+            currentCoroutineContext().ensureActive()
+            acknowledged = true
+        } finally {
+            if (!acknowledged) recordUnsubmittedFundingSafely(proposal, generation)
+        }
+    }
+
+    private suspend fun recordUnsubmittedFundingSafely(proposal: SwapTransactionProposal, generation: Long) =
+        withContext(NonCancellable) {
+            runCatchingRecoverable { recordUnsubmittedFunding(proposal, generation) }.onFailure { error ->
+                Twig.warn { "Unable to record unsubmitted swap funding (${error.javaClass.simpleName})" }
+            }
+        }
 
     private suspend fun recordUnsubmittedFunding(proposal: SwapTransactionProposal, generation: Long) {
         val identity = proposal.quote.reviewedIdentity() ?: return

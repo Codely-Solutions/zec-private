@@ -108,6 +108,9 @@ interface SwapRepository {
 
     /** One owner may navigate for a prepared result, including after a cancel sheet closes. */
     fun consumeReview(expected: SwapQuoteData? = null): SwapQuoteData?
+
+    /** Recheck after suspending between a navigation claim and opening Review. */
+    fun isReviewCurrent(result: SwapQuoteData): Boolean
 }
 
 data class IncomingSwapOwner(val account: WalletAccount, val walletWriteToken: Long)
@@ -655,7 +658,7 @@ class SwapRepositoryImpl(
     }
 
     override fun markReviewReady(result: SwapQuoteData): Boolean = synchronized(this) {
-        if (quote.value !== result || result === consumedReview || result == SwapQuoteData.Loading) {
+        if (!isReviewCurrent(result) || result === consumedReview) {
             return@synchronized false
         }
         readyReview = result
@@ -663,10 +666,29 @@ class SwapRepositoryImpl(
     }
 
     override fun consumeReview(expected: SwapQuoteData?): SwapQuoteData? = synchronized(this) {
-        readyReview?.takeIf { it === quote.value && (expected == null || it === expected) }
+        readyReview?.takeIf { (expected == null || it === expected) && isReviewCurrent(it) }
             ?.also { readyReview = null; consumedReview = it }
     }
+
+    override fun isReviewCurrent(result: SwapQuoteData): Boolean {
+        if (quote.value !== result) return false
+        return when (result) {
+            is SwapQuoteData.Success -> assets.value.admits(result.quote)
+            is SwapQuoteData.Error -> true
+            SwapQuoteData.Loading -> false
+        }
+    }
 }
+
+private fun SwapAssetsData.admits(quote: SwapQuote): Boolean =
+    admits(quote.originAsset) && admits(quote.destinationAsset)
+
+private fun SwapAssetsData.admits(asset: SwapAsset): Boolean =
+    if (asset.isZCashAsset) {
+        asset.isCanonicalNativeZec && zecAsset?.isCanonicalNativeZec == true && zecAsset.assetId == asset.assetId
+    } else {
+        SwapPriceMarkets.reference(asset) != null && SwapPriceMarkets.findAsset(data, asset.assetId) != null
+    }
 
 private fun mergeRecoveryAssets(current: List<SwapAsset>, previous: List<SwapAsset>): List<SwapAsset> =
     current + previous.filter { old -> current.none { it.assetId == old.assetId } }
