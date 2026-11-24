@@ -58,7 +58,8 @@ def quote(mode,incoming,dry=True):
         reason=result.get('http_error','') if result else ''
         raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status)+' '+reason)
     echo=result['quoteRequest']
-    if (echo['swapType']!=mode or echo['recipient']!=body['recipient'] or echo['refundTo']!=body['refundTo']):
+    if (echo['dry'] is not dry or echo['swapType']!=mode or echo['recipient']!=body['recipient']
+            or echo['refundTo']!=body['refundTo']):
         raise RuntimeError('NEAR quote echo is incompatible; publication stopped')
     if not dry:
         required=('depositAddress','amountIn','amountInFormatted','amountInUsd','minAmountIn',
@@ -80,9 +81,13 @@ def main():
     status,poll=request('/v0/status?'+urllib.parse.urlencode({'depositAddress':address}))
     if status!=200 or poll['status']!='PENDING_DEPOSIT':
         raise RuntimeError('Unauthenticated unused-quote status contract changed')
-    if (poll['quoteResponse']['quoteRequest']['refundTo']!=FIXTURE['unified'] or
-            poll['quoteResponse']['quoteRequest']['recipient']!=FIXTURE['bitcoin']):
-        raise RuntimeError('NEAR status changed recipient or refund destination')
+    echoed_quote = poll['quoteResponse']
+    if (echoed_quote['quoteRequest']['dry'] is not False
+            or echoed_quote['quoteRequest']['refundTo'] != FIXTURE['unified']
+            or echoed_quote['quoteRequest']['recipient'] != FIXTURE['bitcoin']
+            or echoed_quote['quote']['depositAddress'] != address
+            or int(echoed_quote['quote']['amountOut']) != int(result['quote']['amountOut'])):
+        raise RuntimeError('NEAR status changed the reviewed funding quote')
     status,_=request('/v0/deposit/submit',{})
     if status not in (400,422):
         raise RuntimeError('Unauthenticated deposit input-validation contract changed: HTTP '+str(status))

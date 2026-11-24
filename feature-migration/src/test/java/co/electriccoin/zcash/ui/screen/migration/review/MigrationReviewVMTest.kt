@@ -335,7 +335,7 @@ class MigrationReviewVMTest {
             coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
         }
         val tor = mockk<IsMigrationTorEnabledStorageProvider> {
-            coEvery { get(any<String>()) } returns false
+            coEvery { this@mockk.get(any<String>()) } returns false
         }
         val vm = vm(
             router = FakeNavigationRouter(),

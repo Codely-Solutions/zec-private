@@ -196,7 +196,8 @@ class SwapQuoteVMTest {
             coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
         }
         val publication = SwapQuoteData.Success(quote)
-        val vm = vm(zashi(), proposals = proposals, quoteData = publication,
+        val account = zashi()
+        val vm = vm(account, proposals = proposals, quoteData = publication,
             submit = submit, prices = prices)
         collect(vm)
         kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
@@ -204,6 +205,7 @@ class SwapQuoteVMTest {
         val sdkProposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(10_000) }
         val prepared = mockk<SwapTransactionProposal> {
             every { this@mockk.quote } returns quote
+            every { fundingAccount } returns account
             every { proposal } returns sdkProposal
         }
         proposals.value = prepared
@@ -302,6 +304,7 @@ class SwapQuoteVMTest {
                 val sdkProposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1_000) }
                 mockk<SwapTransactionProposal> {
                     every { quote } returns preparedQuote
+                    every { fundingAccount } returns account
                     every { proposal } returns sdkProposal
                 }
             }

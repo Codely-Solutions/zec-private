@@ -8,12 +8,10 @@ import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.WalletAccount
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
@@ -174,9 +172,8 @@ class SubmitProposalUseCaseTest {
     fun zashiSubmitFailureStillClearsPrefillAndStillNavigates() =
         runTest {
             val fx = useCase()
-            coEvery { fx.accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
             val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
-            fx.zashiProposal.value = proposal
+            fx.givenZashi(proposal)
             coEvery { fx.zashiProposalRepository.submit(any(), matchNullable { true }) } throws RuntimeException("boom")
 
             fx.submitReviewed(proposal)
@@ -274,6 +271,20 @@ class SubmitProposalUseCaseTest {
         coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
     }
 
+    @Test
+    fun outgoingApprovalRefusesAProposalForAnotherAccountAfterAuthentication() = runTest {
+        val fx = useCase()
+        val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
+        fx.givenZashi(proposal)
+        every { proposal.fundingAccount } returns EditAccountFixtures.keystone()
+
+        fx.submitReviewed(proposal)
+
+        verify(exactly = 1) { fx.navigateToError(any(), any()) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        verify(exactly = 0) { fx.navigationRouter.replace(TransactionProgressArgs) }
+    }
+
     private suspend fun swapProposal(
         tokenTicker: String,
         chainTicker: String
@@ -291,7 +302,9 @@ class SubmitProposalUseCaseTest {
     }
 
     private fun Fixtures.givenKeystone(proposal: TransactionProposal) {
-        coEvery { accountDataSource.getSelectedAccount() } returns spendable<KeystoneAccount>()
+        val account = EditAccountFixtures.keystone()
+        coEvery { accountDataSource.getSelectedAccount() } returns account
+        if (proposal is SwapTransactionProposal) every { proposal.fundingAccount } returns account
         every { keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
     }
 
@@ -304,7 +317,9 @@ class SubmitProposalUseCaseTest {
         proposal: TransactionProposal,
         submitResult: SubmitResult = mockk(relaxed = true)
     ) {
-        coEvery { accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
+        val account = EditAccountFixtures.zodl()
+        coEvery { accountDataSource.getSelectedAccount() } returns account
+        if (proposal is SwapTransactionProposal) every { proposal.fundingAccount } returns account
         zashiProposal.value = proposal
         coEvery { zashiProposalRepository.submit(proposal, matchNullable { true }) } returns submitResult
     }

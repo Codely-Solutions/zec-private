@@ -744,11 +744,9 @@ class RequestSwapQuoteUseCaseTest {
             val entered = CompletableDeferred<Unit>()
             coEvery { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) } answers {
                 entered.complete(Unit)
-                Unit
             }
             coEvery { swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any()) } answers {
                 entered.complete(Unit)
-                Unit
             }
             val job = launch {
                 if (mode == SwapMode.EXACT_INPUT) request.exactInput() else request.exactOutput()
