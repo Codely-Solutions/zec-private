@@ -198,9 +198,9 @@ class MigrationProgressVM(
                         isSent = t.isSent,
                     )
                 },
-            isComplete = snapshot.isComplete,
+            isComplete = snapshot.areAllMined,
             onBack = ::onBack,
-            onDone = if (snapshot.isComplete) ::onDone else null,
+            onDone = if (snapshot.areAllMined) ::onDone else null,
         )
     }
 

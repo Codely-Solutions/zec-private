@@ -37,7 +37,6 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
@@ -90,8 +89,8 @@ class MigrationReviewVMTest {
                 }
             val router = FakeNavigationRouter()
             val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
-            val reviewed = MigrationSweepTransactionProposal(Zatoshi(500_000L), proposal)
-            every { zashiProposalRepository.setMigrationSweepProposal(proposal, reviewed.amount) } returns reviewed
+            val reviewed = MigrationSweepTransactionProposal(proposal)
+            every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
             val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val vm =
                 vm(
@@ -107,7 +106,7 @@ class MigrationReviewVMTest {
             // send-max sweep proposal into the shared send pipeline (SubmitProposalUseCase owns biometrics,
             // broadcast, and the Transaction Progress navigation).
             coVerifyOrder {
-                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
+                zashiProposalRepository.setMigrationSweepProposal(proposal)
                 submitProposal(reviewed)
             }
         }
@@ -137,7 +136,7 @@ class MigrationReviewVMTest {
             advanceUntilIdle()
 
             coVerifyOrder {
-                keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
+                keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 keystoneProposalRepository.createPCZTFromProposal(any())
             }
             assertEquals(
@@ -344,6 +343,47 @@ class MigrationReviewVMTest {
     }
 
     @Test
+    fun uncertainSplitContinuesTheExactCommittedPlanWithoutAnotherBroadcast() = runTest {
+        val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
+        val expected = schedule(42L, 100_000L)
+        val nativeTransfer = mockk<cash.z.ecc.android.sdk.MigrationTransferState> {
+            every { isTransfer } returns true
+            every { id } returns 42L
+            every { amountZatoshi } returns 100_000L
+        }
+        val state = MigrationState.InProgress(mockk(relaxed = true))
+        var committed = false
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } coAnswers {
+                if (committed) state else MigrationState.NotStarted
+            }
+            coEvery { isNoteSplitNeeded() } returns true
+            coEvery { prepareNoteSplit() } returns split
+            coEvery { proposeMigrationTransfersFromSplit(split) } returns expected
+            coEvery { submitNoteSplit(split, any()) } coAnswers {
+                committed = true
+                TransferResult.NetworkError(retryable = true)
+            }
+            coEvery { getMigrationTransferStates() } returns
+                cash.z.ecc.android.sdk.MigrationTransferStates(listOf(nativeTransfer), 100L)
+        }
+        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
+        val vm = vm(
+            router = FakeNavigationRouter(),
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+            finalizeMigrationSchedule = finalize,
+        )
+
+        vm.currentReview().onConfirm()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        coVerify(exactly = 1) { finalize(expected, MigrationMode.AUTOMATIC, any(), false) }
+    }
+
+    @Test
     fun torProtectedSoftwarePlanStopsBeforeAnUnsupportedSplit() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { isNoteSplitNeeded() } returns true
@@ -449,8 +489,8 @@ class MigrationReviewVMTest {
             advanceUntilIdle()
 
             assertRefusedAsViewOnly(vm)
-            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
+            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
             coVerify(exactly = 0) { submitProposal(any()) }
             assertEquals(emptyList(), router.forwardedRoutes)
@@ -535,16 +575,14 @@ class MigrationReviewVMTest {
     private fun invokeOnConfirmImmediate(
         vm: MigrationReviewVM,
         proposal: Proposal,
-        amountZatoshi: Zatoshi = Zatoshi(500_000L)
     ) {
         val method =
             MigrationReviewVM::class.java.getDeclaredMethod(
                 "onConfirmImmediate",
                 Proposal::class.java,
-                Zatoshi::class.java,
             )
         method.isAccessible = true
-        method.invoke(vm, proposal, amountZatoshi)
+        method.invoke(vm, proposal)
     }
 
     private fun vm(
@@ -585,7 +623,6 @@ class MigrationReviewVMTest {
                 every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
             },
         getSelectedWalletAccount = getSelectedWalletAccount,
-        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk(any()) } returns Zatoshi(500_000L) },
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
         biometricRepository = mockk<BiometricRepository>(relaxed = true),

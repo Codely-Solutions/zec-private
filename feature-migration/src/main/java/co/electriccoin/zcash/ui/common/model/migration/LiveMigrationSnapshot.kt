@@ -27,6 +27,7 @@ data class LiveMigrationSnapshot(
 ) {
     val nextPending: LiveMigrationTransfer? get() = transfers.firstOrNull { !it.isSent }
     val completedCount: Int get() = transfers.count { it.isSent }
+    val minedCount: Int get() = transfers.count { it.minedHeight != null }
     val totalCount: Int get() = transfers.size
     val isComplete: Boolean get() = transfers.isNotEmpty() && transfers.all { it.isSent }
     val areAllMined: Boolean get() = transfers.isNotEmpty() && transfers.all { it.minedHeight != null }

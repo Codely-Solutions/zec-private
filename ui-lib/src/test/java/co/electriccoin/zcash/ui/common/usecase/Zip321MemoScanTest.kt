@@ -280,7 +280,6 @@ class Zip321MemoScanTest {
             observeClearSend = clearSend,
             accountDataSource = accounts,
             swapRepository = mockk(),
-            migrationNavigator = mockk(),
         )
         scan(parse(fixture.binary), ScanArgs(ScanFlow.HOMEPAGE))
 

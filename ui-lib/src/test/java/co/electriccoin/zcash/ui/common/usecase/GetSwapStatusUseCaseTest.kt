@@ -335,9 +335,9 @@ class GetSwapStatusUseCaseTest {
             }
         }
         val states = mutableListOf<SwapQuoteStatusData>()
-        backgroundScope.launch {
-            GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
-                .observe("deposit").collect { states += it }
+        val useCase = GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
+        val observer = backgroundScope.launch {
+            useCase.observe("deposit").collect { states += it }
         }
         runCurrent()
         assertTrue(states.last().isFundingWindowOpen)
@@ -361,6 +361,8 @@ class GetSwapStatusUseCaseTest {
         stalledPoll.complete(incomplete)
         runCurrent()
         assertFalse(states.last().isFundingWindowOpen)
+        observer.cancel()
+        assertFalse(useCase("deposit").isFundingWindowOpen)
     }
 
     private fun swapStatusResult(

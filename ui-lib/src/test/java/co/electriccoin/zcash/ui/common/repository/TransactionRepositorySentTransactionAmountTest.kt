@@ -18,7 +18,8 @@ class TransactionRepositorySentTransactionAmountTest {
         netValue: Long,
         zip318Kind: Zip318Kind,
         minedHeight: BlockHeight? = null,
-        raw: FirstClassByteArray? = null
+        raw: FirstClassByteArray? = null,
+        crossingValue: Long? = null,
     ): TransactionOverview =
         TransactionOverview(
             txId = TransactionId.new(ByteArray(32)),
@@ -39,10 +40,19 @@ class TransactionRepositorySentTransactionAmountTest {
             transactionState = TransactionState.Pending,
             isShielding = false,
             spentNoteCount = 0,
-            poolCrossingValue = null,
+            poolCrossingValue = crossingValue?.let(::Zatoshi),
             isTrusted = false,
             zip318Kind = zip318Kind
         )
+
+    @Test
+    fun walletInternalCrossingUsesTheSdkValueEvenWhenTheNoteCountsDisagree() {
+        val overview = overview(
+            sentNoteCount = 1, receivedNoteCount = 2, totalReceived = 1_100_000, netValue = 1_000,
+            zip318Kind = Zip318Kind.TRANSFER, crossingValue = 500_000,
+        )
+        assertEquals(500_000L, sentTransactionAmount(overview).value)
+    }
 
     @Test
     fun ordinary_sent_transaction_uses_net_value() {

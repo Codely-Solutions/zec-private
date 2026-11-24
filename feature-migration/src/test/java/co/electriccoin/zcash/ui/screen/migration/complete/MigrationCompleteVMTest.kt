@@ -6,17 +6,13 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Proposal
-import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
-import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.MutableLce
-import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
@@ -28,9 +24,14 @@ import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvi
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
+import cash.z.ecc.android.sdk.MigrationState
+import kotlin.test.assertFalse
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 import kotlin.time.Instant
@@ -40,7 +41,6 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.migrationMessageFor
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -259,17 +259,19 @@ class MigrationCompleteVMTest {
         }
 
     @Test
-    fun migrateAnywayForZashiAccountSignsAndSubmitsProposalDirectly() =
+    fun migrateAnywayForZashiAccountHandsTheOriginalProposalToSharedSubmission() =
         runTest {
             val router = FakeNavigationRouter()
-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
+            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val proposal = mockk<Proposal>(relaxed = true)
-            val usk = mockk<UnifiedSpendingKey>(relaxed = true)
             val sdk =
                 mockk<OrchardMigrationSdk> {
                     coEvery { proposeImmediateMigration() } returns proposal
                 }
-            coEvery { proposalDataSource.submitTransaction(proposal, usk) } returns SubmitResult.Success(listOf("txid"))
+            val adopted = MigrationSweepTransactionProposal(proposal)
+            val zashiProposalRepository = mockk<ZashiProposalRepository> {
+                every { setMigrationSweepProposal(proposal) } returns adopted
+            }
 
             val vm =
                 vm(
@@ -277,16 +279,17 @@ class MigrationCompleteVMTest {
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-                    zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
-                    proposalDataSource = proposalDataSource,
+                    zashiProposalRepository = zashiProposalRepository,
+                    submitProposal = submitProposal,
+                    args = MigrationCompleteArgs(isResidueOnly = true),
                 )
 
             advanceUntilIdle()
             invokeOnMigrateAnyway(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proposal, usk) }
-            assertEquals(listOf<Any>(MigrationSuccessArgs("txid")), router.forwardedRoutes)
+            coVerify(exactly = 1) { submitProposal(adopted) }
+            assertEquals(emptyList(), router.forwardedRoutes)
         }
 
     @Test
@@ -299,7 +302,7 @@ class MigrationCompleteVMTest {
                     coEvery { proposeImmediateMigration() } returns proposal
                 }
             val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
+            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
 
             val vm =
                 vm(
@@ -308,16 +311,17 @@ class MigrationCompleteVMTest {
                     router = router,
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     keystoneProposalRepository = keystoneProposalRepository,
-                    proposalDataSource = proposalDataSource,
+                    submitProposal = submitProposal,
+                    args = MigrationCompleteArgs(isResidueOnly = true),
                 )
 
             advanceUntilIdle()
             invokeOnMigrateAnyway(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L)) }
+            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal) }
             coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
-            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+            coVerify(exactly = 0) { submitProposal(any()) }
             assertEquals(1, router.forwardedRoutes.count { it == SignKeystoneTransactionArgs })
         }
 
@@ -366,6 +370,7 @@ class MigrationCompleteVMTest {
         advanceUntilIdle()
 
         val state = assertNotNull(vm.state.value.content)
+        assertFalse(state.canShowCompletion)
         assertNull(state.totalTransferred)
         assertNull(state.transfersProgress)
         assertNull(state.duration)
@@ -460,18 +465,17 @@ class MigrationCompleteVMTest {
                 mockk<OrchardMigrationSdk> {
                     coEvery { proposeImmediateMigration() } returns mockk(relaxed = true)
                 }
-            val zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true)
             val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
+            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val vm =
                 vm(
                     account = mockk<ViewOnlyAccount>(relaxed = true) { every { isSpendable } returns false },
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-                    zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
                     keystoneProposalRepository = keystoneProposalRepository,
-                    proposalDataSource = proposalDataSource,
+                    submitProposal = submitProposal,
+                    args = MigrationCompleteArgs(isResidueOnly = true),
                 )
 
             advanceUntilIdle()
@@ -488,9 +492,8 @@ class MigrationCompleteVMTest {
                 AccountOperationUnsupportedException.Kind.VIEW_ONLY,
                 assertIs<AccountOperationUnsupportedException>(error.cause).kind
             )
-            coVerify(exactly = 0) { zashiSpendingKeyDataSource.getZashiSpendingKey() }
-            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
+            coVerify(exactly = 0) { submitProposal(any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
@@ -541,11 +544,13 @@ class MigrationCompleteVMTest {
         getMigrationSnapshot: GetMigrationSnapshotUseCase = mockk { coEvery { this@mockk(any()) } returns null },
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk {
-                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true)
+                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true) {
+                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.Complete
+                }
             },
-        zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource = mockk(relaxed = true),
         biometricRepository: BiometricRepository = mockk(relaxed = true),
-        proposalDataSource: ProposalDataSource = mockk(relaxed = true),
+        zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
+        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
         keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
     ) = MigrationCompleteVM(
         args = args,
@@ -574,9 +579,9 @@ class MigrationCompleteVMTest {
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         getMigrationSnapshot = getMigrationSnapshot,
         lockOrchardBalance = mockk(relaxed = true),
-        zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
         biometricRepository = biometricRepository,
-        proposalDataSource = proposalDataSource,
+        zashiProposalRepository = zashiProposalRepository,
+        submitProposal = submitProposal,
         keystoneProposalRepository = keystoneProposalRepository,
     )
 

@@ -24,7 +24,7 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 internal class SwapQuoteVMMapper {
     @Suppress("UseCheckOrError")
@@ -34,6 +34,7 @@ internal class SwapQuoteVMMapper {
         onSubmitQuoteClick: () -> Unit,
         onNavigateToOnRampSwap: () -> Unit,
         priceCheck: IndependentPriceCheck? = null,
+        assessmentTime: Instant = Clock.System.now(),
         canFund: () -> Boolean = { Clock.System.now() < state.quote.deadline },
     ): SwapQuoteState.Success =
         with(state) {
@@ -50,7 +51,7 @@ internal class SwapQuoteVMMapper {
                 from = createFromState(),
                 to = createToState(),
                 items = createItems(),
-                amount = createTotalAmountState(),
+                amount = createTotalAmountState(assessmentTime),
                 onBack = onBack,
                 infoText = createInfoText(),
                 priceCheck = priceCheck?.let(::mapPriceCheck),
@@ -161,7 +162,7 @@ internal class SwapQuoteVMMapper {
             }
         )
 
-    private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
+    private fun SwapQuoteInternalState.createTotalAmountState(assessmentTime: Instant): SwapQuoteInfoItem =
         SwapQuoteInfoItem(
             description =
                 if (quote.destinationAsset.isZCashAsset) {
@@ -195,16 +196,16 @@ internal class SwapQuoteVMMapper {
             fiatAmount = quoteFiatAmount(quote.amountOutUsd),
             token = stringRes(quote.destinationAsset.tokenTicker),
             chain = quote.destinationAsset.chainName,
-            valueDifference = createValueDifference(),
+            valueDifference = createValueDifference(assessmentTime),
         )
 
-    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
+    private fun SwapQuoteInternalState.createValueDifference(assessmentTime: Instant): QuoteValueDifferenceState? {
         val percentage = quoteValueDifference(
             totalSpendUsd = totalUsd,
             receivedUsd = quote.amountOutUsd,
             quotedAt = quote.timestamp,
             deadline = quote.deadline,
-            now = Clock.System.now(),
+            now = assessmentTime,
         ) ?: return null
         val rounded = percentage.setScale(2, RoundingMode.HALF_UP)
         val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
@@ -217,7 +218,6 @@ internal class SwapQuoteVMMapper {
             percentage = stringRes(signed),
             explanation = stringRes(scope),
             isNegative = rounded.signum() < 0,
-            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
         )
     }
 

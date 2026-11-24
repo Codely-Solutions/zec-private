@@ -45,7 +45,7 @@ class ZashiProposalRepositoryTest {
     @Test
     fun migrationAdoptionReturnsTheExactReviewIdentityPublishedForAuthentication() {
         val sdkProposal = mockk<Proposal>()
-        val adopted = repository.setMigrationSweepProposal(sdkProposal, Zatoshi(1234))
+        val adopted = repository.setMigrationSweepProposal(sdkProposal)
 
         assertSame(adopted, repository.transactionProposal.value)
         assertSame(sdkProposal, adopted.proposal)

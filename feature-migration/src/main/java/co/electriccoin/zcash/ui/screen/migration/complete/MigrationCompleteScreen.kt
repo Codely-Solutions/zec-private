@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -52,7 +53,6 @@ import co.electriccoin.zcash.ui.design.util.scaffoldPadding
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.common.PrivacyDisclaimerCard
-import co.electriccoin.zcash.ui.screen.migration.component.MigrationFailureBottomSheet
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -68,9 +68,9 @@ data class MigrationCompleteState(
     val onMigrateAnyway: () -> Unit,
     val onLockBalance: () -> Unit,
     val onHelp: () -> Unit,
+    val canShowCompletion: Boolean = true,
     val isMigrating: Boolean = false,
     val isLocking: Boolean = false,
-    val failureSheet: co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState? = null,
     // MOB-1750: true for a small leftover Orchard balance not tied to an unseen in-app migration
     // celebration ("You've moved to Ironwood" copy, no Transfers/Duration rows) — false for the
     // original post-migration celebration variant ("Migration Complete"), unchanged.
@@ -90,7 +90,18 @@ fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
     LceRenderer(
         state = state,
         loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
-    ) { MigrationCompleteView(it) }
+    ) { content ->
+        if (content.canShowCompletion) {
+            MigrationCompleteView(content)
+        } else {
+            MigrationUnavailable(
+                message = stringRes(DesignR.string.migrationProgress_unavailable),
+                onBack = content.onDone,
+                onRetry = content.onDone,
+                retryLabel = stringRes(co.electriccoin.zcash.ui.R.string.general_back),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -264,7 +275,6 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
             }
         }
     }
-    MigrationFailureBottomSheet(state.failureSheet)
 }
 
 @Composable

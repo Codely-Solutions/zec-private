@@ -52,7 +52,6 @@ import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
@@ -85,7 +84,6 @@ class MigrationReviewVM(
     private val navigationRouter: NavigationRouter,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
-    private val getOrchardBalance: GetOrchardBalanceUseCase,
     private val errorStateMapper: ErrorMapperUseCase,
     private val zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource,
     private val biometricRepository: BiometricRepository,
@@ -95,20 +93,14 @@ class MigrationReviewVM(
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 ) : ViewModel() {
-    // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
-    // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
-    // destination of its own (only totalFeeRequired()/transactionCount()); the amount shown is
-    // this account's Orchard balance at propose time (the whole point of a send-max sweep).
+    // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
     private sealed class ReviewProposal {
         data class Automatic(
             val reviewed: ReviewedMigrationSchedule,
             val keystoneRunCount: Int?
         ) : ReviewProposal()
 
-        data class Immediate(
-            val proposal: Proposal,
-            val amountZatoshi: Zatoshi
-        ) : ReviewProposal()
+        data class Immediate(val proposal: Proposal) : ReviewProposal()
     }
 
     // Measured block rate captured at propose time; 75s until then. Drives every
@@ -166,7 +158,6 @@ class MigrationReviewVM(
             val result =
                 when (args.mode) {
                     MigrationMode.IMMEDIATE -> {
-                        val amount = getOrchardBalance(account.sdkAccount.accountUuid)
                         val t0 = SystemClock.elapsedRealtime()
                         migrationLog("MIGRATION_DIAG ReviewVM: proposeImmediateMigration start")
                         val proposal = sdk.proposeImmediateMigration()
@@ -174,7 +165,7 @@ class MigrationReviewVM(
                             "MIGRATION_DIAG ReviewVM: proposeImmediateMigration done in " +
                                 "${SystemClock.elapsedRealtime() - t0}ms"
                         )
-                        ReviewProposal.Immediate(proposal, amount)
+                        ReviewProposal.Immediate(proposal)
                     }
 
                     MigrationMode.AUTOMATIC -> {
@@ -260,7 +251,7 @@ class MigrationReviewVM(
             }
 
             is ReviewProposal.Immediate -> {
-                createImmediateState(proposal, isConfirming, exchangeRateState)
+                createImmediateState(proposal, isConfirming)
             }
         }
 
@@ -332,34 +323,30 @@ class MigrationReviewVM(
         )
     }
 
-    // proposeImmediateMigration()'s raw send-max Proposal carries no destination-facing
-    // "list of transfers" the way a MigrationSchedule does — this renders it as a single
-    // synthetic row so the (shared) review layout still has something to show, using the real
-    // fee from Proposal.totalFeeRequired() instead of AUTOMATIC's placeholder.
+    // The public SDK exposes the sweep fee. The exact eligible amount is available in history after creation.
     private fun createImmediateState(
         proposal: ReviewProposal.Immediate,
         isConfirming: Boolean,
-        exchangeRateState: ExchangeRateState,
     ): MigrationReviewState {
         val fee = proposal.proposal.totalFeeRequired()
         return MigrationReviewState(
             mode = args.mode,
-            totalAmount = stringRes(proposal.amountZatoshi),
-            totalFiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
+            totalAmount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
+            totalFiatAmount = null,
             estimatedDuration = stringRes(formatMigrationDuration(0L)),
             transfers =
                 listOf(
                     MigrationReviewTransferState(
                         index = 1,
                         totalCount = 1,
-                        amount = stringRes(proposal.amountZatoshi),
-                        fiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
+                        amount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
+                        fiatAmount = null,
                         scheduledLabel = stringRes(DesignR.string.migrationReview_sendImmediately),
                     )
                 ),
             fee = stringRes(fee),
             isConfirming = isConfirming,
-            onConfirm = { onConfirmImmediate(proposal.proposal, proposal.amountZatoshi) },
+            onConfirm = { onConfirmImmediate(proposal.proposal) },
             onBack = ::onBack,
             // Submit failures now surface on the Sending screen (which owns the broadcast) rather
             // than here — this screen only hands the signed proposal off after biometric auth.
@@ -446,7 +433,7 @@ class MigrationReviewVM(
             if (split != null) {
                 val result = sdk.submitNoteSplit(split, spendingKey)
                 if (result !is TransferResult.Success) {
-                    failure.value = result
+                    onSplitFailure(result, sdk, reviewed, accountKeyId)
                     return
                 }
                 synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
@@ -463,6 +450,21 @@ class MigrationReviewVM(
             } else {
                 loadProposal()
             }
+        }
+    }
+
+    private suspend fun onSplitFailure(
+        result: TransferResult,
+        sdk: OrchardMigrationSdk,
+        reviewed: ReviewedMigrationSchedule,
+        accountKeyId: String,
+    ) {
+        if (result is TransferResult.NetworkError && result.retryable && sdk.hasCommitted(reviewed.schedule)) {
+            requireReviewAccount()
+            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, false)
+            navigationRouter.backToRoot()
+        } else {
+            failure.value = result
         }
     }
 
@@ -493,7 +495,7 @@ class MigrationReviewVM(
     // MigrationSweepTransactionProposal, then hand off to SubmitProposalUseCase (biometrics + async
     // broadcast + Transaction Progress screen, whose sending/success states already render the
     // migration-sweep "…migrated to Ironwood" copy). No migration-specific screen or handoff.
-    private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
+    private fun onConfirmImmediate(proposal: Proposal) =
         confirmLce.execute {
             val account = requireReviewAccount()
             if (account is KeystoneAccount) {
@@ -519,7 +521,7 @@ class MigrationReviewVM(
                     return@execute
                 }
                 requireReviewAccount()
-                keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
+                keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
@@ -528,7 +530,7 @@ class MigrationReviewVM(
                 keystoneProposalRepository.approveForSigning()
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
-                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
+                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
                 submitProposal(reviewed)
             }
         }
@@ -659,10 +661,11 @@ class MigrationReviewVM(
     }
 }
 
-private fun RuntimeException.requiresNewMigrationReview(): Boolean =
+internal fun Throwable.requiresNewMigrationReview(): Boolean =
     message?.contains("StalePlan") == true ||
         message?.contains("BoundaryCheckpointMissing") == true ||
-        message?.contains("plan superseded", ignoreCase = true) == true
+        message?.contains("superseded by a newer proposal", ignoreCase = true) == true ||
+        message?.contains("No pending migration proposal", ignoreCase = true) == true
 
 private const val MAX_MIGRATION_PROPOSAL_ATTEMPTS = 8
 
@@ -686,4 +689,11 @@ private suspend fun OrchardMigrationSdk.prepareReviewedAutomaticMigration(): Rev
         }
     }
     error("The SDK did not provide a usable migration proposal. Try again.")
+}
+
+private suspend fun OrchardMigrationSdk.hasCommitted(schedule: cash.z.ecc.android.sdk.MigrationSchedule): Boolean {
+    if (getMigrationStateUnreconciled() !is MigrationState.InProgress) return false
+    val stored = getMigrationTransferStates()?.transfers?.filter { it.isTransfer } ?: return false
+    return stored.isNotEmpty() &&
+        stored.associate { it.id to it.amountZatoshi } == schedule.transfers.associate { it.id to it.amountZatoshi }
 }

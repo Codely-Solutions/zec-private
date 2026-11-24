@@ -186,6 +186,22 @@ class NearSwapDataSourceTest {
         }
 
     @Test
+    fun incomingQuoteChecksTheExternalDepositAgainstTheOriginNetwork() = runBlocking {
+        val returned = SwapInputProvenanceFixture.status(
+            origin, zec, "t1wrongnetwork", SwapType.FLEX_INPUT, "{}",
+        ).response.quoteResponse
+        coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
+            returned.copy(quoteRequest = firstArg())
+        }
+        val failure = assertFailsWith<IllegalArgumentException> {
+            dataSource.requestQuote(
+                SwapMode.FLEX_INPUT, BigDecimal.ONE, "refund", origin, "destination", zec, BigDecimal.ONE
+            )
+        }
+        assertEquals("Swap quote deposit address does not match the selected network", failure.message)
+    }
+
+    @Test
     fun freshQuoteRefusesAnUnexpectedAppFee() = runBlocking {
         val returned = SwapInputProvenanceFixture.status(
             origin, zec, "synthetic-deposit", SwapType.FLEX_INPUT, "{}",

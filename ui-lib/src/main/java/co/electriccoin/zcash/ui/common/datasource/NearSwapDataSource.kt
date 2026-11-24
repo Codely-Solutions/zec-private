@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.datasource
 
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
+import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
 import co.electriccoin.zcash.ui.common.model.SwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -184,6 +185,11 @@ class NearSwapDataSource(
             val deposit = response.quote.depositAddress
             require(deposit.isNotEmpty() && deposit.all { it in '!'..'~' }) {
                 "Swap quote deposit address must be a single address"
+            }
+            require(originAsset.isZCashAsset ||
+                RecipientAddressPolicy.validate(deposit, originAsset.blockchain.chainTicker) is
+                    RecipientAddressPolicy.Validation.Valid) {
+                "Swap quote deposit address does not match the selected network"
             }
             NearSwapQuote(
                 response = response,

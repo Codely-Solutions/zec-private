@@ -141,7 +141,7 @@ class MigrationHomeMessageSourceImpl(
             if (snapshot != null && hasUnprovable) {
                 return@combine MigrationHomeMessageData(
                     isRunActive = true,
-                    completedCount = snapshot.completedCount,
+                    completedCount = snapshot.minedCount,
                     totalCount = snapshot.totalCount,
                     attentionKind = MigrationAttentionKind.PLAN_UPDATE,
                     accountKeyId = accountKeyId,
@@ -462,7 +462,7 @@ internal fun migrationMessageFor(
             snapshot != null -> {
             MigrationHomeMessageData(
                 isRunActive = true,
-                completedCount = snapshot.completedCount,
+                completedCount = snapshot.minedCount,
                 totalCount = snapshot.totalCount,
                 attentionKind = attentionKind ?: sdkState.reason.toUiKind(),
                 attentionRangeText = attentionRangeText,
@@ -477,7 +477,7 @@ internal fun migrationMessageFor(
             next.scheduledAt <= now -> {
             MigrationHomeMessageData(
                 isRunActive = true,
-                completedCount = snapshot.completedCount,
+                completedCount = snapshot.minedCount,
                 totalCount = snapshot.totalCount,
                 isReadyToSend = true,
             )
@@ -487,7 +487,7 @@ internal fun migrationMessageFor(
             MigrationHomeMessageData(
                 isRunActive = true,
                 isAwaitingSignatures = hasSignatureBlock,
-                completedCount = snapshot?.completedCount ?: 0,
+                completedCount = snapshot?.minedCount ?: 0,
                 totalCount = snapshot?.totalCount ?: 0,
             )
         }
@@ -501,7 +501,7 @@ internal fun migrationMessageFor(
             orchardBalanceZatoshi < MIGRATION_RESIDUAL_MIN_ZATOSHI -> {
             MigrationHomeMessageData(
                 isRunActive = false,
-                completedCount = snapshot?.completedCount ?: 0,
+                completedCount = snapshot?.minedCount ?: 0,
                 totalCount = snapshot?.totalCount ?: 0,
                 isComplete = true,
             )

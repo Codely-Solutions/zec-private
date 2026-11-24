@@ -205,7 +205,6 @@ class SwapQuoteVMMapperTest {
                 percentage = co.electriccoin.zcash.ui.design.util.stringRes("-1.50%"),
                 explanation = co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_value_difference_known),
                 isNegative = true,
-                validUntilMillis = (now + kotlin.time.Duration.parse("3m")).toEpochMilliseconds(),
             ),
             map(quote).to.valueDifference,
         )

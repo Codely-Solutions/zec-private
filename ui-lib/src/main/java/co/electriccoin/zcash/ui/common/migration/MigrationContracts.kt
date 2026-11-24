@@ -85,8 +85,6 @@ interface MigrationNavContributor {
  * (Send was never on that back stack — see CancelProposalFlowUseCase).
  */
 interface MigrationNavigator {
-    fun backToMigrationReview()
-
     /** Opens the Restart Migration screen (Advanced settings entry point). */
     fun forwardToRestartMigration()
 }

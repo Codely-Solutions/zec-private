@@ -89,7 +89,10 @@ def reviewed_request(request):
             or request.get('depositMode', 'SIMPLE') != 'SIMPLE'):
         raise RuntimeError('Unsupported NEAR quote request terms')
     fees = request['appFees']
-    if not isinstance(fees, list) or any(type(entry['fee']) is not int or entry['fee'] != 0 for entry in fees):
+    if not isinstance(fees, list) or any(
+        type(entry.get('recipient')) is not str or type(entry.get('fee')) is not int or entry['fee'] != 0
+        for entry in fees
+    ):
         raise RuntimeError('NEAR quote echoed an app fee')
     return tuple(request[field] for field in route_fields) + (
         request['dry'], request['slippageTolerance'], read_positive_atomic(request['amount']),
@@ -131,6 +134,36 @@ def reviewed_quote(result, require_deposit=True):
     return reviewed_request(request), address, amount_in, minimum_in, amount_out, minimum_out, deadline
 
 
+def require_status_details(details):
+    if details is None:
+        return
+    if not isinstance(details, dict):
+        raise RuntimeError('Invalid NEAR status details')
+    for field in ('amountIn', 'amountOut', 'depositedAmount', 'refundedAmount'):
+        raw = details.get(field)
+        formatted = details.get(field + 'Formatted')
+        usd = details.get(field + 'Usd')
+        if raw is not None:
+            raw = read_decimal(raw)
+            if raw < 0 or raw != raw.to_integral_value():
+                raise RuntimeError('NEAR status amount is not a whole number of base units')
+        if formatted is not None:
+            formatted = read_decimal(formatted)
+            if formatted < 0 or (raw is not None and formatted != Decimal(f'{int(raw)}e-8')):
+                raise RuntimeError('NEAR status value does not match base units')
+        if usd is not None:
+            read_decimal(usd)
+    if details.get('slippage') is not None and type(details['slippage']) is not int:
+        raise RuntimeError('Invalid NEAR status slippage')
+    for field in ('originChainTxHashes', 'destinationChainTxHashes'):
+        hashes = details.get(field)
+        if hashes is not None and (
+            not isinstance(hashes, list) or any(not isinstance(item, dict) or type(item.get('hash')) is not str
+                                                for item in hashes)
+        ):
+            raise RuntimeError('Invalid NEAR status transaction references')
+
+
 def main():
     for mode,incoming in [('FLEX_INPUT',True),('EXACT_INPUT',False),('EXACT_OUTPUT',False)]:
         quote(mode,incoming)
@@ -146,6 +179,7 @@ def main():
     if status!=200 or poll['status']!='PENDING_DEPOSIT':
         raise RuntimeError('Unauthenticated unused-quote status contract changed')
     read_timestamp(poll['updatedAt'])
+    require_status_details(poll.get('swapDetails'))
     if reviewed_quote(poll['quoteResponse']) != reviewed:
         raise RuntimeError('NEAR status changed the reviewed funding quote')
     status,_=request('/v0/deposit/submit',{})

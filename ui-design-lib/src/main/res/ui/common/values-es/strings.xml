@@ -1246,8 +1246,9 @@
     <string name="migrationHowItWorks_disclaimer">Elegir esta opción puede requerir dejar una pequeña cantidad (menos de 0.01 ZEC) en el pool de Orchard, que no se transferirá.</string>
 
     <string name="migrationReview_title">Revisar transferencia</string>
-    <string name="migrationReview_immediateBody">Todo tu saldo de Orchard se transferirá a Ironwood en una sola transferencia en cadena. Una vez confirmada, esta transferencia no se puede cancelar.</string>
+    <string name="migrationReview_immediateBody">La transferencia mueve los fondos elegibles de Orchard a Ironwood. Una vez confirmada, esta transferencia no se puede cancelar.</string>
     <string name="migrationReview_feeLabel">Comisión</string>
+    <string name="migrationReview_eligibleOrchardFunds">Fondos elegibles de Orchard</string>
     <string name="migrationReview_amountLabel">Monto</string>
     <string name="migrationReview_signing">Firmando...</string>
     <string name="migrationReview_confirm">Confirmar</string>

@@ -25,6 +25,9 @@ import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import co.electriccoin.zcash.ui.design.R as DesignR
@@ -48,6 +51,13 @@ class MigrationKeystoneScanVM(
         )
 
     val failureSheet = MutableStateFlow<MigrationTransferFailureState?>(null)
+
+    val isScanReady = getSelectedWalletAccount.observe()
+        .map { account ->
+            val key = account.sdkAccount.accountUuid.toStorageKeyId()
+            (args.accountKeyId == null || args.accountKeyId == key) &&
+                pendingSchedule.peek(key) != null && pendingKeystonePczts.peek(key)?.isFullySigned == false
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), null)
 
     private var isProcessing = false
     private var hasResetDecoder = false
@@ -265,4 +275,6 @@ class MigrationKeystoneScanVM(
     }
 
     fun onBack() = navigationRouter.back()
+
+    fun recoverFromHome() = navigationRouter.backToRoot()
 }

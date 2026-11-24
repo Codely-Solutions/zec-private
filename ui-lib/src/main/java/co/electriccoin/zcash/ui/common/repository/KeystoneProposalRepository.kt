@@ -85,7 +85,7 @@ interface KeystoneProposalRepository {
      * [cash.z.ecc.android.sdk.OrchardMigrationSdk.proposeImmediateMigration]) so [createPCZTFromProposal]
      * can build a Keystone PCZT from it exactly as it would from any other proposal.
      */
-    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
+    fun setMigrationSweepProposal(proposal: Proposal)
 
     /**
      * The SDK rejects any multi-step proposal for PCZT generation. That rejection is surfaced as
@@ -229,8 +229,8 @@ class KeystoneProposalRepositoryImpl(
         }
     }
 
-    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
-        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
+    override fun setMigrationSweepProposal(proposal: Proposal) {
+        transactionProposal.update { MigrationSweepTransactionProposal(proposal) }
     }
 
     override suspend fun createPCZTFromProposal() =

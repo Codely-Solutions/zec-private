@@ -183,6 +183,9 @@ for clear in (False, True):
             ('quoteRequest', 'appFees', [{'recipient': 'fixture', 'fee': 1}]),
             ('quote', 'amountInUsd', 'undefined'), ('envelope', 'timestamp', None),
             ('status', 'updatedAt', 'invalid'),
+            ('quoteRequest', 'appFees', [{'fee': 0}]),
+            ('status', 'swapDetails', {'depositedAmount': '0.5'}),
+            ('status', 'swapDetails', {'amountOut': '500000', 'amountOutFormatted': '1'}),
         )
         with fixture_directory() as temp:
             root = Path(temp)

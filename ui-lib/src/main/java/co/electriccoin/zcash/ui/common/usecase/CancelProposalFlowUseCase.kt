@@ -9,7 +9,6 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -30,7 +29,6 @@ class CancelProposalFlowUseCase(
     private val observeClearSend: ObserveClearSendUseCase,
     private val accountDataSource: AccountDataSource,
     private val swapRepository: SwapRepository,
-    private val migrationNavigator: MigrationNavigator,
 ) {
     suspend operator fun invoke(clearSendForm: Boolean = true) {
         val proposal =
@@ -56,13 +54,7 @@ class CancelProposalFlowUseCase(
                 navigationRouter.backTo(PayArgs::class)
             }
 
-            is MigrationSweepTransactionProposal -> {
-                // Reached via MigrationReviewVM's IMMEDIATE-mode Keystone branch, never via the
-                // ordinary Send flow — Send was never on this back stack, so falling through to
-                // the `else` branch's `backTo(Send::class)` would silently no-op (no matching
-                // destination to pop to), leaving the user stuck on the Sign/reject sheet.
-                migrationNavigator.backToMigrationReview()
-            }
+            is MigrationSweepTransactionProposal -> navigationRouter.back()
 
             is ShieldTransactionProposal -> {
                 // Reached via ShieldFundsUseCase's Keystone branch, which (unlike the Zashi

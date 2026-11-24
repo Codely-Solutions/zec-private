@@ -269,8 +269,6 @@ class MigrationAppHooksImpl(
 class MigrationNavigatorImpl(
     private val navigationRouter: NavigationRouter,
 ) : MigrationNavigator {
-    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
-
     override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
 }
 

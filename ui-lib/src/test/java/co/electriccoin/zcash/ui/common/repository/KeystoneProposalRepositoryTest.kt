@@ -40,12 +40,11 @@ class KeystoneProposalRepositoryTest {
     @Test
     fun setMigrationSweepProposalPublishesAMigrationSweepTransactionProposal() {
         val proposal = mockk<Proposal>()
-        val amount = Zatoshi(1234L)
 
-        repository.setMigrationSweepProposal(proposal, amount)
+        repository.setMigrationSweepProposal(proposal)
 
         val stored = repository.transactionProposal.value
-        assertEquals(MigrationSweepTransactionProposal(amount, proposal), stored)
+        assertEquals(MigrationSweepTransactionProposal(proposal), stored)
     }
 
     /**
@@ -87,7 +86,7 @@ class KeystoneProposalRepositoryTest {
     @Test
     fun aMultiStepPcztRejectionOfAMigrationSweepPropagatesUntouched() =
         runBlocking {
-            repository.setMigrationSweepProposal(mockk<Proposal>(), Zatoshi(1234L))
+            repository.setMigrationSweepProposal(mockk<Proposal>())
             coEvery { accountDataSource.getSelectedAccount() } returns mockk(relaxed = true)
             coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
                 PcztException.MultiStepProposalUnsupportedException()

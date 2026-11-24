@@ -560,7 +560,6 @@ data class ExactOutputSwapTransactionProposal(
  * generic Transaction Progress screen renders its sending/success states.
  */
 data class MigrationSweepTransactionProposal(
-    val amount: Zatoshi,
     override val proposal: Proposal,
 ) : TransactionProposal
 

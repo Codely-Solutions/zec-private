@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
 import androidx.lifecycle.ViewModel
+import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -62,6 +63,7 @@ internal class SwapQuoteVM(
     private val submitProposal: SubmitProposalUseCase,
     private val navigationRouter: NavigationRouter,
     private val independentPrices: IndependentPriceProvider,
+    private val priceClock: Clock = ElapsedTimeClock(),
 ) : ViewModel() {
     private companion object {
         const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
@@ -73,7 +75,7 @@ internal class SwapQuoteVM(
     private val proposals = observeProposal.observeNullable().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val clock = flow {
         while (true) {
-            emit(Clock.System.now().toEpochMilliseconds())
+            emit(priceClock.now().toEpochMilliseconds())
             delay(PRICE_CLOCK_INTERVAL_MILLIS)
         }
     }
@@ -96,7 +98,9 @@ internal class SwapQuoteVM(
             }
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(
+                ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO
+            ),
             initialValue = if (swapRepository.quote.value == null) unavailableState() else null
         )
 
@@ -143,7 +147,7 @@ internal class SwapQuoteVM(
             val proposalChanged = quote.quote.requiresLocalProposal && proposals.value !== proposal
             val invalidReview = currentPublication !== quote || !quote.canFund(now) || proposalChanged
             if (isClosing || invalidReview) return
-            val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
+            val current = priceCheck.value.current(quote.quote, fee, priceClock.now().toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
             action()
         }
@@ -153,6 +157,7 @@ internal class SwapQuoteVM(
             onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal, quote) } },
             onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
             priceCheck = assessment,
+            assessmentTime = kotlin.time.Instant.fromEpochMilliseconds(nowMillis),
             canFund = { quote.canFund(Clock.System.now()) },
         )
     }

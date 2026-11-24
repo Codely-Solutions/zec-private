@@ -13,7 +13,6 @@ import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionPropo
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
@@ -66,7 +65,6 @@ class CancelProposalFlowUseCaseTest {
                             coEvery { getSelectedAccount() } returns mockk<ZodlAccount>(relaxed = true)
                         },
                     swapRepository = mockk<SwapRepository>(relaxed = true),
-                    migrationNavigator = FakeMigrationNavigator(),
                 )
 
             useCase()
@@ -81,15 +79,14 @@ class CancelProposalFlowUseCaseTest {
         }
 
     @Test
-    fun migrationSweepProposalNavigatesBackToMigrationReviewInsteadOfSend() =
+    fun migrationSweepRejectionPopsToTheActualOrigin() =
         runTest {
-            val proposal = MigrationSweepTransactionProposal(Zatoshi(500_000L), mockk<Proposal>())
+            val proposal = MigrationSweepTransactionProposal(mockk<Proposal>())
             val keystoneProposalRepository =
                 mockk<KeystoneProposalRepository>(relaxed = true) {
                     coEvery { getTransactionProposal() } returns proposal
                 }
             val router = FakeNavigationRouter()
-            val migrationNavigator = FakeMigrationNavigator()
             val useCase =
                 CancelProposalFlowUseCase(
                     zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true),
@@ -102,14 +99,13 @@ class CancelProposalFlowUseCaseTest {
                             coEvery { getSelectedAccount() } returns mockk<KeystoneAccount>(relaxed = true)
                         },
                     swapRepository = mockk<SwapRepository>(relaxed = true),
-                    migrationNavigator = migrationNavigator,
                 )
 
             useCase()
 
             coVerify(exactly = 1) { keystoneProposalRepository.clear() }
             assertEquals(0, router.backToCalls.size)
-            assertEquals(1, migrationNavigator.backToReviewCalls)
+            assertEquals(1, router.backCalls)
         }
 
     @Test
@@ -133,7 +129,6 @@ class CancelProposalFlowUseCaseTest {
                             coEvery { getSelectedAccount() } returns mockk<KeystoneAccount>(relaxed = true)
                         },
                     swapRepository = mockk<SwapRepository>(relaxed = true),
-                    migrationNavigator = FakeMigrationNavigator(),
                 )
 
             useCase()
@@ -170,7 +165,6 @@ class CancelProposalFlowUseCaseTest {
                             coEvery { getSelectedAccount() } returns mockk<LedgerAccount>(relaxed = true)
                         },
                     swapRepository = mockk<SwapRepository>(relaxed = true),
-                    migrationNavigator = FakeMigrationNavigator(),
                 )
 
             useCase()
@@ -180,18 +174,6 @@ class CancelProposalFlowUseCaseTest {
             assertEquals(Send::class, router.backToCalls.single())
             assertEquals(0, router.backCalls)
         }
-
-    private class FakeMigrationNavigator : MigrationNavigator {
-        var backToReviewCalls = 0
-
-        override fun backToMigrationReview() {
-            backToReviewCalls++
-        }
-
-        override fun forwardToRestartMigration() {
-            // no-op fake
-        }
-    }
 
     private class FakeNavigationRouter : NavigationRouter {
         val backToCalls = mutableListOf<KClass<*>>()

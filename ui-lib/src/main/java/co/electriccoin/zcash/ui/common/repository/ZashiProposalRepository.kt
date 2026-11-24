@@ -70,7 +70,7 @@ interface ZashiProposalRepository {
      * like a regular send (mirrors [KeystoneProposalRepository.setMigrationSweepProposal]).
      * Returns the exact adopted review identity for the authentication handoff.
      */
-    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal
+    fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal
 
     suspend fun submit(
         expectedProposal: TransactionProposal? = null,
@@ -153,8 +153,8 @@ class ZashiProposalRepositoryImpl(
         }
     }
 
-    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal =
-        MigrationSweepTransactionProposal(amount, proposal).also { sweep -> transactionProposal.update { sweep } }
+    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
+        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
 
     @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
     override suspend fun submit(

@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
+import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
+import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -22,8 +24,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
-import kotlin.time.Duration
-import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.seconds
 
@@ -31,10 +31,11 @@ class GetSwapStatusUseCase(
     private val metadataRepository: MetadataRepository,
     private val swapRepository: SwapRepository,
     context: Context? = null,
-    private val clock: Clock = Clock.System,
-    private val timeSource: TimeSource = TimeSource.Monotonic,
+    clock: Clock = Clock.System,
+    timeSource: TimeSource = AndroidElapsedTimeSource,
 ) {
     private val donationPreferences = context?.let(::DonationPreferences)
+    private val fundingClock = ElapsedTimeClock(clock, timeSource)
     private val refreshes = mutableMapOf<String, RefreshLock>()
 
     suspend operator fun invoke(depositAddress: String) = observe(depositAddress).first { !it.isLoading }
@@ -79,7 +80,6 @@ class GetSwapStatusUseCase(
 
                 data.update { it.copy(savedMetadata = expectedMetadata) }
 
-                val fundingWindow = FundingWindow(clock, timeSource)
                 var fundingExpiry: Job? = null
                 while (true) {
                     try {
@@ -87,7 +87,8 @@ class GetSwapStatusUseCase(
                         if (result.status == SwapStatus.SUCCESS) {
                             donationPreferences?.recordSuccessfulTransaction()
                         }
-                        val fundingTimeLeft = fundingWindow.remaining(result)
+                        val fundingTimeLeft = result.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }
+                            ?.let { it.deadline - fundingClock.now() }?.takeIf { it.isPositive() }
                         fundingExpiry?.cancel()
                         data.update {
                             it.copy(
@@ -164,21 +165,6 @@ class GetSwapStatusUseCase(
             synchronized(refreshes) {
                 if (--refresh.users == 0) refreshes.remove(depositAddress)
             }
-        }
-    }
-
-    private class FundingWindow(private val clock: Clock, private val timeSource: TimeSource) {
-        private var cutoff: TimeMark? = null
-
-        fun remaining(status: SwapQuoteStatus): Duration? {
-            if (status.status != SwapStatus.INCOMPLETE_DEPOSIT) return null
-            val byClock = status.deadline - clock.now()
-            val byElapsedTime = cutoff?.elapsedNow()?.unaryMinus()
-            // A clock correction or identical later poll may shorten this window, never extend it.
-            if (byElapsedTime == null || byClock < byElapsedTime) {
-                cutoff = timeSource.markNow() + byClock
-            }
-            return minOf(byClock, byElapsedTime ?: byClock).takeIf { it.isPositive() }
         }
     }
 

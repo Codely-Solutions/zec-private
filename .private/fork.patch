@@ -3414,7 +3414,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..9b25ea211 100644
+index 294506ed1..52655d9cd 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -3605,27 +3605,29 @@ index 294506ed1..9b25ea211 100644
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -244 +274 @@ class MigrationNavigatorImpl(
+@@ -242,3 +272 @@ class MigrationNavigatorImpl(
+-    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
+-
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -255,2 +285,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -255,2 +283,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationBatteryArgs> { MigrationBatteryScreen() }
 -            composable<MigrationNotificationArgs> { MigrationNotificationScreen() }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +289 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +287 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
-@@ -261 +291 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +289 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
-@@ -263 +293 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263 +291 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 +            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
-@@ -265 +295 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -265 +293 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
 +            composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
-@@ -267 +297 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -267 +295 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationRestartArgs> { MigrationRestartScreen() }
 +            composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt
@@ -3643,10 +3645,12 @@ index a842c2763..a2d52f07a 100644
 @@ -144,0 +149 @@ val featureMigrationModule =
 +                resetPending = resetProgress.isPending,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshot.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshot.kt
-index 53fda8d0d..1cdadb277 100644
+index 53fda8d0d..01cbd40f2 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshot.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshot.kt
-@@ -31,0 +32 @@ data class LiveMigrationSnapshot(
+@@ -29,0 +30 @@ data class LiveMigrationSnapshot(
++    val minedCount: Int get() = transfers.count { it.minedHeight != null }
+@@ -31,0 +33 @@ data class LiveMigrationSnapshot(
 +    val areAllMined: Boolean get() = transfers.isNotEmpty() && transfers.all { it.minedHeight != null }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/HasLockedOrchardDustStorageProvider.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/HasLockedOrchardDustStorageProvider.kt
 index d5320419b..5f6793834 100644
@@ -4339,7 +4343,7 @@ index c2045aa9b..4bae99de4 100644
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        sdk.lockRemainingOrchardBalance()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
-index b76ce6c65..b4d622d9b 100644
+index b76ce6c65..dccd54848 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 @@ -16,0 +17 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
@@ -4492,7 +4496,7 @@ index b76ce6c65..b4d622d9b 100644
 +            if (snapshot != null && hasUnprovable) {
 +                return@combine MigrationHomeMessageData(
 +                    isRunActive = true,
-+                    completedCount = snapshot.completedCount,
++                    completedCount = snapshot.minedCount,
 +                    totalCount = snapshot.totalCount,
 +                    attentionKind = MigrationAttentionKind.PLAN_UPDATE,
 +                    accountKeyId = accountKeyId,
@@ -4603,10 +4607,21 @@ index b76ce6c65..b4d622d9b 100644
 -    // leaving a schedule permanently stuck exactly like this.
 +    // An unsigned committed step needs user action. The banner uses the retained reviewed
 +    // plan when available and offers explicit recovery if this process no longer has it.
-@@ -433 +488,2 @@ internal fun migrationMessageFor(
+@@ -410 +465 @@ internal fun migrationMessageFor(
+-                completedCount = snapshot.completedCount,
++                completedCount = snapshot.minedCount,
+@@ -425 +480 @@ internal fun migrationMessageFor(
+-                completedCount = snapshot.completedCount,
++                completedCount = snapshot.minedCount,
+@@ -433,2 +488,3 @@ internal fun migrationMessageFor(
 -                isRunActive = !hasSignatureBlock,
+-                completedCount = snapshot?.completedCount ?: 0,
 +                isRunActive = true,
 +                isAwaitingSignatures = hasSignatureBlock,
++                completedCount = snapshot?.minedCount ?: 0,
+@@ -448 +504 @@ internal fun migrationMessageFor(
+-                completedCount = snapshot?.completedCount ?: 0,
++                completedCount = snapshot?.minedCount ?: 0,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
 index 7c9893c8a..ebeb5198b 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
@@ -4718,9 +4733,13 @@ index 3c54b5657..ec4662494 100644
 +
 +    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
-index 8d9ded4e7..329dd61bb 100644
+index 8d9ded4e7..39074d59c 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
+@@ -32,0 +33 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
+@@ -55 +55,0 @@ import co.electriccoin.zcash.ui.screen.common.PrivacyDisclaimerCard
+-import co.electriccoin.zcash.ui.screen.migration.component.MigrationFailureBottomSheet
 @@ -62 +62 @@ data class MigrationCompleteState(
 -    val totalTransferred: StringResource,
 +    val totalTransferred: StringResource?,
@@ -4729,16 +4748,36 @@ index 8d9ded4e7..329dd61bb 100644
 -    val duration: StringResource,
 +    val transfersProgress: StringResource?,
 +    val duration: StringResource?,
+@@ -70,0 +71 @@ data class MigrationCompleteState(
++    val canShowCompletion: Boolean = true,
+@@ -73 +73,0 @@ data class MigrationCompleteState(
+-    val failureSheet: co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState? = null,
 @@ -82 +82,2 @@ data class MigrationCompleteArgs(
 -    val isResidueOnly: Boolean = false
 +    val isResidueOnly: Boolean = false,
 +    val accountKeyId: String? = null
-@@ -178 +178,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -92 +93,12 @@ fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
+-    ) { MigrationCompleteView(it) }
++    ) { content ->
++        if (content.canShowCompletion) {
++            MigrationCompleteView(content)
++        } else {
++            MigrationUnavailable(
++                message = stringRes(DesignR.string.migrationProgress_unavailable),
++                onBack = content.onDone,
++                onRetry = content.onDone,
++                retryLabel = stringRes(co.electriccoin.zcash.ui.R.string.general_back),
++            )
++        }
++    }
+@@ -178 +189,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                Spacer(Modifier.height(24.dp))
-@@ -271,0 +272,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -267 +277,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+-    MigrationFailureBottomSheet(state.failureSheet)
+@@ -271,0 +282,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +    if (state.totalTransferred == null && state.remainingDust == null && state.transfersProgress == null) return
 +    Spacer(Modifier.height(24.dp))
-@@ -281,13 +283,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -281,13 +293,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        if (state.isResidueOnly) {
 -            // MOB-1750: reduced summary — no Transfers/Duration rows, since a residue not tied
 -            // to an unseen in-app celebration has no round-trip campaign to report on (whether
@@ -4757,7 +4796,7 @@ index 8d9ded4e7..329dd61bb 100644
 +                DesignR.string.migrationComplete_inIronwoodLabel
 +            } else {
 +                DesignR.string.migrationComplete_totalTransferredLabel
-@@ -295,10 +289,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -295,10 +299,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        } else {
 -            SummaryRow(
 -                label = stringRes(DesignR.string.migrationComplete_totalTransferredLabel).getValue(),
@@ -4775,61 +4814,98 @@ index 8d9ded4e7..329dd61bb 100644
 +                DesignR.string.migrationComplete_leftInOrchardLabel
 +            } else {
 +                DesignR.string.migrationComplete_remainingDustLabel
-@@ -305,0 +297,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -305,0 +307,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +            SummaryRow(label = stringRes(label).getValue(), value = dust.getValue())
 +        }
 +        state.transfersProgress?.let {
-@@ -308 +302 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -308 +312 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.transfersProgress.getValue(),
 +                value = it.getValue(),
-@@ -309,0 +304,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -309,0 +314,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +        }
 +        state.duration?.let {
-@@ -312 +308 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -312 +318 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.duration.getValue(),
 +                value = it.getValue(),
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
-index ca5f70e55..9475665c4 100644
+index ca5f70e55..f68bc5583 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
+@@ -5 +5 @@ import androidx.lifecycle.viewModelScope
+-import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.MigrationState
 @@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.zcash.migration.migrationLog
-@@ -15,0 +17 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
+@@ -9,2 +9,0 @@ import co.electriccoin.zcash.ui.R
+-import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
+-import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
+@@ -15 +14 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
+-import co.electriccoin.zcash.ui.common.model.SubmitResult
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -28 +29,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
+@@ -19 +17,0 @@ import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZA
+-import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
+@@ -28 +25,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
 -import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
-@@ -36,0 +38 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+@@ -33,0 +31 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+@@ -36,0 +35 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
-@@ -45 +47,3 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -39,0 +39 @@ import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
++import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+@@ -43 +42,0 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
+-import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
+@@ -45,2 +44,4 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 -import co.electriccoin.zcash.work.MigrationScheduler
+-import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CoroutineStart
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
-@@ -46,0 +51 @@ import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.async
-@@ -49,0 +55,2 @@ import kotlinx.coroutines.flow.combine
+@@ -49,0 +51,2 @@ import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.flatMapLatest
 +import kotlinx.coroutines.flow.flowOf
-@@ -62,0 +70 @@ class MigrationCompleteVM(
+@@ -51 +53,0 @@ import kotlinx.coroutines.launch
+-import kotlinx.coroutines.withContext
+@@ -62,0 +65 @@ class MigrationCompleteVM(
 +    private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
-@@ -69,2 +76,0 @@ class MigrationCompleteVM(
+@@ -65 +67,0 @@ class MigrationCompleteVM(
+-    private val zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource,
+@@ -67 +68,0 @@ class MigrationCompleteVM(
+-    private val proposalDataSource: ProposalDataSource,
+@@ -69,2 +70,2 @@ class MigrationCompleteVM(
 -    private val migrationScheduler: MigrationScheduler,
 -    private val migrationNotifier: MigrationNotifier,
-@@ -73,4 +79,4 @@ class MigrationCompleteVM(
++    private val zashiProposalRepository: ZashiProposalRepository,
++    private val submitProposal: SubmitProposalUseCase,
+@@ -73,4 +74,5 @@ class MigrationCompleteVM(
 -        val totalTransferred: Long,
 -        val totalCount: Int,
 -        val firstAt: Long,
 -        val lastAt: Long,
 +        val accountKeyId: String,
++        val canShowCompletion: Boolean,
 +        val totalTransferred: Long?,
 +        val totalCount: Int?,
 +        val durationSeconds: Long?,
-@@ -100,0 +107,4 @@ class MigrationCompleteVM(
+@@ -80,11 +81,0 @@ class MigrationCompleteVM(
+-    // Cached across a failed-then-retried "Migrate anyway" attempt so a GrpcFailure retry (see
+-    // immediateSubmitFailureMessage's kdoc in MigrationReviewVM, the reference implementation this
+-    // mirrors) resubmits the exact same already-built/signed Proposal instead of re-proposing (which
+-    // could pick different notes) or re-prompting biometrics.
+-    private data class MigrateAnywayProposal(
+-        val proposal: Proposal,
+-        val amountZatoshi: Zatoshi
+-    )
+-
+-    private var pendingMigrateAnywayProposal: MigrateAnywayProposal? = null
+-
+@@ -99 +90,4 @@ class MigrationCompleteVM(
+-    private val migrateAnywayFailure = MutableStateFlow<SubmitResult?>(null)
++
 +    private val completionOwnerKey = viewModelScope.async(start = CoroutineStart.LAZY) {
 +        args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +    }
-+
-@@ -103,11 +113,4 @@ class MigrationCompleteVM(
+@@ -103,11 +97,4 @@ class MigrationCompleteVM(
 -            // MOB-1750: the residue variant's "In Ironwood" row is the live Ironwood pool
 -            // balance (GetIronwoodBalanceUseCase, same source GetBalancePoolsUseCase's Balance
 -            // Breakdown sheet already uses) rather than the migration engine's own campaign-
@@ -4845,18 +4921,19 @@ index ca5f70e55..9475665c4 100644
 +            val uuid = owner.sdkAccount.accountUuid
 +            val key = uuid.toStorageKeyId()
 +            val summary = if (args.isResidueOnly) {
-@@ -115,5 +118,5 @@ class MigrationCompleteVM(
+@@ -115,5 +102,6 @@ class MigrationCompleteVM(
 -                    totalTransferred = getIronwoodBalance().value,
 -                    totalCount = 0,
 -                    firstAt = 0L,
 -                    lastAt = 0L,
 -                    dustZatoshi = getOrchardBalance().value,
 +                    accountKeyId = key,
++                    canShowCompletion = true,
 +                    totalTransferred = getIronwoodBalance(uuid).value,
 +                    totalCount = null,
 +                    durationSeconds = null,
 +                    dustZatoshi = getOrchardBalance(uuid).value,
-@@ -122,8 +125,4 @@ class MigrationCompleteVM(
+@@ -122,8 +110,7 @@ class MigrationCompleteVM(
 -                // Read the REAL migration summary (amount migrated, transfer count, duration)
 -                // from the ENGINE's persisted migration data — the single source of truth that
 -                // survives completion. The app-side plan is cleared once migration finishes, so
@@ -4867,25 +4944,29 @@ index ca5f70e55..9475665c4 100644
 -                val summary = getOrchardMigrationSdk().getMigrationSummary()
 +                // The pinned SDK's historical summary combines runs and accounts. Only a
 +                // current snapshot requested for this account can supply these figures.
-+                val transfers = getMigrationSnapshot(key)?.takeIf { it.areAllMined }?.transfers
++                val snapshot = getMigrationSnapshot(key)
++                val transfers = snapshot?.takeIf { it.areAllMined }?.transfers
++                val canShowCompletion = transfers != null || (snapshot == null &&
++                    getOrchardMigrationSdk(key)?.getMigrationStateUnreconciled() == MigrationState.Complete)
 +                val minedAt = transfers?.let { rows -> rows.mapNotNull { it.minedAt }.takeIf { it.size == rows.size } }
-@@ -131,5 +130,7 @@ class MigrationCompleteVM(
+@@ -131,5 +118,8 @@ class MigrationCompleteVM(
 -                    totalTransferred = summary?.totalMigratedZatoshi ?: 0L,
 -                    totalCount = summary?.transferCount ?: 0,
 -                    firstAt = summary?.firstMinedEpochSeconds ?: 0L,
 -                    lastAt = summary?.lastMinedEpochSeconds ?: 0L,
 -                    dustZatoshi = getOrchardBalance().value,
 +                    accountKeyId = key,
++                    canShowCompletion = canShowCompletion,
 +                    totalTransferred = transfers?.takeIf { it.all { row -> row.amountZatoshi > 0L } }
 +                        ?.sumOf { it.amountZatoshi },
 +                    totalCount = transfers?.size,
 +                    durationSeconds = minedAt?.takeIf { it.isNotEmpty() }
 +                        ?.let { (it.max() - it.min()).inWholeSeconds },
 +                    dustZatoshi = getOrchardBalance(uuid).value,
-@@ -137,0 +139,2 @@ class MigrationCompleteVM(
+@@ -137,0 +128,2 @@ class MigrationCompleteVM(
 +            activeCompletionOwner()
 +            summary
-@@ -139,16 +142,7 @@ class MigrationCompleteVM(
+@@ -139,16 +131,7 @@ class MigrationCompleteVM(
 -        // Cancel the background chain and clear any leftover notification as soon as THIS screen
 -        // is shown, not deferred until the user taps "Got it" (the previous behavior — onDone()
 -        // still cancels the scheduler too, harmlessly idempotent, but the notifier calls only ever
@@ -4909,19 +4990,29 @@ index ca5f70e55..9475665c4 100644
 +        val owner = getSelectedWalletAccount()
 +        check(owner.sdkAccount.accountUuid.toStorageKeyId() == key) {
 +            "The migration belongs to a different account"
-@@ -155,0 +150 @@ class MigrationCompleteVM(
+@@ -155,0 +139 @@ class MigrationCompleteVM(
 +        return owner
-@@ -157,0 +153 @@ class MigrationCompleteVM(
+@@ -157,0 +142 @@ class MigrationCompleteVM(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -161 +157,3 @@ class MigrationCompleteVM(
+@@ -161 +146,3 @@ class MigrationCompleteVM(
 -            hasLockedOrchardDustStorageProvider.observe(),
 +            loadLce.state.flatMapLatest { state ->
 +                state.success?.accountKeyId?.let(hasLockedOrchardDustStorageProvider::observe) ?: flowOf(false)
 +            },
-@@ -179 +177 @@ class MigrationCompleteVM(
+@@ -164,2 +151 @@ class MigrationCompleteVM(
+-            migrateAnywayFailure,
+-        ) { lce, isLocked, migrateAnywayState, lockState, failure ->
++        ) { lce, isLocked, migrateAnywayState, lockState ->
+@@ -167 +153 @@ class MigrationCompleteVM(
+-                createState(summary, isLocked, migrateAnywayState.loading, lockState.loading, failure)
++                createState(summary, isLocked, migrateAnywayState.loading, lockState.loading)
+@@ -176 +161,0 @@ class MigrationCompleteVM(
+-        failure: SubmitResult?,
+@@ -179 +164,2 @@ class MigrationCompleteVM(
 -            totalTransferred = stringRes(Zatoshi(summary.totalTransferred)),
++            canShowCompletion = summary.canShowCompletion,
 +            totalTransferred = summary.totalTransferred?.let { stringRes(Zatoshi(it)) },
-@@ -182,14 +180,6 @@ class MigrationCompleteVM(
+@@ -182,14 +168,6 @@ class MigrationCompleteVM(
 -            transfersProgress =
 -                stringRes(
 -                    DesignR.string.migrationComplete_transfersProgress,
@@ -4942,9 +5033,37 @@ index ca5f70e55..9475665c4 100644
 +            duration = summary.durationSeconds?.let {
 +                stringRes(formatMigrationDuration(it, applyPrivacyFloor = false))
 +            },
-@@ -231,0 +222 @@ class MigrationCompleteVM(
+@@ -203,18 +180,0 @@ class MigrationCompleteVM(
+-            failureSheet =
+-                failure?.let {
+-                    MigrationTransferFailureState(
+-                        message = migrateAnywaySubmitFailureMessage(it),
+-                        // Only a GrpcFailure is safely resubmittable — see MigrationReviewVM's
+-                        // identical reasoning for onRetry there.
+-                        onRetry =
+-                            if (it is SubmitResult.GrpcFailure) {
+-                                {
+-                                    migrateAnywayFailure.value = null
+-                                    migrateAnywayLce.execute { retryMigrateAnyway() }
+-                                }
+-                            } else {
+-                                null
+-                            },
+-                        onDismiss = { migrateAnywayFailure.value = null },
+-                    )
+-                },
+@@ -223,9 +183 @@ class MigrationCompleteVM(
+-    private fun migrateAnywaySubmitFailureMessage(result: SubmitResult): StringResource =
+-        when (result) {
+-            is SubmitResult.GrpcFailure -> stringRes(DesignR.string.migrationComplete_migrateAnywayFailureNetworkError)
+-            is SubmitResult.Failure -> stringRes(DesignR.string.migrationComplete_migrateAnywayFailureRejected)
+-            is SubmitResult.Error -> stringRes(DesignR.string.migrationComplete_migrateAnywayFailureError)
+-            is SubmitResult.Partial -> stringRes(DesignR.string.migrationComplete_migrateAnywayFailurePartial)
+-            is SubmitResult.Success -> error("migrateAnywaySubmitFailureMessage called with a Success result")
+-        }
+-
 +    @Suppress("TooGenericExceptionCaught") // Leave acknowledgment available after a storage or account error.
-@@ -235,36 +226,7 @@ class MigrationCompleteVM(
+@@ -235,36 +187,7 @@ class MigrationCompleteVM(
 -                // Keystone-only auto-continuation (hot-wallet multi-run is deferred): if residual
 -                // Orchard balance is still at or above the engine's real migratable minimum (not
 -                // just non-zero — a multi-round campaign's per-round MigrationState.Complete doesn't
@@ -4986,9 +5105,9 @@ index ca5f70e55..9475665c4 100644
 +                // A Keystone account can need another round even after the current one completes.
 +                val moreRoundsNeeded = owner is KeystoneAccount &&
 +                    getOrchardBalance(uuid).value >= MIGRATION_RESIDUAL_MIN_ZATOSHI
-+                if (!moreRoundsNeeded) {
++                if (!moreRoundsNeeded && (args.isResidueOnly || hasCompletionEvidence(uuid.toStorageKeyId()))) {
 +                    hasSeenMigrationCompleteStorageProvider.store(uuid.toStorageKeyId(), true)
-@@ -272,4 +234,4 @@ class MigrationCompleteVM(
+@@ -272,4 +195,4 @@ class MigrationCompleteVM(
 -            } finally {
 -                // Guaranteed regardless of the above outcome (or an exception partway through it) —
 -                // navigation away from this screen must never be silently skipped.
@@ -4997,44 +5116,124 @@ index ca5f70e55..9475665c4 100644
 +                throw e
 +            } catch (e: Exception) {
 +                migrationLog("Migration acknowledgment unavailable (${e.javaClass.simpleName}).")
-@@ -276,0 +239 @@ class MigrationCompleteVM(
+@@ -276,0 +200 @@ class MigrationCompleteVM(
 +            navigationRouter.backToRoot()
-@@ -280,4 +242,0 @@ class MigrationCompleteVM(
+@@ -280,4 +203,0 @@ class MigrationCompleteVM(
 -    // "Lock balance" locks the residual Orchard balance directly (real lock in Rust —
 -    // MigrationSdk.lockRemainingOrchardBalance → lockRemainingOrchardBalanceNative), then flips the
 -    // persisted flag that re-renders this screen into its "Orchard balance locked" state. No
 -    // navigation: the user stays on this screen and confirms the result inline.
-@@ -286,2 +245,3 @@ class MigrationCompleteVM(
+@@ -286,2 +206,3 @@ class MigrationCompleteVM(
 -            lockOrchardBalance()
 -            hasLockedOrchardDustStorageProvider.store(true)
 +            val key = activeCompletionOwner().sdkAccount.accountUuid.toStorageKeyId()
 +            lockOrchardBalance(key)
 +            hasLockedOrchardDustStorageProvider.store(key, true)
-@@ -298,0 +259 @@ class MigrationCompleteVM(
+@@ -293,4 +213,0 @@ class MigrationCompleteVM(
+-    // Mirrors MigrationReviewVM.confirmImmediate() — the canonical reference implementation for
+-    // sweeping a residual balance via the IMMEDIATE-mode send-max Proposal. Unlike Review, there's
+-    // no separate propose-then-confirm split here: propose and submit both happen in this single
+-    // user-triggered action, since this screen never shows a review step of its own for it.
+@@ -299,15 +216,9 @@ class MigrationCompleteVM(
+-            try {
+-                biometricRepository.requestBiometrics(
+-                    request =
+-                        BiometricRequest(
+-                            message =
+-                                stringRes(
+-                                    R.string.authentication_system_ui_subtitle,
+-                                    stringRes(R.string.authentication_use_case_send_funds)
+-                                )
+-                        )
+-                )
+-            } catch (_: BiometricsFailureException) {
+-                return@execute
+-            } catch (_: BiometricsCancelledException) {
+-                return@execute
 +            val owner = activeCompletionOwner()
-@@ -315,2 +276,4 @@ class MigrationCompleteVM(
++            if (owner is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
++            owner.requireSpendable()
++            if (owner is KeystoneAccount && !authenticateMigrateAnyway()) return@execute
++            activeCompletionOwner()
++
++            val key = owner.sdkAccount.accountUuid.toStorageKeyId()
++            check(args.isResidueOnly || hasCompletionEvidence(key)) {
++                "The migration has not completed."
+@@ -315,2 +226 @@ class MigrationCompleteVM(
 -            val sdk = getOrchardMigrationSdk()
 -            val amount = getOrchardBalance()
++            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
+@@ -318,2 +228,12 @@ class MigrationCompleteVM(
+-            pendingMigrateAnywayProposal = MigrateAnywayProposal(proposal, amount)
+-            submitMigrateAnyway(proposal, amount)
 +            activeCompletionOwner()
-+            val uuid = owner.sdkAccount.accountUuid
-+            val sdk = checkNotNull(getOrchardMigrationSdk(uuid.toStorageKeyId())) { "Migration account is unavailable" }
-+            val amount = getOrchardBalance(uuid)
-@@ -328 +291,2 @@ class MigrationCompleteVM(
++            if (owner is KeystoneAccount) {
++                keystoneProposalRepository.setMigrationSweepProposal(proposal)
++                keystoneProposalRepository.createPCZTFromProposal(owner)
++                activeCompletionOwner()
++                keystoneProposalRepository.approveForSigning()
++                navigationRouter.forward(SignKeystoneTransactionArgs)
++            } else {
++                // The normal transaction progress path retains submission identity and lets
++                // the SDK reconcile its original transaction after an uncertain result.
++                submitProposal(zashiProposalRepository.setMigrationSweepProposal(proposal))
++            }
+@@ -322,31 +242,15 @@ class MigrationCompleteVM(
+-    private suspend fun retryMigrateAnyway() {
+-        val cached = pendingMigrateAnywayProposal ?: return
+-        submitMigrateAnyway(cached.proposal, cached.amountZatoshi)
+-    }
+-
+-    private suspend fun submitMigrateAnyway(proposal: Proposal, amountZatoshi: Zatoshi) {
 -        if (getSelectedWalletAccount() is LedgerAccount) {
-+        val owner = activeCompletionOwner()
-+        if (owner is LedgerAccount) {
-@@ -331,2 +295,2 @@ class MigrationCompleteVM(
+-            throw AccountOperationUnsupportedException.ledger()
+-        }
 -        getSelectedWalletAccount().requireSpendable()
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
-+        owner.requireSpendable()
-+        if (owner is KeystoneAccount) {
-@@ -341 +305,3 @@ class MigrationCompleteVM(
+-            // Keystone can't sign in-process — adopt the already-built send-max proposal into the
+-            // app's existing generic external-signer pipeline exactly as an ordinary Keystone send
+-            // does (no migration-specific PCZT/QR machinery — one ordinary PCZT, same as any
+-            // regular Keystone send).
+-            keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
+-            // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from the
+-            // already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's cached
+-            // proposalPczt); it never calls createPCZTFromProposal() itself.
 -            keystoneProposalRepository.createPCZTFromProposal()
-+            keystoneProposalRepository.createPCZTFromProposal(owner)
-+            activeCompletionOwner()
-+            keystoneProposalRepository.approveForSigning()
-@@ -345,0 +312 @@ class MigrationCompleteVM(
-+        activeCompletionOwner()
+-            navigationRouter.forward(SignKeystoneTransactionArgs)
+-            return
+-        }
+-        val usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
+-        val result =
+-            withContext(NonCancellable) {
+-                proposalDataSource.submitTransaction(proposal, usk)
+-            }
+-        when (result) {
+-            is SubmitResult.Success -> navigationRouter.forward(MigrationSuccessArgs(result.txIds.lastOrNull()))
+-            else -> migrateAnywayFailure.value = result
++    private suspend fun authenticateMigrateAnyway(): Boolean =
++        try {
++            biometricRepository.requestBiometrics(
++                BiometricRequest(
++                    message = stringRes(
++                        R.string.authentication_system_ui_subtitle,
++                        stringRes(R.string.authentication_use_case_send_funds)
++                    )
++                )
++            )
++            true
++        } catch (_: BiometricsFailureException) {
++            false
++        } catch (_: BiometricsCancelledException) {
++            false
+@@ -353,0 +258,6 @@ class MigrationCompleteVM(
++
++    private suspend fun hasCompletionEvidence(key: String): Boolean {
++        val snapshot = getMigrationSnapshot(key)
++        return snapshot?.areAllMined ?: (
++            getOrchardMigrationSdk(key)?.getMigrationStateUnreconciled() == MigrationState.Complete
++        )
+@@ -354,0 +265 @@ class MigrationCompleteVM(
++
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/component/MigrationUnavailable.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/component/MigrationUnavailable.kt
 new file mode 100644
 index 000000000..7906a4d83
@@ -5162,20 +5361,54 @@ index f2550b564..be2e68486 100644
 +    private suspend fun selectedOwner() = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanArgs.kt
-index 50c737dbd..d1d9bb666 100644
+index 50c737dbd..419865035 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanArgs.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanArgs.kt
-@@ -23,0 +24 @@ data class MigrationKeystoneScanArgs(
+@@ -12,0 +13,3 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
++import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
+@@ -19,0 +23 @@ import org.koin.core.parameter.parametersOf
++import co.electriccoin.zcash.ui.design.R as DesignR
+@@ -23,0 +28 @@ data class MigrationKeystoneScanArgs(
 +    val accountKeyId: String? = null,
+@@ -31,0 +37,15 @@ fun MigrationKeystoneScanScreen(args: MigrationKeystoneScanArgs) {
++    val readiness by vm.isScanReady.collectAsStateWithLifecycle()
++    if (readiness != true) {
++        BackHandler { vm.recoverFromHome() }
++        if (readiness == null) {
++            CircularScreenProgressIndicator()
++        } else {
++            MigrationUnavailable(
++                message = stringRes(DesignR.string.migrationScheduled_signatureRequired),
++                onBack = vm::recoverFromHome,
++                onRetry = vm::recoverFromHome,
++                retryLabel = stringRes(R.string.general_back),
++            )
++        }
++        return
++    }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
-index 2bf341dca..78504879a 100644
+index 2bf341dca..08014c266 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
-@@ -65,0 +66,3 @@ class MigrationKeystoneScanVM(
+@@ -27,0 +28,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.SharingStarted
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.stateIn
+@@ -51,0 +55,7 @@ class MigrationKeystoneScanVM(
++    val isScanReady = getSelectedWalletAccount.observe()
++        .map { account ->
++            val key = account.sdkAccount.accountUuid.toStorageKeyId()
++            (args.accountKeyId == null || args.accountKeyId == key) &&
++                pendingSchedule.peek(key) != null && pendingKeystonePczts.peek(key)?.isFullySigned == false
++        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), null)
++
+@@ -65,0 +76,3 @@ class MigrationKeystoneScanVM(
 +                check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
 +                    "The scan belongs to a different account"
 +                }
-@@ -69,3 +72,6 @@ class MigrationKeystoneScanVM(
+@@ -69,3 +82,6 @@ class MigrationKeystoneScanVM(
 -                    // Edge case only (e.g. process death mid-flow) — bounce back to Confirm Transfer
 -                    // Plan, which will propose a fresh schedule.
 -                    navigationRouter.back()
@@ -5185,26 +5418,29 @@ index 2bf341dca..78504879a 100644
 +                }
 +                if (pending.isFullySigned) {
 +                    navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
-@@ -74 +80 @@ class MigrationKeystoneScanVM(
+@@ -74 +90 @@ class MigrationKeystoneScanVM(
 -                val sdk = getOrchardMigrationSdk()
 +                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-@@ -171,2 +177 @@ class MigrationKeystoneScanVM(
+@@ -171,2 +187 @@ class MigrationKeystoneScanVM(
 -                    // fresh sign-screen instance for the next round. replace() keeps the back stack at
 -                    // a constant depth regardless of how many rounds a large migration needs.
 +                    // fresh sign-screen instance for the next round. Replace the completed Sign and Scan.
-@@ -176 +181 @@ class MigrationKeystoneScanVM(
+@@ -176 +191 @@ class MigrationKeystoneScanVM(
 -                    // re-decoding that still-visible frame every frame. navigationRouter.replace()
 +                    // re-decoding that still-visible frame every frame. Navigation
-@@ -197 +202,3 @@ class MigrationKeystoneScanVM(
+@@ -197 +212,3 @@ class MigrationKeystoneScanVM(
 -                    navigationRouter.replace(MigrationKeystoneSignArgs(args.mode))
 +                    navigationRouter.replaceFrom(
 +                        MigrationKeystoneSignArgs::class, MigrationKeystoneSignArgs(args.mode, accountKeyId)
 +                    )
-@@ -215,0 +223 @@ class MigrationKeystoneScanVM(
+@@ -215,0 +233 @@ class MigrationKeystoneScanVM(
 +                        isFullySigned = true,
-@@ -221 +229 @@ class MigrationKeystoneScanVM(
+@@ -221 +239 @@ class MigrationKeystoneScanVM(
 -                navigationRouter.forward(MigrationScheduledArgs)
 +                navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
+@@ -259,0 +278,2 @@ class MigrationKeystoneScanVM(
++
++    fun recoverFromHome() = navigationRouter.backToRoot()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt
 index f18cbdb3f..8b68b547e 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt
@@ -5212,25 +5448,26 @@ index f18cbdb3f..8b68b547e 100644
 @@ -16,0 +17 @@ data class MigrationKeystoneSignArgs(
 +    val accountKeyId: String? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt
-index c910e50e2..18355cd96 100644
+index c910e50e2..4b69f704d 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt
-@@ -20,0 +21 @@ import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneS
+@@ -20,0 +21,2 @@ import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneS
++import co.electriccoin.zcash.ui.screen.migration.review.requiresNewMigrationReview
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
-@@ -70,2 +71,4 @@ class MigrationKeystoneSignVM(
+@@ -70,2 +72,4 @@ class MigrationKeystoneSignVM(
 -                val sched = pendingSchedule.get(accountKeyId) ?: return@runCatching null
 -                val sdk = getOrchardMigrationSdk()
 +                check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
 +                    "The signing request belongs to a different account"
 +                }
 +                val reviewed = pendingSchedule.review(accountKeyId) ?: return@runCatching null
-@@ -72,0 +76,5 @@ class MigrationKeystoneSignVM(
+@@ -72,0 +77,5 @@ class MigrationKeystoneSignVM(
 +                if (existing?.isFullySigned == true) {
 +                    navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
 +                    return@runCatching null
 +                }
 +                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-@@ -89,35 +97,7 @@ class MigrationKeystoneSignVM(
+@@ -89,35 +98,7 @@ class MigrationKeystoneSignVM(
 -                    // Opaque-handle contract (SDK 2.6.5+): createUnsignedNoteSplitPczt(proposal)
 -                    // and createUnsignedTransferPczts(schedule) must refer to the SAME cached plan
 -                    // (same proposalHandle) or the split call throws "plan superseded". When a
@@ -5273,10 +5510,15 @@ index c910e50e2..18355cd96 100644
 +                        .map { it.id to it.pczt.toByteArray() }
 +                    transferUnsignedPczts = sdk.createUnsignedTransferPczts(reviewed.schedule)
 +                        .map { it.first to it.second.toByteArray() }
-@@ -273 +253 @@ class MigrationKeystoneSignVM(
+@@ -180,0 +162,4 @@ class MigrationKeystoneSignVM(
++                if (error.requiresNewMigrationReview()) {
++                    onReject()
++                    return@onFailure
++                }
+@@ -273 +258 @@ class MigrationKeystoneSignVM(
 -    private fun onGetSignature() = navigationRouter.forward(MigrationKeystoneScanArgs(mode = args.mode))
 +    private fun onGetSignature() = navigationRouter.forward(MigrationKeystoneScanArgs(args.mode, args.accountKeyId))
-@@ -276,3 +256,9 @@ class MigrationKeystoneSignVM(
+@@ -276,3 +261,9 @@ class MigrationKeystoneSignVM(
 -        pendingSchedule.clear()
 -        pendingKeystonePczts.clear()
 -        navigationRouter.back()
@@ -5412,7 +5654,7 @@ index 08734318b..cc42b32fd 100644
 +        ) { MigrationProgressView(it) }
 +    }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
-index f1f185d9b..19db4fdfe 100644
+index f1f185d9b..2cc9ecb45 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 @@ -33,0 +34 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
@@ -5438,6 +5680,12 @@ index f1f185d9b..19db4fdfe 100644
 +        retry.value++
 +    }
 +
+@@ -191 +201 @@ class MigrationProgressVM(
+-            isComplete = snapshot.isComplete,
++            isComplete = snapshot.areAllMined,
+@@ -193 +203 @@ class MigrationProgressVM(
+-            onDone = if (snapshot.isComplete) ::onDone else null,
++            onDone = if (snapshot.areAllMined) ::onDone else null,
 @@ -339 +349 @@ internal fun migrationProgressSubtitle(
 -        snapshot.isComplete -> {
 +        snapshot.areAllMined -> {
@@ -5511,7 +5759,7 @@ index f9f586912..db9963319 100644
 +    val accountKeyId: String? = null,
 +    val useTor: Boolean? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..c9bff9b45 100644
+index ccdc9db31..88ea92e5a 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -5,0 +6,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
@@ -5523,21 +5771,37 @@ index ccdc9db31..c9bff9b45 100644
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 @@ -46,0 +51 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
 +import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
-@@ -76,0 +82 @@ class MigrationReviewVM(
+@@ -50 +54,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+@@ -76,0 +81 @@ class MigrationReviewVM(
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
-@@ -89,0 +96 @@ class MigrationReviewVM(
+@@ -82 +86,0 @@ class MigrationReviewVM(
+-    private val getOrchardBalance: GetOrchardBalanceUseCase,
+@@ -89,0 +94 @@ class MigrationReviewVM(
 +    private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
-@@ -97 +104 @@ class MigrationReviewVM(
+@@ -91,4 +96 @@ class MigrationReviewVM(
+-    // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
+-    // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
+-    // destination of its own (only totalFeeRequired()/transactionCount()); the amount shown is
+-    // this account's Orchard balance at propose time (the whole point of a send-max sweep).
++    // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
+@@ -97 +99 @@ class MigrationReviewVM(
 -            val schedule: MigrationSchedule,
 +            val reviewed: ReviewedMigrationSchedule,
-@@ -134,0 +142 @@ class MigrationReviewVM(
+@@ -101,4 +103 @@ class MigrationReviewVM(
+-        data class Immediate(
+-            val proposal: Proposal,
+-            val amountZatoshi: Zatoshi
+-        ) : ReviewProposal()
++        data class Immediate(val proposal: Proposal) : ReviewProposal()
+@@ -134,0 +134 @@ class MigrationReviewVM(
 +    private var reviewedOwnerKey: String? = null
-@@ -138,0 +147,4 @@ class MigrationReviewVM(
+@@ -138,0 +139,4 @@ class MigrationReviewVM(
 +        loadProposal()
 +    }
 +
 +    private fun loadProposal() {
-@@ -147 +159,7 @@ class MigrationReviewVM(
+@@ -147 +151,7 @@ class MigrationReviewVM(
 -            val sdk = getOrchardMigrationSdk()
 +            val account = getSelectedWalletAccount()
 +            val key = account.sdkAccount.accountUuid.toStorageKeyId()
@@ -5546,10 +5810,12 @@ index ccdc9db31..c9bff9b45 100644
 +            }
 +            reviewedOwnerKey = key
 +            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-@@ -151 +169 @@ class MigrationReviewVM(
+@@ -151 +160,0 @@ class MigrationReviewVM(
 -                        val amount = getOrchardBalance()
-+                        val amount = getOrchardBalance(account.sdkAccount.accountUuid)
-@@ -171,13 +189,2 @@ class MigrationReviewVM(
+@@ -159 +168 @@ class MigrationReviewVM(
+-                        ReviewProposal.Immediate(proposal, amount)
++                        ReviewProposal.Immediate(proposal)
+@@ -171,13 +180,2 @@ class MigrationReviewVM(
 -                        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -                        val reused = restartMigrationScheduleRepository.consume(accountKeyId)
 -                        val schedule =
@@ -5565,13 +5831,13 @@ index ccdc9db31..c9bff9b45 100644
 -                            }
 +                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
 +                        val schedule = reviewed.schedule
-@@ -189 +196 @@ class MigrationReviewVM(
+@@ -189 +187 @@ class MigrationReviewVM(
 -                            if (getSelectedWalletAccount() is KeystoneAccount) {
 +                            if (account is KeystoneAccount) {
-@@ -214 +221 @@ class MigrationReviewVM(
+@@ -214 +212 @@ class MigrationReviewVM(
 -                        ReviewProposal.Automatic(schedule, keystoneRunCount)
 +                        ReviewProposal.Automatic(reviewed, keystoneRunCount)
-@@ -233 +240,8 @@ class MigrationReviewVM(
+@@ -233 +231,8 @@ class MigrationReviewVM(
 -        }.withLce(groupLce(proposeLce, confirmLce), errorStateMapper::mapToState)
 +        }.withLce(groupLce(proposeLce, confirmLce)) { error ->
 +            val message = if (error.cause is PrivateNoteSplitUnavailable) {
@@ -5581,21 +5847,45 @@ index ccdc9db31..c9bff9b45 100644
 +            }
 +            errorStateMapper.mapToState(error, message = message)
 +        }
-@@ -260 +274 @@ class MigrationReviewVM(
+@@ -249 +254 @@ class MigrationReviewVM(
+-                createImmediateState(proposal, isConfirming, exchangeRateState)
++                createImmediateState(proposal, isConfirming)
+@@ -260 +265 @@ class MigrationReviewVM(
 -        val sched = proposal.schedule
 +        val sched = proposal.reviewed.schedule
-@@ -305 +319 @@ class MigrationReviewVM(
+@@ -305 +310 @@ class MigrationReviewVM(
 -            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(sched) } },
 +            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(proposal) } },
-@@ -313 +327 @@ class MigrationReviewVM(
+@@ -313 +318 @@ class MigrationReviewVM(
 -                            proposeLce.guardLoading { onConfirmAutomatic(sched) }
 +                            proposeLce.guardLoading { onConfirmAutomatic(proposal) }
-@@ -368 +382 @@ class MigrationReviewVM(
+@@ -321,4 +326 @@ class MigrationReviewVM(
+-    // proposeImmediateMigration()'s raw send-max Proposal carries no destination-facing
+-    // "list of transfers" the way a MigrationSchedule does — this renders it as a single
+-    // synthetic row so the (shared) review layout still has something to show, using the real
+-    // fee from Proposal.totalFeeRequired() instead of AUTOMATIC's placeholder.
++    // The public SDK exposes the sweep fee. The exact eligible amount is available in history after creation.
+@@ -328 +329,0 @@ class MigrationReviewVM(
+-        exchangeRateState: ExchangeRateState,
+@@ -333,2 +334,2 @@ class MigrationReviewVM(
+-            totalAmount = stringRes(proposal.amountZatoshi),
+-            totalFiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
++            totalAmount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
++            totalFiatAmount = null,
+@@ -341,2 +342,2 @@ class MigrationReviewVM(
+-                        amount = stringRes(proposal.amountZatoshi),
+-                        fiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
++                        amount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
++                        fiatAmount = null,
+@@ -348 +349 @@ class MigrationReviewVM(
+-            onConfirm = { onConfirmImmediate(proposal.proposal, proposal.amountZatoshi) },
++            onConfirm = { onConfirmImmediate(proposal.proposal) },
+@@ -368 +369 @@ class MigrationReviewVM(
 -    private fun onConfirmAutomatic(sched: MigrationSchedule) =
 +    private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
-@@ -369,0 +384 @@ class MigrationReviewVM(
+@@ -369,0 +371 @@ class MigrationReviewVM(
 +            if (proposeLce.state.value.success !== proposal) return@execute
-@@ -386 +401,14 @@ class MigrationReviewVM(
+@@ -386 +388,20 @@ class MigrationReviewVM(
 -            confirmAutomatic(sched)
 +            if (proposeLce.state.value.success === proposal) {
 +                confirmAutomatic(proposal.reviewed)
@@ -5611,15 +5901,15 @@ index ccdc9db31..c9bff9b45 100644
 +            return checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
 +                "Return to Home to recover the existing migration."
 +            }
-@@ -387,0 +416,7 @@ class MigrationReviewVM(
++        }
 +        val restarted = restartMigrationScheduleRepository.consume(accountKeyId)
 +        return if (restarted != null && restarted.proposalHandle >= 0) {
 +            ReviewedMigrationSchedule(restarted)
 +        } else {
 +            sdk.prepareReviewedAutomaticMigration()
-+        }
+@@ -387,0 +409 @@ class MigrationReviewVM(
 +    }
-@@ -389,3 +424,8 @@ class MigrationReviewVM(
+@@ -389,3 +411,8 @@ class MigrationReviewVM(
 -    private suspend fun confirmAutomatic(sched: MigrationSchedule) {
 -        if (getSelectedWalletAccount() is LedgerAccount) {
 -            throw AccountOperationUnsupportedException.ledger()
@@ -5631,7 +5921,7 @@ index ccdc9db31..c9bff9b45 100644
 +        val pending = pendingMigrationScheduleRepository.review(accountKeyId)
 +        check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
 +            "The migration changed. Return to Home to recover it."
-@@ -393,8 +433,3 @@ class MigrationReviewVM(
+@@ -393,8 +420,3 @@ class MigrationReviewVM(
 -        getSelectedWalletAccount().requireSpendable()
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
 -            // Keystone can't sign in-process — hand the unsigned schedule off to the QR
@@ -5643,7 +5933,7 @@ index ccdc9db31..c9bff9b45 100644
 +        val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
 +        if (account is KeystoneAccount) {
 +            confirmKeystone(reviewed, accountKeyId, newTorPreference)
-@@ -403,35 +438,12 @@ class MigrationReviewVM(
+@@ -403,35 +425,12 @@ class MigrationReviewVM(
 -        val sdk = getOrchardMigrationSdk()
 -        // Note-split is the first step of this confirm action (design spec §7) — a schedule with
 -        // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
@@ -5690,8 +5980,8 @@ index ccdc9db31..c9bff9b45 100644
 +            if (split != null) {
 +                val result = sdk.submitNoteSplit(split, spendingKey)
 +                if (result !is TransferResult.Success) {
-+                    failure.value = result
-@@ -440,8 +452,2 @@ class MigrationReviewVM(
++                    onSplitFailure(result, sdk, reviewed, accountKeyId)
+@@ -440,8 +439,2 @@ class MigrationReviewVM(
 -                // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
 -                // already stored locally, so without this the normal enhancement queue would skip
 -                // it forever and the Activity row would stay "Sent" instead of "Note split"/
@@ -5702,7 +5992,7 @@ index ccdc9db31..c9bff9b45 100644
 -                sched
 +                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
 +                requireReviewAccount()
-@@ -449,7 +455,3 @@ class MigrationReviewVM(
+@@ -449,7 +442,3 @@ class MigrationReviewVM(
 -        try {
 -            sdk.signAndStoreMigrationSchedule(scheduleToSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
 -            // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
@@ -5713,7 +6003,7 @@ index ccdc9db31..c9bff9b45 100644
 +            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
 +            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -457,17 +459,29 @@ class MigrationReviewVM(
+@@ -457,17 +446,44 @@ class MigrationReviewVM(
 -            val retryable =
 -                e.message?.contains("StalePlan") == true ||
 -                    e.message?.contains("BoundaryCheckpointMissing") == true
@@ -5741,6 +6031,21 @@ index ccdc9db31..c9bff9b45 100644
 +        }
 +    }
 +
++    private suspend fun onSplitFailure(
++        result: TransferResult,
++        sdk: OrchardMigrationSdk,
++        reviewed: ReviewedMigrationSchedule,
++        accountKeyId: String,
++    ) {
++        if (result is TransferResult.NetworkError && result.retryable && sdk.hasCommitted(reviewed.schedule)) {
++            requireReviewAccount()
++            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, false)
++            navigationRouter.backToRoot()
++        } else {
++            failure.value = result
++        }
++    }
++
 +    private suspend fun confirmKeystone(
 +        reviewed: ReviewedMigrationSchedule,
 +        accountKeyId: String,
@@ -5760,7 +6065,10 @@ index ccdc9db31..c9bff9b45 100644
 +            }
 +            pendingMigrationScheduleRepository.set(accountKeyId, reviewed)
 +            navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
-@@ -484,5 +498,2 @@ class MigrationReviewVM(
+@@ -482 +498 @@ class MigrationReviewVM(
+-    private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
++    private fun onConfirmImmediate(proposal: Proposal) =
+@@ -484,5 +500,2 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
@@ -5768,19 +6076,21 @@ index ccdc9db31..c9bff9b45 100644
 -            if (getSelectedWalletAccount() is KeystoneAccount) {
 +            val account = requireReviewAccount()
 +            if (account is KeystoneAccount) {
-@@ -509,0 +521 @@ class MigrationReviewVM(
+@@ -510 +523,2 @@ class MigrationReviewVM(
+-                keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 +                requireReviewAccount()
-@@ -514 +526,3 @@ class MigrationReviewVM(
++                keystoneProposalRepository.setMigrationSweepProposal(proposal)
+@@ -514 +528,3 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.createPCZTFromProposal(account)
 +                requireReviewAccount()
 +                keystoneProposalRepository.approveForSigning()
-@@ -517,2 +531,2 @@ class MigrationReviewVM(
+@@ -517,2 +533,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
-+                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
++                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
 +                submitProposal(reviewed)
-@@ -521,0 +536,10 @@ class MigrationReviewVM(
+@@ -521,0 +538,10 @@ class MigrationReviewVM(
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
 +            "The migration review belongs to a different account"
@@ -5791,12 +6101,13 @@ index ccdc9db31..c9bff9b45 100644
 +
 +    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
 +
-@@ -636,0 +661,29 @@ class MigrationReviewVM(
+@@ -636,0 +663,37 @@ class MigrationReviewVM(
 +
-+private fun RuntimeException.requiresNewMigrationReview(): Boolean =
++internal fun Throwable.requiresNewMigrationReview(): Boolean =
 +    message?.contains("StalePlan") == true ||
 +        message?.contains("BoundaryCheckpointMissing") == true ||
-+        message?.contains("plan superseded", ignoreCase = true) == true
++        message?.contains("superseded by a newer proposal", ignoreCase = true) == true ||
++        message?.contains("No pending migration proposal", ignoreCase = true) == true
 +
 +private const val MAX_MIGRATION_PROPOSAL_ATTEMPTS = 8
 +
@@ -5820,6 +6131,13 @@ index ccdc9db31..c9bff9b45 100644
 +        }
 +    }
 +    error("The SDK did not provide a usable migration proposal. Try again.")
++}
++
++private suspend fun OrchardMigrationSdk.hasCommitted(schedule: cash.z.ecc.android.sdk.MigrationSchedule): Boolean {
++    if (getMigrationStateUnreconciled() !is MigrationState.InProgress) return false
++    val stored = getMigrationTransferStates()?.transfers?.filter { it.isTransfer } ?: return false
++    return stored.isNotEmpty() &&
++        stored.associate { it.id to it.amountZatoshi } == schedule.transfers.associate { it.id to it.amountZatoshi }
 +}
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledArgs.kt
 index d02755101..f55e2530a 100644
@@ -7126,7 +7444,7 @@ index f030dbba0..0a7509abc 100644
 +
 +            busy = false
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
-index 14369fe4c..004df91de 100644
+index 14369fe4c..19a99dda2 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.MigrationState
@@ -7134,16 +7452,31 @@ index 14369fe4c..004df91de 100644
 @@ -6,0 +6,2 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 +import cash.z.ecc.android.sdk.model.Account
 +import cash.z.ecc.android.sdk.model.AccountUuid
-@@ -20,0 +22 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -8 +8,0 @@ import cash.z.ecc.android.sdk.model.Proposal
+-import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
+@@ -13,2 +12,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
+-import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
+-import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
+@@ -18 +15,0 @@ import co.electriccoin.zcash.ui.common.model.MutableLce
+-import co.electriccoin.zcash.ui.common.model.SubmitResult
+@@ -20,0 +18 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
-@@ -27 +28,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
+@@ -27 +24,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
 -import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
-@@ -31,0 +33,5 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
+@@ -29,0 +27 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+@@ -31,0 +30,9 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
++import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
++import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
++import cash.z.ecc.android.sdk.MigrationState
++import kotlin.test.assertFalse
 +import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 +import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 +import kotlin.time.Instant
 +import kotlin.test.assertNull
+@@ -37 +43,0 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+-import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 @@ -39 +44,0 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 -import co.electriccoin.zcash.work.MigrationScheduler
 @@ -96 +101 @@ class MigrationCompleteVMTest {
@@ -7167,20 +7500,55 @@ index 14369fe4c..004df91de 100644
 @@ -244 +249 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -266 +270,0 @@ class MigrationCompleteVMTest {
+@@ -257 +262 @@ class MigrationCompleteVMTest {
+-    fun migrateAnywayForZashiAccountSignsAndSubmitsProposalDirectly() =
++    fun migrateAnywayForZashiAccountHandsTheOriginalProposalToSharedSubmission() =
+@@ -260 +265 @@ class MigrationCompleteVMTest {
+-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
++            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
+@@ -262 +266,0 @@ class MigrationCompleteVMTest {
+-            val usk = mockk<UnifiedSpendingKey>(relaxed = true)
+@@ -266 +269,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -275 +279 @@ class MigrationCompleteVMTest {
+@@ -268 +271,4 @@ class MigrationCompleteVMTest {
+-            coEvery { proposalDataSource.submitTransaction(proposal, usk) } returns SubmitResult.Success(listOf("txid"))
++            val adopted = MigrationSweepTransactionProposal(proposal)
++            val zashiProposalRepository = mockk<ZashiProposalRepository> {
++                every { setMigrationSweepProposal(proposal) } returns adopted
++            }
+@@ -275,3 +281,4 @@ class MigrationCompleteVMTest {
+-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+-                    zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
+-                    proposalDataSource = proposalDataSource,
++                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
++                    zashiProposalRepository = zashiProposalRepository,
++                    submitProposal = submitProposal,
++                    args = MigrationCompleteArgs(isResidueOnly = true),
+@@ -284,2 +291,2 @@ class MigrationCompleteVMTest {
+-            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proposal, usk) }
+-            assertEquals(listOf<Any>(MigrationSuccessArgs("txid")), router.forwardedRoutes)
++            coVerify(exactly = 1) { submitProposal(adopted) }
++            assertEquals(emptyList(), router.forwardedRoutes)
+@@ -296 +302,0 @@ class MigrationCompleteVMTest {
+-                    coEvery { getMigrationSummary() } returns null
+@@ -299 +305 @@ class MigrationCompleteVMTest {
+-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
++            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
+@@ -306 +312 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -296 +299,0 @@ class MigrationCompleteVMTest {
--                    coEvery { getMigrationSummary() } returns null
-@@ -306 +309 @@ class MigrationCompleteVMTest {
--                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
-+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -316 +319 @@ class MigrationCompleteVMTest {
+@@ -308 +314,2 @@ class MigrationCompleteVMTest {
+-                    proposalDataSource = proposalDataSource,
++                    submitProposal = submitProposal,
++                    args = MigrationCompleteArgs(isResidueOnly = true),
+@@ -315,3 +322,3 @@ class MigrationCompleteVMTest {
+-            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L)) }
 -            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal() }
+-            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
++            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal) }
 +            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
-@@ -322,29 +325,4 @@ class MigrationCompleteVMTest {
++            coVerify(exactly = 0) { submitProposal(any()) }
+@@ -322,29 +329,4 @@ class MigrationCompleteVMTest {
 -    fun summaryIsReadFromEngineSdkNotTheAppSidePlan() =
 -        runTest {
 -            // The Migration Complete summary (amount migrated / transfer count / duration) must come
@@ -7214,7 +7582,7 @@ index 14369fe4c..004df91de 100644
 +        val account = mockk<ZodlAccount>(relaxed = true) {
 +            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { 4 }))
 +            every { isSpendable } returns true
-@@ -351,0 +330,21 @@ class MigrationCompleteVMTest {
+@@ -351,0 +334,21 @@ class MigrationCompleteVMTest {
 +        val owner = account.sdkAccount.accountUuid.toStorageKeyId()
 +        val snapshot = mockk<GetMigrationSnapshotUseCase>()
 +        val first = crossing(1L, 200_000L, 1_785_281_502L)
@@ -7236,7 +7604,7 @@ index 14369fe4c..004df91de 100644
 +        coVerify(exactly = 1) { snapshot(owner) }
 +        collectJob.cancel()
 +    }
-@@ -354,35 +353,4 @@ class MigrationCompleteVMTest {
+@@ -354,35 +357,4 @@ class MigrationCompleteVMTest {
 -    fun residueVariantReadsTotalTransferredFromLiveIronwoodBalanceNotEngineSummary() =
 -        runTest {
 -            // MOB-1750: for isResidueOnly, "In Ironwood" must be the live Ironwood pool balance
@@ -7276,10 +7644,10 @@ index 14369fe4c..004df91de 100644
 +        val snapshot = mockk<GetMigrationSnapshotUseCase> {
 +            coEvery { this@mockk(any()) } returns LiveMigrationSnapshot(
 +                listOf(crossing(1L, 200_000L, null)), emptyList(), 300L,
-@@ -390,2 +357,0 @@ class MigrationCompleteVMTest {
+@@ -390,2 +361,0 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { sdk.getMigrationSummary() }
 -            collectJob.cancel()
-@@ -392,0 +359,15 @@ class MigrationCompleteVMTest {
+@@ -392,0 +363,16 @@ class MigrationCompleteVMTest {
 +        val vm = vm(
 +            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
 +            orchardBalanceZatoshi = 0L,
@@ -7290,12 +7658,13 @@ index 14369fe4c..004df91de 100644
 +        advanceUntilIdle()
 +
 +        val state = assertNotNull(vm.state.value.content)
++        assertFalse(state.canShowCompletion)
 +        assertNull(state.totalTransferred)
 +        assertNull(state.transfersProgress)
 +        assertNull(state.duration)
 +        collectJob.cancel()
 +    }
-@@ -395,30 +376,17 @@ class MigrationCompleteVMTest {
+@@ -395,30 +381,17 @@ class MigrationCompleteVMTest {
 -    fun durationDoesNotApplyThePrivacyFloorSinceBothTimestampsAreAlreadyMined() =
 -        runTest {
 -            // The displayed duration spans the campaign's first to last MINED transfer -- both
@@ -7343,7 +7712,7 @@ index 14369fe4c..004df91de 100644
 +        coVerify(exactly = 0) { snapshot(any()) }
 +        collectJob.cancel()
 +    }
-@@ -426,8 +394,14 @@ class MigrationCompleteVMTest {
+@@ -426,8 +399,14 @@ class MigrationCompleteVMTest {
 -            val expected = stringRes(formatMigrationDuration(spanSeconds, applyPrivacyFloor = false))
 -            assertEquals(
 -                expected,
@@ -7366,15 +7735,30 @@ index 14369fe4c..004df91de 100644
 +        minedHeight = minedAt?.let { 11L },
 +        minedAt = minedAt?.let { Instant.fromEpochSeconds(it) },
 +    )
-@@ -488 +461,0 @@ class MigrationCompleteVMTest {
+@@ -488 +466,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -498 +471 @@ class MigrationCompleteVMTest {
+@@ -490 +467,0 @@ class MigrationCompleteVMTest {
+-            val zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true)
+@@ -492 +469 @@ class MigrationCompleteVMTest {
+-            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
++            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
+@@ -498,2 +475 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+-                    zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -521 +494 @@ class MigrationCompleteVMTest {
+@@ -501 +477,2 @@ class MigrationCompleteVMTest {
+-                    proposalDataSource = proposalDataSource,
++                    submitProposal = submitProposal,
++                    args = MigrationCompleteArgs(isResidueOnly = true),
+@@ -518,4 +495,3 @@ class MigrationCompleteVMTest {
+-            coVerify(exactly = 0) { zashiSpendingKeyDataSource.getZashiSpendingKey() }
+-            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+-            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
++            coVerify(exactly = 0) { submitProposal(any()) }
++            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
-@@ -524,0 +498,23 @@ class MigrationCompleteVMTest {
+@@ -524,0 +501,23 @@ class MigrationCompleteVMTest {
 +    @Test
 +    fun completionForAStaleOwnerLeavesTheSelectedAccountsScheduleAndPreferencesAlone() = runTest {
 +        val reviewed = AccountUuid.new(ByteArray(16))
@@ -7398,26 +7782,40 @@ index 14369fe4c..004df91de 100644
 +        coVerify(exactly = 0) { seen.store(any(), any()) }
 +    }
 +
-@@ -544,0 +541 @@ class MigrationCompleteVMTest {
+@@ -544,0 +544 @@ class MigrationCompleteVMTest {
 +        getMigrationSnapshot: GetMigrationSnapshotUseCase = mockk { coEvery { this@mockk(any()) } returns null },
-@@ -547 +544 @@ class MigrationCompleteVMTest {
+@@ -547 +547,3 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns mockk(relaxed = true)
-+                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true)
-@@ -553,2 +549,0 @@ class MigrationCompleteVMTest {
++                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true) {
++                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.Complete
++                }
+@@ -549 +550,0 @@ class MigrationCompleteVMTest {
+-        zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource = mockk(relaxed = true),
+@@ -551 +552,2 @@ class MigrationCompleteVMTest {
+-        proposalDataSource: ProposalDataSource = mockk(relaxed = true),
++        zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
++        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
+@@ -553,2 +554,0 @@ class MigrationCompleteVMTest {
 -        migrationScheduler: MigrationScheduler = mockk(relaxed = true),
 -        migrationNotifier: MigrationNotifier = mockk(relaxed = true),
-@@ -559 +554 @@ class MigrationCompleteVMTest {
+@@ -559 +559 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(orchardBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(orchardBalanceZatoshi)
-@@ -563 +558 @@ class MigrationCompleteVMTest {
+@@ -563 +563 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(ironwoodBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(ironwoodBalanceZatoshi)
-@@ -571 +566 @@ class MigrationCompleteVMTest {
+@@ -571 +571 @@ class MigrationCompleteVMTest {
 -                every { observe() } returns flowOf(false)
 +                every { observe(any<String>()) } returns flowOf(false)
-@@ -579,0 +575 @@ class MigrationCompleteVMTest {
+@@ -579,0 +580 @@ class MigrationCompleteVMTest {
 +        getMigrationSnapshot = getMigrationSnapshot,
-@@ -585,2 +580,0 @@ class MigrationCompleteVMTest {
+@@ -581 +581,0 @@ class MigrationCompleteVMTest {
+-        zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
+@@ -583 +583,2 @@ class MigrationCompleteVMTest {
+-        proposalDataSource = proposalDataSource,
++        zashiProposalRepository = zashiProposalRepository,
++        submitProposal = submitProposal,
+@@ -585,2 +585,0 @@ class MigrationCompleteVMTest {
 -        migrationScheduler = migrationScheduler,
 -        migrationNotifier = migrationNotifier,
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVMTest.kt
@@ -7446,21 +7844,39 @@ index 60f75827b..3cb0111d6 100644
 -                    coEvery { this@mockk(null) } returns snapshot
 +                    coEvery { this@mockk(any()) } returns snapshot
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
-index 7ec2ab46a..2f100de0d 100644
+index 7ec2ab46a..7b5156b4b 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 @@ -21,0 +22 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignArgs
-@@ -121 +122 @@ class MigrationKeystoneScanVMTest {
+@@ -30,0 +32 @@ import kotlinx.coroutines.flow.emptyFlow
++import kotlinx.coroutines.flow.first
+@@ -74,0 +77,15 @@ class MigrationKeystoneScanVMTest {
++    @Test
++    fun restoredScannerRequiresTheLiveOwnerBoundSigningBatch() = runTest {
++        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
++        val pendingSchedule = PendingMigrationScheduleRepositoryImpl()
++        val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
++        val cold = vm(sdk, pendingSchedule, pendingPczts, FakeNavigationRouter())
++        assertEquals(false, cold.isScanReady.first { it != null })
++
++        pendingSchedule.set(testAccountKeyId, schedule())
++        pendingPczts.set(testAccountKeyId, pending(roundIndex = 0))
++        val warm = vm(sdk, pendingSchedule, pendingPczts, FakeNavigationRouter())
++        assertEquals(true, warm.isScanReady.first { it != null })
++        coVerify(exactly = 0) { sdk.decodeKeystoneSignBatchPart(any(), any()) }
++    }
++
+@@ -121 +138 @@ class MigrationKeystoneScanVMTest {
 -            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
 +            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
-@@ -157 +158 @@ class MigrationKeystoneScanVMTest {
+@@ -157 +174 @@ class MigrationKeystoneScanVMTest {
 -            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
 +            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
-@@ -185 +186 @@ class MigrationKeystoneScanVMTest {
+@@ -185 +202 @@ class MigrationKeystoneScanVMTest {
 -            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
 +            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
-@@ -221,0 +223,23 @@ class MigrationKeystoneScanVMTest {
+@@ -221,0 +239,23 @@ class MigrationKeystoneScanVMTest {
 +    @Test
 +    fun completingFirstOfTwoRoundsReplacesTheSignAndScanPair() = runTest {
 +        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
@@ -7484,19 +7900,19 @@ index 7ec2ab46a..2f100de0d 100644
 +        assertEquals(listOf(11L), next.accumulatedTransferSigned.map { it.first })
 +    }
 +
-@@ -229 +253,3 @@ class MigrationKeystoneScanVMTest {
+@@ -229 +269,3 @@ class MigrationKeystoneScanVMTest {
 -        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> { coEvery { this@mockk() } returns sdk },
 +        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
 +            coEvery { this@mockk(testAccountKeyId) } returns sdk
 +        },
-@@ -279,0 +306,3 @@ class MigrationKeystoneScanVMTest {
+@@ -279,0 +322,3 @@ class MigrationKeystoneScanVMTest {
 +        val replacedRoutes = mutableListOf<Any>()
 +        var replacementOrigin: KClass<*>? = null
 +            private set
-@@ -285 +314 @@ class MigrationKeystoneScanVMTest {
+@@ -285 +330 @@ class MigrationKeystoneScanVMTest {
 -        override fun replace(vararg routes: Any) = Unit
 +        override fun replace(vararg routes: Any) { replacedRoutes.addAll(routes) }
-@@ -289 +318,4 @@ class MigrationKeystoneScanVMTest {
+@@ -289 +334,4 @@ class MigrationKeystoneScanVMTest {
 -        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
 +        override fun replaceFrom(route: KClass<*>, vararg routes: Any) {
 +            replacementOrigin = route
@@ -7806,7 +8222,7 @@ index 20a8edf27..5372c57fd 100644
 -                    coEvery { this@mockk() } returns Zatoshi(500_000L)
 +                    coEvery { this@mockk(any()) } returns Zatoshi(500_000L)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..98caa748a 100644
+index d0838db0c..0808ddfbe 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 @@ -17,0 +18 @@ import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
@@ -7818,36 +8234,42 @@ index d0838db0c..98caa748a 100644
 @@ -29,0 +34,2 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
 +import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
-@@ -50,0 +57 @@ import kotlinx.coroutines.flow.flowOf
+@@ -34 +39,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+@@ -50,0 +56 @@ import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.first
-@@ -85,0 +93,2 @@ class MigrationReviewVMTest {
-+            val reviewed = MigrationSweepTransactionProposal(Zatoshi(500_000L), proposal)
-+            every { zashiProposalRepository.setMigrationSweepProposal(proposal, reviewed.amount) } returns reviewed
-@@ -102 +111 @@ class MigrationReviewVMTest {
+@@ -85,0 +92,2 @@ class MigrationReviewVMTest {
++            val reviewed = MigrationSweepTransactionProposal(proposal)
++            every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
+@@ -101,2 +109,2 @@ class MigrationReviewVMTest {
+-                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                submitProposal()
++                zashiProposalRepository.setMigrationSweepProposal(proposal)
 +                submitProposal(reviewed)
-@@ -132 +141 @@ class MigrationReviewVMTest {
+@@ -131,2 +139,2 @@ class MigrationReviewVMTest {
+-                keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                keystoneProposalRepository.createPCZTFromProposal()
++                keystoneProposalRepository.setMigrationSweepProposal(proposal)
 +                keystoneProposalRepository.createPCZTFromProposal(any())
-@@ -170 +179 @@ class MigrationReviewVMTest {
+@@ -170 +178 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -221 +230 @@ class MigrationReviewVMTest {
+@@ -221 +229 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -272 +281 @@ class MigrationReviewVMTest {
+@@ -272 +280 @@ class MigrationReviewVMTest {
 -                    coEvery { getMigrationState() } returns MigrationState.NotStarted
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-@@ -283 +292 @@ class MigrationReviewVMTest {
+@@ -283 +291 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -289 +298,4 @@ class MigrationReviewVMTest {
+@@ -289 +297,4 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(vm, scheduleFromSplit)
 +            val review = vm.currentReview()
 +            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
 +            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
 +            review.onConfirm()
-@@ -299,0 +312,119 @@ class MigrationReviewVMTest {
+@@ -299,0 +311,160 @@ class MigrationReviewVMTest {
 +    @Test
 +    fun rejectsNegativeHandlesBeforeReviewAndRequiresApprovalForAReplacement() = runTest {
 +        val unusable = schedule(-1L, 400_000L)
@@ -7880,6 +8302,47 @@ index d0838db0c..98caa748a 100644
 +        refreshed.onConfirm()
 +        advanceUntilIdle()
 +        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(replacement, any()) }
++    }
++
++    @Test
++    fun uncertainSplitContinuesTheExactCommittedPlanWithoutAnotherBroadcast() = runTest {
++        val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
++        val expected = schedule(42L, 100_000L)
++        val nativeTransfer = mockk<cash.z.ecc.android.sdk.MigrationTransferState> {
++            every { isTransfer } returns true
++            every { id } returns 42L
++            every { amountZatoshi } returns 100_000L
++        }
++        val state = MigrationState.InProgress(mockk(relaxed = true))
++        var committed = false
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { getMigrationStateUnreconciled() } coAnswers {
++                if (committed) state else MigrationState.NotStarted
++            }
++            coEvery { isNoteSplitNeeded() } returns true
++            coEvery { prepareNoteSplit() } returns split
++            coEvery { proposeMigrationTransfersFromSplit(split) } returns expected
++            coEvery { submitNoteSplit(split, any()) } coAnswers {
++                committed = true
++                TransferResult.NetworkError(retryable = true)
++            }
++            coEvery { getMigrationTransferStates() } returns
++                cash.z.ecc.android.sdk.MigrationTransferStates(listOf(nativeTransfer), 100L)
++        }
++        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
++        val vm = vm(
++            router = FakeNavigationRouter(),
++            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
++            mode = MigrationMode.AUTOMATIC,
++            finalizeMigrationSchedule = finalize,
++        )
++
++        vm.currentReview().onConfirm()
++        advanceUntilIdle()
++
++        coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
++        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
++        coVerify(exactly = 1) { finalize(expected, MigrationMode.AUTOMATIC, any(), false) }
 +    }
 +
 +    @Test
@@ -7967,33 +8430,37 @@ index d0838db0c..98caa748a 100644
 +        coVerify(exactly = 0) { tor.store(any<String>(), false) }
 +    }
 +
-@@ -323,2 +454,2 @@ class MigrationReviewVMTest {
+@@ -321,4 +492,4 @@ class MigrationReviewVMTest {
+-            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
+-            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
 -            coVerify(exactly = 0) { submitProposal() }
++            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any()) }
++            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
 +            coVerify(exactly = 0) { submitProposal(any()) }
-@@ -336 +467,4 @@ class MigrationReviewVMTest {
+@@ -336 +507,4 @@ class MigrationReviewVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
 +            }
-@@ -342 +476 @@ class MigrationReviewVMTest {
+@@ -342 +516 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -347,4 +481 @@ class MigrationReviewVMTest {
+@@ -347,4 +521 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(
 -                vm,
 -                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
 -            )
 +            vm.currentReview().onConfirm()
-@@ -354 +485 @@ class MigrationReviewVMTest {
+@@ -354 +525 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
 +            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-@@ -359 +490 @@ class MigrationReviewVMTest {
+@@ -359 +530 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
 +            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
-@@ -385,6 +516,11 @@ class MigrationReviewVMTest {
+@@ -385,6 +556,11 @@ class MigrationReviewVMTest {
 -    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
@@ -8011,24 +8478,30 @@ index d0838db0c..98caa748a 100644
 +        estimatedDurationHours = 1,
 +        proposalHandle = handle,
 +    )
-@@ -429,0 +566 @@ class MigrationReviewVMTest {
+@@ -402 +577,0 @@ class MigrationReviewVMTest {
+-        amountZatoshi: Zatoshi = Zatoshi(500_000L)
+@@ -408 +582,0 @@ class MigrationReviewVMTest {
+-                Zatoshi::class.java,
+@@ -411 +585 @@ class MigrationReviewVMTest {
+-        method.invoke(vm, proposal, amountZatoshi)
++        method.invoke(vm, proposal)
+@@ -429,0 +604 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -430,0 +568,3 @@ class MigrationReviewVMTest {
+@@ -430,0 +606,3 @@ class MigrationReviewVMTest {
 +        pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
 +            PendingMigrationScheduleRepositoryImpl(),
 +        draftTor: Boolean? = null,
-@@ -435 +575 @@ class MigrationReviewVMTest {
+@@ -435 +613 @@ class MigrationReviewVMTest {
 -        args = MigrationReviewArgs(mode = mode),
 +        args = MigrationReviewArgs(mode = mode, useTor = draftTor),
-@@ -437 +577,2 @@ class MigrationReviewVMTest {
+@@ -437 +615,2 @@ class MigrationReviewVMTest {
 -        pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
 +        pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
 +        pendingKeystone = mockk { every { peek(any()) } returns null },
-@@ -439,0 +581 @@ class MigrationReviewVMTest {
+@@ -439,0 +619 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled = migrationTorEnabled,
-@@ -446 +588 @@ class MigrationReviewVMTest {
+@@ -446 +625,0 @@ class MigrationReviewVMTest {
 -        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
-+        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk(any()) } returns Zatoshi(500_000L) },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 index a914d8998..b0b397ace 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
@@ -22994,10 +23467,10 @@ index 000000000..dd7572bf3
 +}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifferenceState.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifferenceState.kt
 new file mode 100644
-index 000000000..f946d231b
+index 000000000..34c15c27d
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifferenceState.kt
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,53 @@
 +package co.electriccoin.zcash.ui.design.component
 +
 +import androidx.compose.foundation.clickable
@@ -23010,11 +23483,6 @@ index 000000000..f946d231b
 +import androidx.compose.material3.TooltipDefaults
 +import androidx.compose.material3.rememberTooltipState
 +import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.LaunchedEffect
-+import androidx.compose.runtime.getValue
-+import androidx.compose.runtime.mutableStateOf
-+import androidx.compose.runtime.remember
-+import androidx.compose.runtime.setValue
 +import androidx.compose.runtime.rememberCoroutineScope
 +import androidx.compose.ui.Modifier
 +import androidx.compose.ui.semantics.Role
@@ -23026,28 +23494,16 @@ index 000000000..f946d231b
 +import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.getValue
 +import kotlinx.coroutines.launch
-+import kotlinx.coroutines.delay
 +
 +data class QuoteValueDifferenceState(
 +    val percentage: StringResource,
 +    val explanation: StringResource,
 +    val isNegative: Boolean,
-+    val validUntilMillis: Long? = null,
 +)
 +
 +@OptIn(ExperimentalMaterial3Api::class)
 +@Composable
 +internal fun QuoteValueDifference(state: QuoteValueDifferenceState) {
-+    var isCurrent by remember(state) {
-+        mutableStateOf(state.validUntilMillis?.let { it > System.currentTimeMillis() } ?: true)
-+    }
-+    LaunchedEffect(state) {
-+        state.validUntilMillis?.let {
-+            delay((it - System.currentTimeMillis()).coerceAtLeast(0))
-+            isCurrent = false
-+        }
-+    }
-+    if (!isCurrent) return
 +    val tooltip = rememberTooltipState(isPersistent = true)
 +    val scope = rememberCoroutineScope()
 +    val value = state.percentage.getValue()
@@ -27733,7 +28189,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..d731abc96 100644
+index 7b9af8bf7..5905d29a2 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -28076,26 +28532,31 @@ index 7b9af8bf7..d731abc96 100644
 @@ -1248 +1241 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1262 +1255 @@
+@@ -1256 +1249 @@
+-    <string name="migrationReview_immediateBody">Todo tu saldo de Orchard se transferirá a Ironwood en una sola transferencia en cadena. Una vez confirmada, esta transferencia no se puede cancelar.</string>
++    <string name="migrationReview_immediateBody">La transferencia mueve los fondos elegibles de Orchard a Ironwood. Una vez confirmada, esta transferencia no se puede cancelar.</string>
+@@ -1257,0 +1251 @@
++    <string name="migrationReview_eligibleOrchardFunds">Fondos elegibles de Orchard</string>
+@@ -1262 +1256 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1270 @@
+@@ -1277 +1271 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1272 @@
+@@ -1279 +1273 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1276,2 @@
+@@ -1283,2 +1277,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1294,0 +1288,2 @@
+@@ -1294,0 +1289,2 @@
 +    <string name="migrationHome_finishScheduling">Termina de programar la migración</string>
 +    <string name="migrationScheduled_signatureRequired">Vuelve a Inicio para terminar de firmar con Keystone.</string>
-@@ -1306 +1300,0 @@
+@@ -1306 +1301,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1306,2 @@
+@@ -1312,2 +1307,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -28140,7 +28601,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..ababe6ae0 100644
+index f41234151..7506379d1 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -28704,24 +29165,29 @@ index f41234151..ababe6ae0 100644
 @@ -1547 +1383 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1561 +1397 @@ Your vote can no longer be submitted.</string>
+@@ -1555 +1391 @@ Your vote can no longer be submitted.</string>
+-    <string name="migrationReview_immediateBody">Your full Orchard balance will be transferred to Ironwood in a single on-chain transfer. Once confirmed, this transfer cannot be cancelled.</string>
++    <string name="migrationReview_immediateBody">The transfer moves eligible Orchard funds to Ironwood. Once confirmed, this transfer cannot be cancelled.</string>
+@@ -1556,0 +1393 @@ Your vote can no longer be submitted.</string>
++    <string name="migrationReview_eligibleOrchardFunds">Eligible Orchard funds</string>
+@@ -1561 +1398 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1412 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1413 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1414 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1415 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1418,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1419,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1593,0 +1430,2 @@ Your vote can no longer be submitted.</string>
+@@ -1593,0 +1431,2 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationHome_finishScheduling">Finish scheduling migration</string>
 +    <string name="migrationScheduled_signatureRequired">Return to Home to finish signing with Keystone.</string>
-@@ -1629,0 +1468,7 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1469,7 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
 +    <string name="private_swap_funding_status">Funding status</string>
 +    <string name="private_swap_status_unavailable">Unavailable</string>
@@ -31208,30 +31674,32 @@ index c38424cc6..52be8a5ce 100644
 -            .firstOrNull { !it.grpcError }
 +            .firstOrNull { it.grpcError }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffdcd..baa62b504 100644
+index a5bcffdcd..ed99d6562 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-@@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
+@@ -4,0 +5 @@ import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
++import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
+@@ -16 +16,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
 -import co.electriccoin.zcash.ui.common.model.near.AppFee
-@@ -26,0 +26,5 @@ import co.electriccoin.zcash.ui.common.model.near.SwapType
+@@ -26,0 +27,5 @@ import co.electriccoin.zcash.ui.common.model.near.SwapType
 +import co.electriccoin.zcash.ui.common.model.near.requireNearTokenDecimals
 +import co.electriccoin.zcash.ui.common.model.near.requireNoAffiliateFees
 +import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
 +import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 +import co.electriccoin.zcash.ui.common.model.near.toNearProviderDecimalOrNull
-@@ -34 +37,0 @@ import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayCont
+@@ -34 +38,0 @@ import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayCont
 -import co.electriccoin.zcash.ui.util.loggableNot
-@@ -50 +52,0 @@ class NearSwapDataSource(
+@@ -50 +53,0 @@ class NearSwapDataSource(
 -    private val log = loggableNot("NearSwapDataSourceImpl")
-@@ -56 +57,0 @@ class NearSwapDataSource(
+@@ -56 +58,0 @@ class NearSwapDataSource(
 -                .distinctBy { Triple(it.symbol, it.blockchain, it.decimals) }
-@@ -67,0 +69 @@ class NearSwapDataSource(
+@@ -67,0 +70 @@ class NearSwapDataSource(
 +            contractAddress = dto.contractAddress,
-@@ -79,2 +81 @@ class NearSwapDataSource(
+@@ -79,2 +82 @@ class NearSwapDataSource(
 -        slippage: BigDecimal,
 -        affiliateAddress: String
 +        slippage: BigDecimal
-@@ -92,3 +93,7 @@ class NearSwapDataSource(
+@@ -92,3 +94,7 @@ class NearSwapDataSource(
 -        val shifted = amount.movePointRight(decimals)
 -        val integer = shifted.toBigInteger().toBigDecimal()
 -        val normalizedAmount = shifted.round(MathContext(integer.precision(), RoundingMode.DOWN))
@@ -31242,7 +31710,7 @@ index a5bcffdcd..baa62b504 100644
 +                "Quote amount must be a positive whole number of base units"
 +            }
 +        }
-@@ -118,8 +123 @@ class NearSwapDataSource(
+@@ -118,8 +124 @@ class NearSwapDataSource(
 -                appFees =
 -                    listOf(
 -                        AppFee(
@@ -31252,15 +31720,15 @@ index a5bcffdcd..baa62b504 100644
 -                    ),
 -                referral = "zodl"
 +                appFees = emptyList()
-@@ -136,3 +134,2 @@ class NearSwapDataSource(
+@@ -136,3 +135,2 @@ class NearSwapDataSource(
 -                                .split(" ")
 -                                .lastOrNull()
 -                                ?.toBigDecimalOrNull() ?: throw e
 +                                .substringAfterLast(' ')
 +                                .toNearProviderDecimalOrNull() ?: throw e
-@@ -166,0 +164 @@ class NearSwapDataSource(
+@@ -166,0 +165 @@ class NearSwapDataSource(
 +            require(!response.quoteRequest.dry) { "A simulation response cannot authorize swap funding" }
-@@ -174,0 +173,15 @@ class NearSwapDataSource(
+@@ -174,0 +174,20 @@ class NearSwapDataSource(
 +            val depositType =
 +                if (originAsset.isZCashAsset) {
 +                    synchronizerProvider.getSynchronizer().validateAddress(response.quote.depositAddress)
@@ -31276,26 +31744,31 @@ index a5bcffdcd..baa62b504 100644
 +            require(deposit.isNotEmpty() && deposit.all { it in '!'..'~' }) {
 +                "Swap quote deposit address must be a single address"
 +            }
-@@ -202,0 +216,2 @@ class NearSwapDataSource(
++            require(originAsset.isZCashAsset ||
++                RecipientAddressPolicy.validate(deposit, originAsset.blockchain.chainTicker) is
++                    RecipientAddressPolicy.Validation.Valid) {
++                "Swap quote deposit address does not match the selected network"
++            }
+@@ -202,0 +222,2 @@ class NearSwapDataSource(
 +        require(response.quoteResponse.quote.depositAddress == depositAddress) { "Swap status reference mismatch" }
 +        require(!response.quoteResponse.quoteRequest.dry) { "A simulation response cannot settle a swap" }
-@@ -209 +223,0 @@ class NearSwapDataSource(
+@@ -209 +229,0 @@ class NearSwapDataSource(
 -        log("checkSwapStatus $depositAddress")
-@@ -220,3 +233,0 @@ class NearSwapDataSource(
+@@ -220,3 +239,0 @@ class NearSwapDataSource(
 -    // The 1Click API normalises asset IDs for routing (e.g. "nep141:btc.omft.near" →
 -    // "1cs_v1:btc:native:coin"). Try an exact match first; fall back to extracting the ticker
 -    // from the normalised "1cs_v1:<ticker>:..." format and matching by tokenTicker.
-@@ -224,4 +235 @@ class NearSwapDataSource(
+@@ -224,4 +241 @@ class NearSwapDataSource(
 -        supportedTokens.find { it.assetId == echoedId }
 -            ?: echoedId.split(":").getOrNull(1)?.let { ticker ->
 -                supportedTokens.find { it.tokenTicker.equals(ticker, ignoreCase = true) }
 -            }
 +        co.electriccoin.zcash.ui.common.model.near.resolveNearAsset(supportedTokens, echoedId)
-@@ -256,2 +263,0 @@ class NearSwapDataSource(
+@@ -256,2 +269,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..473ca0b7d 100644
+index bf147a8b5..148341540 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -31436,6 +31909,8 @@ index bf147a8b5..473ca0b7d 100644
 +    override val fundingAccount: WalletAccount,
 @@ -504,0 +548 @@ data class ExactOutputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
+@@ -519 +562,0 @@ data class MigrationSweepTransactionProposal(
+-    val amount: Zatoshi,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
@@ -31756,13 +32231,16 @@ index befe3b652..ade3fe056 100644
 +
 +private val SETTLEMENT_SUPPORT_STATUSES = setOf(SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
-index 327721528..492cf0243 100644
+index 327721528..c76af82cb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
 @@ -62,0 +63,3 @@ interface MigrationAppHooks {
 +    /** Restores pending notification navigation after process recreation. */
 +    fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean = false)
 +
+@@ -85,2 +87,0 @@ interface MigrationNavigator {
+-    fun backToMigrationReview()
+-
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AccountUuidExt.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AccountUuidExt.kt
 index 77bfd5ff3..0989f382e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AccountUuidExt.kt
@@ -31807,6 +32285,43 @@ index 000000000..5c5ac0d01
 +    }
 +
 +    internal class Grant
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClock.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClock.kt
+new file mode 100644
+index 000000000..4c163b6df
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClock.kt
+@@ -0,0 +1,31 @@
++package co.electriccoin.zcash.ui.common.model
++
++import android.os.SystemClock
++import kotlin.time.AbstractLongTimeSource
++import kotlin.time.Clock
++import kotlin.time.DurationUnit
++import kotlin.time.TimeSource
++
++/** Keeps an observed deadline from reopening after a backward device clock correction. */
++internal class ElapsedTimeClock(
++    private val wallClock: Clock = Clock.System,
++    private val elapsedTime: TimeSource = AndroidElapsedTimeSource,
++) : Clock {
++    private var anchorTime = wallClock.now()
++    private var anchorMark = elapsedTime.markNow()
++
++    @Synchronized
++    override fun now(): kotlin.time.Instant {
++        val projected = anchorTime + anchorMark.elapsedNow()
++        val current = wallClock.now()
++        if (current > projected) {
++            anchorTime = current
++            anchorMark = elapsedTime.markNow()
++        }
++        return maxOf(projected, current)
++    }
++}
++
++internal object AndroidElapsedTimeSource : AbstractLongTimeSource(DurationUnit.MILLISECONDS) {
++    override fun read(): Long = SystemClock.elapsedRealtime()
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
 new file mode 100644
@@ -35944,7 +36459,7 @@ index 000000000..def3275d1
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
-index f9a562c53..ccfd58254 100644
+index f9a562c53..dbe108199 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
 @@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -35983,6 +36498,9 @@ index f9a562c53..ccfd58254 100644
 +        quote: SwapQuote,
 +        account: WalletAccount,
 +    ): ExactOutputSwapTransactionProposal
+@@ -70 +88 @@ interface KeystoneProposalRepository {
+-    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
++    fun setMigrationSweepProposal(proposal: Proposal)
 @@ -86,0 +105,7 @@ interface KeystoneProposalRepository {
 +    suspend fun createPCZTFromProposal(account: WalletAccount)
 +
@@ -36026,6 +36544,11 @@ index f9a562c53..ccfd58254 100644
 @@ -183 +217 @@ class KeystoneProposalRepositoryImpl(
 -        createProposalInternal {
 +        createProposalInternal(includeFailureCause = false) {
+@@ -198,2 +232,2 @@ class KeystoneProposalRepositoryImpl(
+-    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
+-        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
++    override fun setMigrationSweepProposal(proposal: Proposal) {
++        transactionProposal.update { MigrationSweepTransactionProposal(proposal) }
 @@ -202 +236,6 @@ class KeystoneProposalRepositoryImpl(
 -    override suspend fun createPCZTFromProposal() {
 +    override suspend fun createPCZTFromProposal() =
@@ -37241,7 +37764,7 @@ index 36d947b49..9ee60d7da 100644
 +}
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
-index 26bf877f4..107ea06e8 100644
+index 26bf877f4..a3fdf2a34 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -37375,6 +37898,9 @@ index 26bf877f4..107ea06e8 100644
 +        override val accountUuid: AccountUuid? = null,
 @@ -524,0 +581 @@ sealed interface ShieldTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
+@@ -556 +613 @@ internal fun sentTransactionAmount(transaction: TransactionOverview): Zatoshi =
+-    if ((transaction.sentNoteCount == 0 && transaction.receivedNoteCount == 0) ||
++    transaction.poolCrossingValue ?: if ((transaction.sentNoteCount == 0 && transaction.receivedNoteCount == 0) ||
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 index fa652b038..612ebcb01 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
@@ -37822,7 +38348,7 @@ index fa652b038..612ebcb01 100644
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..96173fc8f 100644
+index 0a5bfe73c..d1aa9aab7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -37857,7 +38383,7 @@ index 0a5bfe73c..96173fc8f 100644
 +     * Returns the exact adopted review identity for the authentication handoff.
 @@ -55 +73 @@ interface ZashiProposalRepository {
 -    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
-+    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal
++    fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal
 @@ -57 +75,4 @@ interface ZashiProposalRepository {
 -    suspend fun submit(): SubmitResult
 +    suspend fun submit(
@@ -37892,8 +38418,8 @@ index 0a5bfe73c..96173fc8f 100644
 -    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
 -        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
 -    }
-+    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal =
-+        MigrationSweepTransactionProposal(amount, proposal).also { sweep -> transactionProposal.update { sweep } }
++    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
++        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
 @@ -129 +160,4 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun submit(): SubmitResult =
 +    override suspend fun submit(
@@ -38007,16 +38533,29 @@ index b3f3f1abf..2d131ac95 100644
 +
 +internal const val METADATA_FILE_IDENTIFIER_PREFIX = "zashi-metadata-"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
-index 1d3fdf0e2..984bab06a 100644
+index 1d3fdf0e2..4cc5ebc12 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionPropo
 +import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 @@ -8,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
-@@ -17,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+@@ -10 +11,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+-import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
+@@ -17,0 +19 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 +import co.electriccoin.zcash.ui.screen.donation.DonationArgs
-@@ -75,3 +78,7 @@ class CancelProposalFlowUseCase(
+@@ -30 +31,0 @@ class CancelProposalFlowUseCase(
+-    private val migrationNavigator: MigrationNavigator,
+@@ -56,7 +57 @@ class CancelProposalFlowUseCase(
+-            is MigrationSweepTransactionProposal -> {
+-                // Reached via MigrationReviewVM's IMMEDIATE-mode Keystone branch, never via the
+-                // ordinary Send flow — Send was never on this back stack, so falling through to
+-                // the `else` branch's `backTo(Send::class)` would silently no-op (no matching
+-                // destination to pop to), leaving the user stuck on the Sign/reject sheet.
+-                migrationNavigator.backToMigrationReview()
+-            }
++            is MigrationSweepTransactionProposal -> navigationRouter.back()
+@@ -75,3 +70,11 @@ class CancelProposalFlowUseCase(
 -            else -> {
 -                if (clearSendForm) observeClearSend.requestClear()
 -                navigationRouter.backTo(Send::class)
@@ -38027,14 +38566,14 @@ index 1d3fdf0e2..984bab06a 100644
 +                } else {
 +                    backToSend(clearSendForm)
 +                }
-@@ -78,0 +86,6 @@ class CancelProposalFlowUseCase(
++            }
 +
 +            is RegularTransactionProposal -> {
 +                if (proposal.isDonation) navigationRouter.backTo(DonationArgs::class) else backToSend(clearSendForm)
-+            }
+@@ -78,0 +82,2 @@ class CancelProposalFlowUseCase(
 +
 +            else -> backToSend(clearSendForm)
-@@ -80,0 +94,5 @@ class CancelProposalFlowUseCase(
+@@ -80,0 +86,5 @@ class CancelProposalFlowUseCase(
 +
 +    private fun backToSend(clearSendForm: Boolean) {
 +        if (clearSendForm) observeClearSend.requestClear()
@@ -39198,37 +39737,38 @@ index 9174c2293..5bc75d47f 100644
 @@ -58,0 +102 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..3864f6033 100644
+index a33c847ad..8e6225221 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
 +import android.content.Context
 +import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
++import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
++import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
-@@ -3,0 +7,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+@@ -3,0 +9,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -5,0 +11 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -5,0 +13 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -6,0 +13,2 @@ import kotlinx.coroutines.channels.awaitClose
+@@ -6,0 +15,2 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Job
-@@ -13,0 +22,6 @@ import kotlinx.coroutines.launch
+@@ -13,0 +24,4 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlin.time.Clock
-+import kotlin.time.Duration
-+import kotlin.time.TimeMark
 +import kotlin.time.TimeSource
 @@ -18,0 +33,3 @@ class GetSwapStatusUseCase(
 +    context: Context? = null,
-+    private val clock: Clock = Clock.System,
-+    private val timeSource: TimeSource = TimeSource.Monotonic,
-@@ -19,0 +37,3 @@ class GetSwapStatusUseCase(
++    clock: Clock = Clock.System,
++    timeSource: TimeSource = AndroidElapsedTimeSource,
+@@ -19,0 +37,4 @@ class GetSwapStatusUseCase(
 +    private val donationPreferences = context?.let(::DonationPreferences)
++    private val fundingClock = ElapsedTimeClock(clock, timeSource)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -21,0 +42,8 @@ class GetSwapStatusUseCase(
+@@ -21,0 +43,8 @@ class GetSwapStatusUseCase(
 +    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
 +        observe(expected.depositAddress, expected).first { !it.isLoading }
 +
@@ -39237,29 +39777,28 @@ index a33c847ad..3864f6033 100644
 +    internal fun observeForAccount(depositAddress: String, account: WalletAccount): Flow<SwapQuoteStatusData> =
 +        observe(depositAddress, null, account)
 +
-@@ -23 +51,5 @@ class GetSwapStatusUseCase(
+@@ -23 +52,5 @@ class GetSwapStatusUseCase(
 -    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
 +    private fun observe(
 +        depositAddress: String,
 +        initial: TransactionSwapMetadata?,
 +        account: WalletAccount? = null,
 +    ): Flow<SwapQuoteStatusData> =
-@@ -32 +64,4 @@ class GetSwapStatusUseCase(
+@@ -32 +65,4 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
 +                val loaded = runCatchingRecoverable {
 +                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
 +                }
 +                val expectedMetadata = loaded.getOrNull()
-@@ -38 +73,2 @@ class GetSwapStatusUseCase(
+@@ -38 +74,2 @@ class GetSwapStatusUseCase(
 -                            error = IllegalStateException("No metadata for deposit addr")
 +                            error = loaded.exceptionOrNull() as? Exception
 +                                ?: IllegalStateException("No metadata for deposit addr"),
-@@ -43,0 +80,4 @@ class GetSwapStatusUseCase(
+@@ -43,0 +81,3 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
-+                val fundingWindow = FundingWindow(clock, timeSource)
 +                var fundingExpiry: Job? = null
-@@ -46,9 +86,6 @@ class GetSwapStatusUseCase(
+@@ -46,9 +86,7 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -39273,25 +39812,26 @@ index a33c847ad..3864f6033 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
-+                        val fundingTimeLeft = fundingWindow.remaining(result)
++                        val fundingTimeLeft = result.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }
++                            ?.let { it.deadline - fundingClock.now() }?.takeIf { it.isPositive() }
 +                        fundingExpiry?.cancel()
-@@ -57,0 +95 @@ class GetSwapStatusUseCase(
+@@ -57,0 +96 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -59 +97,2 @@ class GetSwapStatusUseCase(
+@@ -59 +98,2 @@ class GetSwapStatusUseCase(
 -                                error = null
 +                                error = null,
 +                                isFundingWindowOpen = fundingTimeLeft != null,
-@@ -61,0 +101,6 @@ class GetSwapStatusUseCase(
+@@ -61,0 +102,6 @@ class GetSwapStatusUseCase(
 +                        fundingExpiry = fundingTimeLeft?.let { remaining ->
 +                            launch {
 +                                delay(remaining)
 +                                data.update { it.copy(isFundingWindowOpen = false) }
 +                            }
 +                        }
-@@ -64,0 +110,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +111,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +113,13 @@ class GetSwapStatusUseCase(
+@@ -66,2 +114,13 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        fundingExpiry?.cancel()
@@ -39307,7 +39847,7 @@ index a33c847ad..3864f6033 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +133,59 @@ class GetSwapStatusUseCase(
+@@ -74,0 +134,44 @@ class GetSwapStatusUseCase(
 +
 +    private suspend fun savedAfterFailure(
 +        expected: TransactionSwapMetadata,
@@ -39345,21 +39885,6 @@ index a33c847ad..3864f6033 100644
 +        }
 +    }
 +
-+    private class FundingWindow(private val clock: Clock, private val timeSource: TimeSource) {
-+        private var cutoff: TimeMark? = null
-+
-+        fun remaining(status: SwapQuoteStatus): Duration? {
-+            if (status.status != SwapStatus.INCOMPLETE_DEPOSIT) return null
-+            val byClock = status.deadline - clock.now()
-+            val byElapsedTime = cutoff?.elapsedNow()?.unaryMinus()
-+            // A clock correction or identical later poll may shorten this window, never extend it.
-+            if (byElapsedTime == null || byClock < byElapsedTime) {
-+                cutoff = timeSource.markNow() + byClock
-+            }
-+            return minOf(byClock, byElapsedTime ?: byClock).takeIf { it.isPositive() }
-+        }
-+    }
-+
 +    private class RefreshLock {
 +        val mutex = Mutex()
 +        var users = 0
@@ -39367,10 +39892,10 @@ index a33c847ad..3864f6033 100644
 +
 +    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
 +        IllegalStateException("Swap status refresh was not saved")
-@@ -80,0 +198,2 @@ data class SwapQuoteStatusData(
+@@ -80,0 +184,2 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
 +    val isFundingWindowOpen: Boolean = false,
-@@ -83,0 +203,19 @@ data class SwapQuoteStatusData(
+@@ -83,0 +189,19 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)
@@ -50762,42 +51287,45 @@ index 2ceac399f..cd65a938b 100644
 +    val showInline: Boolean = true,
 +    val detailItem: SwapQuoteInfoItem? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-index 9f37c1d93..bb8c02329 100644
+index 9f37c1d93..ec328a4df 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-@@ -4,0 +5 @@ import androidx.lifecycle.viewModelScope
+@@ -3,0 +4 @@ import androidx.lifecycle.ViewModel
++import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
+@@ -4,0 +6 @@ import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
-@@ -15,0 +17 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
+@@ -15,0 +18 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
-@@ -17,0 +20,5 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -17,0 +21,5 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotal
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
 +import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
-@@ -30 +37 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -30 +38 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-@@ -31,0 +39,5 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArg
+@@ -31,0 +40,5 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArg
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.collectLatest
 +import kotlinx.coroutines.flow.flow
-@@ -36,3 +47,0 @@ import kotlinx.coroutines.flow.combine
+@@ -36,3 +48,0 @@ import kotlinx.coroutines.flow.combine
 -import kotlinx.coroutines.flow.filterNotNull
 -import kotlinx.coroutines.flow.launchIn
 -import kotlinx.coroutines.flow.onEach
-@@ -40,0 +50 @@ import kotlinx.coroutines.launch
+@@ -40,0 +51 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withTimeoutOrNull
-@@ -43 +52,0 @@ import kotlin.time.Clock
+@@ -43 +53,0 @@ import kotlin.time.Clock
 -import kotlin.time.Duration.Companion.minutes
-@@ -48 +57 @@ internal class SwapQuoteVM(
+@@ -48 +58 @@ internal class SwapQuoteVM(
 -    applicationStateProvider: ApplicationStateProvider,
 +    @Suppress("UNUSED_PARAMETER") applicationStateProvider: ApplicationStateProvider,
-@@ -54,0 +64 @@ internal class SwapQuoteVM(
+@@ -54,0 +65,2 @@ internal class SwapQuoteVM(
 +    private val independentPrices: IndependentPriceProvider,
-@@ -55,0 +66,15 @@ internal class SwapQuoteVM(
++    private val priceClock: Clock = ElapsedTimeClock(),
+@@ -55,0 +68,15 @@ internal class SwapQuoteVM(
 +    private companion object {
 +        const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
 +        const val PRICE_REVIEW_BUDGET_MILLIS = 8_000L
@@ -50808,12 +51336,12 @@ index 9f37c1d93..bb8c02329 100644
 +    private val proposals = observeProposal.observeNullable().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 +    private val clock = flow {
 +        while (true) {
-+            emit(Clock.System.now().toEpochMilliseconds())
++            emit(priceClock.now().toEpochMilliseconds())
 +            delay(PRICE_CLOCK_INTERVAL_MILLIS)
 +        }
 +    }
 +
-@@ -58,4 +83,6 @@ internal class SwapQuoteVM(
+@@ -58,4 +85,6 @@ internal class SwapQuoteVM(
 -            swapRepository.quote.filterNotNull(),
 -            observeProposal.observeNullable(),
 -            observeSelectedWalletAccount.require(),
@@ -50824,17 +51352,21 @@ index 9f37c1d93..bb8c02329 100644
 +            priceCheck,
 +            clock,
 +        ) { quote, proposal, account, check, now ->
-@@ -62,0 +90 @@ internal class SwapQuoteVM(
+@@ -62,0 +92 @@ internal class SwapQuoteVM(
 +                null -> unavailableState()
-@@ -65 +93,3 @@ internal class SwapQuoteVM(
+@@ -65 +95,3 @@ internal class SwapQuoteVM(
 -                is SwapQuoteData.Success -> createState(proposal, quote, account)
 +                is SwapQuoteData.Success -> if (account == null || quote.quote.requiresLocalProposal &&
 +                    !proposal.matchesFunding(quote.quote, account)) unavailableState()
 +                else createState(proposal, quote, account, check, now)
-@@ -70 +100 @@ internal class SwapQuoteVM(
+@@ -69,2 +101,4 @@ internal class SwapQuoteVM(
+-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
 -            initialValue = null
++            started = SharingStarted.WhileSubscribed(
++                ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO
++            ),
 +            initialValue = if (swapRepository.quote.value == null) unavailableState() else null
-@@ -74,7 +104,22 @@ internal class SwapQuoteVM(
+@@ -74,7 +108,22 @@ internal class SwapQuoteVM(
 -        applicationStateProvider
 -            .observeOnForeground()
 -            .onEach {
@@ -50864,10 +51396,10 @@ index 9f37c1d93..bb8c02329 100644
 +                        }
 +                        priceCheck.value = BoundPriceCheck(quote, fee, checked)
 +                    }
-@@ -82 +127 @@ internal class SwapQuoteVM(
+@@ -82 +131 @@ internal class SwapQuoteVM(
 -            }.launchIn(viewModelScope)
 +        }
-@@ -88,3 +133,18 @@ internal class SwapQuoteVM(
+@@ -88,3 +137,18 @@ internal class SwapQuoteVM(
 -        account: WalletAccount
 -    ): SwapQuoteState.Success =
 -        swapQuoteSuccessMapper.createState(
@@ -50884,12 +51416,12 @@ index 9f37c1d93..bb8c02329 100644
 +            val proposalChanged = quote.quote.requiresLocalProposal && proposals.value !== proposal
 +            val invalidReview = currentPublication !== quote || !quote.canFund(now) || proposalChanged
 +            if (isClosing || invalidReview) return
-+            val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
++            val current = priceCheck.value.current(quote.quote, fee, priceClock.now().toEpochMilliseconds())
 +            if (current != assessment || current == IndependentPriceCheck.Checking) return
 +            action()
 +        }
 +        return swapQuoteSuccessMapper.createState(
-@@ -92,3 +152,5 @@ internal class SwapQuoteVM(
+@@ -92,3 +156,6 @@ internal class SwapQuoteVM(
 -            onBack = ::onBack,
 -            onSubmitQuoteClick = ::onSubmitQuoteClick,
 -            onNavigateToOnRampSwap = ::onNavigateToOnRampSwap
@@ -50897,23 +51429,24 @@ index 9f37c1d93..bb8c02329 100644
 +            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal, quote) } },
 +            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
 +            priceCheck = assessment,
++            assessmentTime = kotlin.time.Instant.fromEpochMilliseconds(nowMillis),
 +            canFund = { quote.canFund(Clock.System.now()) },
-@@ -95,0 +158 @@ internal class SwapQuoteVM(
+@@ -95,0 +163 @@ internal class SwapQuoteVM(
 +    }
-@@ -109 +172 @@ internal class SwapQuoteVM(
+@@ -109 +177 @@ internal class SwapQuoteVM(
 -                        stringResByDynamicCurrencyNumber(
 +                        stringResByCurrencyNumber(
-@@ -111 +174,2 @@ internal class SwapQuoteVM(
+@@ -111 +179,2 @@ internal class SwapQuoteVM(
 -                            ticker = quote.exception.asset.tokenTicker
 +                            ticker = quote.exception.asset.tokenTicker,
 +                            minDecimals = 0,
-@@ -153 +217 @@ internal class SwapQuoteVM(
+@@ -153 +222 @@ internal class SwapQuoteVM(
 -                    onClick = ::onEditPaymentClick
 +                    onClick = ::onBack
-@@ -155 +219 @@ internal class SwapQuoteVM(
+@@ -155 +224 @@ internal class SwapQuoteVM(
 -            onBack = ::onBackDuringError
 +            onBack = ::onBack
-@@ -159 +223,10 @@ internal class SwapQuoteVM(
+@@ -159 +228,10 @@ internal class SwapQuoteVM(
 -    private fun onEditPaymentClick() = cancelSwapQuote()
 +    internal fun unavailableState() = SwapQuoteState.Error(
 +        icon = imageRes(R.drawable.ic_swap_quote_error),
@@ -50925,24 +51458,24 @@ index 9f37c1d93..bb8c02329 100644
 +    )
 +
 +    private fun dismissUnavailable() = closeQuote { navigationRouter.back() }
-@@ -161 +234 @@ internal class SwapQuoteVM(
+@@ -161 +239 @@ internal class SwapQuoteVM(
 -    private fun onBack() = cancelSwapQuote()
 +    internal fun onBack() = closeQuote { cancelSwapQuote() }
-@@ -163 +236,5 @@ internal class SwapQuoteVM(
+@@ -163 +241,5 @@ internal class SwapQuoteVM(
 -    private fun onBackDuringError() = cancelSwapQuote()
 +    private fun closeQuote(action: () -> Unit) {
 +        if (isClosing) return
 +        isClosing = true
 +        action()
 +    }
-@@ -165 +242,2 @@ internal class SwapQuoteVM(
+@@ -165 +247,2 @@ internal class SwapQuoteVM(
 -    private fun onSubmitQuoteClick() = viewModelScope.launch { submitProposal() }
 +    private fun onSubmitQuoteClick(proposal: TransactionProposal?, quote: SwapQuoteData.Success) =
 +        viewModelScope.launch { submitProposal(proposal, quote) }
-@@ -167 +245 @@ internal class SwapQuoteVM(
+@@ -167 +250 @@ internal class SwapQuoteVM(
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
-@@ -169,0 +248,8 @@ internal class SwapQuoteVM(
+@@ -169,0 +253,8 @@ internal class SwapQuoteVM(
 +private fun TransactionProposal?.matchesFunding(quote: SwapQuote, account: WalletAccount): Boolean =
 +    this is SwapTransactionProposal && this.quote === quote &&
 +        fundingAccount.sdkAccount.accountUuid == account.sdkAccount.accountUuid
@@ -50951,9 +51484,9 @@ index 9f37c1d93..bb8c02329 100644
 +    get() = co.electriccoin.zcash.ui.common.model.ZecSwapComposition.funding(mode) ==
 +        co.electriccoin.zcash.wallet.foundation.FundingCapability.LOCAL_TRANSACTION
 +
-@@ -177 +262,0 @@ internal data class SwapQuoteInternalState(
+@@ -177 +267,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
-@@ -180,0 +266,16 @@ internal data class SwapQuoteInternalState(
+@@ -180,0 +271,16 @@ internal data class SwapQuoteInternalState(
 +
 +private data class BoundPriceCheck(
 +    val quote: SwapQuote,
@@ -50971,7 +51504,7 @@ index 9f37c1d93..bb8c02329 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..dbc98955f 100644
+index 717411935..8ddc7f2e0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -50984,18 +51517,22 @@ index 717411935..dbc98955f 100644
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 @@ -23,0 +26,2 @@ import java.math.RoundingMode
 +import kotlin.time.Clock
-+import kotlin.time.Duration.Companion.minutes
-@@ -31 +35,3 @@ internal class SwapQuoteVMMapper {
++import kotlin.time.Instant
+@@ -31 +35,4 @@ internal class SwapQuoteVMMapper {
 -        onNavigateToOnRampSwap: () -> Unit
 +        onNavigateToOnRampSwap: () -> Unit,
 +        priceCheck: IndependentPriceCheck? = null,
++        assessmentTime: Instant = Clock.System.now(),
 +        canFund: () -> Boolean = { Clock.System.now() < state.quote.deadline },
-@@ -33,0 +40 @@ internal class SwapQuoteVMMapper {
+@@ -33,0 +41 @@ internal class SwapQuoteVMMapper {
 +            val expired = !canFund()
-@@ -48,0 +56,2 @@ internal class SwapQuoteVMMapper {
+@@ -46 +54 @@ internal class SwapQuoteVMMapper {
+-                amount = createTotalAmountState(),
++                amount = createTotalAmountState(assessmentTime),
+@@ -48,0 +57,2 @@ internal class SwapQuoteVMMapper {
 +                priceCheck = priceCheck?.let(::mapPriceCheck),
 +                minimumDeposit = quote.minimumDepositInfo(),
-@@ -51 +60,9 @@ internal class SwapQuoteVMMapper {
+@@ -51 +61,9 @@ internal class SwapQuoteVMMapper {
 -                        text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
 +                        text = when {
 +                            expired -> stringRes(R.string.private_swap_fresh_quote)
@@ -51006,14 +51543,14 @@ index 717411935..dbc98955f 100644
 +                        },
 +                        isEnabled =
 +                            expired || canReview(priceCheck),
-@@ -53,5 +70 @@ internal class SwapQuoteVMMapper {
+@@ -53,5 +71 @@ internal class SwapQuoteVMMapper {
 -                            if (quote.destinationAsset.isZCashAsset) {
 -                                onNavigateToOnRampSwap()
 -                            } else {
 -                                onSubmitQuoteClick()
 -                            }
 +                            if (canFund()) reviewAction(onNavigateToOnRampSwap, onSubmitQuoteClick) else onBack()
-@@ -62,0 +76,11 @@ internal class SwapQuoteVMMapper {
+@@ -62,0 +77,11 @@ internal class SwapQuoteVMMapper {
 +    private fun SwapQuoteInternalState.canReview(priceCheck: IndependentPriceCheck?): Boolean =
 +        (quote.destinationAsset.isZCashAsset || proposal?.quote === quote) &&
 +            priceCheck != IndependentPriceCheck.Checking
@@ -51025,17 +51562,17 @@ index 717411935..dbc98955f 100644
 +        }
 +    }
 +
-@@ -65,0 +90,6 @@ internal class SwapQuoteVMMapper {
+@@ -65,0 +91,6 @@ internal class SwapQuoteVMMapper {
 +        val minimum = quote.minimumAmountOut?.let {
 +            stringRes(
 +                R.string.private_minimum_received,
 +                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
 +            )
 +        }
-@@ -67 +97 @@ internal class SwapQuoteVMMapper {
+@@ -67 +98 @@ internal class SwapQuoteVMMapper {
 -        return stringRes(
 +        return minimum ?: stringRes(
-@@ -96,7 +126,2 @@ internal class SwapQuoteVMMapper {
+@@ -96,7 +127,2 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 -                title =
 -                    if (quote.destinationAsset.isZCashAsset) {
@@ -51045,33 +51582,36 @@ index 717411935..dbc98955f 100644
 -                    }.withStyle(),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
 +                title = stringRes(totalFeesZatoshi).withStyle(),
-@@ -107,0 +133,6 @@ internal class SwapQuoteVMMapper {
+@@ -107,0 +134,6 @@ internal class SwapQuoteVMMapper {
 +            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-@@ -111 +142,4 @@ internal class SwapQuoteVMMapper {
+@@ -111 +143,4 @@ internal class SwapQuoteVMMapper {
 -                val slippageUsd = quote.amountOutUsd.multiply(slippage)
 +                val allowance = quote.inputAllowance ?: quote.amountInFormatted.multiply(slippage)
 +                val slippageUsd = quote.amountInUsd
 +                    .divide(quote.amountInFormatted, MathContext.DECIMAL128)
 +                    .multiply(allowance)
-@@ -113,5 +147 @@ internal class SwapQuoteVMMapper {
+@@ -113,5 +148 @@ internal class SwapQuoteVMMapper {
 -                    quote.amountInFormatted
 -                        .multiply(
 -                            slippage,
 -                            MathContext.DECIMAL128
 -                        ).convertZecToZatoshi()
 +                    allowance.convertZecToZatoshi()
-@@ -122 +152 @@ internal class SwapQuoteVMMapper {
+@@ -122 +153 @@ internal class SwapQuoteVMMapper {
 -                            R.string.swapAndPay_maxSlippage,
 +                            R.string.private_included_input_allowance,
-@@ -127 +157 @@ internal class SwapQuoteVMMapper {
+@@ -127 +158 @@ internal class SwapQuoteVMMapper {
 -                        stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol).withStyle()
 +                        quoteFiatAmount(slippageUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -136,3 +166,8 @@ internal class SwapQuoteVMMapper {
+@@ -134 +165 @@ internal class SwapQuoteVMMapper {
+-    private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
++    private fun SwapQuoteInternalState.createTotalAmountState(assessmentTime: Instant): SwapQuoteInfoItem =
+@@ -136,3 +167,8 @@ internal class SwapQuoteVMMapper {
 -            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
 -            subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
@@ -51083,32 +51623,32 @@ index 717411935..dbc98955f 100644
 +                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
 +            subtitle = quoteFiatAmount(totalUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -145,2 +180,2 @@ internal class SwapQuoteVMMapper {
+@@ -145,2 +181,2 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
 +            fiatAmount = quoteFiatAmount(quote.amountInUsd),
-@@ -156 +191 @@ internal class SwapQuoteVMMapper {
+@@ -156 +192 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
-@@ -157,0 +193 @@ internal class SwapQuoteVMMapper {
+@@ -157,0 +194 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
-@@ -159 +195 @@ internal class SwapQuoteVMMapper {
+@@ -159 +196 @@ internal class SwapQuoteVMMapper {
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
 +            fiatAmount = quoteFiatAmount(quote.amountOutUsd),
-@@ -161 +197,24 @@ internal class SwapQuoteVMMapper {
+@@ -161 +198,23 @@ internal class SwapQuoteVMMapper {
 -            chain = quote.destinationAsset.chainName
 +            chain = quote.destinationAsset.chainName,
-+            valueDifference = createValueDifference(),
++            valueDifference = createValueDifference(assessmentTime),
 +        )
 +
-+    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
++    private fun SwapQuoteInternalState.createValueDifference(assessmentTime: Instant): QuoteValueDifferenceState? {
 +        val percentage = quoteValueDifference(
 +            totalSpendUsd = totalUsd,
 +            receivedUsd = quote.amountOutUsd,
 +            quotedAt = quote.timestamp,
 +            deadline = quote.deadline,
-+            now = Clock.System.now(),
++            now = assessmentTime,
 +        ) ?: return null
 +        val rounded = percentage.setScale(2, RoundingMode.HALF_UP)
 +        val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
@@ -51121,7 +51661,6 @@ index 717411935..dbc98955f 100644
 +            percentage = stringRes(signed),
 +            explanation = stringRes(scope),
 +            isNegative = rounded.signum() < 0,
-+            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
 @@ -162,0 +222,54 @@ internal class SwapQuoteVMMapper {
 +    }
 +
@@ -61832,7 +62371,7 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..9fa4dc5ba 100644
+index c0be20563..7e0de0b60 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -61933,7 +62472,7 @@ index c0be20563..9fa4dc5ba 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -111,4 +183,17 @@ class NearSwapDataSourceTest {
+@@ -111,4 +183,3 @@ class NearSwapDataSourceTest {
 -            // The affiliate fee + referral are attached to every request.
 -            assertEquals("zodl", captured.referral)
 -            assertEquals("affiliate", captured.appFees.single().recipient)
@@ -61941,7 +62480,22 @@ index c0be20563..9fa4dc5ba 100644
 +            // Independent quotes carry no affiliate fee or referral.
 +            assertEquals(null, captured.referral)
 +            assertEquals(emptyList(), captured.appFees)
+@@ -116,0 +188,32 @@ class NearSwapDataSourceTest {
++    @Test
++    fun incomingQuoteChecksTheExternalDepositAgainstTheOriginNetwork() = runBlocking {
++        val returned = SwapInputProvenanceFixture.status(
++            origin, zec, "t1wrongnetwork", SwapType.FLEX_INPUT, "{}",
++        ).response.quoteResponse
++        coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
++            returned.copy(quoteRequest = firstArg())
 +        }
++        val failure = assertFailsWith<IllegalArgumentException> {
++            dataSource.requestQuote(
++                SwapMode.FLEX_INPUT, BigDecimal.ONE, "refund", origin, "destination", zec, BigDecimal.ONE
++            )
++        }
++        assertEquals("Swap quote deposit address does not match the selected network", failure.message)
++    }
 +
 +    @Test
 +    fun freshQuoteRefusesAnUnexpectedAppFee() = runBlocking {
@@ -61955,36 +62509,37 @@ index c0be20563..9fa4dc5ba 100644
 +            dataSource.requestQuote(
 +                SwapMode.FLEX_INPUT, BigDecimal.ONE, "refund", origin, "destination", zec, BigDecimal.ONE
 +            )
-@@ -115,0 +201,2 @@ class NearSwapDataSourceTest {
++        }
 +        assertEquals("Unexpected swap app fee", failure.message)
 +    }
-@@ -132,2 +219 @@ class NearSwapDataSourceTest {
++
+@@ -132,2 +235 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -159,2 +245 @@ class NearSwapDataSourceTest {
+@@ -159,2 +261 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -182,2 +267 @@ class NearSwapDataSourceTest {
+@@ -182,2 +283 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -205,2 +289 @@ class NearSwapDataSourceTest {
+@@ -205,2 +305 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -221 +304,4 @@ class NearSwapDataSourceTest {
+@@ -221 +320,4 @@ class NearSwapDataSourceTest {
 -                    every { quoteRequest } returns mockk { every { swapType } returns SwapType.EXACT_OUTPUT }
 +                    every { quoteRequest } returns mockk {
 +                        every { dry } returns false
 +                        every { swapType } returns SwapType.EXACT_OUTPUT
 +                    }
-@@ -235,2 +321 @@ class NearSwapDataSourceTest {
+@@ -235,2 +337 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -244,0 +330,35 @@ class NearSwapDataSourceTest {
+@@ -244,0 +346,35 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
 +        runBlocking {
@@ -62020,19 +62575,19 @@ index c0be20563..9fa4dc5ba 100644
 +            }
 +        }
 +
-@@ -260,2 +380 @@ class NearSwapDataSourceTest {
+@@ -260,2 +396 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +404 @@ class NearSwapDataSourceTest {
+@@ -285,2 +420 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +429 @@ class NearSwapDataSourceTest {
+@@ -311,2 +445 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +452,21 @@ class NearSwapDataSourceTest {
+@@ -335,2 +468,21 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
@@ -62056,7 +62611,7 @@ index c0be20563..9fa4dc5ba 100644
 +                    destinationAddress = "destination",
 +                    destinationAsset = zec,
 +                    slippage = BigDecimal("2")
-@@ -353,0 +490,50 @@ class NearSwapDataSourceTest {
+@@ -353,0 +506,50 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun incomingBitcoinStatusUsesExactIdentityWhenBothCatalogEntriesExist() = runBlocking {
 +        val btc = (origin as NearSwapAsset).copy(assetId = "nep141:btc.omft.near", tokenTicker = "BTC")
@@ -62107,9 +62662,9 @@ index c0be20563..9fa4dc5ba 100644
 +        }
 +    }
 +
-@@ -389,0 +576 @@ class NearSwapDataSourceTest {
+@@ -389,0 +592 @@ class NearSwapDataSourceTest {
 +                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
-@@ -391,0 +579 @@ class NearSwapDataSourceTest {
+@@ -391,0 +595 @@ class NearSwapDataSourceTest {
 +                            every { dry } returns false
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt
 new file mode 100644
@@ -63113,6 +63668,40 @@ index c471b234a..000000000
 -        assertNotEquals(accountIdOffset("0011223344556677"), accountIdOffset("8899aabbccddeeff"))
 -    }
 -}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClockTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClockTest.kt
+new file mode 100644
+index 000000000..5cd283dbc
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ElapsedTimeClockTest.kt
+@@ -0,0 +1,28 @@
++package co.electriccoin.zcash.ui.common.model
++
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.time.Clock
++import kotlin.time.Duration.Companion.seconds
++import kotlin.time.Instant
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class ElapsedTimeClockTest {
++    @Test
++    fun carriesForwardElapsedTimeAfterWallCorrections() = runTest {
++        val origin = Instant.parse("2026-11-24T00:00:00Z")
++        var wall = origin
++        val clock = ElapsedTimeClock(object : Clock { override fun now() = wall }, testScheduler.timeSource)
++        advanceTimeBy(3_000)
++        wall = origin - 10.seconds
++        assertEquals(origin + 3.seconds, clock.now())
++        wall = origin + 8.seconds
++        assertEquals(wall, clock.now())
++        advanceTimeBy(4_000)
++        wall = origin
++        assertEquals(origin + 12.seconds, clock.now())
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
 index 3f54429cb..4c5470daa 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
@@ -66556,7 +67145,7 @@ index 5333e1415..bcfac2bc7 100644
 @@ -294,0 +304 @@ class GiftCardRepositoryIdlePolicyTest {
 +            afterReset.job.cancel()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
-index 000ebfa20..b1480b116 100644
+index 000ebfa20..32e28eaaf 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
 @@ -4,0 +5 @@ import cash.z.ecc.android.sdk.model.Memo
@@ -66574,7 +67163,18 @@ index 000ebfa20..b1480b116 100644
 -            keystoneSDKProvider = mockk<KeystoneSDKProvider>(),
 +            keystoneSDKProvider = signer,
 +            processSwapTransaction = mockk(relaxed = true),
-@@ -94,0 +102,28 @@ class KeystoneProposalRepositoryTest {
+@@ -36 +42,0 @@ class KeystoneProposalRepositoryTest {
+-        val amount = Zatoshi(1234L)
+@@ -38 +44 @@ class KeystoneProposalRepositoryTest {
+-        repository.setMigrationSweepProposal(proposal, amount)
++        repository.setMigrationSweepProposal(proposal)
+@@ -41 +47 @@ class KeystoneProposalRepositoryTest {
+-        assertEquals(MigrationSweepTransactionProposal(amount, proposal), stored)
++        assertEquals(MigrationSweepTransactionProposal(proposal), stored)
+@@ -83 +89 @@ class KeystoneProposalRepositoryTest {
+-            repository.setMigrationSweepProposal(mockk<Proposal>(), Zatoshi(1234L))
++            repository.setMigrationSweepProposal(mockk<Proposal>())
+@@ -94,0 +101,28 @@ class KeystoneProposalRepositoryTest {
 +    @Test
 +    fun replacementDuringRedactionCannotBeHandedToKeystone() = runBlocking {
 +        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
@@ -67711,6 +68311,27 @@ index 000000000..4d8a0b33b
 +            zip318Kind = Zip318Kind.NOT_CLASSIFIED,
 +        )
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt
+index 70f0929ad..1cc4daef3 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt
+@@ -21 +21,2 @@ class TransactionRepositorySentTransactionAmountTest {
+-        raw: FirstClassByteArray? = null
++        raw: FirstClassByteArray? = null,
++        crossingValue: Long? = null,
+@@ -42 +43 @@ class TransactionRepositorySentTransactionAmountTest {
+-            poolCrossingValue = null,
++            poolCrossingValue = crossingValue?.let(::Zatoshi),
+@@ -46,0 +48,9 @@ class TransactionRepositorySentTransactionAmountTest {
++    @Test
++    fun walletInternalCrossingUsesTheSdkValueEvenWhenTheNoteCountsDisagree() {
++        val overview = overview(
++            sentNoteCount = 1, receivedNoteCount = 2, totalReceived = 1_100_000, netValue = 1_000,
++            zip318Kind = Zip318Kind.TRANSFER, crossingValue = 500_000,
++        )
++        assertEquals(500_000L, sentTransactionAmount(overview).value)
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 index 0bc7a1124..0d0ca40b4 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
@@ -68687,7 +69308,7 @@ index 0bc7a1124..0d0ca40b4 100644
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..9a21e17f5
+index 000000000..053f87e98
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 @@ -0,0 +1,193 @@
@@ -68738,7 +69359,7 @@ index 000000000..9a21e17f5
 +    @Test
 +    fun migrationAdoptionReturnsTheExactReviewIdentityPublishedForAuthentication() {
 +        val sdkProposal = mockk<Proposal>()
-+        val adopted = repository.setMigrationSweepProposal(sdkProposal, Zatoshi(1234))
++        val adopted = repository.setMigrationSweepProposal(sdkProposal)
 +
 +        assertSame(adopted, repository.transactionProposal.value)
 +        assertSame(sdkProposal, adopted.proposal)
@@ -68885,17 +69506,20 @@ index 000000000..9a21e17f5
 +    )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
-index 3cd0d3f1e..8743375c2 100644
+index 3cd0d3f1e..4c2afdb8b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
-@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
+@@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+-import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
+@@ -18,0 +18 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
-@@ -21,0 +23 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+@@ -21,0 +22 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 +import co.electriccoin.zcash.ui.screen.donation.DonationArgs
-@@ -35,0 +38,45 @@ class CancelProposalFlowUseCaseTest {
-+    @Test
+@@ -37 +38 @@ class CancelProposalFlowUseCaseTest {
+-    fun migrationSweepProposalNavigatesBackToMigrationReviewInsteadOfSend() =
 +    fun donationCancellationClearsProposalsAndRetainsDonationFormWithoutClearingSend() =
-+        runTest {
+@@ -39 +40,45 @@ class CancelProposalFlowUseCaseTest {
+-            val proposal = MigrationSweepTransactionProposal(Zatoshi(500_000L), mockk<Proposal>())
 +            val proposal =
 +                RegularTransactionProposal(
 +                    destination = WalletAddress.Unified.new("recipient"),
@@ -68924,7 +69548,6 @@ index 3cd0d3f1e..8743375c2 100644
 +                            coEvery { getSelectedAccount() } returns mockk<ZodlAccount>(relaxed = true)
 +                        },
 +                    swapRepository = mockk<SwapRepository>(relaxed = true),
-+                    migrationNavigator = FakeMigrationNavigator(),
 +                )
 +
 +            useCase()
@@ -68938,6 +69561,34 @@ index 3cd0d3f1e..8743375c2 100644
 +            assertEquals(0, router.backCalls)
 +        }
 +
++    @Test
++    fun migrationSweepRejectionPopsToTheActualOrigin() =
++        runTest {
++            val proposal = MigrationSweepTransactionProposal(mockk<Proposal>())
+@@ -45 +89,0 @@ class CancelProposalFlowUseCaseTest {
+-            val migrationNavigator = FakeMigrationNavigator()
+@@ -58 +101,0 @@ class CancelProposalFlowUseCaseTest {
+-                    migrationNavigator = migrationNavigator,
+@@ -65 +108 @@ class CancelProposalFlowUseCaseTest {
+-            assertEquals(1, migrationNavigator.backToReviewCalls)
++            assertEquals(1, router.backCalls)
+@@ -89 +131,0 @@ class CancelProposalFlowUseCaseTest {
+-                    migrationNavigator = FakeMigrationNavigator(),
+@@ -126 +167,0 @@ class CancelProposalFlowUseCaseTest {
+-                    migrationNavigator = FakeMigrationNavigator(),
+@@ -137,12 +177,0 @@ class CancelProposalFlowUseCaseTest {
+-    private class FakeMigrationNavigator : MigrationNavigator {
+-        var backToReviewCalls = 0
+-
+-        override fun backToMigrationReview() {
+-            backToReviewCalls++
+-        }
+-
+-        override fun forwardToRestartMigration() {
+-            // no-op fake
+-        }
+-    }
+-
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt
 deleted file mode 100644
 index 0a57ab991..000000000
@@ -69651,7 +70302,7 @@ index f0dc3ea70..18d6269c4 100644
 +        assertNull(emissions.last().status)
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
-index 40bfe60a6..ee2a049e7 100644
+index 40bfe60a6..c6f127a7e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -69814,7 +70465,7 @@ index 40bfe60a6..ee2a049e7 100644
 @@ -103 +225 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
-@@ -105,0 +228,138 @@ class GetSwapStatusUseCaseTest {
+@@ -105,0 +228,140 @@ class GetSwapStatusUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun restartResumesSavedReferenceAndRefundStopsPolling() =
@@ -69925,9 +70576,9 @@ index 40bfe60a6..ee2a049e7 100644
 +            }
 +        }
 +        val states = mutableListOf<SwapQuoteStatusData>()
-+        backgroundScope.launch {
-+            GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
-+                .observe("deposit").collect { states += it }
++        val useCase = GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
++        val observer = backgroundScope.launch {
++            useCase.observe("deposit").collect { states += it }
 +        }
 +        runCurrent()
 +        assertTrue(states.last().isFundingWindowOpen)
@@ -69951,6 +70602,8 @@ index 40bfe60a6..ee2a049e7 100644
 +        stalledPoll.complete(incomplete)
 +        runCurrent()
 +        assertFalse(states.last().isFundingWindowOpen)
++        observer.cancel()
++        assertFalse(useCase("deposit").isFundingWindowOpen)
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
@@ -72636,10 +73289,10 @@ index 1d445dd11..4e10b0b52 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..1fe71ace7
+index 000000000..7a14294ba
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,530 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
@@ -72922,7 +73575,6 @@ index 000000000..1fe71ace7
 +            observeClearSend = clearSend,
 +            accountDataSource = accounts,
 +            swapRepository = mockk(),
-+            migrationNavigator = mockk(),
 +        )
 +        scan(parse(fixture.binary), ScanArgs(ScanFlow.HOMEPAGE))
 +
@@ -83711,7 +84363,7 @@ index 881e28b09..74f1857a7 100644
 @@ -79,0 +80 @@ class SwapQuoteVMGiftCardLinkTest {
 +            independentPrices = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..639979164 100644
+index 38427672d..a710dba93 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,26 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -83779,7 +84431,7 @@ index 38427672d..639979164 100644
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +86,179 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +86,178 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun ordinaryMarketComparisonUsesOneRowWithDirectionalValueAndSourceHelp() {
 +        val cases = mapOf(
@@ -83902,7 +84554,6 @@ index 38427672d..639979164 100644
 +                percentage = co.electriccoin.zcash.ui.design.util.stringRes("-1.50%"),
 +                explanation = co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_value_difference_known),
 +                isNegative = true,
-+                validUntilMillis = (now + kotlin.time.Duration.parse("3m")).toEpochMilliseconds(),
 +            ),
 +            map(quote).to.valueDifference,
 +        )
@@ -83959,7 +84610,7 @@ index 38427672d..639979164 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +301,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +300,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())

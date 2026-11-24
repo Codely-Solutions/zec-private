@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanArgs
+import co.electriccoin.zcash.ui.screen.migration.review.requiresNewMigrationReview
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
@@ -158,6 +159,10 @@ class MigrationKeystoneSignVM(
                     roundInfo.value = roundIndex to totalRounds
                 }
             }.onFailure { error ->
+                if (error.requiresNewMigrationReview()) {
+                    onReject()
+                    return@onFailure
+                }
                 failureSheet.update {
                     MigrationTransferFailureState(
                         message =

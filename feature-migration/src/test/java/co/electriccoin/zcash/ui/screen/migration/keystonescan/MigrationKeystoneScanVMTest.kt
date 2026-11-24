@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -71,6 +72,21 @@ class MigrationKeystoneScanVMTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun restoredScannerRequiresTheLiveOwnerBoundSigningBatch() = runTest {
+        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
+        val pendingSchedule = PendingMigrationScheduleRepositoryImpl()
+        val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
+        val cold = vm(sdk, pendingSchedule, pendingPczts, FakeNavigationRouter())
+        assertEquals(false, cold.isScanReady.first { it != null })
+
+        pendingSchedule.set(testAccountKeyId, schedule())
+        pendingPczts.set(testAccountKeyId, pending(roundIndex = 0))
+        val warm = vm(sdk, pendingSchedule, pendingPczts, FakeNavigationRouter())
+        assertEquals(true, warm.isScanReady.first { it != null })
+        coVerify(exactly = 0) { sdk.decodeKeystoneSignBatchPart(any(), any()) }
     }
 
     @Test

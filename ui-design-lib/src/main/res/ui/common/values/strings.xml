@@ -1388,8 +1388,9 @@
     <string name="migrationHowItWorks_disclaimer">Choosing this option may require a small amount (less than 0.01 ZEC) to be left in the Orchard pool, and which won\'t be transferred.</string>
 
     <string name="migrationReview_title">Review Transfer</string>
-    <string name="migrationReview_immediateBody">Your full Orchard balance will be transferred to Ironwood in a single on-chain transfer. Once confirmed, this transfer cannot be cancelled.</string>
+    <string name="migrationReview_immediateBody">The transfer moves eligible Orchard funds to Ironwood. Once confirmed, this transfer cannot be cancelled.</string>
     <string name="migrationReview_feeLabel">Fee</string>
+    <string name="migrationReview_eligibleOrchardFunds">Eligible Orchard funds</string>
     <string name="migrationReview_amountLabel">Amount</string>
     <string name="migrationReview_signing">Signing...</string>
     <string name="migrationReview_confirm">Confirm</string>

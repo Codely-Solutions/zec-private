@@ -10,6 +10,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
 import co.electriccoin.zcash.ui.screen.migration.component.MigrationFailureBottomSheet
 import co.electriccoin.zcash.ui.screen.scankeystone.view.ScanKeystoneView
 import co.electriccoin.zcash.ui.util.SettingsUtil
@@ -17,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
 data class MigrationKeystoneScanArgs(
@@ -30,6 +34,21 @@ fun MigrationKeystoneScanScreen(args: MigrationKeystoneScanArgs) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val readiness by vm.isScanReady.collectAsStateWithLifecycle()
+    if (readiness != true) {
+        BackHandler { vm.recoverFromHome() }
+        if (readiness == null) {
+            CircularScreenProgressIndicator()
+        } else {
+            MigrationUnavailable(
+                message = stringRes(DesignR.string.migrationScheduled_signatureRequired),
+                onBack = vm::recoverFromHome,
+                onRetry = vm::recoverFromHome,
+                retryLabel = stringRes(R.string.general_back),
+            )
+        }
+        return
+    }
     val validationState by vm.validationState.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()
