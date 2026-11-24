@@ -8,8 +8,23 @@ on:
         default: true
 permissions: {}
 jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
+    steps:
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
   verify-key:
-    if: github.ref == 'refs/heads/main'
+    needs: admit
+    if: needs.admit.outputs.main == 'true'
     concurrency:
       group: zec-private-release
       queue: max
@@ -34,7 +49,8 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: bash .private/verify_signing_key.sh
   verify-scope:
-    if: github.ref == 'refs/heads/main' && inputs.require_environment_only
+    needs: admit
+    if: needs.admit.outputs.main == 'true' && inputs.require_environment_only
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:

@@ -29,8 +29,23 @@ on:
         default: ''
 permissions: {}
 jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
+    steps:
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
   review:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && inputs.operation == 'check'
+    needs: admit
+    if: github.repository == 'Codely-Solutions/zec-private' && needs.admit.outputs.main == 'true' && inputs.operation == 'check'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -61,7 +76,8 @@ jobs:
           print('Exact custom candidate and dispatch verified.')
           PY
   build:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && (inputs.operation == 'preflight' || ((inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'))
+    needs: admit
+    if: github.repository == 'Codely-Solutions/zec-private' && needs.admit.outputs.main == 'true' && (inputs.operation == 'preflight' || ((inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'))
     permissions:
       actions: read
       contents: write

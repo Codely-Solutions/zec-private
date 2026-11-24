@@ -249,8 +249,14 @@ class PublishMetadataTest(unittest.TestCase):
                    status='completed', conclusion='failure')
         self.assertEqual(publisher_job(run, [job], 7, repo), job)
         self.assertEqual(publisher_job(dict(run, event='push'), [job], 7, repo), job)
+        admitted = dict(job, name='discover / build / publish')
+        self.assertEqual(publisher_job(run, [admitted], 7, repo), admitted)
+        with self.assertRaisesRegex(ValueError, 'publisher job'):
+            publisher_job(run, [job, admitted], 7, repo)
         custom = dict(run, path='.github/workflows/custom-release.yml', event='workflow_dispatch')
         self.assertEqual(publisher_job(custom, [job], 7, repo), job)
+        with self.assertRaisesRegex(ValueError, 'publisher job'):
+            publisher_job(custom, [admitted], 7, repo)
         with self.assertRaisesRegex(ValueError, 'trusted main'):
             publisher_job(dict(custom, event='schedule'), [job], 7, repo)
         for change in ({'event': 'pull_request'}, {'head_branch': 'candidate'},

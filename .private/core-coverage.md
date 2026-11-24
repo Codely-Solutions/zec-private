@@ -57,6 +57,19 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Fast screen and provider checks
 
+### Corrections after 28f11edfc
+
+| Boundary | Maintained checks |
+| --- | --- |
+| Raw diagnostics and tax CSV | `ExportPrivateDataUseCaseTest` drives export authentication, pre-copy scheduling, grant replacement at chooser creation and a successful synthetic export. `ExportTaxUseCaseTest` checks empty staging at cleanup registration, registration failure and the exact CSV delivered to the chooser. |
+| Outgoing swap funding | `SubmitProposalUseCaseTest`, `SwapBroadcastDeadlineTest` and the Ledger repository tests keep the quote deadline fixed and roll back wall time while elapsed time crosses the cutoff. The first SDK broadcast remains idle after expiry. Later legs of an entered submission remain covered. |
+| Keystone scanner recovery | `KeystoneEnrollmentSavedStateTest` checks Parcel restoration of the opaque preparation ID. `RestoredWalletRoutesLayoutTest` renders recovery at large text with a ready wallet and fresh repository. `ScanKeystonePCZTViewModelTest` covers live multipart scans, stale preparation, invalid QR/PCZT and old firmware. |
+| Settlement details | `NearSwapQuoteStatusTest` decodes formatted-only input, output, deposit and refund at the resolved asset's precision. Its consumer case keeps saved details visible and observes no metadata write after an invalid refresh. |
+| Support handoffs | `ErrorReportHandoffTest` covers initial account hydration, app grant replacement, wallet reset and account-bound reports after selection changes. Walletless restore opens a blank support draft. |
+| Publisher recovery and ref admission | `test_maintenance_watch`, `test_notify`, `test_publish` and `test_quote_recovery` cover malformed dispatches, run-only and exact recovery, unrelated blockers, original and admitted discovery job identities, and mixed-case or tag refs. |
+
+These checks cover app and controller behavior with synthetic I/O. Android process termination, actual WorkManager dispatch, physical biometrics and signers, external recipient delivery and funded settlement need separate evidence.
+
 ### Review transition regressions
 
 | Area | Automatic regression and behavior |

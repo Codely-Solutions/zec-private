@@ -75,11 +75,51 @@ on:
         required: true
 permissions: {}
 concurrency:
-  group: ${{ (inputs.validation_only || inputs.preflight_only || github.ref != 'refs/heads/main') && 'zec-private-release-validation' || 'zec-private-release-production' }}
+  group: ${{ (inputs.validation_only || inputs.preflight_only || !github.ref_protected || github.ref != 'refs/heads/main') && 'zec-private-release-validation' || 'zec-private-release-production' }}
   queue: max
 jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
+    steps:
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
+  reconcile_input:
+    needs: admit
+    if: needs.admit.outputs.main == 'true' && (inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate the reconciliation dispatch
+        env:
+          CHECK_RECONCILIATION_SELECTOR: 'true'
+          RECONCILIATION_RUN: ${{ inputs.reconciliation_run }}
+          RECONCILIATION_ATTEMPT: ${{ inputs.reconciliation_attempt }}
+          RECONCILIATION_ARTIFACT: ${{ inputs.reconciliation_artifact }}
+          RESUME_DRAFT: ${{ inputs.resume_draft }}
+          CONFLICTING_INPUTS: ${{ !!inputs.candidate_run || inputs.build_emulator || inputs.validation_only || inputs.preflight_only }}
+        run: |
+          if [[ "$CONFLICTING_INPUTS" == true ]]; then
+            echo '::error::Reconciliation cannot be combined with build or validation requests.'
+            exit 1
+          fi
+          python3 -B .private/reconcile_release.py
   admit_hosted:
-    if: inputs.hosted && !inputs.reconciliation_run && github.ref == 'refs/heads/main'
+    needs: admit
+    if: inputs.hosted && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && needs.admit.outputs.main == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -155,8 +195,8 @@ jobs:
     with:
       reuse_run_id: ${{ needs.admit_hosted.outputs.original_controller == github.sha && inputs.recover_run || '' }}
   preflight:
-    needs: admit_hosted
-    if: ${{ always() && !cancelled() && !inputs.reconciliation_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
+    needs: [admit_hosted, admit]
+    if: ${{ always() && !cancelled() && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -166,19 +206,19 @@ jobs:
       signing_changed: ${{ steps.wiring.outputs.changed }}
     steps:
       - name: Check out the trusted release controller
-        if: github.ref == 'refs/heads/main'
+        if: needs.admit.outputs.main == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Select signing smoke from trusted wiring
-        if: github.ref == 'refs/heads/main'
+        if: needs.admit.outputs.main == 'true'
         id: wiring
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .private/signing_wiring.py
       - name: Recheck production controller after queueing
-        if: github.ref == 'refs/heads/main' && !inputs.hosted && !inputs.validation_only && !inputs.preflight_only
+        if: needs.admit.outputs.main == 'true' && !inputs.hosted && !inputs.validation_only && !inputs.preflight_only
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
@@ -259,8 +299,8 @@ jobs:
             --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' \
             -Pkotlin.compiler.execution.strategy=in-process help detektAll
   signing_smoke:
-    needs: preflight
-    if: github.ref == 'refs/heads/main' && needs.preflight.outputs.signing_changed == 'true'
+    needs: [preflight, admit]
+    if: needs.admit.outputs.main == 'true' && needs.preflight.outputs.signing_changed == 'true'
     concurrency:
       group: zec-private-release
       queue: max
@@ -437,8 +477,8 @@ jobs:
       reuse_funded: ${{ needs.admit_hosted.outputs.reuse_funded == 'true' }}
       prepared_id: ${{ needs.admit_hosted.outputs.prepared_id }}
   reserve_quote_retry:
-    needs: [admit_hosted, preflight, signing_smoke, quote_bridge]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    needs: [admit_hosted, preflight, signing_smoke, quote_bridge, admit]
+    if: ${{ !cancelled() && needs.admit.outputs.main == 'true' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -496,8 +536,8 @@ jobs:
       bridge_run_id: ${{ needs.quote_bridge.outputs.artifact_run_id }}
       use_tor: false
   promotion:
-    needs: [preflight, signing_smoke]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
+    needs: [preflight, signing_smoke, admit]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && needs.admit.outputs.main == 'true' && inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -515,8 +555,8 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && !inputs.resume_draft && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
-    needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && needs.admit.outputs.main == 'true' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && !inputs.resume_draft && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted, admit]
     concurrency:
       group: zec-private-release
       queue: max
@@ -617,7 +657,8 @@ jobs:
           PUBLISH_SIGNED_RELEASE: 'true'
         run: python3 -B .private/publish.py
   resume_draft:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
+    needs: [admit, reconcile_input]
+    if: github.event_name == 'workflow_dispatch' && needs.reconcile_input.result == 'success' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
     concurrency:
       group: zec-private-release
       queue: max
@@ -644,8 +685,8 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: python3 -B .private/reconcile_release.py
   reconcile:
-    needs: resume_draft
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && !inputs.preflight_only && (!inputs.resume_draft || needs.resume_draft.result == 'success') }}
+    needs: [resume_draft, admit, reconcile_input]
+    if: ${{ always() && !cancelled() && needs.reconcile_input.result == 'success' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && !inputs.preflight_only && (!inputs.resume_draft || needs.resume_draft.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -683,8 +724,8 @@ jobs:
       attestation_run: ${{ inputs.reconciliation_run || github.run_id }}
       attestation_controller: ${{ needs.reconcile.outputs.controller_sha || github.sha }}
   record_integration:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && needs.verify_publication.result == 'success' }}
-    needs: [publish, reconcile, verify_publication]
+    if: ${{ always() && !cancelled() && needs.admit.outputs.main == 'true' && needs.verify_publication.result == 'success' }}
+    needs: [publish, reconcile, verify_publication, admit]
     environment: maintenance-integration
     runs-on: ubuntu-24.04
     timeout-minutes: 6
@@ -755,8 +796,8 @@ jobs:
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   validation_recovered:
-    if: ${{ !cancelled() && inputs.validation_only && !inputs.preflight_only && github.ref == 'refs/heads/main' && needs.unsigned.result == 'success' && ((!inputs.build_emulator && needs.emulator.result == 'skipped') || needs.emulator.result == 'success') }}
-    needs: [unsigned, emulator]
+    if: ${{ !cancelled() && inputs.validation_only && !inputs.preflight_only && needs.admit.outputs.main == 'true' && needs.unsigned.result == 'success' && ((!inputs.build_emulator && needs.emulator.result == 'skipped') || needs.emulator.result == 'success') }}
+    needs: [unsigned, emulator, admit]
     concurrency:
       group: zec-private-blocker
       queue: max
@@ -779,8 +820,8 @@ jobs:
           BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
         run: python3 -B .private/notify.py 'ZEC Private candidate validation passed.'
   failed:
-    if: ${{ always() && !cancelled() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
-    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration]
+    if: ${{ always() && !cancelled() && !inputs.preflight_only && needs.admit.outputs.main == 'true' && (!(inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft) || needs.reconcile_input.result == 'success') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration, admit, reconcile_input]
     concurrency:
       group: zec-private-blocker
       queue: max

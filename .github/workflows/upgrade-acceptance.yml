@@ -6,6 +6,20 @@ concurrency:
   group: zec-private-upgrade-simulation
   queue: max
 jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
+    steps:
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
   prepare:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -92,8 +106,8 @@ jobs:
           path: artifact/
           retention-days: 1
   sign:
-    if: github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true'
-    needs: [prepare, unsigned]
+    if: needs.admit.outputs.main == 'true' && vars.PRODUCTION_SIGNING_READY == 'true'
+    needs: [prepare, unsigned, admit]
     concurrency:
       group: zec-private-release
       queue: max

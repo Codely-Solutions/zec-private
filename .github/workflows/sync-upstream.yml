@@ -7,116 +7,37 @@ on:
     paths: ['.private/security-maintenance.json', '.private/security-maintenance.patch']
   workflow_dispatch:
 permissions: {}
-concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && 'zec-private-sync' || 'zec-private-sync-diagnostic' }}
-  cancel-in-progress: false
 jobs:
-  maintenance:
-    if: github.ref == 'refs/heads/main'
+  admit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
+    steps:
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
+  discover:
+    needs: admit
+    if: needs.admit.outputs.main == 'true'
+    concurrency:
+      group: zec-private-sync
+      cancel-in-progress: false
     permissions:
       actions: read
-      contents: read
-      issues: read
-      pull-requests: read
-    uses: ./.github/workflows/maintenance-watch.yml
-  prepare:
-    needs: maintenance
-    if: github.ref == 'refs/heads/main' && needs.maintenance.outputs.reconciliation_run == ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: read
-    outputs:
-      source_sha: ${{ steps.sync.outputs.source_sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Select and prepare due maintenance with the trusted patch set
-        id: sync
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PROPOSAL: ${{ needs.maintenance.outputs.proposal }}
-          PROPOSAL_HEAD: ${{ needs.maintenance.outputs.proposal_head }}
-        run: |
-          gh auth setup-git
-          python3 -B .private/maintenance_cadence.py
-      - name: Report a prepared candidate waiting for signing setup
-        if: steps.sync.outputs.source_sha != '' && vars.PRODUCTION_SIGNING_READY != 'true'
-        run: echo '::warning::Upstream candidate prepared. Publication is waiting for verified signing environment setup.'
-  build:
-    needs: [prepare, maintenance]
-    if: ${{ always() && !cancelled() && needs.maintenance.result == 'success' && (needs.maintenance.outputs.reconciliation_run != '' || (needs.prepare.result == 'success' && needs.prepare.outputs.source_sha != '' && vars.PRODUCTION_SIGNING_READY == 'true')) }}
-    permissions:
       contents: write
       issues: write
-      actions: read
       packages: read
-    uses: ./.github/workflows/build-release.yml
-    with:
-      source_sha: ${{ needs.prepare.outputs.source_sha }}
-      reconciliation_run: ${{ needs.maintenance.outputs.reconciliation_run }}
-      reconciliation_attempt: ${{ needs.maintenance.outputs.reconciliation_attempt }}
-      reconciliation_artifact: ${{ needs.maintenance.outputs.reconciliation_artifact }}
-      hosted: ${{ needs.maintenance.outputs.reconciliation_run == '' }}
+      pull-requests: read
+    uses: ./.github/workflows/sync-upstream-main.yml
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}
       RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
       RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
       MAINTENANCE_APP_PRIVATE_KEY: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
-  blocked:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && (needs.maintenance.result == 'failure' || needs.maintenance.result == 'cancelled' || needs.prepare.result == 'failure' || needs.prepare.result == 'cancelled') }}
-    needs: [maintenance, prepare]
-    concurrency:
-      group: zec-private-blocker
-      queue: max
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          NTFY_URL: ${{ secrets.NTFY_URL }}
-          MAKE_ISSUE: 'true'
-          BLOCKER_OPERATION: discovery
-          BLOCKER_CANDIDATE: ${{ github.sha }}
-          MAINTENANCE: ${{ needs.maintenance.result }}
-          BLOCKER_DIAGNOSIS: watcher=${{ needs.maintenance.result }}; preparation=${{ needs.prepare.result }}
-        run: |
-          if [[ "$MAINTENANCE" == cancelled ]]; then
-            python3 .private/notify.py "ZEC Private maintenance blocked. The watcher was independently cancelled before candidate preparation; inspect the current discovery run. Last working release remains available."
-          elif [[ "$MAINTENANCE" == failure ]]; then
-            python3 .private/notify.py "ZEC Private maintenance blocked. The watcher failed before candidate preparation; check discovery and publication-reconciliation proof. Last working release remains available."
-          else
-            python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
-          fi
-  discovery_recovered:
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.maintenance.result == 'success' && needs.prepare.result == 'success' }}
-    needs: [maintenance, prepare]
-    concurrency:
-      group: zec-private-blocker
-      queue: max
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Retire matching discovery blocker
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RECOVERY_VERIFIED: 'true'
-          BLOCKER_OPERATION: discovery
-          BLOCKER_CANDIDATE: ${{ github.sha }}
-        run: python3 -B .private/notify.py 'ZEC Private discovery and candidate preparation passed.'

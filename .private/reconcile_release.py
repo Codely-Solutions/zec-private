@@ -9,14 +9,15 @@ import tempfile
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW as CUSTOM_WORKFLOW
 from publish import (APK, NOTES, exact_assets, expose_release, release_for_tag, release_title,
                      verify_attestation_publisher, verify_tag)
-from release_metadata import ARCHIVE_LIMITS, artifact_producer_job, job_timestamp
+from release_metadata import (ARCHIVE_LIMITS, UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job,
+                              hosted_release_job_names, job_timestamp)
 from verify_public_release import API, bounded_zip, digest, gh, require, unsigned_proof
 
 
 PUBLISHERS = {
-    '.github/workflows/build-release.yml': ({'workflow_dispatch'}, 'publish'),
-    '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule', 'push'}, 'build / publish'),
-    CUSTOM_WORKFLOW: ({'workflow_dispatch'}, 'build / publish'),
+    '.github/workflows/build-release.yml': {'workflow_dispatch'},
+    UPSTREAM_DISCOVERY_WORKFLOW: {'workflow_dispatch', 'schedule', 'push'},
+    CUSTOM_WORKFLOW: {'workflow_dispatch'},
 }
 PUBLISHER_CONCLUSIONS = ('success', 'failure', 'cancelled')
 
@@ -24,13 +25,15 @@ PUBLISHER_CONCLUSIONS = ('success', 'failure', 'cancelled')
 def publisher_job(run, jobs, run_id, repository, *, attempt=None):
     definition = PUBLISHERS.get(run.get('path'))
     require(definition is not None and run['id'] == run_id
-            and run['event'] in definition[0] and run['head_branch'] == 'main'
+            and run['event'] in definition and run['head_branch'] == 'main'
             and run['head_repository']['full_name'] == repository
             and run['status'] == 'completed'
             and (attempt is None or run['run_attempt'] == attempt)
             and re.fullmatch(r'[0-9a-f]{40}', run['head_sha']),
             'Expected a completed trusted main publication')
-    publishers = [job for job in jobs if job['name'] == definition[1]]
+    names = ({'publish'} if run['path'] == '.github/workflows/build-release.yml'
+             else hosted_release_job_names(run['path'], 'publish'))
+    publishers = [job for job in jobs if job['name'] in names]
     require(len(publishers) == 1 and publishers[0]['status'] == 'completed'
             and publishers[0]['run_id'] == run_id and publishers[0]['head_sha'] == run['head_sha']
             and (attempt is None or publishers[0].get('run_attempt') == attempt)
@@ -66,12 +69,16 @@ def archive_bytes(artifact, run, role):
     return raw
 
 
-def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
+def validate_selector(run_id, attempt, artifact_id, *, allow_draft=False):
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Invalid signing run ID')
     require(not attempt or re.fullmatch(r'[1-9][0-9]*', attempt), 'Invalid publisher attempt')
     require(not artifact_id or re.fullmatch(r'[1-9][0-9]*', artifact_id), 'Invalid attestation artifact ID')
     require(bool(attempt) == bool(artifact_id), 'Specify both the publisher attempt and the attestation artifact ID')
     require(not allow_draft or bool(attempt), 'Draft recovery requires an exact attempt and artifact ID')
+
+
+def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
+    validate_selector(run_id, attempt, artifact_id, allow_draft=allow_draft)
     pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     artifacts = [item for page in pages for item in page['artifacts']]
     attestations = [item for item in artifacts if item['expired'] is False
@@ -213,7 +220,11 @@ def resume_draft(run_id, attempt, artifact_id):
 def main():
     args = (os.environ['RECONCILIATION_RUN'], os.environ.get('RECONCILIATION_ATTEMPT', ''),
             os.environ.get('RECONCILIATION_ARTIFACT', ''))
-    proof = resume_draft(*args) if os.environ.get('RESUME_DRAFT') == 'true' else resolve(*args)
+    draft = os.environ.get('RESUME_DRAFT') == 'true'
+    validate_selector(*args, allow_draft=draft)
+    if os.environ.get('CHECK_RECONCILIATION_SELECTOR') == 'true':
+        return
+    proof = resume_draft(*args) if draft else resolve(*args)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8', newline='\n') as output:
         output.writelines(f'{key}={value}\n' for key, value in proof.items())
 

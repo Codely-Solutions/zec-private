@@ -16,7 +16,8 @@ import zipfile
 from apk_architecture import check_apk
 from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
-from release_metadata import APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT, artifact_producer_job
+from release_metadata import (APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT,
+                              UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, hosted_release_job_names)
 
 
 APK = 'zec-private-latest.apk'
@@ -122,7 +123,7 @@ def unsigned_proof(evidence):
     hosted_event = (run['event'] in ('schedule', 'workflow_dispatch') or
                     (run['event'] == 'push' and evidence.get('maintenance', {}).get('kind') == 'security'))
     build_controller = evidence.get('quote_recovery', {}).get('original_controller', evidence['controller_sha'])
-    upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and hosted_event
+    upstream = (run['path'] == UPSTREAM_DISCOVERY_WORKFLOW and hosted_event
                 and run['head_sha'] == build_controller)
     custom = (run['path'] == CUSTOM_WORKFLOW and run['event'] == 'workflow_dispatch'
               and run['head_sha'] == build_controller and evidence.get('maintenance', {}).get('kind') == 'custom')
@@ -131,8 +132,8 @@ def unsigned_proof(evidence):
             and (direct or upstream or custom),
             'Expected a main-branch release producer')
     job_pages = gh(f'actions/runs/{run_id}/jobs?filter=all&per_page=100', '--paginate', '--slurp')
-    label = 'unsigned' if direct else 'build / unsigned'
-    jobs = [job for page in job_pages for job in page['jobs'] if job['name'] == label
+    labels = {'unsigned'} if direct else hosted_release_job_names(run['path'], 'unsigned')
+    jobs = [job for page in job_pages for job in page['jobs'] if job['name'] in labels
             and job['run_id'] == int(run_id) and job['head_sha'] == run['head_sha']]
     pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     assets = [item for page in pages for item in page['artifacts'] if item['name'] == 'validated-unsigned-apk']

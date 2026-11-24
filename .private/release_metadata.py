@@ -17,6 +17,15 @@ ARCHIVE_LIMITS = {
 }
 PUBLIC_APK_LIMIT = 96 * MIB
 APK_PAYLOAD_LIMIT = 256 * MIB
+UPSTREAM_DISCOVERY_WORKFLOW = '.github/workflows/sync-upstream.yml'
+
+
+def hosted_release_job_names(workflow, job):
+    """Keep original discovery evidence readable after moving execution behind ref admission."""
+    original = 'build / ' + job
+    if workflow == UPSTREAM_DISCOVERY_WORKFLOW:
+        return {original, 'discover / ' + original}
+    return {original}
 
 
 def require(condition, message):

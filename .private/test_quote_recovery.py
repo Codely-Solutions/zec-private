@@ -877,19 +877,22 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     def test_unpublished_maintenance_requires_proven_producer_and_current_cadence(self):
         states = dict(BUILD_JOBS, publish='failure', **{WALLET: 'success', QUOTE: 'success'})
-        for event, marker, prior_attestation, error in (
-            ('schedule', {}, False, None),
-            ('push', {}, False, 'cannot recover routine'),
-            ('pull_request', {}, False, 'trusted custom run or maintenance run'),
-            ('push', {'kind': 'security'}, False, None),
-            ('schedule', {}, True, 'retained publication attestation'),
+        for event, marker, prior_attestation, admitted, error in (
+            ('schedule', {}, False, False, None),
+            ('schedule', {}, False, True, None),
+            ('push', {}, False, True, 'cannot recover routine'),
+            ('pull_request', {}, False, True, 'trusted custom run or maintenance run'),
+            ('push', {'kind': 'security'}, False, True, None),
+            ('schedule', {}, True, True, 'retained publication attestation'),
         ):
-            with self.subTest(event=event, marker=marker, error=error):
+            with self.subTest(event=event, marker=marker, admitted=admitted, error=error):
                 names = [*ARTIFACTS.values(), 'hosted-quote-receipt']
                 if prior_attestation:
                     names.append('release-attestation-1')
                 run, jobs, artifacts = self.recovery_run(7, OLD, states, names)
                 run.update(path='.github/workflows/sync-upstream.yml', event=event)
+                if admitted:
+                    jobs = [dict(job, name='discover / ' + job['name']) for job in jobs]
                 metadata = self.recovery_metadata((run, jobs, artifacts))
                 with patch('quote_recovery.require_dispatch') as dispatch, patch('quote_recovery.verify_delta'), \
                         patch('quote_recovery.changed_marker', side_effect=({}, marker)), \

@@ -6,12 +6,14 @@ import subprocess
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
 from maintenance_cadence import MARKER as MAINTENANCE_MARKER, changed_marker, git
-from release_metadata import artifact_producer_job, copied_job_matches, job_timestamp, require
+from release_metadata import (UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, copied_job_matches,
+                              hosted_release_job_names, job_timestamp, require)
 
 RECOVERY_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
     '.github/workflows/quote-bridge.yml',
-    '.github/workflows/hosted-acceptance-probe.yml', '.github/workflows/sync-upstream.yml', '.private/quote_recovery.py',
+    '.github/workflows/hosted-acceptance-probe.yml', '.github/workflows/sync-upstream.yml',
+    '.github/workflows/sync-upstream-main.yml', '.private/quote_recovery.py',
     '.private/hosted_release.py', '.private/hosted_quote_probe.py', '.private/custom_release.py',
     '.private/publish.py', '.private/integrate_release.py', '.private/verify_public_release.py',
     '.private/tor_resident_ui_driver.py', '.private/size_workflow_ui_scenario.py',
@@ -37,9 +39,10 @@ FUNDED_RECOVERY_PATHS = {
     '.private/RELEASE-WORKFLOW.md', '.private/core-coverage.md',
 }
 
-MAINTENANCE_WORKFLOW = '.github/workflows/sync-upstream.yml'
+MAINTENANCE_WORKFLOW = UPSTREAM_DISCOVERY_WORKFLOW
 PUBLICATION_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml', MAINTENANCE_WORKFLOW,
+    '.github/workflows/sync-upstream-main.yml',
     '.github/workflows/maintenance-watch.yml', '.github/workflows/verify-public-release.yml',
     '.private/custom_release.py', '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
     '.private/release_metadata.py', '.private/signing_wiring.py', '.private/reconcile_release.py', '.private/verify_public_release.py',
@@ -194,7 +197,8 @@ class UnpublishedRun:
         return self.attempts[number]
 
     def job(self, name, number):
-        matching = [job for job in self.jobs[number] if job['name'] == 'build / ' + name]
+        names = hosted_release_job_names(self.run['path'], name)
+        matching = [job for job in self.jobs[number] if job['name'] in names]
         require(len(matching) <= 1, 'Ambiguous recovery job: build / ' + name)
         return next(iter(matching), None)
 
@@ -217,7 +221,8 @@ class UnpublishedRun:
         rows = [row for row in self.artifacts if row['name'] == name]
         require(len(rows) == 1, 'Expected one live artifact for recovery: ' + name)
         value = artifact_record(self.metadata, rows[0]['id'], name, self.run['id'], self.run['head_sha'])
-        names = {'build / ' + job for job in (roles or (ARTIFACT_JOBS[name],))}
+        names = set().union(*(hosted_release_job_names(self.run['path'], job)
+                             for job in (roles or (ARTIFACT_JOBS[name],))))
         jobs = [job for group in self.jobs.values() for job in group if job['name'] in names]
         producer = artifact_producer_job(self.run, jobs, value, self.attempt, role=name, strict_timestamps=True)
         require(not first_attempt or producer['run_attempt'] == 1,
@@ -303,7 +308,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         require(publisher == 'skipped' and not history.contains(*WALLET_RECEIPTS),
                 'Wallet recovery requires a stopped publisher and no previous wallet receipt')
         if missing_core and not original_preclaim:
-            require(not any(job['name'].startswith('build / hosted_core /') for job in history.jobs[1]),
+            prefixes = tuple(hosted_release_job_names(history.run['path'], 'hosted_core /'))
+            require(not any(job['name'].startswith(prefixes) for job in history.jobs[1]),
                     'Skipped-wallet recovery requires no previous wallet execution')
         require(all(job['run_attempt'] == 1 for _, job in builds.values()),
                 'Fresh wallet acceptance requires the original build attempt')
@@ -496,7 +502,7 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata, *, o
     quote_controller = history.run['head_sha']
     receipt, producer = history.retained('hosted-quote-receipt', *QUOTE_JOBS,
                                          first_attempt=historical or quote_controller == original)
-    linked = producer['name'] == 'build / ' + QUOTE_JOBS[1]
+    linked = producer['name'] in hosted_release_job_names(history.run['path'], QUOTE_JOBS[1])
     if quote_controller == original:
         require(retry_allowed and original_run and not linked,
                 'Same-controller quote receipt requires the original transient quote failure')

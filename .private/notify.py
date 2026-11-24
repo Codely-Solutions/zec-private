@@ -20,6 +20,7 @@ RECOVERY_HISTORY = re.compile(r'<!-- zec-private-verified-recoveries: ([^\r\n]+)
 RECOVERY_LIMIT = 64
 DISCOVERY_RECOVERY_LIMIT = 16
 EXACT_PUBLISHER = re.compile(r'publisher:([1-9][0-9]*):[1-9][0-9]*:([1-9][0-9]*)')
+RUN_PUBLISHER = re.compile(r'publisher:[1-9][0-9]*::')
 PUBLICATION_OPERATIONS = {'release', 'reconciliation'}
 BLOCKER_OPERATIONS = PUBLICATION_OPERATIONS | {'discovery', 'validation'}
 
@@ -190,6 +191,11 @@ def main(message):
                         attestation=os.environ.get('BLOCKER_ATTESTATION', ''))
         if revision['operation'] not in BLOCKER_OPERATIONS or not revision['candidate']:
             raise ValueError('Invalid blocker scope')
+        if revision['operation'] == 'reconciliation' and not (
+            EXACT_PUBLISHER.fullmatch(revision['candidate']) or RUN_PUBLISHER.fullmatch(revision['candidate'])
+        ):
+            print('Invalid reconciliation selector. See dispatch diagnostics.', flush=True)
+            return
         if revision['operation'] == 'validation' and (emulator := os.environ.get('BLOCKER_VALIDATION_EMULATOR')):
             if emulator not in ('true', 'false'):
                 raise ValueError('Invalid validation emulator scope')

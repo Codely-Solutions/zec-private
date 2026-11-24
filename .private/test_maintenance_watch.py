@@ -75,6 +75,7 @@ def job_activates(job, results, **overrides):
               'inputs.preflight_only': False, 'inputs.hosted': True,
               'inputs.preclaim_run': '', 'inputs.recover_run': '7',
               'inputs.validation_only': False, 'inputs.reconciliation_run': '',
+              'inputs.reconciliation_attempt': '', 'inputs.reconciliation_artifact': '',
               'inputs.resume_draft': False, 'inputs.build_emulator': False,
               'vars.PRODUCTION_SIGNING_READY': 'true',
               'needs.admit_hosted.outputs.same_controller_retry': 'true',
@@ -83,6 +84,10 @@ def job_activates(job, results, **overrides):
               'needs.preflight.outputs.signing_changed': 'false'}
     values.update({f'needs.{name}.result': result for name, result in results.items()})
     values['needs.*.result'] = [results.get(name, 'skipped') for name in job['needs']]
+    values['needs.admit.outputs.main'] = (
+        'true' if overrides.get('github.ref', values['github.ref']) == 'refs/heads/main'
+        and results.get('admit', 'success') == 'success' else ''
+    )
     values.update(overrides)
     return bool(evaluate_expression(job['if'], values))
 
@@ -97,7 +102,7 @@ class MaintenanceWatchTest(unittest.TestCase):
         failed = workflow_job('build-release.yml', 'failed')
         self.assertIn('reserve_quote_retry', failed['needs'])
         for state in ('failure', 'cancelled'):
-            for name in failed['needs']:
+            for name in set(failed['needs']) - {'admit', 'reconcile_input'}:
                 with self.subTest(job=name, result=state):
                     results = {name: state}
                     self.assertTrue(job_activates(failed, results))
@@ -126,32 +131,62 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertEqual(release['queue'], 'max')
         self.assertNotEqual(release.get('cancel-in-progress'), 'true')
         defaults = {'inputs.validation_only': False, 'inputs.preflight_only': False,
-                    'github.ref': 'refs/heads/main'}
+                    'github.ref': 'refs/heads/main', 'github.ref_protected': True}
         production = evaluate_expression(release['group'], defaults)
         self.assertEqual(production, evaluate_expression(release['group'], dict(defaults, **{
             'inputs.reconciliation_run': '123'})))
         for change in ({'inputs.validation_only': True}, {'inputs.preflight_only': True},
-                       {'github.ref': 'refs/heads/review/test'}):
+                       {'github.ref': 'refs/heads/review/test'},
+                       {'github.ref': 'refs/heads/Main', 'github.ref_protected': False}):
             self.assertNotEqual(production, evaluate_expression(release['group'], dict(defaults, **change)))
         for workflow in ('upgrade-acceptance.yml', 'verify-signing-environment.yml'):
             diagnostic = concurrency_settings(workflow_blocks(workflow)[0])
             self.assertNotEqual(production, diagnostic.get('group'))
 
     def test_discovery_dispatch_routes_non_main_away_from_the_main_pending_slot(self):
-        header, _ = workflow_blocks('sync-upstream.yml')
-        settings = concurrency_settings(header)
+        header, jobs = workflow_blocks('sync-upstream.yml')
+        self.assertFalse(concurrency_settings(header))
+        discovery = workflow_job('sync-upstream.yml', 'discover')
+        settings = concurrency_settings(discovery['block'], indent=4)
         self.assertEqual(settings.get('queue', 'single'), 'single')
         self.assertEqual(settings['cancel-in-progress'], 'false')
         self.assertIn('  schedule:\n', header)
         self.assertIn('    branches: [main]', header)
         self.assertIn('  workflow_dispatch:\n', header)
-        routes = [evaluate_expression(settings['group'], {'github.ref': ref, 'github.event_name': event})
-                  for ref, event in [('refs/heads/main', 'schedule'), ('refs/heads/main', 'push'),
-                                     ('refs/heads/main', 'workflow_dispatch'),
-                                     ('refs/heads/review/test', 'workflow_dispatch'),
-                                     ('refs/tags/example', 'workflow_dispatch')]]
-        self.assertEqual(routes[:3], ['zec-private-sync'] * 3)
-        self.assertEqual(routes[3:], ['zec-private-sync-diagnostic'] * 2)
+        self.assertEqual(settings['group'], 'zec-private-sync')
+        self.assertIn('uses: ./.github/workflows/sync-upstream-main.yml', jobs['discover'])
+        self.assertIn('build', workflow_blocks('sync-upstream-main.yml')[1])
+
+    def test_exact_ref_output_controls_privileged_callers_and_queues(self):
+        consumers = (
+            ('sync-upstream.yml', ('discover',)),
+            ('build-release.yml', ('admit_hosted', 'signing_smoke', 'publish', 'failed')),
+            ('custom-release.yml', ('build',)),
+            ('upgrade-acceptance.yml', ('sign',)),
+            ('verify-signing-environment.yml', ('verify-key',)),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp, 'ref-output')
+            for workflow, jobs in consumers:
+                gate = re.search(r'(?ms)^        run: \|\n(.*)', workflow_blocks(workflow)[1]['admit'])[1]
+                gate = '\n'.join(line[10:] for line in gate.splitlines())
+                for ref in ('refs/heads/main', 'refs/heads/Main', 'REFS/HEADS/MAIN', 'refs/tags/main'):
+                    with self.subTest(workflow=workflow, ref=ref):
+                        output.write_text('')
+                        subprocess.run([sys.executable, '-B', '-c', gate], check=True, timeout=15,
+                                       env=dict(os.environ, GITHUB_REF=ref, GITHUB_OUTPUT=str(output)))
+                        allowed = ref == 'refs/heads/main'
+                        self.assertEqual(output.read_text(), 'main=true\n' if allowed else '')
+                        values = {
+                            'github.ref': ref, 'github.repository': 'Codely-Solutions/zec-private',
+                            'inputs.operation': 'publish', 'needs.admit.outputs.main': 'true' if allowed else '',
+                            'needs.preflight.outputs.signing_changed': 'true',
+                            'needs.admit_hosted.outputs.quote_receipt_id': '71',
+                            'needs.admit_hosted.outputs.core_receipt_id': '72',
+                        }
+                        for job in jobs:
+                            statuses = dict(preflight='success', signing_smoke='success', emulator='failure')
+                            self.assertEqual(job_activates(workflow_job(workflow, job), statuses, **values), allowed)
 
     def test_graph_and_fixture_dispatches_leave_the_main_pending_slot_available(self):
         main, repo = 'refs/heads/main', 'Codely-Solutions/zec-private'
@@ -238,8 +273,8 @@ class MaintenanceWatchTest(unittest.TestCase):
 
     def test_issue_writers_share_one_non_replacing_queue(self):
         for workflow, name in (('build-release.yml', 'failed'), ('build-release.yml', 'notify'),
-                               ('build-release.yml', 'validation_recovered'), ('sync-upstream.yml', 'blocked'),
-                               ('sync-upstream.yml', 'discovery_recovered')):
+                               ('build-release.yml', 'validation_recovered'), ('sync-upstream-main.yml', 'blocked'),
+                               ('sync-upstream-main.yml', 'discovery_recovered')):
             block = workflow_job(workflow, name)['block']
             self.assertEqual(concurrency_settings(block, indent=4), {'group': 'zec-private-blocker', 'queue': 'max'})
             self.assertIn('BLOCKER_OPERATION:', block)
@@ -258,7 +293,7 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertTrue(job_activates(workflow_job('build-release.yml', 'publish'), results))
 
     def test_watcher_and_preparation_failures_notify_independently(self):
-        blocked = workflow_job('sync-upstream.yml', 'blocked')
+        blocked = workflow_job('sync-upstream-main.yml', 'blocked')
         self.assertEqual(['maintenance', 'prepare'], blocked['needs'])
         for results in ({'maintenance': 'failure', 'prepare': 'skipped'},
                         {'maintenance': 'success', 'prepare': 'failure'},
@@ -311,8 +346,66 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertEqual(selector(failure, **verified), 'publisher:7:1:73')
                 self.assertEqual(selector(notification, **verified), 'publisher:7:1:73')
 
+    def test_malformed_reconciliation_dispatch_leaves_no_publisher_blocker_after_exact_recovery(self):
+        from reconcile_release import main as reconcile
+        from test_notify import NotifyTest
+
+        workflow = 'build-release.yml'
+        admission = workflow_job(workflow, 'reconcile_input')
+        failed = workflow_job(workflow, 'failed')
+        recovered = workflow_job(workflow, 'notify')
+
+        def field(job, key, values):
+            return evaluate_expression(re.search(r'^          '+key+r': (.+)$', job['block'], re.M)[1], values)
+
+        self.assertIn("CHECK_RECONCILIATION_SELECTOR: 'true'", admission['block'])
+        self.assertIn('python3 -B .private/reconcile_release.py', admission['block'])
+        for run, attempt, artifact, draft, valid in (
+            ('7', '1', '', False, False), ('7', '', '73', False, False),
+            ('7', '01', '73', False, False), ('7', '1', 'invalid', False, False),
+            ('bad', '', '', False, False), ('', '1', '', False, False),
+            ('7', '', '', True, False), ('7', '', '', False, True), ('7', '1', '73', False, True),
+        ):
+            with self.subTest(run=run, attempt=attempt, artifact=artifact, draft=draft):
+                inputs = {'inputs.reconciliation_run': run, 'inputs.reconciliation_attempt': attempt,
+                          'inputs.reconciliation_artifact': artifact, 'inputs.resume_draft': draft,
+                          'needs.reconcile.outputs.attestation_attempt': '',
+                          'needs.reconcile.outputs.attestation_id': '',
+                          'needs.publish.outputs.attestation_id': '', 'inputs.source_sha': '',
+                          'inputs.candidate_run': ''}
+                self.assertTrue(job_activates(admission, {}, **inputs))
+                with patch_environment(dict(CHECK_RECONCILIATION_SELECTOR='true', RECONCILIATION_RUN=run,
+                                            RECONCILIATION_ATTEMPT=attempt, RECONCILIATION_ARTIFACT=artifact,
+                                            RESUME_DRAFT=str(draft).lower())), \
+                        patch('reconcile_release.gh', side_effect=AssertionError('Unexpected remote I/O')):
+                    if valid:
+                        reconcile()
+                    else:
+                        with self.assertRaises(ValueError):
+                            reconcile()
+                notify_failure = job_activates(failed, dict(reconcile='failure',
+                                               reconcile_input='success' if valid else 'failure'), **inputs)
+                self.assertEqual(notify_failure, valid)
+                fixture = NotifyTest()
+                fixture.setUp()
+                fixture.run_notice('Unrelated blocker', BLOCKER_CANDIDATE='unrelated', NTFY_URL='')
+                if notify_failure:
+                    fixture.run_notice('Reconciliation stopped', BLOCKER_OPERATION='reconciliation',
+                                       BLOCKER_CANDIDATE=field(failed, 'BLOCKER_CANDIDATE', inputs),
+                                       BLOCKER_ATTESTATION=field(failed, 'BLOCKER_ATTESTATION', inputs), NTFY_URL='')
+                self.assertEqual(len(fixture.blockers()), 2 if valid else 1)
+
+                verified = dict(inputs, **{'inputs.reconciliation_run': '7',
+                                           'needs.reconcile.outputs.attestation_attempt': '1',
+                                           'needs.reconcile.outputs.attestation_id': '73'})
+                fixture.run_notice('Exact publisher verified', GITHUB_RUN_ID='21', MAKE_ISSUE='',
+                                   RECOVERY_VERIFIED='true', BLOCKER_OPERATION='reconciliation', NTFY_URL='',
+                                   BLOCKER_CANDIDATE=field(recovered, 'BLOCKER_CANDIDATE', verified),
+                                   BLOCKER_ATTESTATION=field(recovered, 'BLOCKER_ATTESTATION', verified))
+                self.assertEqual(set(fixture.blockers()), {('release', 'unrelated', '')})
+
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
-        recovery = workflow_job('sync-upstream.yml', 'discovery_recovered')
+        recovery = workflow_job('sync-upstream-main.yml', 'discovery_recovered')
         passed = dict(maintenance='success', prepare='success')
         self.assertTrue(job_activates(recovery, passed))
         self.assertFalse(job_activates(recovery, passed, workflow_cancelled=True))

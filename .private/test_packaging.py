@@ -77,7 +77,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('!cancelled()', hosted_core)
         self.assertIn("needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true'", hosted_core)
         self.assertIn("needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'", hosted_core)
-        self.assertIn('needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]', publish)
+        self.assertIn('needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted, admit]', publish)
         self.assertIn('environment: production-signing', publish)
         for caller in ('custom-release.yml', 'sync-upstream.yml'):
             caller_workflow = (root / '.github/workflows' / caller).read_text()

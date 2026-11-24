@@ -9,6 +9,14 @@ from test_support import patch_environment
 
 
 class NotifyTest(unittest.TestCase):
+    def test_malformed_publisher_scope_cannot_write_an_issue_or_send_a_notice(self):
+        for candidate in ('publisher:7:1:', 'publisher:7::73', 'publisher:07::', 'publisher:7:1:bad'):
+            with self.subTest(candidate=candidate):
+                self.run_notice(BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE=candidate)
+        self.assertEqual(self.commands, [])
+        self.assertEqual(self.messages, [])
+        self.assertEqual(self.blockers(), {})
+
     def setUp(self):
         self.issue = dict(number=41, title=notify.TITLE, body='Original diagnosis and operator notes.', state='open')
         self.closed = []
