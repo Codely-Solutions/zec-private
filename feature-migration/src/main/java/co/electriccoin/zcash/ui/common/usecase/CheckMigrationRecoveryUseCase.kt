@@ -123,57 +123,22 @@ class CheckMigrationRecoveryUseCase(
     }
 
     private suspend fun reviveAccountWorkers() {
-        // Worker reconciliation + app-open acceleration, for EVERY account (2026-08-0X — was
-        // selected-account-only; a Keystone account's committed migration must keep getting the
-        // live-driver fast path and worker revival regardless of which account is selected in
-        // the UI right now). Self-heals after process kill, device reboot, or an app upgrade
-        // that cleared WorkManager state, without requiring the user to re-enter the migration
-        // flow (the worker's re-arm only happens at the end of its own run and its due alarms
-        // don't survive a package update — see OnMigrationSyncCompletedUseCase; duplicated here
-        // because the SYNCED hook needs a synced foreground synchronizer, which a freshly
-        // relaunched app may not reach for minutes).
-        // Gate on the ENGINE's state, not only the app-side plan cache: the cache can be lost
-        // (observed live: repository empty while the engine held a run with 8/9 broadcast and the
-        // last transfer proved) and the engine is the single source of truth — a live in-progress
-        // migration must always have its worker chain running.
-        //
-        // getMigrationStateUnreconciled(), not getMigrationState(): this router never mutates
-        // (2026-08-07 read/write-separation design) — it starts the live driver below regardless,
-        // which reconciles on its own first cycle, so any staleness here self-corrects immediately.
-        accountDataSource.getAllAccounts().filter { it.isSpendable }.forEach { account ->
-            val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
-            val accountSdk = getOrchardMigrationSdk(accountKeyId) ?: return@forEach
-            val engineInProgress = accountSdk.getMigrationStateUnreconciled() is MigrationState.InProgress
-            if (engineInProgress && !resetPending()) {
-                // The live driver is the fast path while the app is alive — starting it here
-                // covers both cold start (process was killed mid-migration) and every subsequent
-                // foreground return; it is a no-op if already running for this account. It
-                // supersedes the old "accelerate a SCHEDULED worker to run now" logic entirely:
-                // the live driver already drives the account forward on its own once running, so
-                // there is nothing left to separately nudge.
-                migrationLiveDriver.startIfNotRunning(accountKeyId)
-                when (getWorkerRunState(accountKeyId)) {
-                    MigrationWorkerRunState.RUNNING, MigrationWorkerRunState.SCHEDULED -> {
-                        // Nothing to do — RUNNING is already executing; SCHEDULED will either fire
-                        // on its own or be superseded by the live driver's own re-arm (reArm's
-                        // MigrationScheduler.schedule call), whichever comes first.
-                        migrationLog(
-                            "MigrationRecovery: migration worker already active (RUNNING or SCHEDULED) " +
-                                "for $accountKeyId — nothing to do."
-                        )
-                    }
-
-                    MigrationWorkerRunState.ABSENT -> {
-                        // Revival: recovers the DURABLE background chain after process kill, device
-                        // reboot, or an app upgrade that cleared WorkManager state — the live driver
-                        // covers speed while alive, but only the worker chain survives process death.
-                        migrationLog(
-                            "MigrationRecovery: migration worker absent for $accountKeyId — scheduling now."
-                        )
-                        if (!resetPending()) scheduleNow(accountKeyId)
-                    }
-                }
+        // The process-scoped driver accelerates committed migrations. WorkManager keeps the same work
+        // alive after process death, reboot or an update. Recover both for every spendable account.
+        for (account in accountDataSource.getAllAccounts().filter { it.isSpendable }) {
+            if (resetPending()) return
+            val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
+            val sdk = getOrchardMigrationSdk(accountKey)
+            if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending()) {
+                migrationLiveDriver.startIfNotRunning(accountKey)
+                reviveScheduledWorker(accountKey)
             }
+        }
+    }
+
+    private suspend fun reviveScheduledWorker(accountKey: String) {
+        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending()) {
+            scheduleNow(accountKey)
         }
     }
 

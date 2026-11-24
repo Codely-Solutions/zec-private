@@ -330,6 +330,7 @@ def main():
     (dist/'release-attestation.json').write_bytes(data)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
         output.write(f'release_tag={tag}\nattestation_digest={hashlib.sha256(data).hexdigest()}\n')
+        output.write(f'attestation_attempt={attestation["publisher"]["attempt"]}\n')
 
 
 APK = 'zec-private-latest.apk'

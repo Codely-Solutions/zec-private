@@ -561,7 +561,7 @@
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/repository/PendingMigrationScheduleRepository.kt": "879849820769b6e2696fa05b91d1fc3f5ee13f9f460f3115ac8a488369d4aa77",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/repository/PendingMigrationTorFailureDecisionRepository.kt": "c6644e59ea6c0ad6e795380980c5759dfa1cb4b362d985f1af2989b17eb1c9a9",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/repository/RestartMigrationScheduleRepository.kt": "ec1a8479a30ae2d9dcd04b43bc626a0dad0d10e98e3eaf1461db51d7c6224db1",
-  "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt": "6569db7480d27fc0f4c71a65dbaf4d53669dab9159abd6fdaf4c844c554cff62",
+  "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt": "ba4de81697fe5d00e50949ef9bae4d7a46097f1a922c980c354de847110fbd6d",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt": "f0dc4be582cbf3d9ed7118073ab7459bc105443b369f22501b445170d7f6f0a0",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt": "bf4912f47a7700579852ce00863d4c82bc079e5e967fffabb560605e7ae0f16c",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetMigrationGateInfoUseCase.kt": "c1ebd5781ee95f38516725f693c63153b8e58b086d6de29dd8e26dbdea93e80a",

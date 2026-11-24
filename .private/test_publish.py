@@ -380,6 +380,30 @@ class PublishMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'differs from the original publisher'):
                 reconcile.resolve('7', '1', '53')
 
+    def test_run_only_requires_every_plausible_archive_read_to_complete(self):
+        import reconcile_release as reconcile
+
+        run = dict(id=7, head_sha='a' * 40)
+        expected = b'complete archive'
+        second = dict(id=54, name='release-attestation-2', expired=False, workflow_run=run,
+                      size_in_bytes=len(expected), digest='sha256:' + hashlib.sha256(expected).hexdigest())
+        first = dict(second, id=53, name='release-attestation-1')
+        matched = (dict(attestation_id=53, attestation_attempt=1), {}, {})
+
+        def verify(_run, artifact, _artifacts, **_kwargs):
+            if artifact == first:
+                return matched
+            return reconcile.archive_bytes(artifact, run, 'release-attestation')
+
+        with patch.object(reconcile, 'gh', return_value=[{'artifacts': [first, second]}]), \
+                patch.object(reconcile, 'verify_attempt', side_effect=verify), \
+                patch.object(reconcile.subprocess, 'check_output', return_value=b'incomplete'):
+            with self.assertRaisesRegex(reconcile.IncompleteProofSearch, 'size or digest'):
+                reconcile.resolve('7')
+            self.assertEqual(reconcile.resolve('7', '1', '53'), matched[0])
+            with self.assertRaisesRegex(reconcile.IncompleteProofSearch, 'size or digest'):
+                reconcile.resolve('7', '2', '54')
+
     def test_reconciliation_main_writes_each_actions_output_on_its_own_line(self):
         import reconcile_release as reconcile
 

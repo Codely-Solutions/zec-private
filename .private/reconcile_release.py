@@ -75,8 +75,8 @@ def archive_bytes(artifact, run, role):
             and artifact['workflow_run']['head_sha'] == run['head_sha']
             and 0 < artifact['size_in_bytes'] <= compressed, 'Publisher artifact producer or size mismatch')
     raw = subprocess.check_output(['gh', 'api', f'{API}/actions/artifacts/{artifact["id"]}/zip'], timeout=90)
-    require(len(raw) == artifact['size_in_bytes'] and 'sha256:' + digest(raw) == artifact['digest'],
-            'Publisher archive differs from GitHub digest')
+    if len(raw) != artifact['size_in_bytes'] or 'sha256:' + digest(raw) != artifact['digest']:
+        raise IncompleteProofSearch('Publisher archive differs from GitHub size or digest; retry the read')
     return raw
 
 

@@ -488,6 +488,19 @@ class MaintenanceWatchTest(unittest.TestCase):
                 'github.repository': 'Codely-Solutions/zec-private',
             }))
 
+    def test_integration_uses_the_attempt_that_produced_the_attestation(self):
+        workflow = 'build-release.yml'
+        publisher = workflow_job(workflow, 'publish')['block']
+        integration = workflow_job(workflow, 'record_integration')['block']
+        self.assertIn('attestation_attempt: ${{ steps.publication.outputs.attestation_attempt }}', publisher)
+        expression = re.search(r'^          ATTESTATION_ATTEMPT: (.+)$', integration, re.M)[1]
+        values = {'github.run_attempt': 3, 'needs.publish.outputs.attestation_attempt': '1',
+                  'needs.reconcile.outputs.attestation_attempt': ''}
+        self.assertEqual(evaluate_expression(expression, values), '1')
+        self.assertEqual(evaluate_expression(expression, dict(values, **{
+            'needs.publish.outputs.attestation_attempt': '', 'needs.reconcile.outputs.attestation_attempt': '2',
+        })), '2')
+
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
         recovery = workflow_job('sync-upstream-main.yml', 'discovery_recovered')
         passed = dict(maintenance='success', prepare='success')
