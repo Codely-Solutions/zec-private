@@ -401,8 +401,6 @@ class MigrationReviewVM(
     private suspend fun confirmAutomatic(sched: MigrationSchedule) {
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
-        if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
-        account.requireSpendable()
         if (account is KeystoneAccount) {
             // Keystone can't sign in-process — hand the unsigned schedule off to the QR
             // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
@@ -494,8 +492,6 @@ class MigrationReviewVM(
     private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
         confirmLce.execute {
             val account = requireReviewAccount()
-            if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
-            account.requireSpendable()
             if (account is KeystoneAccount) {
                 // Keystone can't sign in-process — adopt the already-built send-max proposal into the
                 // app's existing generic external-signer pipeline exactly as an ordinary Keystone
@@ -537,6 +533,8 @@ class MigrationReviewVM(
         check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
             "The migration review belongs to a different account"
         }
+        if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
+        account.requireSpendable()
     }
 
     private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")

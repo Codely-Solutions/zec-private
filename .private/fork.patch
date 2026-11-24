@@ -3766,7 +3766,7 @@ index 237fdf105..df03e4247 100644
 -    }
 +    override fun consume(decision: MigrationTorFailureDecision): Boolean = pending.compareAndSet(decision, null)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..2878c35b5 100644
+index 9451c3bae..7913a4073 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -7,0 +8 @@ import cash.z.ecc.android.sdk.MigrationState
@@ -3799,22 +3799,21 @@ index 9451c3bae..2878c35b5 100644
 +    ) {
 +        if (!recoveryMutex.tryLock()) return
 +        try {
-@@ -80,3 +88,9 @@ class CheckMigrationRecoveryUseCase(
+@@ -80,3 +88,2 @@ class CheckMigrationRecoveryUseCase(
 -            if (elapsed != null && elapsed < RUN_THROTTLE) {
 -                migrationLog("MigrationRecovery: throttled (ran ${elapsed.inWholeMilliseconds}ms ago)")
 -                return
-+            if (resetPending.value || (elapsed != null && elapsed < RUN_THROTTLE)) return
-+            if (persistableWalletProvider.getPersistableWallet() != null) {
-+                val ownerKey = awaitOwnerKey()
-+                val sdk = ownerKey?.takeUnless { resetPending.value }?.let { getOrchardMigrationSdk(it) }
-+                if (ownerKey != null && sdk != null && !resetPending.value) {
-+                    reviveAccountWorkers()
-+                    recoverBroadcast(sdk, ownerKey, requestSendingScreen)
-+                    if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
-+                }
-@@ -84,15 +98,6 @@ class CheckMigrationRecoveryUseCase(
++            if (!resetPending.value && (elapsed == null || elapsed >= RUN_THROTTLE)) {
++                recoverPersistedWallet(requestSendingScreen)
+@@ -84 +91,6 @@ class CheckMigrationRecoveryUseCase(
 -            lastRunMark = TimeSource.Monotonic.markNow()
--        }
++        } catch (e: CancellationException) {
++            throw e
++        } catch (e: Exception) {
++            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
++        } finally {
++            recoveryMutex.unlock()
+@@ -86,13 +98,10 @@ class CheckMigrationRecoveryUseCase(
 -        // No wallet YET — on a cold start this fires before the synchronizer initializes, and
 -        // silently consuming the throttle window here left recovery permanently ineffective
 -        // (observed live: 1st call = SDK null + throttle stamped, 2nd call 3s later = throttled;
@@ -3828,16 +3827,20 @@ index 9451c3bae..2878c35b5 100644
 -            throttleMutex.withLock { lastRunMark = null }
 -            migrationLog("MigrationRecovery: SDK not ready — will retry on next trigger.")
 -            return
-+        } catch (e: CancellationException) {
-+            throw e
-+        } catch (e: Exception) {
-+            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
-+        } finally {
-+            recoveryMutex.unlock()
-@@ -100 +105 @@ class CheckMigrationRecoveryUseCase(
++    }
++
++    private suspend fun recoverPersistedWallet(requestSendingScreen: (String) -> Unit) {
++        if (persistableWalletProvider.getPersistableWallet() == null) return
++        val ownerKey = awaitOwnerKey() ?: return
++        val sdk = if (resetPending.value) null else getOrchardMigrationSdk(ownerKey)
++        if (sdk != null && !resetPending.value) {
++            reviveAccountWorkers()
++            recoverBroadcast(sdk, ownerKey, requestSendingScreen)
++            if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
+@@ -100 +109 @@ class CheckMigrationRecoveryUseCase(
 -        val sdk = getOrchardMigrationSdk()
 +    }
-@@ -102,46 +107,5 @@ class CheckMigrationRecoveryUseCase(
+@@ -102,46 +111,5 @@ class CheckMigrationRecoveryUseCase(
 -        // The whole engine-reading/routing body below is guarded (2026-08-07): a "database is
 -        // locked" throw here used to be unguarded and would crash the app-open/foreground-return
 -        // path — this use case drives navigation, not a screen with its own LCE error state to
@@ -3889,7 +3892,7 @@ index 9451c3bae..2878c35b5 100644
 +        resetPending.flatMapLatest { pending ->
 +            if (pending) flowOf(null) else accountDataSource.selectedAccount.filterNotNull()
 +        }.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
-@@ -149,11 +113,10 @@ class CheckMigrationRecoveryUseCase(
+@@ -149,11 +117,10 @@ class CheckMigrationRecoveryUseCase(
 -                        MigrationWorkerRunState.ABSENT -> {
 -                            // Revival: recovers the DURABLE background chain after process kill, device
 -                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
@@ -3911,10 +3914,16 @@ index 9451c3bae..2878c35b5 100644
 +            if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
 +                migrationLiveDriver.startIfNotRunning(accountKey)
 +                reviveScheduledWorker(accountKey)
-@@ -160,0 +124,2 @@ class CheckMigrationRecoveryUseCase(
+@@ -160,0 +128,8 @@ class CheckMigrationRecoveryUseCase(
 +        }
 +    }
-@@ -162,36 +127,46 @@ class CheckMigrationRecoveryUseCase(
++
++    private suspend fun reviveScheduledWorker(accountKey: String) {
++        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending.value) {
++            scheduleNow(accountKey)
++        }
++    }
+@@ -162,36 +137,40 @@ class CheckMigrationRecoveryUseCase(
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
 -                // The flag only records THAT a background attempt once failed on Tor, not what the
 -                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -3951,12 +3960,6 @@ index 9451c3bae..2878c35b5 100644
 -                    )
 -                    pendingMigrationTorFailureStorageProvider.store(false)
 -                }
-+    private suspend fun reviveScheduledWorker(accountKey: String) {
-+        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending.value) {
-+            scheduleNow(accountKey)
-+        }
-+    }
-+
 +    private suspend fun recoverBroadcast(
 +        sdk: OrchardMigrationSdk,
 +        ownerKey: String,
@@ -3997,7 +4000,7 @@ index 9451c3bae..2878c35b5 100644
 +                        "(next transfer action=${nextTransfer?.action}) — clearing."
 +                )
 +                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
-@@ -199,10 +173,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -199,10 +177,0 @@ class CheckMigrationRecoveryUseCase(
 -            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
 -            // the engine's own state is the single, authoritative record (a commit that never happened
 -            // simply leaves the engine NotStarted, and every screen renders that live).
@@ -4008,7 +4011,7 @@ index 9451c3bae..2878c35b5 100644
 -                e
 -            )
 -            throttleMutex.withLock { lastRunMark = null }
-@@ -215 +180 @@ class CheckMigrationRecoveryUseCase(
+@@ -215 +184 @@ class CheckMigrationRecoveryUseCase(
 -        private val throttleMutex = Mutex()
 +        private val recoveryMutex = Mutex()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt
@@ -4522,7 +4525,7 @@ index f1f185d9b..fb20c33df 100644
 +    }
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..9847ee5a3 100644
+index ccdc9db31..61e9a6461 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -37,0 +38 @@ import co.electriccoin.zcash.ui.common.model.withLce
@@ -4557,7 +4560,7 @@ index ccdc9db31..9847ee5a3 100644
 +            }
 +            errorStateMapper.mapToState(error, message = message)
 +        }
-@@ -390,5 +402,5 @@ class MigrationReviewVM(
+@@ -390,5 +402,3 @@ class MigrationReviewVM(
 -        if (getSelectedWalletAccount() is LedgerAccount) {
 -            throw AccountOperationUnsupportedException.ledger()
 -        }
@@ -4565,53 +4568,51 @@ index ccdc9db31..9847ee5a3 100644
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
 +        val account = requireReviewAccount()
 +        val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
-+        if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
-+        account.requireSpendable()
 +        if (account is KeystoneAccount) {
-@@ -398 +409,0 @@ class MigrationReviewVM(
+@@ -398 +407,0 @@ class MigrationReviewVM(
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-@@ -403 +414 @@ class MigrationReviewVM(
+@@ -403 +412 @@ class MigrationReviewVM(
 -        val sdk = getOrchardMigrationSdk()
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-@@ -421,0 +433 @@ class MigrationReviewVM(
+@@ -421,0 +431 @@ class MigrationReviewVM(
 +                if (migrationTorEnabled.get(accountKeyId)) throw PrivateNoteSplitUnavailable()
-@@ -454,2 +466,2 @@ class MigrationReviewVM(
+@@ -454,2 +464,2 @@ class MigrationReviewVM(
 -            finalizeMigrationSchedule(scheduleToSign, args.mode, startLiveDriverImmediately = false)
 -            navigationRouter.forward(MigrationScheduledArgs)
 +            finalizeMigrationSchedule(scheduleToSign, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -472,2 +484,2 @@ class MigrationReviewVM(
+@@ -472,2 +482,2 @@ class MigrationReviewVM(
 -            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
 -            navigationRouter.forward(MigrationScheduledArgs)
 +            finalizeMigrationSchedule(fresh, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -484,5 +496,4 @@ class MigrationReviewVM(
+@@ -484,5 +494,2 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
 -            getSelectedWalletAccount().requireSpendable()
 -            if (getSelectedWalletAccount() is KeystoneAccount) {
 +            val account = requireReviewAccount()
-+            if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
-+            account.requireSpendable()
 +            if (account is KeystoneAccount) {
-@@ -509,0 +521 @@ class MigrationReviewVM(
+@@ -509,0 +517 @@ class MigrationReviewVM(
 +                requireReviewAccount()
-@@ -514 +526,3 @@ class MigrationReviewVM(
+@@ -514 +522,3 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.createPCZTFromProposal(account)
 +                requireReviewAccount()
 +                keystoneProposalRepository.approveForSigning()
-@@ -517,2 +531,2 @@ class MigrationReviewVM(
+@@ -517,2 +527,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
 +                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 +                submitProposal(reviewed)
-@@ -521,0 +536,8 @@ class MigrationReviewVM(
+@@ -521,0 +532,10 @@ class MigrationReviewVM(
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
 +            "The migration review belongs to a different account"
 +        }
++        if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
++        account.requireSpendable()
 +    }
 +
 +    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
@@ -28287,7 +28288,7 @@ index cd30d81f4..21d69fa61 100644
 +private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
-index abf14322d..871d2def0 100644
+index abf14322d..d3cd2bc49 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 @@ -0,0 +1,2 @@
@@ -28531,7 +28532,7 @@ index abf14322d..871d2def0 100644
 +    if (!sameRoute || !sameAssets) return this
 +    val newer = hasNewerStatus(candidate)
 +    val preferred = (if (newer) candidate else this).copy(
-+        fundingNotSubmitted = fundingNotSubmitted || candidate.fundingNotSubmitted
++        fundingNotSubmitted = fundingNotSubmitted or candidate.fundingNotSubmitted
 +    )
 +    val earlier = if (newer) this else candidate
 +    val executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
@@ -49014,7 +49015,7 @@ index d9b22b066..3d99d9553 100644
 -                    maxLines = 1,
 +                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
-index fa3022a69..16afd1c5f 100644
+index fa3022a69..5a6b2a204 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
 @@ -3,0 +4,2 @@ import androidx.compose.foundation.layout.Box
@@ -49071,7 +49072,7 @@ index fa3022a69..16afd1c5f 100644
 @@ -160,0 +170,2 @@ data class TransactionDetailSwapStatusRowState(
 +    val isLoading: Boolean = false,
 +    val fundingNotSubmitted: Boolean = false,
-@@ -167,0 +179,25 @@ data class TransactionDetailSwapStatusRowState(
+@@ -167,0 +179,32 @@ data class TransactionDetailSwapStatusRowState(
 +internal fun SwapQuoteStatusData.toDetailStatusRow(
 +    mode: TransactionDetailSwapStatusRowState.Mode = SWAP_FROM_ZEC,
 +    metadata: TransactionSwapMetadata? = savedMetadata,
@@ -49080,8 +49081,7 @@ index fa3022a69..16afd1c5f 100644
 +    val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
 +    val providerStatus = status?.status ?: savedStatus
 +    val value = outgoingStatus ?: providerStatus
-+    val localOutcome = (value == PENDING && metadata?.fundingNotSubmitted == true) ||
-+        (outgoingStatus != null && outgoingStatus != providerStatus)
++    val localOutcome = isLocalFundingStatus(value, providerStatus, outgoingStatus, metadata)
 +    val isSaved = value != null && (status == null || error != null)
 +    val title = when {
 +        localOutcome -> R.string.private_swap_funding_status
@@ -49097,7 +49097,15 @@ index fa3022a69..16afd1c5f 100644
 +    )
 +}
 +
-@@ -192,0 +229 @@ private fun LoadingPreview() =
++private fun isLocalFundingStatus(
++    value: SwapStatus?,
++    providerStatus: SwapStatus?,
++    outgoingStatus: SwapStatus?,
++    metadata: TransactionSwapMetadata?,
++): Boolean = (value == PENDING && metadata?.fundingNotSubmitted == true) ||
++    (outgoingStatus != null && outgoingStatus != providerStatus)
++
+@@ -192,0 +236 @@ private fun LoadingPreview() =
 +                        isLoading = true,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt
 index bda79395f..dea954d10 100644

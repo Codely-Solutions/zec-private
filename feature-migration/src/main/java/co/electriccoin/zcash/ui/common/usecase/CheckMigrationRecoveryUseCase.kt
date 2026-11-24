@@ -85,15 +85,8 @@ class CheckMigrationRecoveryUseCase(
         if (!recoveryMutex.tryLock()) return
         try {
             val elapsed = lastRunMark?.elapsedNow()
-            if (resetPending.value || (elapsed != null && elapsed < RUN_THROTTLE)) return
-            if (persistableWalletProvider.getPersistableWallet() != null) {
-                val ownerKey = awaitOwnerKey()
-                val sdk = ownerKey?.takeUnless { resetPending.value }?.let { getOrchardMigrationSdk(it) }
-                if (ownerKey != null && sdk != null && !resetPending.value) {
-                    reviveAccountWorkers()
-                    recoverBroadcast(sdk, ownerKey, requestSendingScreen)
-                    if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
-                }
+            if (!resetPending.value && (elapsed == null || elapsed >= RUN_THROTTLE)) {
+                recoverPersistedWallet(requestSendingScreen)
             }
         } catch (e: CancellationException) {
             throw e
@@ -101,6 +94,17 @@ class CheckMigrationRecoveryUseCase(
             migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
         } finally {
             recoveryMutex.unlock()
+        }
+    }
+
+    private suspend fun recoverPersistedWallet(requestSendingScreen: (String) -> Unit) {
+        if (persistableWalletProvider.getPersistableWallet() == null) return
+        val ownerKey = awaitOwnerKey() ?: return
+        val sdk = if (resetPending.value) null else getOrchardMigrationSdk(ownerKey)
+        if (sdk != null && !resetPending.value) {
+            reviveAccountWorkers()
+            recoverBroadcast(sdk, ownerKey, requestSendingScreen)
+            if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
         }
     }
 
