@@ -121,7 +121,7 @@ class MigrationBackgroundRecoveryScenarioTest {
         navigationRouter = navigationRouter,
         pendingMigrationTorFailureStorageProvider =
             mockk<PendingMigrationTorFailureStorageProvider> {
-                coEvery { get(any()) } returns pendingMigrationTorFailure
+                coEvery { this@mockk.get(any()) } returns pendingMigrationTorFailure
             },
         accountDataSource =
             mockk<AccountDataSource>(relaxed = true) {

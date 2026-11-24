@@ -665,7 +665,7 @@
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/MigrationGateInfoTest.kt": "9f906785759ea7e3fe1711660bf922fae419d1f7b9a67cc16dbdce0bd1b588ca",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/MigrationPreparationDetailsTest.kt": "731214d3d8936ecb404a164f63ee0889d2ec463647a2ba0fe5d98b988138c6d6",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/FakeOrchardMigrationSdk.kt": "475d99373e3c3deaf7a62f65016245b33b23d813466db6b125418ce57850ea6b",
-  "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt": "1247515065be476cc84f1fd5ae4679b73c223f606d30fd6f0eb6cb461ac2fe01",
+  "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt": "046447c821df3000d8b1fe76e6d07af649ef2533c98ccaa1e68c404d096d7c0a",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationKeystoneMultiRoundScenarioTest.kt": "95a47b372d18a13f88fc95fa2aeb56460a71a74bb37b6acd41bf517ce7f0b341",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationLatePrepScenarioTest.kt": "be34426a5b67747329c2913f43e96f768fafffcec8e934f866e58cb87ebc034b",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationOverdueScenarioTest.kt": "cb3f991c4acf809475a691149bf22ec8e9b27c932049de43c55751c5b8ee747a",

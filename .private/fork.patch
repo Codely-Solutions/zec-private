@@ -7839,7 +7839,7 @@ index 000000000..9aeb20a52
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
-index d329553c7..1e3337dae 100644
+index d329553c7..8f51fb4d5 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
 @@ -18,0 +19 @@ import io.mockk.mockk
@@ -7850,7 +7850,7 @@ index d329553c7..1e3337dae 100644
 + *  - A worker scheduled for later keeps its wake. The live driver accelerates work in the app.
 @@ -124 +124 @@ class MigrationBackgroundRecoveryScenarioTest {
 -                coEvery { get() } returns pendingMigrationTorFailure
-+                coEvery { get(any()) } returns pendingMigrationTorFailure
++                coEvery { this@mockk.get(any()) } returns pendingMigrationTorFailure
 @@ -128,0 +129 @@ class MigrationBackgroundRecoveryScenarioTest {
 +                every { selectedAccount } returns flowOf(testWalletAccount)
 @@ -133,0 +135 @@ class MigrationBackgroundRecoveryScenarioTest {
