@@ -108,7 +108,10 @@ class AdvancedSettingsVMTest {
             }
         val getWalletAccounts =
             mockk<GetWalletAccountsUseCase> {
-                every { observe() } returns MutableStateFlow<List<WalletAccount>?>(emptyList())
+                every { observe() } returns MutableStateFlow<List<WalletAccount>?>(listOf(mockk {
+                    every { isSelected } returns true
+                    every { isSpendable } returns true
+                }))
             }
         val getVersionInfo =
             mockk<GetVersionInfoProvider> {

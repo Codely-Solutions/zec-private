@@ -129,14 +129,14 @@ class MigrationDriveOnce(
                 return DriveOnceResult.Terminal
             }
             val step = result.step
-            migrationLog("MigrationDriveOnce: run start account=$accountKeyId step=$step")
+            migrationLog("MigrationDriveOnce: starting ${step.javaClass.simpleName}.")
             return when (step) {
                 MigrationAdvanceStep.Complete -> {
-                    handleCompleteStep(sdk, accountKeyId) { completeRun(accountKeyId) }
+                    handleCompleteStep(sdk)
                 }
 
                 is MigrationAdvanceStep.Rebuild -> {
-                    rebuildRun(sdk, accountKeyId, step.transferId)
+                    rebuildRun(sdk, accountKeyId)
                     DriveOnceResult.Terminal
                 }
 
@@ -251,7 +251,7 @@ class MigrationDriveOnce(
             return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration()))
         }
         val burst = synchronizerProvider.getSynchronizerOrNull()?.syncToTip(timeout = SYNC_TIMEOUT)
-        migrationLog("MigrationDriveOnce: syncToTip result=$burst")
+        migrationLog("MigrationDriveOnce: syncToTip outcome=${burst?.javaClass?.simpleName}")
         val proved = sdk.finalizeReadyTransfers()
         migrationLog("MigrationDriveOnce: proved=$proved")
         // Post Pass-3-removal (2026-08-05 migration-engine-delegation work): this can now only report
@@ -278,24 +278,22 @@ class MigrationDriveOnce(
                 // but avoidable now that the id is already in hand).
                 val prep = isPreparationTransfer(sdk.getMigrationTransferStates(), nextStep.transferId)
                 if (prep) {
-                    migrationLog(
-                        "MigrationDriveOnce: sync done, next=$nextStep (preparation) — broadcasting same-beat."
-                    )
+                    migrationLog("MigrationDriveOnce: sync done. Broadcasting the preparation.")
                     broadcastRun(sdk, accountKeyId, nextStep.transferId, allowForcedBroadcastWindow)
                 } else {
                     val chainDelay = sdk.privacySyncBufferDuration()
                     scheduleUnlessLiveLoop(accountKeyId, chainDelay)
-                    migrationLog("MigrationDriveOnce: sync done, next=$nextStep — broadcast run in $chainDelay")
+                    migrationLog("MigrationDriveOnce: sync done. Scheduled the broadcast.")
                     DriveOnceResult.ReArmed(chainDelay)
                 }
             }
 
             MigrationAdvanceStep.Complete -> {
-                handleCompleteStep(sdk, accountKeyId) { completeRun(accountKeyId) }
+                handleCompleteStep(sdk)
             }
 
             is MigrationAdvanceStep.Rebuild -> {
-                rebuildRun(sdk, accountKeyId, nextStep.transferId)
+                rebuildRun(sdk, accountKeyId)
                 DriveOnceResult.Terminal
             }
 
@@ -316,7 +314,7 @@ class MigrationDriveOnce(
 
             else -> {
                 // Prove again (boundary not yet settled at the new tip) or Waiting.
-                migrationLog("MigrationDriveOnce: sync done, next=$nextStep — re-arming.")
+                migrationLog("MigrationDriveOnce: sync done. Scheduling the next wake.")
                 surfaceUnprovableBlocker(sdk, accountKeyId, sdk.getMigrationTransferStates())
                 DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
             }
@@ -360,7 +358,7 @@ class MigrationDriveOnce(
             )
         migrationLog(
             "MigrationDriveOnce: broadcast preflight=$preflight " +
-                "(syncing=$syncing, prepFastTrack=$prepFastTrack, lastNetworkActivity=$lastActivity)"
+                "(syncing=$syncing, prepFastTrack=$prepFastTrack)"
         )
         if (preflight == BroadcastPreflight.DEFER) {
             if (syncing && allowForcedBroadcastWindow && applicationStateProvider.isInForeground.first()) {
@@ -381,7 +379,7 @@ class MigrationDriveOnce(
                 try {
                     val gap = quietGapRemaining(sdk.privacySyncBufferDuration())
                     if (gap.isPositive()) {
-                        migrationLog("MigrationDriveOnce: waiting privacy quiet gap $gap before broadcast.")
+                        migrationLog("MigrationDriveOnce: waiting for the privacy quiet gap before broadcast.")
                         delay(gap)
                     }
                     // Re-ask the engine — up to a full privacy buffer may have elapsed during the
@@ -389,10 +387,7 @@ class MigrationDriveOnce(
                     // or name a different transaction than the one that triggered this run.
                     val freshStep = sdk.nextStep()?.step
                     if (freshStep !is MigrationAdvanceStep.Broadcast) {
-                        migrationLog(
-                            "MigrationDriveOnce: after the wait, engine no longer reports Broadcast " +
-                                "(now=$freshStep) — re-arming."
-                        )
+                        migrationLog("MigrationDriveOnce: broadcast unavailable after the wait. Scheduling a wake.")
                         return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
                     }
                     val freshStates = sdk.getMigrationTransferStates()
@@ -467,10 +462,7 @@ class MigrationDriveOnce(
                 // Defensive: nextStep said Broadcast, so the engine had a proved transaction — a
                 // proof can only have vanished through a concurrent reorg/rescan. Re-arm floored;
                 // the next run re-asks the engine from scratch.
-                migrationLog(
-                    "MigrationDriveOnce: AwaitingProof for ${outcome.transferId} despite a Broadcast step — " +
-                        "re-arming."
-                )
+                migrationLog("MigrationDriveOnce: broadcast is awaiting proof. Scheduling a wake.")
                 DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = REARM_FLOOR))
             }
 
@@ -621,14 +613,14 @@ class MigrationDriveOnce(
         }
 
     /**
-     * The engine wants [transferId] rebuilt (expired today; unprovable-anchor too once the engine
+     * The engine wants a transfer rebuilt (expired today; unprovable-anchor too once the engine
      * change request ships). A rebuild needs a fresh signature, so it is user-driven: surface the
      * attention notification and stop re-arming — the home banner and the app-open router route
      * the user into the invalid/reschedule screen, and recovery re-arms the chain afterwards.
      */
-    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String, transferId: Long) {
+    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String) {
         val snapshot = sdk.snapshot()
-        migrationLog("MigrationDriveOnce: engine requests Rebuild{$transferId} — user-driven reschedule required.")
+        migrationLog("MigrationDriveOnce: engine requests a rebuild. The user must reschedule.")
         migrationNotifier.notifyRescheduleRequired(
             accountKeyId,
             (snapshot?.nextPending?.index?.plus(1)) ?: 1,
@@ -639,7 +631,7 @@ class MigrationDriveOnce(
     /**
      * The engine says the WHOLE plan is dead (past the committed replan threshold — see
      * [MigrationAdvanceStep.Replan]'s doc), not just one transfer. Unlike [rebuildRun] there is no
-     * single [transferId][MigrationAdvanceStep.Rebuild.transferId] to point at; the entire plan
+     * single transfer to point at. The entire plan
      * needs a user-driven re-plan/reschedule. Same terminal handling as a rebuild: surface the
      * attention notification and stop re-arming — the home banner and the app-open router take it
      * from here.
@@ -666,16 +658,11 @@ class MigrationDriveOnce(
      */
     private suspend fun interruptedRun(sdk: OrchardMigrationSdk, accountKeyId: String, activationHeight: Long) {
         migrationLog(
-            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run — cancelling it, " +
-                "the user is offered a new migration. (account=$accountKeyId)"
+            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run. " +
+                "Cancelling it and offering a new migration."
         )
         sdk.cancelMigrationRun()
         migrationUpgradeNotice.markPending(accountKeyId)
-    }
-
-    /** All transactions mined — nothing left to fold anywhere; just stop the chain. */
-    private suspend fun completeRun(accountKeyId: String) {
-        migrationLog("MigrationDriveOnce: migration complete — stopping the work chain. (account=$accountKeyId)")
     }
 
     /**
@@ -693,12 +680,10 @@ class MigrationDriveOnce(
         accountKeyId: String,
         states: MigrationTransferStates?,
     ) {
-        val stuck = states?.transfers?.firstOrNull { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: return
+        val blocked = states?.transfers?.any { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: false
+        if (!blocked) return
         val snapshot = sdk.snapshot()
-        migrationLog(
-            "MigrationDriveOnce: transfer ${stuck.id} blocked on an unprovable anchor — user-driven reschedule " +
-                "required."
-        )
+        migrationLog("MigrationDriveOnce: an unprovable anchor requires the user to reschedule.")
         migrationNotifier.notifyRescheduleRequired(
             accountKeyId,
             (snapshot?.nextPending?.index?.plus(1)) ?: 1,
@@ -753,14 +738,7 @@ class MigrationDriveOnce(
             )
         val armed = maxOf(delay ?: migrationCadence(), floor)
         scheduleUnlessLiveLoop(accountKeyId, armed)
-        // The full "why" of the chosen wake, so timing is diagnosable from logs alone: the
-        // engine's own peek, the tip estimate, and the floor.
-        migrationLog(
-            "MigrationDriveOnce: re-armed in $armed " +
-                "(peek=${peek?.let { "${it.height}/${it.kind}" }}, " +
-                "estimatedTip=$est, floor=$floor" +
-                if (delay == null) ", cadence fallback)" else ")"
-        )
+        migrationLog("MigrationDriveOnce: scheduled a wake (cadenceFallback=${delay == null}).")
         return armed
     }
 
@@ -968,18 +946,11 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
  * (rather than a method on [MigrationDriveOnce]) so adding this disambiguation does not itself push
  * the class over its function-count budget.
  */
-private suspend fun handleCompleteStep(
-    sdk: OrchardMigrationSdk,
-    accountKeyId: String,
-    onActuallyComplete: suspend () -> Unit,
-): DriveOnceResult {
+private suspend fun handleCompleteStep(sdk: OrchardMigrationSdk): DriveOnceResult {
     if (isMigrationActuallyComplete(sdk.getMigrationState())) {
-        onActuallyComplete()
+        migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")
     } else {
-        migrationLog(
-            "MigrationDriveOnce: nextStep reported Complete but the migration state is not " +
-                "actually Complete (superseded/failed) — not surfacing as complete. (account=$accountKeyId)"
-        )
+        migrationLog("MigrationDriveOnce: the engine reported a terminal step with no completed migration.")
     }
     return DriveOnceResult.Terminal
 }
@@ -988,7 +959,7 @@ private suspend fun handleCompleteStep(
  * The Superseded-vs-Complete disambiguation predicate — see [handleCompleteStep]'s doc for why
  * the step alone is ambiguous. Only a genuine [MigrationState.Complete] counts — every other case
  * (notably [MigrationState.ReadyToPropose], what a Superseded migration maps to) means
- * `completeRun`'s effects must NOT fire.
+ * the finished-migration log applies only to a genuine completion.
  */
 internal fun isMigrationActuallyComplete(migrationState: MigrationState): Boolean =
     migrationState is MigrationState.Complete

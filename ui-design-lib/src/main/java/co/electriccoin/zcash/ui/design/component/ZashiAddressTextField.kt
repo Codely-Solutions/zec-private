@@ -3,23 +3,27 @@ package co.electriccoin.zcash.ui.design.component
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.theme.typography.RobotoMonoFontFamily
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
-import kotlin.math.absoluteValue
 
 /**
  * The single-line address field, which truncates the address around an ellipsis while it is not
@@ -51,10 +55,18 @@ fun ZashiAddressTextField(
     colors: ZashiTextFieldColors = ZashiTextFieldDefaults.defaultColors()
 ) {
     val isFocused by interactionSource.collectIsFocusedAsState()
+    val measurer = rememberTextMeasurer()
+    var contentWidth by remember { mutableIntStateOf(Int.MAX_VALUE) }
 
     val visualTransformation =
-        remember(isFocused) {
-            if (isFocused) VisualTransformation.None else ellipsisVisualTransformation()
+        remember(isFocused, contentWidth, textStyle, measurer) {
+            if (isFocused) {
+                VisualTransformation.None
+            } else {
+                ellipsisVisualTransformation { text ->
+                    measurer.measure(text, style = textStyle, maxLines = 1, softWrap = false).size.width <= contentWidth
+                }
+            }
         }
 
     WithoutPersonalizedLearning {
@@ -78,64 +90,40 @@ fun ZashiAddressTextField(
             shape = shape,
             contentPadding = contentPadding,
             colors = colors,
+            textContentModifier = Modifier.fillMaxWidth().onSizeChanged { contentWidth = it.width },
         )
     }
 }
 
-@Suppress("MagicNumber")
-private fun ellipsisVisualTransformation() =
+private const val ADDRESS_PREVIEW_EDGE_LIMIT = 8
+private const val ADDRESS_PREVIEW_ELLIPSIS = "..."
+
+private fun ellipsisVisualTransformation(fits: (String) -> Boolean) =
     VisualTransformation { text ->
-        val ellipsis = "..."
-        val maxLength =
-            (text.length / 2)
-                .coerceAtMost(text.length / 3)
-                .coerceAtMost(8)
-
-        val mapping =
-            object : OffsetMapping {
-                override fun originalToTransformed(offset: Int): Int = 0
-
-                override fun transformedToOriginal(offset: Int): Int =
-                    when {
-                        text.length <= 16 -> {
-                            offset
-                        }
-
-                        offset <= maxLength -> {
-                            offset
-                        }
-
-                        offset in (maxLength + 1)..(maxLength + 2) -> {
-                            maxLength
-                        }
-
-                        else -> {
-                            val whole = maxLength * 2 + 3
-                            val fromRight = (offset - whole).absoluteValue
-                            text.length - fromRight
-                        }
-                    }.coerceIn(0, text.length)
-            }
-
-        TransformedText(
-            AnnotatedString
-                .Builder()
-                .apply {
-                    when {
-                        text.length <= 16 -> {
-                            append(text)
-                        }
-
-                        text.isNotBlank() -> {
-                            append(text.take(maxLength))
-                            append(ellipsis)
-                            append(text.takeLast(maxLength))
-                        }
-                    }
-                }.toAnnotatedString(),
-            mapping
-        )
+        if (text.length <= ADDRESS_PREVIEW_EDGE_LIMIT * 2 && fits(text.text)) {
+            TransformedText(text, OffsetMapping.Identity)
+        } else {
+            abbreviateAddress(text, fits)
+        }
     }
+
+private fun abbreviateAddress(text: AnnotatedString, fits: (String) -> Boolean): TransformedText {
+    val edgeLimit = (text.length / 3).coerceAtMost(ADDRESS_PREVIEW_EDGE_LIMIT)
+    fun preview(edge: Int) = text.take(edge).toString() + ADDRESS_PREVIEW_ELLIPSIS + text.takeLast(edge)
+    val edge = (edgeLimit downTo 0).firstOrNull { fits(preview(it)) } ?: 0
+    val shortened = preview(edge).takeIf(fits).orEmpty()
+    val tailStart = edge + ADDRESS_PREVIEW_ELLIPSIS.length
+    val mapping = object : OffsetMapping {
+        override fun originalToTransformed(offset: Int) = 0
+
+        override fun transformedToOriginal(offset: Int) = when {
+            offset <= edge -> offset
+            offset < tailStart -> edge
+            else -> text.length - (shortened.length - offset)
+        }.coerceIn(0, text.length)
+    }
+    return TransformedText(AnnotatedString(shortened), mapping)
+}
 
 object ZashiAddressTextFieldDefaults {
     @Composable

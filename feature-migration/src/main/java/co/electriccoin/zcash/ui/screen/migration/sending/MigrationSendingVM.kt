@@ -233,7 +233,8 @@ class MigrationSendingVM(
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
             withContext(NonCancellable) {
                 outcome = sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
-                migrationLog("SendingVM: attempt=${attempt + 1} outcome=$outcome")
+                val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
+                migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
             }
             attempt++
         }

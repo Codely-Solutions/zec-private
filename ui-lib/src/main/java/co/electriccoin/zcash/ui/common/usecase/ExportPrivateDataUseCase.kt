@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -26,6 +27,7 @@ class ExportPrivateDataUseCase(
     private val biometricRepository: BiometricRepository,
     private val appAccess: AppAccessSession,
     private val walletAccess: WalletWriteAccess,
+    private val accountDataSource: AccountDataSource,
 ) {
     private val export = Mutex()
 
@@ -36,9 +38,12 @@ class ExportPrivateDataUseCase(
     suspend operator fun invoke(sourceFile: suspend () -> File): Boolean {
         if (!export.tryLock()) return false
         return try {
+            val owner = selectedSpendableAccount() ?: return false
             val grant = appAccess.grant.value
             val generation = walletAccess.token()
-            val isAllowed = { appAccess.permits(grant) && walletAccess.permits(generation) }
+            val isAllowed = {
+                appAccess.permits(grant) && walletAccess.permits(generation) && selectedSpendableAccount() == owner
+            }
             isAllowed() && run {
                 biometricRepository.requestBiometrics(
                     BiometricRequest(
@@ -58,6 +63,11 @@ class ExportPrivateDataUseCase(
             export.unlock()
         }
     }
+
+    private fun selectedSpendableAccount() = accountDataSource.allAccounts.value
+        ?.firstOrNull { it.isSelected }
+        ?.takeIf { it.isSpendable }
+        ?.sdkAccount?.accountUuid
 
     private suspend fun shareApprovedExport(sourceFile: suspend () -> File, isAllowed: () -> Boolean): Boolean {
         var staged: File? = null

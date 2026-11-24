@@ -31,7 +31,7 @@ class OnMigrationSyncCompletedUseCase(
         val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
         val proved = sdk.finalizeReadyTransfers()
         val invalidated = sdk.reconcileInvalidations()
-        migrationLog("ForegroundHook: SYNCED — proved=$proved, invalidated=$invalidated (account=$accountKeyId)")
+        migrationLog("ForegroundHook: SYNCED — proved=$proved, invalidated=$invalidated")
         if (invalidated) {
             migrationNotifier.notifyMigrationPlanInvalid(accountKeyId)
             migrationScheduler.cancel(accountKeyId)

@@ -68,7 +68,7 @@ class DebugStartMigrationE2EUseCase(
                     .onFailure {
                         migrationLog(
                             "E2E: propose attempt ${attempt + 1}/$PROPOSE_ATTEMPTS failed " +
-                                "(${it.message}) — retrying in $PROPOSE_RETRY_DELAY"
+                                "(${it.javaClass.simpleName}) — retrying in $PROPOSE_RETRY_DELAY"
                         )
                     }.getOrNull()
             if (sched == null) delay(PROPOSE_RETRY_DELAY)
@@ -86,7 +86,7 @@ class DebugStartMigrationE2EUseCase(
                 val scheduleFromSplit = sdk.proposeMigrationTransfersFromSplit(proposal)
                 val splitResult = sdk.submitNoteSplit(proposal, zashiSpendingKeyDataSource.getZashiSpendingKey())
                 if (splitResult !is TransferResult.Success) {
-                    migrationLog("E2E: note split failed ($splitResult) — aborting")
+                    migrationLog("E2E: note split failed (${splitResult.javaClass.simpleName}).")
                     return
                 }
                 scheduleFromSplit
@@ -119,7 +119,7 @@ class DebugStartMigrationE2EUseCase(
                 if (!retryable || attempt == COMMIT_ATTEMPTS - 1) throw e
                 migrationLog(
                     "E2E: commit attempt ${attempt + 1} failed retryably " +
-                        "(${e.message?.take(ERROR_MESSAGE_PREVIEW_LENGTH)}) — re-proposing"
+                        "(${e.javaClass.simpleName}) — re-proposing"
                 )
                 delay(COMMIT_RETRY_DELAY)
                 toSign = sdk.proposeMigrationTransfers()
@@ -144,6 +144,5 @@ class DebugStartMigrationE2EUseCase(
         // rounds may be needed before all 9 transfers land on retained boundaries.
         private const val COMMIT_ATTEMPTS = 6
         private val COMMIT_RETRY_DELAY = 5.seconds
-        private const val ERROR_MESSAGE_PREVIEW_LENGTH = 120
     }
 }

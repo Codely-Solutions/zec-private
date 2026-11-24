@@ -505,6 +505,56 @@ class MaintenanceWatchTest(unittest.TestCase):
                 'github.repository': 'Codely-Solutions/zec-private',
             }))
 
+    def test_validation_builds_stay_independent_of_paused_signing(self):
+        workflow = 'build-release.yml'
+        preflight = workflow_job(workflow, 'preflight')
+        wiring = re.search(r'Select signing smoke from trusted wiring\n        if: (.+)', preflight['block'])[1]
+        smoke = workflow_job(workflow, 'signing_smoke')
+        jobs = dict(admit='success', preflight='success')
+        values = {'inputs.validation_only': True, 'inputs.hosted': False, 'inputs.recover_run': '',
+                  'inputs.candidate_run': '', 'inputs.build_emulator': True,
+                  'needs.admit.outputs.main': 'true', 'needs.preflight.outputs.signing_changed': 'true'}
+        for readiness in ('', 'false', 'true'):
+            with self.subTest(readiness=readiness):
+                current = dict(values, **{'vars.PRODUCTION_SIGNING_READY': readiness})
+                self.assertEqual(evaluate_expression(wiring, current), readiness == 'true')
+                self.assertEqual(job_activates(smoke, jobs, **current), readiness == 'true')
+                if readiness != 'true':
+                    unsigned = dict(current, **{'needs.preflight.outputs.signing_changed': ''})
+                    available = dict(jobs, signing_smoke='skipped')
+                    for job in ('unsigned', 'emulator'):
+                        self.assertTrue(job_activates(workflow_job(workflow, job), available, **unsigned))
+                    self.assertFalse(job_activates(workflow_job(workflow, 'publish'), available, **unsigned))
+        for preflight_only in (False, True):
+            current = dict(values, **{'inputs.validation_only': False, 'inputs.preflight_only': preflight_only,
+                                      'vars.PRODUCTION_SIGNING_READY': 'true' if not preflight_only else ''})
+            self.assertTrue(evaluate_expression(wiring, current))
+            self.assertTrue(job_activates(smoke, jobs, **current))
+            foreign = dict(current, **{'github.ref': 'refs/heads/review/test', 'needs.admit.outputs.main': ''})
+            self.assertFalse(evaluate_expression(wiring, foreign))
+            self.assertFalse(job_activates(smoke, jobs, **foreign))
+
+    def test_promotion_conflicts_fail_before_build_or_signing_without_notifying(self):
+        workflow = 'build-release.yml'
+        admit = workflow_blocks(workflow)[1]['admit']
+        conflict = re.search(r'Identify conflicting promotion options\n        if: (.+)', admit)[1]
+        reject = re.search(r'Reject conflicting promotion options\n        if: (.+)', admit)[1]
+        values = {'steps.ref.outputs.main': 'true', 'inputs.candidate_run': '7',
+                  'inputs.validation_only': False, 'inputs.build_emulator': False}
+        self.assertFalse(evaluate_expression(conflict, values))
+        for option in ('validation_only', 'build_emulator'):
+            with self.subTest(option=option):
+                self.assertTrue(evaluate_expression(conflict, dict(values, **{f'inputs.{option}': True})))
+                self.assertFalse(evaluate_expression(conflict, dict(values, **{f'inputs.{option}': True,
+                                                                              'inputs.candidate_run': ''})))
+        self.assertTrue(evaluate_expression(reject, {'steps.selector.outputs.invalid': 'true'}))
+        self.assertIn('          exit 1\n', admit.split('Reject conflicting promotion options', 1)[1])
+        failed = dict(admit='failure')
+        for job in ('preflight', 'promotion', 'publish', 'signing_smoke'):
+            self.assertFalse(job_activates(workflow_job(workflow, job), failed))
+        self.assertFalse(job_activates(workflow_job(workflow, 'failed'), failed, **{
+            'needs.admit.outputs.main': 'true', 'needs.admit.outputs.invalid': 'true'}))
+
     def test_integration_uses_the_attempt_that_produced_the_attestation(self):
         workflow = 'build-release.yml'
         publisher = workflow_job(workflow, 'publish')['block']

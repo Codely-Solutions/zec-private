@@ -171,7 +171,8 @@ fun ZashiTextField(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     shape: Shape = ZashiTextFieldDefaults.shape,
     contentPadding: PaddingValues = ZashiTextFieldDefaults.contentPadding(leadingIcon, suffix, trailingIcon, prefix),
-    colors: ZashiTextFieldColors = ZashiTextFieldDefaults.defaultColors()
+    colors: ZashiTextFieldColors = ZashiTextFieldDefaults.defaultColors(),
+    textContentModifier: Modifier = Modifier,
 ) {
     var enhancedValueState by remember {
         mutableStateOf(
@@ -229,7 +230,8 @@ fun ZashiTextField(
         colors = colors,
         contentPadding = contentPadding,
         modifier = modifier,
-        innerModifier = innerModifier
+        innerModifier = innerModifier,
+        textContentModifier = textContentModifier,
     )
 }
 
@@ -265,6 +267,7 @@ private fun TextFieldInternal(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     innerModifier: Modifier = Modifier,
+    textContentModifier: Modifier = Modifier,
 ) {
     val value = state.innerState.value.getValue()
     // Holds the latest internal TextFieldValue state. We need to keep it to have the correct value
@@ -353,12 +356,12 @@ private fun TextFieldInternal(
                     value = state.innerState.value.getValue(),
                     visualTransformation = visualTransformation,
                     innerTextField = {
-                        DecorationBox(prefix = prefix, suffix = suffix, content = innerTextField)
+                        DecorationBox(prefix, suffix, textContentModifier, innerTextField)
                     },
                     placeholder =
                         if (placeholder != null) {
                             {
-                                DecorationBox(prefix, suffix, placeholder)
+                                DecorationBox(prefix, suffix, content = placeholder)
                             }
                         } else {
                             null
@@ -408,6 +411,7 @@ fun getVerticalPadding(
 private fun DecorationBox(
     prefix: @Composable (() -> Unit)?,
     suffix: @Composable (() -> Unit)?,
+    contentModifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Box(
@@ -417,7 +421,7 @@ private fun DecorationBox(
                 top = if (suffix != null || prefix != null) 8.dp else 0.dp,
                 bottom = if (suffix != null || prefix != null) 8.dp else 0.dp,
                 end = if (suffix != null) 4.dp else 0.dp
-            )
+            ).then(contentModifier)
     ) {
         content()
     }

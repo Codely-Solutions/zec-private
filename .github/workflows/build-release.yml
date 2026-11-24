@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       validation_only:
-        description: Build and validate without signing an APK or publishing. Trusted signing changes on main still require a key-access smoke check.
+        description: Build and validate without signing an APK or publishing. Check changed signing wiring on main when production signing is enabled.
         type: boolean
         default: false
       build_emulator:
@@ -11,7 +11,7 @@ on:
         type: boolean
         default: false
       candidate_run:
-        description: Promote a successful validation run without rebuilding
+        description: Promote a successful validation run. Leave the build options off when promoting.
         type: string
         default: ''
       reconciliation_run:
@@ -83,6 +83,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       main: ${{ steps.ref.outputs.main }}
+      invalid: ${{ steps.selector.outputs.invalid }}
     steps:
       - id: ref
         shell: python
@@ -92,6 +93,15 @@ jobs:
           if os.environ["GITHUB_REF"] == "refs/heads/main":
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
                   output.write("main=true\n")
+      - name: Identify conflicting promotion options
+        if: steps.ref.outputs.main == 'true' && inputs.candidate_run && (inputs.validation_only || inputs.build_emulator)
+        id: selector
+        run: echo 'invalid=true' >> "$GITHUB_OUTPUT"
+      - name: Reject conflicting promotion options
+        if: steps.selector.outputs.invalid == 'true'
+        run: |
+          echo '::error::Use candidate_run by itself to promote an accepted run. Use the build options for a new build.'
+          exit 1
       - name: Require signing readiness for publication requests
         if: steps.ref.outputs.main == 'true' && !inputs.validation_only && !inputs.preflight_only && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && vars.PRODUCTION_SIGNING_READY != 'true'
         run: |
@@ -212,13 +222,13 @@ jobs:
       signing_changed: ${{ steps.wiring.outputs.changed }}
     steps:
       - name: Check out the trusted release controller
-        if: needs.admit.outputs.main == 'true'
+        if: needs.admit.outputs.main == 'true' && (!inputs.validation_only || vars.PRODUCTION_SIGNING_READY == 'true')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Select signing smoke from trusted wiring
-        if: needs.admit.outputs.main == 'true'
+        if: needs.admit.outputs.main == 'true' && (!inputs.validation_only || vars.PRODUCTION_SIGNING_READY == 'true')
         id: wiring
         env:
           GH_TOKEN: ${{ github.token }}
@@ -306,7 +316,7 @@ jobs:
             -Pkotlin.compiler.execution.strategy=in-process help detektAll
   signing_smoke:
     needs: [preflight, admit]
-    if: needs.admit.outputs.main == 'true' && needs.preflight.outputs.signing_changed == 'true'
+    if: needs.admit.outputs.main == 'true' && (!inputs.validation_only || vars.PRODUCTION_SIGNING_READY == 'true') && needs.preflight.outputs.signing_changed == 'true'
     concurrency:
       group: zec-private-release
       queue: max
@@ -842,7 +852,7 @@ jobs:
           BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
         run: python3 -B .private/notify.py 'ZEC Private candidate validation passed.'
   failed:
-    if: ${{ always() && !cancelled() && needs.admit.outputs.main == 'true' && needs.reconcile_input.outputs.invalid != 'true' && (!inputs.preflight_only || needs.reconcile_input.result == 'failure' || needs.reconcile_input.result == 'cancelled') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    if: ${{ always() && !cancelled() && needs.admit.outputs.main == 'true' && needs.admit.outputs.invalid != 'true' && needs.reconcile_input.outputs.invalid != 'true' && (!inputs.preflight_only || needs.reconcile_input.result == 'failure' || needs.reconcile_input.result == 'cancelled') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, draft_readiness, resume_draft, reconcile, verify_publication, record_integration, admit, reconcile_input]
     concurrency:
       group: zec-private-blocker

@@ -36,7 +36,7 @@ class MigrationDueAlarmScheduler(
             return
         }
         val triggerAtMillis = System.currentTimeMillis() + delay.inWholeMilliseconds
-        migrationLog("MigrationDueAlarmScheduler: arming ready-to-send alarm for $accountKeyId in $delay")
+        migrationLog("MigrationDueAlarmScheduler: arming a migration fallback alarm.")
         alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent(accountKeyId))
     }
 

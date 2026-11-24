@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 @Suppress("TooManyFunctions")
 class AdvancedSettingsVM(
     getWalletRestoringState: GetWalletRestoringStateUseCase,
-    getWalletAccounts: GetWalletAccountsUseCase,
+    private val getWalletAccounts: GetWalletAccountsUseCase,
     private val navigationRouter: NavigationRouter,
     private val navigateToTaxExport: NavigateToTaxExportUseCase,
     private val navigateToWalletBackup: NavigateToWalletBackupUseCase,
@@ -98,7 +98,7 @@ class AdvancedSettingsVM(
                         title = stringRes(R.string.settings_exportPrivateData),
                         bigIcon = imageRes(R.drawable.ic_advanced_settings_export),
                         onClick = ::onExportPrivateDataClick
-                    ).takeIf { selectedAccount?.isSpendable != false },
+                    ).takeIf { selectedAccount?.isSpendable == true },
                     ListItemState(
                         title = stringRes(R.string.exportViewingKey_settingsItem),
                         bigIcon = imageRes(R.drawable.ic_advanced_settings_viewing_key),
@@ -173,7 +173,10 @@ class AdvancedSettingsVM(
             navigateToWalletBackup(isOpenedFromSeedBackupInfo = false)
         }
 
-    private fun onExportPrivateDataClick() = navigationRouter.forward(EXPORT_PRIVATE_DATA)
+    private fun onExportPrivateDataClick() {
+        val selected = getWalletAccounts.observe().value?.firstOrNull { it.isSelected }
+        if (selected?.isSpendable == true) navigationRouter.forward(EXPORT_PRIVATE_DATA)
+    }
 
     private fun onExportVKClick() = navigationRouter.forward(ExportVKArgs)
 

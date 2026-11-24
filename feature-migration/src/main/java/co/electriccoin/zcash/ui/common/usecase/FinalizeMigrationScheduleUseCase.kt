@@ -64,7 +64,7 @@ class FinalizeMigrationScheduleUseCase(
         // scheduling the first worker run far past the real due heights.
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
         val secondsPerBlock = sdk.estimatedSecondsPerBlock()
-        logCommittedBoundaries(sdk)
+        migrationLog("FinalizeMigrationSchedule: scheduling ${sched.transfers.size} committed transfer(s).")
         val tipHeight =
             sched.transfers.minOfOrNull { it.anchorHeight }
                 ?: (sched.preparations.minOfOrNull { it.broadcastHeight } ?: 0L)
@@ -97,45 +97,6 @@ class FinalizeMigrationScheduleUseCase(
                     "the scheduled WorkManager job will drive this plan forward instead."
             )
         }
-    }
-
-    /**
-     * Post-commit discoverability log (Issue 1): re-surface the engine's REAL per-transfer anchor
-     * boundaries from the Kotlin side, right after the commit, so `grep MIGRATION_DIAG` shows the
-     * true committed anchors without having to read the Rust `committedPlan:` dump.
-     *
-     * The propose-time app log (MigrationReviewVM.logProposedPlan) deliberately carries no
-     * `boundary=` — anchor boundaries are drawn only at COMMIT (commit_preparation), so a proposal
-     * has none. This reads them back from [OrchardMigrationSdk.getMigrationTransferStates], which
-     * surfaces `anchorBoundaryHeight` per transfer (null for preparations — they anchor to the
-     * natural tip, not a drawn grid boundary). Correlates by the stable transfer id (never array
-     * index — ZIP 318 shuffles the two orderings apart). Best-effort: a failed/absent read logs a
-     * single warning and is otherwise silent, never blocking the commit's scheduling/navigation.
-     */
-    private suspend fun logCommittedBoundaries(sdk: OrchardMigrationSdk) {
-        val states = runCatching { sdk.getMigrationTransferStates() }.getOrNull()
-        if (states == null) {
-            migrationLog("committedPlan(app): no live transfer states available post-commit")
-            return
-        }
-        migrationLog(
-            buildString {
-                appendLine(
-                    "committedPlan(app): ${states.transfers.size} transaction(s), scannedTip=${states.tipHeight}"
-                )
-                states.transfers
-                    .sortedBy { it.scheduledHeight }
-                    .forEach { t ->
-                        appendLine(
-                            "MIGRATION_DIAG committedPlan(app): id=${t.id} " +
-                                "kind=${if (t.isTransfer) "Transfer" else "Preparation"} " +
-                                "scheduled=${t.scheduledHeight} " +
-                                "boundary=${t.anchorBoundaryHeight ?: "natural"} " +
-                                "proved=${t.isProved} sent=${t.isSent}"
-                        )
-                    }
-            }.trimEnd()
-        )
     }
 
     // The first step (preparation or transfer) is never "ready now" (same anchor/proposal round

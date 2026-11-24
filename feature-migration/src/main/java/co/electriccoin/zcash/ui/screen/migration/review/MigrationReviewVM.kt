@@ -208,7 +208,7 @@ class MigrationReviewVM(
                             "MIGRATION_DIAG ReviewVM: estimatedSecondsPerBlock done in " +
                                 "${SystemClock.elapsedRealtime() - t0}ms"
                         )
-                        logProposedPlan(schedule)
+                        migrationLog("MigrationReviewVM: proposed ${schedule.transfers.size} transfer(s).")
                         ReviewProposal.Automatic(reviewed, keystoneRunCount)
                     }
                 }
@@ -554,42 +554,6 @@ class MigrationReviewVM(
     // stays null forever and there is no in-flight propose operation left to guard, so this must
     // navigate back unconditionally.
     fun navigateBack() = navigationRouter.back()
-
-    // Only ever called for AUTOMATIC (createImmediateState hardcodes its own single-row label
-    // instead — a raw send-max Proposal carries no per-transfer schedule to derive one from).
-
-    /** One-shot plan dump at propose time: absolute heights + wall-clock estimates. */
-    private fun logProposedPlan(sched: MigrationSchedule) {
-        // `anchorHeight` on a PROPOSED transfer is NOT a real commitment-tree anchor — the engine
-        // draws anchor boundaries only at COMMIT (commit_preparation), so a proposal carries none.
-        // The field holds the plan-time tip as a "now" reference for the height→time estimates
-        // below; it is deliberately NOT logged per-transfer as "anchor=" (that read as a real
-        // boundary and was misleading). The real per-transfer boundaries are logged post-commit by
-        // the Rust `committedPlan:` dump (boundary=Some(...)).
-        val referenceTip = sched.transfers.minOfOrNull { it.anchorHeight } ?: return
-        migrationLog(
-            buildString {
-                appendLine(
-                    "Plan: ${sched.transfers.size} transfer(s), referenceTip=$referenceTip " +
-                        "(anchors are drawn at commit — see committedPlan; times estimated at measured " +
-                        "${secondsPerBlock}s/block from the reference tip)"
-                )
-                var prev = referenceTip
-                sched.transfers.forEachIndexed { i, t ->
-                    val fromNow =
-                        secondsBetween(referenceTip, t.nextExecutableAfterHeight)
-                    val gap = secondsBetween(prev, t.nextExecutableAfterHeight)
-                    prev = t.nextExecutableAfterHeight
-                    appendLine(
-                        "MIGRATION_DIAG Plan: transfer[${i + 1}] " +
-                            "send=${t.nextExecutableAfterHeight} expiry=${t.expiryHeight} " +
-                            "dueIn=${formatMigrationDuration(fromNow, fineGrained = true)} " +
-                            "gapFromPrev=${formatMigrationDuration(gap, fineGrained = true)}"
-                    )
-                }
-            }.trimEnd()
-        )
-    }
 
     private fun scheduledLabel(t: TransferProposal): StringResource {
         val secondsUntil = secondsBetween(t.anchorHeight, t.nextExecutableAfterHeight)

@@ -40,11 +40,8 @@ class EphemeralAddressRepositoryImpl(
 
     override suspend fun invalidate() {
         val account = accountDataSource.getSelectedAccount()
-        val existing = ephemeralAddressStorageProvider.get(account.sdkAccount.accountUuid)
-        if (existing != null) {
-            Twig.debug { "Invalidating ephemeral address $existing" }
-        }
         ephemeralAddressStorageProvider.remove(account.sdkAccount.accountUuid)
+        Twig.debug { "Invalidated ephemeral address" }
     }
 
     override suspend fun get(): EphemeralAddress? {
@@ -66,8 +63,8 @@ class EphemeralAddressRepositoryImpl(
                     )
                 }
 
-        Twig.debug { "Generated new ephemeral address: $new" }
         ephemeralAddressStorageProvider.store(account.sdkAccount.accountUuid, new)
+        Twig.debug { "Stored a new ephemeral address" }
         return new
     }
 }

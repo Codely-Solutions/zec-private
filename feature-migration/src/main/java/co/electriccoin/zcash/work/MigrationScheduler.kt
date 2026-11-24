@@ -53,7 +53,7 @@ class MigrationScheduler(
         MigrationAccountRetirement.keepWake(accountKeyId) { enqueueAllowed(accountKeyId, delay) }
 
     private fun enqueueAllowed(accountKeyId: String, delay: Duration): Operation {
-        migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
+        migrationLog("MigrationScheduler: scheduling the next migration wake.")
         val operation = WorkManager.getInstance(context).enqueueUniqueWork(
             workId(accountKeyId),
             ExistingWorkPolicy.REPLACE,
@@ -81,7 +81,7 @@ class MigrationScheduler(
     }
 
     private fun cancelWork(accountKeyId: String): Operation {
-        migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
+        migrationLog("MigrationScheduler: cancelling a migration work chain.")
         val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
         migrationDueAlarmScheduler.cancel(accountKeyId)
         MigrationWorkerHeartbeat.clear(context, accountKeyId)

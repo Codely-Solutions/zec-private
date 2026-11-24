@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.exportdata
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -13,6 +14,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.usecase.ExportPrivateDataUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.screen.exportdata.view.ExportPrivateData
@@ -27,11 +29,14 @@ internal fun WrapExportPrivateData() {
     val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val navigationRouter = koinInject<NavigationRouter>()
     val export = koinInject<ExportPrivateDataUseCase>()
+    val accounts = koinInject<GetWalletAccountsUseCase>().observe().collectAsStateWithLifecycle().value
     val context = LocalActivity.current.applicationContext
 
     BackHandler { navigationRouter.back() }
-    if (synchronizer == null) {
+    if (synchronizer == null || accounts == null) {
         CircularScreenProgressIndicator()
+    } else if (accounts.firstOrNull { it.isSelected }?.isSpendable != true) {
+        LaunchedEffect(Unit) { navigationRouter.back() }
     } else {
         val snackbar = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()

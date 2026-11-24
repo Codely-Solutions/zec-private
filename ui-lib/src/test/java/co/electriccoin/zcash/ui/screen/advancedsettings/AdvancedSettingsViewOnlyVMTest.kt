@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.advancedsettings
 
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.migration.MigrationGate
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -16,6 +17,7 @@ import co.electriccoin.zcash.ui.fixture.VersionInfoFixture
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,11 +78,30 @@ class AdvancedSettingsViewOnlyVMTest {
             }
         }
 
+    @Test
+    fun unresolvedAccountsHideExportAndAStaleTapCannotOpenIt() = runTest {
+        val accounts = MutableStateFlow<List<WalletAccount>?>(null)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        assertFalse(R.string.settings_exportPrivateData in titles(vm(accounts, router)))
+
+        accounts.value = listOf(zodl(isSelected = true))
+        val vm = vm(accounts, router)
+        val export = vm.state.value.items.single { it.title == stringRes(R.string.settings_exportPrivateData) }
+        accounts.value = listOf(viewOnly(isSelected = true))
+        export.onClick?.invoke()
+        verify(exactly = 0) { router.forward(co.electriccoin.zcash.ui.NavigationTargets.EXPORT_PRIVATE_DATA) }
+    }
+
     private fun titles(vm: AdvancedSettingsVM) =
         vm.state.value.items
             .mapNotNull { (it.title as? StringResource.ByResource)?.resource }
 
-    private fun vm(accounts: List<WalletAccount>) =
+    private fun vm(accounts: List<WalletAccount>) = vm(MutableStateFlow(accounts))
+
+    private fun vm(
+        accounts: MutableStateFlow<List<WalletAccount>?>,
+        router: NavigationRouter = mockk(relaxed = true),
+    ) =
         AdvancedSettingsVM(
             getWalletRestoringState =
                 mockk {
@@ -88,9 +109,9 @@ class AdvancedSettingsViewOnlyVMTest {
                 },
             getWalletAccounts =
                 mockk {
-                    every { observe() } returns MutableStateFlow(accounts)
+                    every { observe() } returns accounts
                 },
-            navigationRouter = mockk(relaxed = true),
+            navigationRouter = router,
             navigateToTaxExport = mockk(relaxed = true),
             navigateToWalletBackup = mockk(relaxed = true),
             getVersionInfo =

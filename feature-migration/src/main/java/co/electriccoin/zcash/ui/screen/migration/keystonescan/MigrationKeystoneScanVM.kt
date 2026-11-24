@@ -254,7 +254,7 @@ class MigrationKeystoneScanVM(
                 // is holding a hardware device expecting the app to still be there. Leave
                 // isProcessing false so the still-visible QR can be rescanned instead of forcing a
                 // full restart of the batch.
-                migrationLog("MigrationKeystoneScanVM: onScanned failed: $e")
+                migrationLog("MigrationKeystoneScanVM: scan failed (${e.javaClass.simpleName}).")
                 isProcessing = false
                 failureSheet.update {
                     MigrationTransferFailureState(

@@ -92,7 +92,7 @@ class MigrationLiveDriverImpl(
     }
 
     private suspend fun loop(accountKeyId: String) {
-        migrationLog("MigrationLiveDriver: starting live loop for $accountKeyId")
+        migrationLog("MigrationLiveDriver: starting a migration loop.")
         // Priming publish (2026-08-0X): populate the cache near-instantly, before the first
         // driveOnce.run() call below — which can itself take many seconds (confirmed live: up
         // to ~13s for a real broadcast) and previously left the repository empty/stale for that
@@ -114,7 +114,7 @@ class MigrationLiveDriverImpl(
             try {
                 val sdk =
                     getOrchardMigrationSdk(accountKeyId) ?: run {
-                        migrationLog("MigrationLiveDriver: SDK unavailable for $accountKeyId — stopping.")
+                        migrationLog("MigrationLiveDriver: SDK unavailable. Stopping the loop.")
                         return
                     }
                 val result =
@@ -162,7 +162,7 @@ class MigrationLiveDriverImpl(
                     }
 
                     DriveOnceResult.RemovalManaged, DriveOnceResult.Terminal -> {
-                        migrationLog("MigrationLiveDriver: $accountKeyId has no admitted work — stopping loop.")
+                        migrationLog("MigrationLiveDriver: no admitted work. Stopping the loop.")
                         return
                     }
                 }
@@ -180,9 +180,7 @@ class MigrationLiveDriverImpl(
                 // again). Catching per-iteration instead means the loop survives: log, back off,
                 // and let the next iteration retry with a fresh SDK/DB read.
                 migrationLog(
-                    "MigrationLiveDriver: step failed for $accountKeyId (transient) — retrying in " +
-                        "${MIN_REARM_SECONDS}s.",
-                    e
+                    "MigrationLiveDriver: step failed (${e.javaClass.simpleName}). Retrying."
                 )
                 delay(MIN_REARM_SECONDS.seconds)
             }
