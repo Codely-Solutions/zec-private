@@ -47,7 +47,6 @@ import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
-import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -159,7 +158,6 @@ class MigrationKoinGraphSmokeTest {
                 single<ExchangeRateRepository> { mockk(relaxed = true) }
                 single<PendingMigrationScheduleRepository> { mockk(relaxed = true) }
                 single<RestartMigrationScheduleRepository> { mockk(relaxed = true) }
-                single<PendingMigrationTorFailureDecisionRepository> { mockk(relaxed = true) }
                 single<PendingKeystoneMigrationPcztsRepository> { mockk(relaxed = true) }
                 single<ZashiProposalRepository> { mockk(relaxed = true) }
                 single<KeystoneProposalRepository> { mockk(relaxed = true) }

@@ -655,7 +655,7 @@
   "feature-migration/src/main/res/drawable/ic_migration_notif_announcement.xml": "5ef640cb66ae149ab7bbc65b8c4a83055809e9a020c068decbe1a25b34a847a2",
   "feature-migration/src/main/res/drawable/ic_migration_notif_bell_ringing.xml": "90772d1eeabc9e5988811e94964dfc9160f78acd999e70c18e03f52f4c701c2e",
   "feature-migration/src/main/res/drawable/ic_migration_shield_outline.xml": "4c0e0bc8fcf9e88708d99ce4eb11c7e1eb7a3f3bc5d6bf7a3cc4d8dac00169fc",
-  "feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt": "dff2f77c6a6c54c177faf4d313f86409c3db21aa35e6911bbc88793bfedc1304",
+  "feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt": "e24c60597f14adbe8bc24ec1565ad8d8fa0d3c31605908fa62a73aa6426bda67",
   "feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt": "2284edbcd4979cbe47de4be9a8a9e389a70cf225214556c3b51b104afbbbc42b",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshotTest.kt": "b697163a8dd13b0935eda889ef9d90b002bede5afe7a8212730736bd5329f810",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/MigrationAttentionTest.kt": "d8e157eced457962844b4bdd4387489bc5974a6e1a6e2792e5827b66e2113496",
