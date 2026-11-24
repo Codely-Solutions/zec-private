@@ -3060,7 +3060,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt": "61c89fd76dfaae6df992269776e7c9d665e99f6eb2e58f0e2b6488bd657e1c87",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt": "47a775f44dd108877918f38369064b91e88078c34b39537e08c84fabdb82afaa",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/SwapAssetIconTest.kt": "3e142f45aa1587a2b35792ab1494aead31a41a8018eb49e475a6ad59cdd8413a",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt": "9d677e38408bc3c24bb23e457211211927ddf8e592836334499b94a10cc35949",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt": "6fec1cd277ea4305761b88d589622c82ec74b5683f697dc572615e6b2506522a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt": "d0bd23eb78f58819e08b6253b40a52ce140007daf37a6729168b542c07d14cc2",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt": "b6044bb2cfe81e7eb70052f639f15590aca9ef4e7413bfc343a89b7bdb29c6ef",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt": "5bca26ba6e0781fafbd1f4d791dca66608daeb94910b31592f30021c08a5b7f0",

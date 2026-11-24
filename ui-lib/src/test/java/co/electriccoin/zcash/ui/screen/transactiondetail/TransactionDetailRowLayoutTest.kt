@@ -84,6 +84,7 @@ class TransactionDetailRowLayoutTest {
     }
 
     @Test
+    @Config(sdk = [28], qualifiers = "w360dp-h800dp")
     fun expandedSavedRefundKeepsTheLabeledQuoteWithoutLiveDetails() {
         val app = RuntimeEnvironment.getApplication()
         val details = SwapDetailState(

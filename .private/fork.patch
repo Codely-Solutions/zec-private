@@ -88149,10 +88149,10 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..bab64e38c
+index 000000000..a9296c74a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,271 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import android.graphics.Bitmap
@@ -88239,6 +88239,7 @@ index 000000000..bab64e38c
 +    }
 +
 +    @Test
++    @Config(sdk = [28], qualifiers = "w360dp-h800dp")
 +    fun expandedSavedRefundKeepsTheLabeledQuoteWithoutLiveDetails() {
 +        val app = RuntimeEnvironment.getApplication()
 +        val details = SwapDetailState(
