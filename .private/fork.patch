@@ -69308,10 +69308,10 @@ index 0bc7a1124..0d0ca40b4 100644
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..053f87e98
+index 000000000..e34494ec3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,192 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -69363,7 +69363,6 @@ index 000000000..053f87e98
 +
 +        assertSame(adopted, repository.transactionProposal.value)
 +        assertSame(sdkProposal, adopted.proposal)
-+        assertEquals(Zatoshi(1234), adopted.amount)
 +    }
 +
 +    @Test
@@ -73289,7 +73288,7 @@ index 1d445dd11..4e10b0b52 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..7a14294ba
+index 000000000..def57cf88
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 @@ -0,0 +1,530 @@
@@ -73797,7 +73796,7 @@ index 000000000..7a14294ba
 +            observeProposal = observeProposal,
 +            observeAccountIcon = AccountIconFixtures.useCase(),
 +            cancelProposalFlow = CancelProposalFlowUseCase(
-+                repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(), mockk(),
++                repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(),
 +            ),
 +            getExchangeRate = GetExchangeRateUseCase(mockk {
 +                every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)

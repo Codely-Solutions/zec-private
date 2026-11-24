@@ -502,7 +502,7 @@ class Zip321MemoScanTest {
             observeProposal = observeProposal,
             observeAccountIcon = AccountIconFixtures.useCase(),
             cancelProposalFlow = CancelProposalFlowUseCase(
-                repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(), mockk(),
+                repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(),
             ),
             getExchangeRate = GetExchangeRateUseCase(mockk {
                 every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)

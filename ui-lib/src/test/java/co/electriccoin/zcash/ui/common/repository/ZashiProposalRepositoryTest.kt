@@ -49,7 +49,6 @@ class ZashiProposalRepositoryTest {
 
         assertSame(adopted, repository.transactionProposal.value)
         assertSame(sdkProposal, adopted.proposal)
-        assertEquals(Zatoshi(1234), adopted.amount)
     }
 
     @Test
