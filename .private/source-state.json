@@ -1670,7 +1670,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSlippageUseCase.kt": "b000359c04e6595f56e99399d98a200484c222959c357292453eff17cf170984",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapAssetPickerUseCase.kt": "263c6386c689b2ed683c30c240dd694ac750572310b8897de3dadb332556674f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapInfoUseCase.kt": "bb7495c14ce2cc69ef10dc801641c9b0d93eebac0ea33bd470c420e2b219f46a",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt": "b0f3bf1fdd92b5c6d58927fd0ef85c453046a01821ff06ea01e80afb232f3bf0",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt": "81116f2470e9f09b83b03e7120f8c970a5f8e6f10b1ce2785506dd91183e8e8f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt": "17bd524bdd021a6b420909a1b8742a2e17a4dae54d6c77d3208c3376194a0573",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapUseCase.kt": "e07aadb6775ef7a571bd80373501ad8b2d7ff6a994b7a0da457b2f3c4a61028d",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToTaxExportUseCase.kt": "34cba792e667289b00fb4e962207346bb95368260e3186b35bde4c16aa5e02d1",

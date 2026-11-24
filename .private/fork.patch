@@ -42222,7 +42222,7 @@ index 80a163cdc..c45553fa7 100644
 -    suspend operator fun invoke(onlyChainTicker: String?): SwapAsset? {
 +    suspend operator fun invoke(onlyChainTicker: String? = null): SwapAsset? {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
-index f7385365c..5c4851d40 100644
+index f7385365c..34b773856 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
 @@ -13,2 +13,2 @@ class NavigateToSwapQuoteIfAvailableUseCase(
@@ -42230,7 +42230,7 @@ index f7385365c..5c4851d40 100644
 -        val value = swapRepository.quote.value
 +    suspend operator fun invoke(canNavigate: () -> Boolean = { true }, hideBottomSheet: suspend () -> Unit) {
 +        val value = (if (canNavigate()) swapRepository.consumeReview() else null) ?: return
-@@ -17,9 +17,11 @@ class NavigateToSwapQuoteIfAvailableUseCase(
+@@ -17,9 +17,9 @@ class NavigateToSwapQuoteIfAvailableUseCase(
 -        val isQuoteAvailable = value is SwapQuoteData.Success || value is SwapQuoteData.Error
 -        if (isQuoteAvailable) {
 -            hideBottomSheet()
@@ -42244,9 +42244,7 @@ index f7385365c..5c4851d40 100644
 +        if (!canNavigate() || swapRepository.quote.value !== value) return
 +        if (!swapRepository.isReviewCurrent(value)) {
 +            if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
-+            return
-+        }
-+        if (mismatchArgs == null) {
++        } else if (mismatchArgs == null) {
 +            navigationRouter.forward(SwapQuoteArgs)
 +        } else {
 +            swapRepository.clearQuote()

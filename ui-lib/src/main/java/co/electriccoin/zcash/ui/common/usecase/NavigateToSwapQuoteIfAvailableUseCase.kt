@@ -18,9 +18,7 @@ class NavigateToSwapQuoteIfAvailableUseCase(
         if (!canNavigate() || swapRepository.quote.value !== value) return
         if (!swapRepository.isReviewCurrent(value)) {
             if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
-            return
-        }
-        if (mismatchArgs == null) {
+        } else if (mismatchArgs == null) {
             navigationRouter.forward(SwapQuoteArgs)
         } else {
             swapRepository.clearQuote()
