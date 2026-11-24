@@ -339,30 +339,36 @@ class RequestSwapQuoteUseCase(
         owner: FundingOwner?,
         canNavigateToSwapQuote: suspend () -> Boolean,
     ) {
-        if (!canNavigateToSwapQuote() || owner?.isCurrent() == false) return
-        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) {
-            if (swapRepository.quote.value === result && !swapRepository.isReviewCurrent(result)) {
+        if (!canNavigateToSwapQuote()) return
+        currentCoroutineContext().ensureActive()
+        when {
+            result is SwapQuoteData.Success && owner != null && !owner.matchesCurrentSelection() -> {
                 onPreparationFailure(result, canNavigateToSwapQuote) {
-                    navigateToErrorUseCase(ErrorArgs.General(SwapAssetsUnavailableException()))
+                    navigateToErrorUseCase(ErrorArgs.General(IllegalStateException(QUOTE_ACCOUNT_CHANGED)))
                 }
             }
-            return
-        }
-        if (swapRepository.consumeReview(result) != null) {
-            navigationRouter.forward(SwapQuoteArgs)
+            result is SwapQuoteData.Success && !swapRepository.markReviewReady(result) -> {
+                if (swapRepository.quote.value === result && !swapRepository.isReviewCurrent(result)) {
+                    onPreparationFailure(result, canNavigateToSwapQuote) {
+                        navigateToErrorUseCase(ErrorArgs.General(SwapAssetsUnavailableException()))
+                    }
+                }
+            }
+            swapRepository.consumeReview(result) != null -> navigationRouter.forward(SwapQuoteArgs)
         }
     }
 
     private suspend fun FundingOwner.requireCurrent() {
-        check(isCurrent()) { "The wallet account for this quote changed. Request a new quote." }
+        check(walletWriteAccess.permits(writeToken)) { QUOTE_ACCOUNT_CHANGED }
+        check(matches(accountDataSource.getSelectedAccount())) { QUOTE_ACCOUNT_CHANGED }
     }
 
-    private suspend fun FundingOwner.isCurrent(): Boolean {
-        if (!walletWriteAccess.permits(writeToken)) return false
-        val current = accountDataSource.getSelectedAccount()
-        val sameOwner = current === account || current.sdkAccount.accountUuid == account.sdkAccount.accountUuid
-        return sameOwner && walletWriteAccess.permits(writeToken)
-    }
+    private fun FundingOwner.matchesCurrentSelection(): Boolean =
+        matches(accountDataSource.allAccounts.value?.firstOrNull { it.isSelected })
+
+    private fun FundingOwner.matches(current: WalletAccount?): Boolean =
+        current != null && walletWriteAccess.permits(writeToken) &&
+            (current === account || current.sdkAccount.accountUuid == account.sdkAccount.accountUuid)
 
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")
     private suspend fun createProposal(quote: SwapQuote, account: WalletAccount) {
@@ -417,6 +423,8 @@ class RequestSwapQuoteUseCase(
             is AddressType.Invalid -> throw IllegalStateException(result.reason)
         }
 }
+
+private const val QUOTE_ACCOUNT_CHANGED = "The wallet account for this quote changed. Request a new quote."
 
 private fun BigDecimal.toExactQuoteZatoshi(): Zatoshi =
     try {

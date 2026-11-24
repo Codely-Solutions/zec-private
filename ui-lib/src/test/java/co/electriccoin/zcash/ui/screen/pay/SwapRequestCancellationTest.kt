@@ -47,6 +47,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -182,6 +183,7 @@ class SwapRequestCancellationTest {
             val router = mockk<NavigationRouter>(relaxed = true)
             val account = mockk<ZodlAccount> {
                 every { isSpendable } returns true
+                every { isSelected } returns true
                 every { canSpend(any()) } returns true
             }
             val replacementAddress = CompletableDeferred<Unit>()
@@ -192,6 +194,7 @@ class SwapRequestCancellationTest {
                     refund
                 }
                 coEvery { getSelectedAccount() } returns account
+                every { allAccounts } returns MutableStateFlow(listOf(account))
             }
             val synchronizer = mockk<Synchronizer> {
                 coEvery { validateAddress(any()) } returns AddressType.Unified

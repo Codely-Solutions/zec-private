@@ -813,11 +813,53 @@ class RequestSwapQuoteUseCaseTest {
         verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
     }
 
-    private fun zodl(): WalletAccount = mockk<ZodlAccount> { every { isSpendable } returns true }
+    @Test
+    fun crossPayCannotOpenReviewWhenTheSelectionIsLoadingAfterDismissal() = runTest {
+        val account = zodl()
+        val quote = swapQuote(originAsset = zec, destinationAsset = btc, mode = SwapMode.EXACT_OUTPUT)
+        val request = useCase(quote, account)
+        val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
+        every { accountDataSource.allAccounts } returns accounts
+        coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), account) } returns mockk()
+        val waiting = CompletableDeferred<Unit>()
+        val dismissed = CompletableDeferred<Unit>()
+        val job = launch {
+            request.requestExactOutput(
+                amount = BigDecimal.ONE,
+                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+                selectedAsset = btc,
+                slippage = BigDecimal("2"),
+                canNavigateToSwapQuote = {
+                    waiting.complete(Unit)
+                    dismissed.await()
+                    true
+                },
+            )
+        }
+        waiting.await()
+        accounts.value = null
+        dismissed.complete(Unit)
+        job.join()
 
-    private fun keystone(): WalletAccount = mockk<KeystoneAccount> { every { isSpendable } returns true }
+        verify(exactly = 0) { swapRepository.markReviewReady(any()) }
+        verify { zashiProposalRepository.clear() }
+        assertNavigatedToError()
+    }
 
-    private fun ledger(): WalletAccount = mockk<LedgerAccount> { every { isSpendable } returns true }
+    private fun zodl(): WalletAccount = mockk<ZodlAccount> {
+        every { isSpendable } returns true
+        every { isSelected } returns true
+    }
+
+    private fun keystone(): WalletAccount = mockk<KeystoneAccount> {
+        every { isSpendable } returns true
+        every { isSelected } returns true
+    }
+
+    private fun ledger(): WalletAccount = mockk<LedgerAccount> {
+        every { isSpendable } returns true
+        every { isSelected } returns true
+    }
 
     private suspend fun RequestSwapQuoteUseCase.exactInput(selectedAsset: SwapAsset = btc) =
         requestExactInput(
@@ -871,6 +913,7 @@ class RequestSwapQuoteUseCaseTest {
             accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any())
         } returns shieldedAddress
         coEvery { accountDataSource.getSelectedAccount() } returns selectedAccount
+        every { accountDataSource.allAccounts } returns MutableStateFlow(listOf(selectedAccount))
         return RequestSwapQuoteUseCase(
             navigationRouter = navigationRouter,
             navigateToErrorUseCase = navigateToError,
