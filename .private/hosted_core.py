@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 
 from acceptance_policy import direct_core_build_fingerprint, input_fingerprint, needs_live_tor_probe, validate_core_sources
 from core_testnet_driver import INSTALLED_UPGRADE_STAGES, PACKAGE, run as lifecycle, select_apk_roles
@@ -18,6 +19,24 @@ from strip_emulator_apk import prepare
 def sha(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def funding_claim_state(root):
+    ledger = Path(os.environ.get('CORE_FAUCET_LEDGER', str(root / 'funding-claim-ledger.json')))
+    try:
+        entry = ledger.lstat()
+    except FileNotFoundError:
+        return 'no-POST'
+    except OSError:
+        return 'unknown'
+    if not stat.S_ISREG(entry.st_mode) or not 0 < entry.st_size <= 8192:
+        return 'unknown'
+    try:
+        state = json.loads(ledger.read_bytes())['status']
+    except (OSError, ValueError, KeyError, TypeError):
+        return 'unknown'
+    known = ('request-starting', 'refused-or-unknown', 'pending', 'failed-or-unknown', 'broadcast')
+    return state if state in known else 'unknown'
 
 
 def candidate_pair(directory, source):
@@ -226,8 +245,7 @@ def run(session, root, fixture, candidate, result):
         report = root / 'core-testnet-result.json'
         if report.exists():
             value = json.loads(report.read_text())
-            ledger = root / 'funding-claim-ledger.json'
-            state = json.loads(ledger.read_text())['status'] if ledger.exists() else 'no-POST'
+            state = funding_claim_state(root)
             print(f'Hosted lifecycle failed at {value["last_stage"]}, claim state {state}', flush=True)
             egress_diagnostics(value)
             if 'transport_failure' in value:

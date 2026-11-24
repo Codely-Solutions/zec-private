@@ -14,13 +14,16 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from core_faucet import ready_session as faucet_ready_session
+from core_faucet import FundingWindowExpired, PAYOUT_POLL_SECONDS, ready_session as faucet_ready_session
 from acceptance_policy import BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
 RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 INSTALLED_UPGRADE_STAGES = {'receiptProbe': 'candidate', 'recipient': 'baseline', 'restoreProbe': 'candidate'}
 WALLET_PREFERENCES = 'shared_prefs/co.electriccoin.zcash.encrypted.xml'
+STAGE_START_SECONDS = 1600
+INSTRUMENTATION_DEADLINE_SECONDS = 1700
+FUNDED_RESERVE_SECONDS = {False: PAYOUT_POLL_SECONDS + 670, True: PAYOUT_POLL_SECONDS + 820}
 
 
 def instrumentation_role(stage):
@@ -168,7 +171,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     def stage(name, timeout=700, *, readiness_only=False):
         nonlocal current_stage
         current_stage = 'preclaim_readiness' if readiness_only else name
-        if time.monotonic() - started > 1600:
+        if time.monotonic() - started > STAGE_START_SECONDS:
             raise RuntimeError('Core acceptance total deadline exhausted')
         if candidate_only:
             role = 'candidate'
@@ -186,7 +189,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
                      'valueless-coins-only', '-e', 'transport', 'tor' if stage_uses_tor else 'direct',
                      '-e', 'stage', name, RUNNER]
-        timeout_seconds=min(timeout,max(1,1700-int(time.monotonic()-started)))
+        timeout_seconds=min(timeout,max(1,INSTRUMENTATION_DEADLINE_SECONDS-int(time.monotonic()-started)))
         operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         with operation_lock:active_instrumentation[name]=operation
         ready = False
@@ -362,7 +365,11 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         write_fixture(private)
         current_stage = 'funding_setup'
         # The funding helper receives only the public test address.
-        report['funding_setup'] = fund_testnet(private['senderAddress'])
+        try:
+            report['funding_setup'] = fund_testnet(private['senderAddress'])
+        except FundingWindowExpired:
+            current_stage = 'funding_time_budget'
+            raise
         return private
 
     firewall = False
@@ -538,7 +545,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                     return
         else:
             current_stage='faucet_readiness'
-            with faucet_ready_session(root) as (readiness, fund_testnet):
+            post_by = started + STAGE_START_SECONDS - FUNDED_RESERVE_SECONDS[use_tor]
+            with faucet_ready_session(root, post_by=post_by) as (readiness, fund_testnet):
                 report['faucet_readiness']=readiness
                 stage('recipient',240)
                 check_denials('recipient')

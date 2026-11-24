@@ -121,7 +121,7 @@ class ClaimTest(unittest.TestCase):
                 (202,dict(ok=True,pending=True,id='c'*16)),
                 (200,dict(ok=True,txid='d'*64,amountZat=10000000))]
 
-    def run_claim(self,root,replies,*,clock=None,work=None):
+    def run_claim(self,root,replies,*,clock=None,work=None,post_by=None):
         self.calls=[]
         def request(client,method,path,body=None):
             self.calls.append((method,path,body))
@@ -133,7 +133,32 @@ class ClaimTest(unittest.TestCase):
         with patch_environment({},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',side_effect=work,return_value=dict(nonce='0',seconds=.1,workers=2)) as solve,patch('core_faucet.time.time',side_effect=clock,return_value=100):
             self.solve=solve
             client.return_value.sock=object()
-            return core_faucet.claim(self.address,root,12345,True)
+            return core_faucet.claim(self.address,root,12345,True,post_by=post_by)
+
+    def test_deadline_caps_proof_and_stops_before_the_claim_ledger(self):
+        with tempfile.TemporaryDirectory() as root, \
+                patch('core_faucet.time.monotonic', side_effect=[100, 100, 250, 600]):
+            with self.assertRaises(core_faucet.FundingWindowExpired):
+                self.run_claim(root, self.replies(), post_by=600)
+            self.assertEqual(self.solve.call_args.kwargs['budget_seconds'], 275)
+            self.assertNotIn('POST', [method for method, _, _ in self.calls])
+            self.assertFalse((Path(root) / 'funding-claim-ledger.json').exists())
+
+    def test_deadline_reached_at_start_skips_all_faucet_requests(self):
+        with tempfile.TemporaryDirectory() as root, patch('core_faucet.time.monotonic', return_value=600):
+            with self.assertRaises(core_faucet.FundingWindowExpired):
+                self.run_claim(root, self.replies(), post_by=600)
+            self.assertEqual(self.calls, [])
+            self.solve.assert_not_called()
+            self.assertFalse((Path(root) / 'funding-claim-ledger.json').exists())
+
+    def test_deadline_crossed_during_ledger_write_leaves_it_protected(self):
+        with tempfile.TemporaryDirectory() as root, \
+                patch('core_faucet.time.monotonic', side_effect=[100, 100, 250, 599, 600]):
+            with self.assertRaises(core_faucet.FundingWindowExpired):
+                self.run_claim(root, self.replies(), post_by=600)
+            self.assertNotIn('POST', [method for method, _, _ in self.calls])
+            self.assertTrue((Path(root) / 'funding-claim-ledger.json').is_file())
 
     def test_single_claim_and_broadcast_ledger(self):
         with tempfile.TemporaryDirectory() as root:

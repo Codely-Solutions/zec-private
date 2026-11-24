@@ -241,7 +241,11 @@ class QuoteRecoveryTests(unittest.TestCase):
         metadata = self.recovery_metadata(run, reservation=reservation)
         safe = b'Hosted lifecycle failed at networkTargets, claim state no-POST'
         preclaim = b'CORE_STAGE sender passed\nHosted lifecycle failed at preclaim_readiness, claim state no-POST'
-        for log, error in ((safe, None), (preclaim, None), (b'no-POST', 'did not prove'),
+        budget = b'CORE_STAGE sender passed\nHosted lifecycle failed at funding_time_budget, claim state no-POST'
+        for log, error in ((safe, None), (preclaim, None), (budget, None), (b'no-POST', 'did not prove'),
+                           (budget.replace(b'funding_time_budget', b'funding_setup'), 'did not prove'),
+                           (budget.replace(b'no-POST', b'request-starting'), 'did not prove'),
+                           (budget + b'\nHosted lifecycle failed at funding_setup, claim state pending', 'did not prove'),
                            (preclaim.replace(b'no-POST', b'uncertain'), 'did not prove'),
                            (preclaim + b'\nCORE_STAGE fund passed', 'did not prove'),
                            (safe + b'\nCORE_STAGE sender passed', 'did not prove')):

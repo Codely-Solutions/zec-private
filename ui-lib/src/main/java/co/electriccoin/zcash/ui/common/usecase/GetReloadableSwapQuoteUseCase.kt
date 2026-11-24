@@ -52,12 +52,11 @@ class GetReloadableSwapQuoteUseCase(
 
     private fun SwapQuoteStatusData.withAcceptedStatus(saved: TransactionSwapMetadata?): SwapQuoteStatusData {
         val previous = savedMetadata
-        val owner = previous?.ownerAccount?.sdkAccount?.accountUuid
-        return if (previous != null && saved != null && owner != null &&
-            saved.ownerAccount?.sdkAccount?.accountUuid == owner &&
-            previous.walletWriteToken == saved.walletWriteToken &&
-            previous.matchesStoredSwap(saved)
-        ) withSavedObservation(saved) else this
+        if (previous == null || saved == null) return this
+        val owner = previous.ownerAccount?.sdkAccount?.accountUuid
+        val sameOwner = owner != null && saved.ownerAccount?.sdkAccount?.accountUuid == owner
+        val sameWallet = previous.walletWriteToken == saved.walletWriteToken
+        return if (sameOwner && sameWallet && previous.matchesStoredSwap(saved)) withSavedObservation(saved) else this
     }
 }
 

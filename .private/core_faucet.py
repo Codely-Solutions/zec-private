@@ -25,6 +25,22 @@ from urllib.parse import quote
 BUNDLE='https://archive.torproject.org/tor-package-archive/torbrowser/16.0/tor-expert-bundle-windows-x86_64-16.0.tar.gz'
 BUNDLE_SHA256='2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4'
 FAUCET='zcash-faucet.vercel.app'
+PAYOUT_POLL_SECONDS = 330
+WORK_PROCESS_GRACE_SECONDS = 20
+PRE_POST_PREPARATION_SECONDS = 75  # Node startup, worker teardown and a typical Tor reconnect.
+
+
+class FundingWindowExpired(TimeoutError):
+    """The acceptance time budget closed before POST."""
+
+
+class ProofWorkDeadline(RuntimeError):
+    """The proof worker exhausted its allotted runtime."""
+
+
+def require_funding_window(post_by):
+    if post_by is not None and time.monotonic() >= post_by:
+        raise FundingWindowExpired('Insufficient time to complete funded acceptance; no claim')
 
 
 def exact(sock,size):
@@ -102,14 +118,17 @@ def solve_work(challenge, budget_seconds=180):
     try:
         result=subprocess.run([node,str(Path(__file__).with_name('faucet_pow.cjs'))],
             input=json.dumps(dict(seed=challenge['seed'],difficulty=difficulty,budgetSeconds=budget_seconds)).encode(),
-            capture_output=True,timeout=budget_seconds+20,creationflags=0x08000000 if os.name=='nt' else 0)
+            capture_output=True, timeout=budget_seconds+WORK_PROCESS_GRACE_SECONDS,
+            creationflags=0x08000000 if os.name=='nt' else 0)
     except subprocess.TimeoutExpired:
-        raise RuntimeError(f'Bounded faucet work did not complete (worker process timeout, {context}); no claim') from None
+        raise ProofWorkDeadline(
+            f'Bounded faucet work did not complete (worker process timeout, {context}); no claim') from None
     if result.returncode:
         reason={b'PoW deadline':'worker deadline', b'PoW exhausted':'workers exhausted',
                 b'PoW bounds':'worker input rejected', b'Proof verification failed':'proof verification failed'}
         safe=reason.get(result.stderr.strip(),'worker failure')
-        raise RuntimeError(f'Bounded faucet work did not complete ({safe}, {context}); no claim')
+        error_type = ProofWorkDeadline if safe == 'worker deadline' else RuntimeError
+        raise error_type(f'Bounded faucet work did not complete ({safe}, {context}); no claim')
     proof=json.loads(result.stdout)
     if not re.fullmatch(r'\d{1,15}',str(proof.get('nonce',''))):raise ValueError('Invalid nonce')
     return proof
@@ -182,7 +201,7 @@ def status_readiness(client):
 
 
 @contextmanager
-def ready_session(root):
+def ready_session(root, *, post_by=None):
     """Reuse one owned Tor lifetime for pre-wallet status and the later sole claim."""
     root=Path(root)
     began=time.monotonic()
@@ -201,7 +220,7 @@ def ready_session(root):
             def fund_ready(address):
                 if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
                     raise ValueError('Only a testnet unified address may be funded')
-                funded=claim(address,root,port,negative)
+                funded=claim(address,root,port,negative,post_by=post_by)
                 funded.update(metadata)
                 return funded
             yield result,fund_ready
@@ -219,12 +238,13 @@ def readiness(root):
     with ready_session(root) as (result,_):return result
 
 
-def claim(address,root,port,negative):
+def claim(address,root,port,negative,*,post_by=None):
     if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
         raise ValueError('Only a testnet unified address may be funded')
     began=time.monotonic()
     ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(Path(root)/'funding-claim-ledger.json')))
     if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
+    require_funding_window(post_by)
     client=TorHTTPS(FAUCET,port)
     state=None
     owns_ledger=False
@@ -246,21 +266,36 @@ def claim(address,root,port,negative):
         # This faucet binds its signature to the address, not IP or TLS session.
         # Close the challenge connection during CPU work; claim/poll share new TLS.
         client.close()
-        budget_seconds=min(600,int(expires-time.time())-30)
+        challenge_budget = min(600, int(expires-time.time())-30)
+        budget_seconds = challenge_budget
         if budget_seconds<=0:raise ValueError('Challenge expiry leaves no work budget')
-        proof=solve_work(challenge,budget_seconds=budget_seconds)
+        if post_by is not None:
+            remaining = int(post_by - time.monotonic()) - PRE_POST_PREPARATION_SECONDS
+            if remaining <= 0:
+                raise FundingWindowExpired('Insufficient proof and acceptance time; no claim')
+            budget_seconds = min(budget_seconds, remaining)
+        try:
+            proof = solve_work(challenge, budget_seconds=budget_seconds)
+        except ProofWorkDeadline as error:
+            if budget_seconds < challenge_budget:
+                raise FundingWindowExpired('Proof exhausted its acceptance time budget; no claim') from error
+            raise
         nonce=proof.get('nonce','')
         if not re.fullmatch(r'\d{1,15}',nonce):raise ValueError('Invalid nonce')
         client=TorHTTPS(FAUCET,port);client.connect();pinned=client.sock
         if pinned is None:raise RuntimeError('Missing claim TLS connection; no claim')
         now=time.time()
         if now>=expires:raise ValueError('Challenge expired before claim')
+        payload=dict(address=address,pow={**{k:challenge[k] for k in ('seed','difficulty','exp','sig')},'nonce':nonce},**{'async':True})
+        require_funding_window(post_by)
         state=dict(provider='argon-testnet',status='request-starting',created_at=now,claim_requests=1,
                    address_sha256=hashlib.sha256(address.encode()).hexdigest())
         with ledger.open('x') as stream:
             json.dump(state,stream);stream.flush();os.fsync(stream.fileno())
         owns_ledger=True
-        payload=dict(address=address,pow={**{k:challenge[k] for k in ('seed','difficulty','exp','sig')},'nonce':nonce},**{'async':True})
+        require_funding_window(post_by)
+        if time.time() >= expires:
+            raise ValueError('Challenge expired while recording the claim ledger; preserve the ledger')
         status,raw=request(client,'POST','/api/claim',payload)
         reply=json.loads(raw)
         if status!=202 or reply.get('ok') is not True or reply.get('pending') is not True:
@@ -269,7 +304,7 @@ def claim(address,root,port,negative):
         claim_id=reply.get('id','')
         if not re.fullmatch('[0-9a-f]{16}',claim_id):raise RuntimeError('Unknown claim identity; no resubmission')
         state.update(status='pending',claim_id=claim_id);save()
-        stop=time.monotonic()+330
+        stop=time.monotonic()+PAYOUT_POLL_SECONDS
         while time.monotonic()<stop:
             if client.sock is not pinned:raise RuntimeError('Claim TLS changed; preserve outcome, no resubmission')
             status,raw=request(client,'GET','/api/claim/'+claim_id)

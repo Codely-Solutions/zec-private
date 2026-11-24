@@ -34315,7 +34315,7 @@ index 47fbdb939..9f0caa8c4 100644
 +                assets.data?.let(SwapPriceMarkets::selectableAssets)?.singleOrNull {
 +                    it.isSame(assetToSelect.tokenTicker, assetToSelect.chainTicker)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt
-index 9174c2293..3087dcab6 100644
+index 9174c2293..64dcf51a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt
 @@ -3,0 +4,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
@@ -34343,18 +34343,17 @@ index 9174c2293..3087dcab6 100644
 +            swapFlow.combine(accepted.onStart { emit(null) }) { status, saved ->
 +                SwapData(data = status.withAcceptedStatus(saved), handle = reloadHandle)
 +            }.collect { send(it) }
-@@ -49,0 +52,10 @@ class GetReloadableSwapQuoteUseCase(
+@@ -49,0 +52,9 @@ class GetReloadableSwapQuoteUseCase(
 +
 +    private fun SwapQuoteStatusData.withAcceptedStatus(saved: TransactionSwapMetadata?): SwapQuoteStatusData {
 +        val previous = savedMetadata
-+        val owner = previous?.ownerAccount?.sdkAccount?.accountUuid
-+        return if (previous != null && saved != null && owner != null &&
-+            saved.ownerAccount?.sdkAccount?.accountUuid == owner &&
-+            previous.walletWriteToken == saved.walletWriteToken &&
-+            previous.matchesStoredSwap(saved)
-+        ) withSavedObservation(saved) else this
++        if (previous == null || saved == null) return this
++        val owner = previous.ownerAccount?.sdkAccount?.accountUuid
++        val sameOwner = owner != null && saved.ownerAccount?.sdkAccount?.accountUuid == owner
++        val sameWallet = previous.walletWriteToken == saved.walletWriteToken
++        return if (sameOwner && sameWallet && previous.matchesStoredSwap(saved)) withSavedObservation(saved) else this
 +    }
-@@ -58,0 +71 @@ data class SwapData(
+@@ -58,0 +70 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 index a33c847ad..281485819 100644

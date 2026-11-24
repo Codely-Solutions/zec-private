@@ -62,6 +62,8 @@ For a recorded public release, the watcher checks open publication blockers and 
 
 A failed proof read leaves automatic selection unresolved, even when another proof matches. Retry discovery after the read recovers or supply the verified original publisher run, attempt and attestation ID. A draft-recovery dispatch checks signing readiness in a credential-free job before it enters the protected environment. If signing is paused, the run reports the blocker against that exact publisher.
 
+When only integration is rerun, the publisher job's retained outputs identify the original signing attempt, archive and digest. Integration verifies that attempt against the attestation before recording the release.
+
 The main discovery caller reports watcher and preparation failures independently, including when the watcher prevents preparation from starting. The shared release workflow reports a failed protected quote-retry reservation even when quotes and publication skip. Its diagnosis names the reservation; retain the protected one-use ref and investigate the failing job before recovery. Notification tests evaluate each failed prerequisite separately, with successful/skipped controls and closed quote/publication gates. These reports do not authorize another reservation or relax attestation requirements.
 
 The read-only watcher follows its caller's lifetime and has no shared concurrency group. Scheduled, security-push and manual discovery on `main` share one replaceable pending slot. Non-main dispatches use a separate slot. Discovery and shared release callers report failure or independent cancellation of each declared prerequisite. Whole-run cancellation stays quiet.
