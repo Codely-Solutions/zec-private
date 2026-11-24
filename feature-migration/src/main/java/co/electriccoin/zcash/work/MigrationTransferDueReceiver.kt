@@ -36,14 +36,13 @@ class MigrationTransferDueReceiver :
         }
 
         MigrationAccountRetirement.keepWake(accountKeyId) {
-            if (MigrationWorkerHeartbeat.removalPending(context, accountKeyId) || resetProgress.isPending.value) {
-                return@keepWake
-            }
+            if (resetProgress.isPending.value) return@keepWake
             val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
             val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
             if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
-                migrationLog("MigrationStepDueReceiver: missed worker run — raising the step-due notification.")
-                migrationNotifier.notifyMigrationStepDue(accountKeyId)
+                val removalUnresolved = MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
+                migrationLog("MigrationStepDueReceiver: missed worker run — posting migration fallback.")
+                migrationNotifier.notifyMigrationFallback(accountKeyId, removalUnresolved)
             }
         }
     }

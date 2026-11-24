@@ -270,21 +270,28 @@ class MigrationNotifier(
     /**
      * Dead-man's-switch fallback (design 2026-07-30): the worker missed its expected run — a
      * migration STEP (prove or broadcast; everything is pre-signed, no user review exists) is due
-     * and nothing is executing it. Tapping opens the app, which silently re-kicks the worker; the
-     * worker's own next run start cancels this via [cancelStepDue].
+     * and nothing is executing it. The normal tap re-kicks the worker. If an interrupted removal
+     * left ownership unresolved, the notice asks the user to check status and opens progress only
+     * after the app resolves the original account. [cancelStepDue] dismisses either form.
      *
      * @param accountKeyId storage-key id ([toStorageKeyId]) of the migrating account; also selects
      *   the per-account notification id so [cancelStepDue] can dismiss exactly this one.
      */
-    fun notifyMigrationStepDue(accountKeyId: String) {
+    fun notifyMigrationFallback(accountKeyId: String, removalUnresolved: Boolean) {
+        val text = if (removalUnresolved) {
+            R.string.migration_notification_checkStatusText
+        } else {
+            R.string.migration_notification_stepDueText
+        }
+        val tap = if (removalUnresolved) mainActivityIntent(accountKeyId) else runStepIntent(accountKeyId)
         val notification =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_alert_circle)
                 .setContentTitle(context.getString(R.string.migration_notification_title))
-                .setContentText(context.getString(R.string.migration_notification_stepDueText))
+                .setContentText(context.getString(text))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(runStepIntent(accountKeyId))
+                .setContentIntent(tap)
                 .setAutoCancel(true)
                 .build()
 
@@ -295,7 +302,7 @@ class MigrationNotifier(
      * The worker ran — the step-due fallback (if showing) is obsolete.
      *
      * @param accountKeyId storage-key id ([toStorageKeyId]) of the account whose step-due
-     *   notification (posted by [notifyMigrationStepDue]) should be dismissed.
+     *   notification (posted by [notifyMigrationFallback]) should be dismissed.
      */
     fun cancelStepDue(accountKeyId: String) {
         NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_STEP_DUE)

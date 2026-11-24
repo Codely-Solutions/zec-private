@@ -1083,6 +1083,7 @@
     <string name="migration_notification_torFailureTitle">Migración: No se pudo conectar a Tor</string>
     <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
     <string name="migration_notification_stepDueText">Tu migración está lista para continuar — toca para ejecutar el siguiente paso.</string>
+    <string name="migration_notification_checkStatusText">Abre la aplicación para comprobar el estado de la migración.</string>
     <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
     <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
     <string name="migration_notification_completeTitle">Migración a Ironwood completada</string>

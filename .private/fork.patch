@@ -3807,7 +3807,7 @@ index fc7d89b2b..0951092b3 100644
 +    override suspend fun store(accountKeyId: String, value: Boolean) =
 +        default(accountKeyId).putValue(preferenceHolder(), value)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
-index 259530a9c..4c3b4e3ba 100644
+index 259530a9c..893f04359 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
 @@ -12 +11,0 @@ import co.electriccoin.zcash.ui.R
@@ -3858,28 +3858,52 @@ index 259530a9c..4c3b4e3ba 100644
 @@ -273 +267 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -297 +291 @@ class MigrationNotifier(
+@@ -279,2 +273,3 @@ class MigrationNotifier(
+-     * and nothing is executing it. Tapping opens the app, which silently re-kicks the worker; the
+-     * worker's own next run start cancels this via [cancelStepDue].
++     * and nothing is executing it. The normal tap re-kicks the worker. If an interrupted removal
++     * left ownership unresolved, the notice asks the user to check status and opens progress only
++     * after the app resolves the original account. [cancelStepDue] dismisses either form.
+@@ -285 +280,7 @@ class MigrationNotifier(
+-    fun notifyMigrationStepDue(accountKeyId: String) {
++    fun notifyMigrationFallback(accountKeyId: String, removalUnresolved: Boolean) {
++        val text = if (removalUnresolved) {
++            R.string.migration_notification_checkStatusText
++        } else {
++            R.string.migration_notification_stepDueText
++        }
++        val tap = if (removalUnresolved) mainActivityIntent(accountKeyId) else runStepIntent(accountKeyId)
+@@ -291 +292 @@ class MigrationNotifier(
+-                .setContentText(context.getString(R.string.migration_notification_stepDueText))
++                .setContentText(context.getString(text))
+@@ -293 +294 @@ class MigrationNotifier(
+-                .setContentIntent(runStepIntent(accountKeyId))
++                .setContentIntent(tap)
+@@ -297 +298 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(stepDueNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_STEP_DUE, notification)
-@@ -307 +301 @@ class MigrationNotifier(
+@@ -304 +305 @@ class MigrationNotifier(
+-     *   notification (posted by [notifyMigrationStepDue]) should be dismissed.
++     *   notification (posted by [notifyMigrationFallback]) should be dismissed.
+@@ -307 +308 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).cancel(stepDueNotificationId(accountKeyId))
 +        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_STEP_DUE)
-@@ -334 +328 @@ class MigrationNotifier(
+@@ -334 +335 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -358 +352 @@ class MigrationNotifier(
+@@ -358 +359 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -363 +357 @@ class MigrationNotifier(
+@@ -363 +364 @@ class MigrationNotifier(
 -     * notify* methods above share the single per-account [progressNotificationId], so one cancel
 +     * notify* methods above share the same per-account progress notification, so one cancel
-@@ -372 +366 @@ class MigrationNotifier(
+@@ -372 +373 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).cancel(progressNotificationId(accountKeyId))
 +        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_PROGRESS)
-@@ -392 +386 @@ class MigrationNotifier(
+@@ -392 +393 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -414,10 +408,4 @@ class MigrationNotifier(
+@@ -414,10 +415,4 @@ class MigrationNotifier(
 -        // Notification-id namespace (NotificationManager ids). Independent of the PendingIntent
 -        // request-code namespace below — sharing the same numeric base value across the two namespaces
 -        // does not collide. Per-account via `+ accountIdOffset(...)` (range 0..0xFFFF).
@@ -3894,7 +3918,7 @@ index 259530a9c..4c3b4e3ba 100644
 +        private const val NOTIFICATION_ID_STEP_DUE = 0x40_0000
 +        private const val REQUEST_CODE_MIGRATION = 0x10_0000
 +        private const val REQUEST_CODE_TRANSFER_READY = 0x20_0000
-@@ -425,0 +414,3 @@ class MigrationNotifier(
+@@ -425,0 +421,3 @@ class MigrationNotifier(
 +
 +// Android ignores extras when comparing pending intents.
 +internal fun migrationIntentAction(kind: String, accountKeyId: String): String = "$kind.$accountKeyId"
@@ -7125,7 +7149,7 @@ index 1886de6a8..91a85e381 100644
 @@ -61,0 +88 @@ class MigrationScheduler(
 +        return operation
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
-index adcdb7013..5b239cefc 100644
+index adcdb7013..e4f1feacc 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
@@ -7137,7 +7161,7 @@ index adcdb7013..5b239cefc 100644
 + * the network, wallet database or synchronizer.
 @@ -27,0 +29 @@ class MigrationTransferDueReceiver :
 +    private val resetProgress: ResetProgressStore by inject()
-@@ -36,11 +38,10 @@ class MigrationTransferDueReceiver :
+@@ -36,11 +38,9 @@ class MigrationTransferDueReceiver :
 -        val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
 -        val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
 -        if (expectedRunAt == null) {
@@ -7150,22 +7174,21 @@ index adcdb7013..5b239cefc 100644
 -            )
 -            return
 +        MigrationAccountRetirement.keepWake(accountKeyId) {
-+            if (MigrationWorkerHeartbeat.removalPending(context, accountKeyId) || resetProgress.isPending.value) {
-+                return@keepWake
-+            }
++            if (resetProgress.isPending.value) return@keepWake
 +            val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
 +            val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
 +            if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
-+                migrationLog("MigrationStepDueReceiver: missed worker run — raising the step-due notification.")
-+                migrationNotifier.notifyMigrationStepDue(accountKeyId)
++                val removalUnresolved = MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
++                migrationLog("MigrationStepDueReceiver: missed worker run — posting migration fallback.")
++                migrationNotifier.notifyMigrationFallback(accountKeyId, removalUnresolved)
 +            }
-@@ -48,5 +48,0 @@ class MigrationTransferDueReceiver :
+@@ -48,5 +47,0 @@ class MigrationTransferDueReceiver :
 -        migrationLog(
 -            "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
 -                "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
 -        )
 -        migrationNotifier.notifyMigrationStepDue(accountKeyId)
-@@ -55,8 +50,0 @@ class MigrationTransferDueReceiver :
+@@ -55,8 +49,0 @@ class MigrationTransferDueReceiver :
 -    private companion object {
 -        /**
 -         * A run that started slightly BEFORE the recorded expected time (WorkManager dispatching
@@ -7174,7 +7197,7 @@ index adcdb7013..5b239cefc 100644
 -         */
 -        const val RUN_TOLERANCE_MILLIS = 30_000L
 -    }
-@@ -63,0 +52,7 @@ class MigrationTransferDueReceiver :
+@@ -63,0 +51,7 @@ class MigrationTransferDueReceiver :
 +
 +private const val EARLY_WORKER_TOLERANCE_MILLIS = 30_000L
 +
@@ -9833,10 +9856,10 @@ index 4a5eda3b1..9caeb9e10 100644
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
 new file mode 100644
-index 000000000..c6c9c0090
+index 000000000..e0e709240
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,76 @@
 +package co.electriccoin.zcash.work
 +
 +import android.content.Context
@@ -9857,11 +9880,11 @@ index 000000000..c6c9c0090
 +
 +class MigrationTransferDueReceiverTest {
 +    @Test
-+    fun persistedRemovalAndResetDeferAStaleFallbackInAFreshProcess() {
++    fun overdueFallbackPromptsForStatusWhileRemovalIsUnresolved() {
 +        val owner = "fixture-owner"
 +        val overdue = System.currentTimeMillis() - 300_000L
 +        val preferences = mockk<SharedPreferences> {
-+            every { getBoolean("removal_pending_$owner", false) } returnsMany listOf(true, false, false)
++            every { getBoolean("removal_pending_$owner", false) } returnsMany listOf(true, false)
 +            every { getLong("next_wake_at_$owner", -1L) } returns overdue
 +            every { getLong("last_run_at_$owner", -1L) } returns -1L
 +        }
@@ -9871,7 +9894,7 @@ index 000000000..c6c9c0090
 +        val intent = mockk<Intent> {
 +            every { getStringExtra(MigrationDueAlarmScheduler.EXTRA_ACCOUNT_KEY_ID) } returns owner
 +        }
-+        val pendingReset = MutableStateFlow(true)
++        val pendingReset = MutableStateFlow(false)
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns pendingReset }
 +        val notifier = mockk<MigrationNotifier>(relaxed = true)
 +        startKoin {
@@ -9882,14 +9905,22 @@ index 000000000..c6c9c0090
 +        }
 +        try {
 +            assertFalse(MigrationAccountRetirement.blocks(owner))
-+            MigrationTransferDueReceiver().onReceive(context, intent) // owner removal unresolved
-+            MigrationTransferDueReceiver().onReceive(context, intent) // reset still pending
-+            verify(exactly = 0) { notifier.notifyMigrationStepDue(owner) }
-+
-+            pendingReset.value = false
 +            MigrationTransferDueReceiver().onReceive(context, intent)
-+            verify(exactly = 1) { notifier.notifyMigrationStepDue(owner) }
++            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
++            verify(exactly = 0) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
++
++            pendingReset.value = true
++            MigrationTransferDueReceiver().onReceive(context, intent)
++            pendingReset.value = false
++
++            MigrationTransferDueReceiver().onReceive(context, intent)
++            MigrationAccountRetirement.begin(owner)
++            MigrationAccountRetirement.markRemoved(owner)
++            MigrationTransferDueReceiver().onReceive(context, intent)
++            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
++            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
 +        } finally {
++            MigrationAccountRetirement.restore(owner)
 +            stopKoin()
 +        }
 +    }
@@ -29131,7 +29162,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..c0e4388d9 100644
+index 7b9af8bf7..6f5df812e 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -29451,57 +29482,58 @@ index 7b9af8bf7..c0e4388d9 100644
 @@ -1091 +1084 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1086,2 @@
+@@ -1093,2 +1086,3 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
++    <string name="migration_notification_checkStatusText">Abre la aplicación para comprobar el estado de la migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1099 @@
+@@ -1106 +1100 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1132 +1125 @@
+@@ -1132 +1126 @@
 -    <string name="migrationPrivacy_bodyImmediate">Si Tor está disponible en tu región, te recomendamos encarecidamente activarlo para evitar vincular tu saldo con tu dirección IP. También puedes usar una VPN de confianza si Tor no está disponible en tu región.</string>
 +    <string name="migrationPrivacy_bodyImmediate">La migración inmediata usa el ajuste de Tor de tu monedero. Activa Tor en Ajustes para usarlo.</string>
-@@ -1140 +1133 @@
+@@ -1140 +1134 @@
 -    <string name="migrationSuccess_subtitle">Tus ZEC se migraron\ncorrectamente a Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migración enviada. Consulta Actividad para ver la confirmación.</string>
-@@ -1179 +1172 @@
+@@ -1179 +1173 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1179 @@
+@@ -1186 +1180 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1215 +1208 @@
+@@ -1215 +1209 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1241 @@
+@@ -1248 +1242 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1256 +1249 @@
+@@ -1256 +1250 @@
 -    <string name="migrationReview_immediateBody">Todo tu saldo de Orchard se transferirá a Ironwood en una sola transferencia en cadena. Una vez confirmada, esta transferencia no se puede cancelar.</string>
 +    <string name="migrationReview_immediateBody">La transferencia mueve los fondos elegibles de Orchard a Ironwood. Una vez confirmada, esta transferencia no se puede cancelar.</string>
-@@ -1257,0 +1251 @@
+@@ -1257,0 +1252 @@
 +    <string name="migrationReview_eligibleOrchardFunds">Fondos elegibles de Orchard</string>
-@@ -1262 +1256 @@
+@@ -1262 +1257 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1271 @@
+@@ -1277 +1272 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1273 @@
+@@ -1279 +1274 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1277,2 @@
+@@ -1283,2 +1278,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1294,0 +1289,2 @@
+@@ -1294,0 +1290,2 @@
 +    <string name="migrationHome_finishScheduling">Termina de programar la migración</string>
 +    <string name="migrationScheduled_signatureRequired">Vuelve a Inicio para terminar de firmar con Keystone.</string>
-@@ -1306 +1301,0 @@
+@@ -1306 +1302,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1307,2 @@
+@@ -1312,2 +1308,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -29546,7 +29578,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..12c266ba3 100644
+index f41234151..0f229e307 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -30072,70 +30104,71 @@ index f41234151..12c266ba3 100644
 @@ -1377 +1211 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
 +    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1213,2 @@ Your vote can no longer be submitted.</string>
+@@ -1379,2 +1213,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
++    <string name="migration_notification_checkStatusText">Open the app to check migration status.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
-@@ -1392 +1226 @@ Your vote can no longer be submitted.</string>
+@@ -1392 +1227 @@ Your vote can no longer be submitted.</string>
 -    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to Zodl Support via Send Feedback.</string>
 +    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
-@@ -1406,0 +1241 @@ Your vote can no longer be submitted.</string>
+@@ -1406,0 +1242 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationProgress_unavailable">Migration progress unavailable</string>
-@@ -1425 +1260,2 @@ Your vote can no longer be submitted.</string>
+@@ -1425 +1261,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationPrivacy_bodyImmediate">If Tor is available in your region, we strongly recommend enabling it to prevent linking your balance to your IP address. You can also use a trusted VPN if Tor is unavailable in your region.</string>
 +    <string name="migrationPrivacy_bodyImmediate">Immediate migration uses your wallet’s Tor setting. Enable Tor in Settings to use it.</string>
 +    <string name="migrationReview_privateSplitUnavailable">This plan needs a preparation transaction that can only be sent without Tor. To keep Tor on, choose immediate migration with wallet Tor enabled.</string>
-@@ -1433 +1269 @@ Your vote can no longer be submitted.</string>
+@@ -1433 +1270 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationSuccess_subtitle">Your ZEC was successfully\nmigrated to Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migration submitted. Check Activity for confirmation.</string>
-@@ -1462,3 +1298,3 @@ Your vote can no longer be submitted.</string>
+@@ -1462,3 +1299,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
 +    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
-@@ -1472 +1308 @@ Your vote can no longer be submitted.</string>
+@@ -1472 +1309 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
-@@ -1479 +1315 @@ Your vote can no longer be submitted.</string>
+@@ -1479 +1316 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening Zodl at every step to send each transfer.</string>
 +    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening ZEC Private at every step to send each transfer.</string>
-@@ -1507,2 +1343,2 @@ Your vote can no longer be submitted.</string>
+@@ -1507,2 +1344,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationTipUnavailable_title">Zodl is still syncing</string>
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
-@@ -1514 +1350 @@ Your vote can no longer be submitted.</string>
+@@ -1514 +1351 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
-@@ -1547 +1383 @@ Your vote can no longer be submitted.</string>
+@@ -1547 +1384 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1555 +1391 @@ Your vote can no longer be submitted.</string>
+@@ -1555 +1392 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_immediateBody">Your full Orchard balance will be transferred to Ironwood in a single on-chain transfer. Once confirmed, this transfer cannot be cancelled.</string>
 +    <string name="migrationReview_immediateBody">The transfer moves eligible Orchard funds to Ironwood. Once confirmed, this transfer cannot be cancelled.</string>
-@@ -1556,0 +1393 @@ Your vote can no longer be submitted.</string>
+@@ -1556,0 +1394 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationReview_eligibleOrchardFunds">Eligible Orchard funds</string>
-@@ -1561 +1398 @@ Your vote can no longer be submitted.</string>
+@@ -1561 +1399 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1413 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1414 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1415 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1416 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1419,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1420,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1593,0 +1431,2 @@ Your vote can no longer be submitted.</string>
+@@ -1593,0 +1432,2 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationHome_finishScheduling">Finish scheduling migration</string>
 +    <string name="migrationScheduled_signatureRequired">Return to Home to finish signing with Keystone.</string>
-@@ -1629,0 +1469,7 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1470,7 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
 +    <string name="private_swap_funding_status">Funding status</string>
 +    <string name="private_swap_status_unavailable">Unavailable</string>
