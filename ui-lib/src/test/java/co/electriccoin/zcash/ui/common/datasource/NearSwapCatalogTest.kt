@@ -450,7 +450,7 @@ class NearSwapCatalogTest {
     private data class Route(val origin: NearSwapAsset, val destination: NearSwapAsset, val type: SwapType) {
         val outgoing = type != SwapType.FLEX_INPUT
         val label = "${origin.assetId} to ${destination.assetId} ($type)"
-        val deposit = if (outgoing) ZEC_DEPOSIT else "synthetic-external-deposit"
+        val deposit = if (outgoing) ZEC_DEPOSIT else externalDeposits.getValue(origin.blockchain.chainTicker)
         val recipient = if (outgoing) "synthetic-external-recipient" else ZEC_RECIPIENT
         val refund = if (outgoing) ZEC_REFUND else "synthetic-external-refund"
         val originAmount =
@@ -471,6 +471,21 @@ class NearSwapCatalogTest {
         val ENTERED_AMOUNT = BigDecimal("1.1234567890123456789012349")
         val COUNTER_AMOUNT = BigDecimal("2.2345678901234567890123459")
         const val SLIPPAGE_BPS = 100
+        // Offline public format vectors. The Base58-only chains use a deterministic 20-byte payload.
+        private const val EVM_DEPOSIT = "0x52908400098527886E0F7030069857D2E4169EE7"
+        val externalDeposits = mapOf(
+            "arb" to EVM_DEPOSIT, "avax" to EVM_DEPOSIT, "base" to EVM_DEPOSIT,
+            "bsc" to EVM_DEPOSIT, "eth" to EVM_DEPOSIT, "pol" to EVM_DEPOSIT,
+            "btc" to "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
+            "bch" to "bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a",
+            "dash" to "XbKzysY6LYGbsGwNG8B7K1BRoA1ffLodAT",
+            "ltc" to "LKs7QqC2TVJ4y92waNrBjVZQB2oFhcmZqB",
+            "near" to "fixture.near",
+            "sol" to "11111111111111111111111111111111",
+            "sui" to ("0x" + "a".repeat(64)),
+            "tron" to "TAcN9gFvXZAxsWQQzWWbydBmscBHnEi5nZ",
+            "xrp" to "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        )
         const val ZEC_DEPOSIT = "synthetic-zec-deposit"
         const val ZEC_RECIPIENT = "synthetic-zec-recipient"
         const val ZEC_REFUND = "synthetic-zec-refund"

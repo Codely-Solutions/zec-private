@@ -202,7 +202,8 @@ class TransactionDetailVMTest {
         assertEquals(stringRes(Zatoshi(10_000)), info.totalFees)
         assertEquals(stringResByTransactionId(sent.id.txIdString(), abbreviated = true), info.transactionId)
         assertNull(info.donationBasisZec)
-        assertNotNull(state.errorFooter)
+        assertNull(state.errorFooter)
+        assertEquals(stringRes(R.string.private_swap_refresh_unavailable), state.infoFooter)
         assertEquals(listOf(sent.id.txIdString()), state.explorerLinks.map { it.transactionId })
         assertEquals(
             stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
