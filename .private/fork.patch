@@ -30932,7 +30932,7 @@ index f9a562c53..21f96f3ee 100644
 -    val error: Exception? = null
 -)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-index a4216cc0a..397be7f80 100644
+index a4216cc0a..203afecdb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 @@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -31183,7 +31183,7 @@ index a4216cc0a..397be7f80 100644
 @@ -313 +346 @@ class MetadataRepositoryImpl(
 -                    ?.map { it.toBusinessObject() }
 +                    ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
-@@ -316,9 +349,39 @@ class MetadataRepositoryImpl(
+@@ -316,9 +349,32 @@ class MetadataRepositoryImpl(
 -    override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? =
 -        selectedMetadata
 -            .filterNotNull()
@@ -31220,25 +31220,18 @@ index a4216cc0a..397be7f80 100644
 +                metadataDataSource.read(key)?.accountMetadata?.swaps?.swapIds
 +                    ?.firstOrNull { it.depositAddress == expected.depositAddress }
 +                    ?.toBusinessObject(simpleSwapAssetProvider)
-+                    ?.takeIf {
-+                        it.provider == expected.provider && it.lastUpdated == expected.lastUpdated &&
-+                            it.reviewedIdentity == expected.reviewedIdentity &&
-+                            (expected.reviewedIdentity == null || it.mode == expected.mode) &&
-+                            it.origin.tokenTicker == expected.origin.tokenTicker &&
-+                            it.origin.chainTicker == expected.origin.chainTicker &&
-+                            it.destination.tokenTicker == expected.destination.tokenTicker &&
-+                            it.destination.chainTicker == expected.destination.chainTicker
-+                    }?.copy(ownerAccount = owner, walletWriteToken = token)
++                    ?.takeIf(expected::matchesStoredSwap)
++                    ?.copy(ownerAccount = owner, walletWriteToken = token)
 +            }
 +        }
 +    }
-@@ -348 +411,4 @@ class MetadataRepositoryImpl(
+@@ -348 +404,4 @@ class MetadataRepositoryImpl(
 -            emitAll(metadataDataSource.observe(getMetadataKey(account)).dropWhile { it == null })
 +            val token = walletWriteAccess.token()
 +            val key = getMetadataKey(account, token)
 +            val observations = walletWriteAccess.write(token) { metadataDataSource.observe(key) } ?: return@flow
 +            emitAll(observations.dropWhile { it == null })
-@@ -354,13 +420,3 @@ class MetadataRepositoryImpl(
+@@ -354,13 +413,3 @@ class MetadataRepositoryImpl(
 -    @Suppress("TooGenericExceptionCaught")
 -    override fun delete() {
 -        scope.launch {
@@ -31255,24 +31248,24 @@ index a4216cc0a..397be7f80 100644
 +    override suspend fun delete() {
 +        mutex.withLock {
 +            metadataDataSource.delete()
-@@ -370,2 +426,3 @@ class MetadataRepositoryImpl(
+@@ -370,2 +419,3 @@ class MetadataRepositoryImpl(
 -    private fun updateMetadata(block: suspend (MetadataKey) -> Boolean) {
 -        scope.launch { updateMetadataLocked(block = block) }
 +    private fun updateMetadata(account: WalletAccount? = null, block: suspend (MetadataKey) -> Boolean) {
 +        val token = walletWriteAccess.token()
 +        scope.launch { updateMetadataLocked(account = account, block = block, token = token) }
-@@ -375,0 +433 @@ class MetadataRepositoryImpl(
+@@ -375,0 +426 @@ class MetadataRepositoryImpl(
 +        token: Long = walletWriteAccess.token(),
-@@ -377 +435,3 @@ class MetadataRepositoryImpl(
+@@ -377 +428,3 @@ class MetadataRepositoryImpl(
 -    ): Boolean = scope.async { updateMetadataLocked(account, block) }.await()
 +    ): Boolean {
 +        return scope.async { updateMetadataLocked(account, token, block) }.await()
 +    }
-@@ -386 +446,2 @@ class MetadataRepositoryImpl(
+@@ -386 +439,2 @@ class MetadataRepositoryImpl(
 -        block: suspend (MetadataKey) -> Boolean
 +        token: Long,
 +        block: suspend (MetadataKey) -> Boolean,
-@@ -388,4 +449,4 @@ class MetadataRepositoryImpl(
+@@ -388,4 +442,4 @@ class MetadataRepositoryImpl(
 -        mutex.withLock {
 -            try {
 -                val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount())
@@ -31281,30 +31274,30 @@ index a4216cc0a..397be7f80 100644
 +            val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount(), token)
 +            mutex.withLock {
 +                (walletWriteAccess.write(token) { block(key) } ?: false).also { isSaved ->
-@@ -394,3 +454,0 @@ class MetadataRepositoryImpl(
+@@ -394,3 +447,0 @@ class MetadataRepositoryImpl(
 -            } catch (e: Exception) {
 -                Twig.error(e) { "Unable to update Metadata" }
 -                false
-@@ -397,0 +456,3 @@ class MetadataRepositoryImpl(
+@@ -397,0 +449,3 @@ class MetadataRepositoryImpl(
 +        } catch (e: Exception) {
 +            Twig.error(e) { "Unable to update Metadata" }
 +            false
-@@ -405 +466 @@ class MetadataRepositoryImpl(
+@@ -405 +459 @@ class MetadataRepositoryImpl(
 -    private suspend fun getMetadataKey(account: WalletAccount): MetadataKey =
 +    private suspend fun getMetadataKey(account: WalletAccount, token: Long = walletWriteAccess.token()): MetadataKey =
-@@ -427 +488,3 @@ class MetadataRepositoryImpl(
+@@ -427 +481,3 @@ class MetadataRepositoryImpl(
 -                metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
 +                checkNotNull(walletWriteAccess.write(token) {
 +                    metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
 +                }) { "Wallet changed before its metadata key could be saved" }
-@@ -444 +507,2 @@ data class TransactionMetadata(
+@@ -444 +500,2 @@ data class TransactionMetadata(
 -    val swapMetadata: TransactionSwapMetadata?
 +    val swapMetadata: TransactionSwapMetadata?,
 +    internal val bookmarkWriteToken: Long? = null,
-@@ -456 +520 @@ data class TransactionSwapMetadata(
+@@ -456 +513 @@ data class TransactionSwapMetadata(
 -    val status: SwapStatus,
 +    val recordedStatus: SwapStatus?,
-@@ -458 +522,64 @@ data class TransactionSwapMetadata(
+@@ -458 +515,71 @@ data class TransactionSwapMetadata(
 -)
 +    val reviewedIdentity: String? = null,
 +    internal val ownerAccount: WalletAccount? = null,
@@ -31316,6 +31309,13 @@ index a4216cc0a..397be7f80 100644
 +) {
 +    val status: SwapStatus
 +        get() = recordedStatus ?: SwapStatus.SUCCESS
++
++    internal fun matchesStoredSwap(other: TransactionSwapMetadata): Boolean =
++        depositAddress == other.depositAddress && provider == other.provider && lastUpdated == other.lastUpdated &&
++            reviewedIdentity == other.reviewedIdentity && (reviewedIdentity == null || mode == other.mode) &&
++            origin.tokenTicker == other.origin.tokenTicker && origin.chainTicker == other.origin.chainTicker &&
++            destination.tokenTicker == other.destination.tokenTicker &&
++            destination.chainTicker == other.destination.chainTicker
 +
 +    internal val legacySuccessfulOutput: BigDecimal?
 +        get() {
@@ -33667,7 +33667,7 @@ index 9174c2293..1c2415bd7 100644
 @@ -58,0 +59 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..b5c9cdb5a 100644
+index a33c847ad..488a377a0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -33763,20 +33763,20 @@ index a33c847ad..b5c9cdb5a 100644
 @@ -83,0 +139,16 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
-+        val saved = savedMetadata
-+        if (saved == null) return copy(savedMetadata = observed)
-+        val sameRoute = saved.depositAddress == observed.depositAddress && saved.provider == observed.provider &&
-+            saved.lastUpdated == observed.lastUpdated && saved.reviewedIdentity == observed.reviewedIdentity &&
-+            saved.origin == observed.origin && saved.destination == observed.destination
-+        if (!sameRoute) return copy(status = null, savedMetadata = observed)
++        val saved = savedMetadata ?: return copy(savedMetadata = observed)
 +        val previousAt = saved.statusUpdatedAt
 +        val observedAt = observed.statusUpdatedAt
-+        if (previousAt != null && (observedAt == null || observedAt < previousAt)) return this
-+        val sameStatus = saved.recordedStatus == observed.recordedStatus && saved.mode == observed.mode &&
-+            saved.executedAmountOut == observed.executedAmountOut &&
-+            saved.quotedAmountOut == observed.quotedAmountOut
-+        return if (sameStatus) this else copy(status = null, savedMetadata = observed)
++        return when {
++            !saved.matchesStoredSwap(observed) -> copy(status = null, savedMetadata = observed)
++            previousAt != null && (observedAt == null || observedAt < previousAt) -> this
++            saved.matchesDisplayStatus(observed) -> copy(savedMetadata = observed)
++            else -> copy(status = null, savedMetadata = observed)
++        }
 +    }
++
++    private fun TransactionSwapMetadata.matchesDisplayStatus(other: TransactionSwapMetadata): Boolean =
++        recordedStatus == other.recordedStatus && mode == other.mode &&
++            executedAmountOut == other.executedAmountOut && quotedAmountOut == other.quotedAmountOut
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt
 index fbae02e04..f9be37d0a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt

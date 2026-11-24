@@ -373,15 +373,8 @@ class MetadataRepositoryImpl(
                 metadataDataSource.read(key)?.accountMetadata?.swaps?.swapIds
                     ?.firstOrNull { it.depositAddress == expected.depositAddress }
                     ?.toBusinessObject(simpleSwapAssetProvider)
-                    ?.takeIf {
-                        it.provider == expected.provider && it.lastUpdated == expected.lastUpdated &&
-                            it.reviewedIdentity == expected.reviewedIdentity &&
-                            (expected.reviewedIdentity == null || it.mode == expected.mode) &&
-                            it.origin.tokenTicker == expected.origin.tokenTicker &&
-                            it.origin.chainTicker == expected.origin.chainTicker &&
-                            it.destination.tokenTicker == expected.destination.tokenTicker &&
-                            it.destination.chainTicker == expected.destination.chainTicker
-                    }?.copy(ownerAccount = owner, walletWriteToken = token)
+                    ?.takeIf(expected::matchesStoredSwap)
+                    ?.copy(ownerAccount = owner, walletWriteToken = token)
             }
         }
     }
@@ -529,6 +522,13 @@ data class TransactionSwapMetadata(
 ) {
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
+
+    internal fun matchesStoredSwap(other: TransactionSwapMetadata): Boolean =
+        depositAddress == other.depositAddress && provider == other.provider && lastUpdated == other.lastUpdated &&
+            reviewedIdentity == other.reviewedIdentity && (reviewedIdentity == null || mode == other.mode) &&
+            origin.tokenTicker == other.origin.tokenTicker && origin.chainTicker == other.origin.chainTicker &&
+            destination.tokenTicker == other.destination.tokenTicker &&
+            destination.chainTicker == other.destination.chainTicker
 
     internal val legacySuccessfulOutput: BigDecimal?
         get() {
