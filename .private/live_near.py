@@ -84,7 +84,11 @@ def read_timestamp(value):
 
 def deadline_identity(value):
     timestamp = read_timestamp(value).astimezone(datetime.timezone.utc)
-    fractional = re.fullmatch(r'[^.]+(?:\.([0-9]{1,9}))?(?:Z|[+-][0-9]{2}:[0-9]{2})', value)
+    fractional = re.fullmatch(
+        r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
+        r'(?:\.([0-9]{1,9}))?(?:Z|[+-][0-9]{2}:[0-9]{2})',
+        value,
+    )
     if fractional is None:
         raise RuntimeError('Invalid NEAR quote deadline precision')
     return timestamp.replace(microsecond=0), int((fractional[1] or '').ljust(9, '0'))

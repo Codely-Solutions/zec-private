@@ -204,8 +204,7 @@ class MigrationAppHooksImpl(
 
     @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
     private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
-        if (resetProgress.isPending.value) return
-        val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return
+        val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
         val generation = walletWriteAccess.token()
         val notice = MigrationAccountRetirement.admit(key) {
             launchNavigation.beginMigrationProgress(key, runStep)
@@ -271,7 +270,7 @@ class MigrationAppHooksImpl(
                         "The wallet changed before the account could be removed"
                     }
                     deleted = true
-                    launchNavigation.clearMigrationRequestsFor(accountKeyId)
+                    launchNavigation.clearMigrationRequests(accountKeyId)
                 }
                 migrationReadouts.clear(accountKeyId)
                 pendingMigrationSchedule.peek(accountKeyId)?.let { pendingMigrationSchedule.clear(accountKeyId, it) }

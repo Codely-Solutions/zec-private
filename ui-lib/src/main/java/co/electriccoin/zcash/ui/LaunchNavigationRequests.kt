@@ -69,15 +69,15 @@ class LaunchNavigationRequests {
     fun requestMigrationRecovery(ownerKey: String, command: NavigationCommand.ReplaceAll) =
         offer(Kind.MIGRATION_RECOVERY, command, ownerKey)
 
-    fun clearMigrationRequestsFor(ownerKey: String) {
+    fun clearMigrationRequests(ownerKey: String? = null) {
         pending.update { queue ->
-            queue.filterNot { it.migrationNotice?.ownerKey == ownerKey || it.recoveryOwnerKey == ownerKey }
-        }
-    }
-
-    fun clearMigrationRequests() {
-        pending.update { queue ->
-            queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS || it.kind == Kind.MIGRATION_RECOVERY }
+            queue.filterNot { request ->
+                when (request.kind) {
+                    Kind.MIGRATION_PROGRESS -> ownerKey == null || request.migrationNotice?.ownerKey == ownerKey
+                    Kind.MIGRATION_RECOVERY -> ownerKey == null || request.recoveryOwnerKey == ownerKey
+                    else -> false
+                }
+            }
         }
     }
 

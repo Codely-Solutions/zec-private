@@ -3414,7 +3414,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..61775eb79 100644
+index 294506ed1..8d0b17557 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -3487,7 +3487,7 @@ index 294506ed1..61775eb79 100644
 +                openNotificationProgress(
 +                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 +                )
-@@ -164,11 +193,34 @@ class MigrationAppHooksImpl(
+@@ -164,11 +193,33 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -3513,8 +3513,7 @@ index 294506ed1..61775eb79 100644
 +
 +    @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
 +    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
-+        if (resetProgress.isPending.value) return
-+        val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return
++        val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
 +        val generation = walletWriteAccess.token()
 +        val notice = MigrationAccountRetirement.admit(key) {
 +            launchNavigation.beginMigrationProgress(key, runStep)
@@ -3533,9 +3532,9 @@ index 294506ed1..61775eb79 100644
 +                            MigrationScheduler(context).runNotificationStep(key)
 +                        }
 +                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
-@@ -176 +227,0 @@ class MigrationAppHooksImpl(
+@@ -176 +226,0 @@ class MigrationAppHooksImpl(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +229,9 @@ class MigrationAppHooksImpl(
+@@ -178 +228,9 @@ class MigrationAppHooksImpl(
 -                true
 +                val offered = MigrationAccountRetirement.admit(key) {
 +                    launchNavigation.finishMigrationProgress(notice, command)
@@ -3546,10 +3545,10 @@ index 294506ed1..61775eb79 100644
 +            } catch (e: Exception) {
 +                launchNavigation.finishMigrationProgress(notice, null)
 +                migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
-@@ -179,0 +239,2 @@ class MigrationAppHooksImpl(
+@@ -179,0 +238,2 @@ class MigrationAppHooksImpl(
 +        }
 +    }
-@@ -181,2 +242,9 @@ class MigrationAppHooksImpl(
+@@ -181,2 +241,9 @@ class MigrationAppHooksImpl(
 -            else -> {
 -                false
 +    override suspend fun checkRecovery() {
@@ -3561,9 +3560,9 @@ index 294506ed1..61775eb79 100644
 +                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
 +                    )
 +                }
-@@ -184,0 +253 @@ class MigrationAppHooksImpl(
+@@ -184,0 +252 @@ class MigrationAppHooksImpl(
 +    }
-@@ -186,23 +255,30 @@ class MigrationAppHooksImpl(
+@@ -186,23 +254,30 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -3606,7 +3605,7 @@ index 294506ed1..61775eb79 100644
 +                        "The wallet changed before the account could be removed"
 +                    }
 +                    deleted = true
-+                    launchNavigation.clearMigrationRequestsFor(accountKeyId)
++                    launchNavigation.clearMigrationRequests(accountKeyId)
 +                }
 +                migrationReadouts.clear(accountKeyId)
 +                pendingMigrationSchedule.peek(accountKeyId)?.let { pendingMigrationSchedule.clear(accountKeyId, it) }
@@ -3617,12 +3616,12 @@ index 294506ed1..61775eb79 100644
 +        } finally {
 +            if (!deleted) {
 +                restoreRetirement(accountKeyId, generation, scheduler, wakeToRestore)
-@@ -210,4 +285,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +284,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +289,20 @@ class MigrationAppHooksImpl(
+@@ -217 +288,20 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    @Suppress("TooGenericExceptionCaught") // Keep the original removal failure visible if re-enqueue fails.
 +    private suspend fun restoreRetirement(
@@ -3644,7 +3643,7 @@ index 294506ed1..61775eb79 100644
 +        }
 +        Unit
 +    }
-@@ -220,5 +311,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +310,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -3667,7 +3666,7 @@ index 294506ed1..61775eb79 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -228,6 +331 @@ class MigrationAppHooksImpl(
+@@ -228,6 +330 @@ class MigrationAppHooksImpl(
 -        }
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
@@ -3675,31 +3674,31 @@ index 294506ed1..61775eb79 100644
 -            val wm = androidx.work.WorkManager.getInstance(context)
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 +            migrationNotifier.cancelStepDue(key)
-@@ -236,0 +335,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +334,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +344 @@ class MigrationNavigatorImpl(
+@@ -242,3 +343 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -255,2 +355,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -255,2 +354,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationBatteryArgs> { MigrationBatteryScreen() }
 -            composable<MigrationNotificationArgs> { MigrationNotificationScreen() }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +359 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +358 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
-@@ -261 +361 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +360 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
-@@ -263 +363 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263 +362 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 +            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
-@@ -265,3 +365,3 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -265,3 +364,3 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
 -            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }
 -            composable<MigrationRestartArgs> { MigrationRestartScreen() }
@@ -30972,7 +30971,7 @@ index 000000000..ed0e92273
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..8f2d4348b
+index 000000000..1367217d0
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 @@ -0,0 +1,120 @@
@@ -31047,15 +31046,15 @@ index 000000000..8f2d4348b
 +    fun requestMigrationRecovery(ownerKey: String, command: NavigationCommand.ReplaceAll) =
 +        offer(Kind.MIGRATION_RECOVERY, command, ownerKey)
 +
-+    fun clearMigrationRequestsFor(ownerKey: String) {
++    fun clearMigrationRequests(ownerKey: String? = null) {
 +        pending.update { queue ->
-+            queue.filterNot { it.migrationNotice?.ownerKey == ownerKey || it.recoveryOwnerKey == ownerKey }
-+        }
-+    }
-+
-+    fun clearMigrationRequests() {
-+        pending.update { queue ->
-+            queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS || it.kind == Kind.MIGRATION_RECOVERY }
++            queue.filterNot { request ->
++                when (request.kind) {
++                    Kind.MIGRATION_PROGRESS -> ownerKey == null || request.migrationNotice?.ownerKey == ownerKey
++                    Kind.MIGRATION_RECOVERY -> ownerKey == null || request.recoveryOwnerKey == ownerKey
++                    else -> false
++                }
++            }
 +        }
 +    }
 +
