@@ -49446,25 +49446,23 @@ index b93adcca4..efecf32ba 100644
 -    BackHandler { state?.onBack?.invoke() }
 +    BackHandler(enabled = state != null) { state?.onBack?.invoke() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
-index 14718462c..3b6a1bf29 100644
+index 14718462c..a2e322672 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
 @@ -6,0 +7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 +import co.electriccoin.zcash.ui.NavigationRouter
-@@ -14,0 +16 @@ import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
-+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
-@@ -23,0 +26 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -23,0 +25 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 +import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
-@@ -34,0 +38 @@ import co.electriccoin.zcash.ui.design.util.withStyle
+@@ -34,0 +37 @@ import co.electriccoin.zcash.ui.design.util.withStyle
 +import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
-@@ -44,0 +49 @@ import kotlinx.coroutines.launch
+@@ -44,0 +48 @@ import kotlinx.coroutines.launch
 +@Suppress("TooManyFunctions")
-@@ -52 +57,3 @@ class TransactionProgressVM(
+@@ -52 +56,3 @@ class TransactionProgressVM(
 -    private val copyToClipboard: CopyToClipboardUseCase
 +    private val copyToClipboard: CopyToClipboardUseCase,
 +    private val navigationRouter: NavigationRouter,
 +    reportAccess: WalletReportAccess,
-@@ -53,0 +61,7 @@ class TransactionProgressVM(
+@@ -53,0 +60,7 @@ class TransactionProgressVM(
 +    private val reportPermission = reportAccess.bind(viewModelScope)
 +
 +    private fun shareReport(send: suspend (() -> Boolean) -> Unit) {
@@ -49472,15 +49470,15 @@ index 14718462c..3b6a1bf29 100644
 +        if (allowed()) viewModelScope.launch { send(allowed) }
 +    }
 +
-@@ -55 +69,3 @@ class TransactionProgressVM(
+@@ -55 +68,3 @@ class TransactionProgressVM(
 -        combine(observeTransactionProposal(), observeTransactionSubmitState()) { proposal, submitState ->
 +        combine(observeTransactionProposal.observeNullable(), observeTransactionSubmitState()) {
 +                proposal, submitState ->
 +            if (proposal == null) return@combine createUnavailableState(submitState)
-@@ -84 +100 @@ class TransactionProgressVM(
+@@ -84 +99 @@ class TransactionProgressVM(
 -            initialValue = null
 +            initialValue = createUnavailableState(null)
-@@ -86,0 +103,27 @@ class TransactionProgressVM(
+@@ -86,0 +102,27 @@ class TransactionProgressVM(
 +    private fun createUnavailableState(submitState: SubmitProposalState?): TransactionProgressState {
 +        val result = (submitState as? SubmitProposalState.Result)?.submitResult
 +        val transactionIds = when (result) {
@@ -49508,10 +49506,10 @@ index 14718462c..3b6a1bf29 100644
 +
 +    private fun onOpenActivity() = navigationRouter.replaceAll(ActivityHistoryArgs)
 +
-@@ -104 +147 @@ class TransactionProgressVM(
+@@ -104 +146 @@ class TransactionProgressVM(
 -                    onClick = { viewModelScope.launch { sendEmail(result) } },
 +                    onClick = { shareReport { sendEmail(result, it) } },
-@@ -225,12 +268,5 @@ class TransactionProgressVM(
+@@ -225,12 +267,5 @@ class TransactionProgressVM(
 -                    is ExactInputSwapTransactionProposal,
 -                    is ExactOutputSwapTransactionProposal -> {
 -                        if (txId != null) {
@@ -49529,7 +49527,7 @@ index 14718462c..3b6a1bf29 100644
 +                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
 +                        style = ButtonStyle.PRIMARY
 +                    )
-@@ -344,12 +380,5 @@ class TransactionProgressVM(
+@@ -344,12 +379,5 @@ class TransactionProgressVM(
 -                    is ExactInputSwapTransactionProposal,
 -                    is ExactOutputSwapTransactionProposal -> {
 -                        if (txId != null) {
@@ -49547,10 +49545,10 @@ index 14718462c..3b6a1bf29 100644
 +                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
 +                        style = ButtonStyle.PRIMARY
 +                    )
-@@ -411 +440 @@ class TransactionProgressVM(
+@@ -411 +439 @@ class TransactionProgressVM(
 -                        viewModelScope.launch {
 +                        shareReport { allowed ->
-@@ -413,2 +442,2 @@ class TransactionProgressVM(
+@@ -413,2 +441,2 @@ class TransactionProgressVM(
 -                                is SubmitResult.Error -> sendEmail(result)
 -                                is SubmitResult.Failure -> sendEmail(result)
 +                                is SubmitResult.Error -> sendEmail(result, allowed)

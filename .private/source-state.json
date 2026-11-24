@@ -2326,7 +2326,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressScreen.kt": "60f1ecfcb5e63ab7a09ed6b5193bcbe18689c4ec82bb1bb704fc6d48501bc4b1",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressState.kt": "fe96cea629c536875617898b91077d1287f69ff5890215ab43dbf81378d4b9b4",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressTag.kt": "3a8069aac8695551fb5c3568c1b63f09abe6d4a368833ec0ce10681f05f62342",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt": "6224642556cb54edcb502b35263c04ac9f67d0f7b14778f876279b918ae4886a",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt": "72ba0d9c470de46c7c79254fa936b48be122bc89ca29e17e1562a9a3141493a2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressView.kt": "4a95d64333a4a7f70e8e2d16f9962a3d8be820b6a1df5ce44c11b34fe19550a3",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt": "6b182f3761661e15d36fd012cde664032d1b432fca495bb10fb252fdddb13979",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt": "352f4ee0528429b4fe9bae8dad63332878737d1d1dce7f054b4a519b779bf6b8",
