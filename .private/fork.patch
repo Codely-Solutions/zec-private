@@ -5759,7 +5759,7 @@ index f9f586912..db9963319 100644
 +    val accountKeyId: String? = null,
 +    val useTor: Boolean? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..88ea92e5a 100644
+index ccdc9db31..a7fa1eba0 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -5,0 +6,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
@@ -6135,7 +6135,7 @@ index ccdc9db31..88ea92e5a 100644
 +
 +private suspend fun OrchardMigrationSdk.hasCommitted(schedule: cash.z.ecc.android.sdk.MigrationSchedule): Boolean {
 +    if (getMigrationStateUnreconciled() !is MigrationState.InProgress) return false
-+    val stored = getMigrationTransferStates()?.transfers?.filter { it.isTransfer } ?: return false
++    val stored = getMigrationTransferStates()?.transfers.orEmpty().filter { it.isTransfer }
 +    return stored.isNotEmpty() &&
 +        stored.associate { it.id to it.amountZatoshi } == schedule.transfers.associate { it.id to it.amountZatoshi }
 +}
@@ -51504,7 +51504,7 @@ index 9f37c1d93..ec328a4df 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..8ddc7f2e0 100644
+index 717411935..81b1549f1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -51526,9 +51526,9 @@ index 717411935..8ddc7f2e0 100644
 +        canFund: () -> Boolean = { Clock.System.now() < state.quote.deadline },
 @@ -33,0 +41 @@ internal class SwapQuoteVMMapper {
 +            val expired = !canFund()
-@@ -46 +54 @@ internal class SwapQuoteVMMapper {
--                amount = createTotalAmountState(),
-+                amount = createTotalAmountState(assessmentTime),
+@@ -44 +52 @@ internal class SwapQuoteVMMapper {
+-                to = createToState(),
++                to = createToState(assessmentTime),
 @@ -48,0 +57,2 @@ internal class SwapQuoteVMMapper {
 +                priceCheck = priceCheck?.let(::mapPriceCheck),
 +                minimumDeposit = quote.minimumDepositInfo(),
@@ -51608,9 +51608,6 @@ index 717411935..8ddc7f2e0 100644
 @@ -127 +158 @@ internal class SwapQuoteVMMapper {
 -                        stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol).withStyle()
 +                        quoteFiatAmount(slippageUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -134 +165 @@ internal class SwapQuoteVMMapper {
--    private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
-+    private fun SwapQuoteInternalState.createTotalAmountState(assessmentTime: Instant): SwapQuoteInfoItem =
 @@ -136,3 +167,8 @@ internal class SwapQuoteVMMapper {
 -            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
@@ -51628,6 +51625,9 @@ index 717411935..8ddc7f2e0 100644
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
 +            fiatAmount = quoteFiatAmount(quote.amountInUsd),
+@@ -151 +187 @@ internal class SwapQuoteVMMapper {
+-    private fun SwapQuoteInternalState.createToState(): SwapTokenAmountState =
++    private fun SwapQuoteInternalState.createToState(assessmentTime: Instant): SwapTokenAmountState =
 @@ -156 +192 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(

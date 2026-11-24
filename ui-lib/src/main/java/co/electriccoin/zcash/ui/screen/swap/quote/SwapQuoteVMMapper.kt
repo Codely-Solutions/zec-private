@@ -49,9 +49,9 @@ internal class SwapQuoteVMMapper {
                     },
                 rotateIcon = quote.mode == EXACT_OUTPUT,
                 from = createFromState(),
-                to = createToState(),
+                to = createToState(assessmentTime),
                 items = createItems(),
-                amount = createTotalAmountState(assessmentTime),
+                amount = createTotalAmountState(),
                 onBack = onBack,
                 infoText = createInfoText(),
                 priceCheck = priceCheck?.let(::mapPriceCheck),
@@ -162,7 +162,7 @@ internal class SwapQuoteVMMapper {
             }
         )
 
-    private fun SwapQuoteInternalState.createTotalAmountState(assessmentTime: Instant): SwapQuoteInfoItem =
+    private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
         SwapQuoteInfoItem(
             description =
                 if (quote.destinationAsset.isZCashAsset) {
@@ -184,7 +184,7 @@ internal class SwapQuoteVMMapper {
             chain = quote.originAsset.chainName
         )
 
-    private fun SwapQuoteInternalState.createToState(): SwapTokenAmountState =
+    private fun SwapQuoteInternalState.createToState(assessmentTime: Instant): SwapTokenAmountState =
         SwapTokenAmountState(
             bigIcon = quote.destinationAsset.swapQuoteTokenIcon(),
             smallIcon = quote.destinationAsset.swapQuoteChainIcon(isShielded = true),

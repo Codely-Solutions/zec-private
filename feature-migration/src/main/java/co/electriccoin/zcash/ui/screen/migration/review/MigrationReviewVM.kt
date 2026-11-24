@@ -693,7 +693,7 @@ private suspend fun OrchardMigrationSdk.prepareReviewedAutomaticMigration(): Rev
 
 private suspend fun OrchardMigrationSdk.hasCommitted(schedule: cash.z.ecc.android.sdk.MigrationSchedule): Boolean {
     if (getMigrationStateUnreconciled() !is MigrationState.InProgress) return false
-    val stored = getMigrationTransferStates()?.transfers?.filter { it.isTransfer } ?: return false
+    val stored = getMigrationTransferStates()?.transfers.orEmpty().filter { it.isTransfer }
     return stored.isNotEmpty() &&
         stored.associate { it.id to it.amountZatoshi } == schedule.transfers.associate { it.id to it.amountZatoshi }
 }
