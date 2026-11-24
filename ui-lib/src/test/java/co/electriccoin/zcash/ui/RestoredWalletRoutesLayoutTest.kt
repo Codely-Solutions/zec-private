@@ -165,19 +165,20 @@ class RestoredWalletRoutesLayoutTest {
     @Test
     fun restoredRequestCanExitWhileItsAddressIsStillLoading() {
         every { router.back() } answers {
-            controller.popBackStack()
+            check(controller.popBackStack())
         }
         install()
         val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
         compose.runOnIdle { controller.navigate(request) }
         val back = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back)
-        compose.onNodeWithContentDescription(back).assertIsDisplayed().performClick()
-        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+        compose.onNodeWithContentDescription(back).assertIsDisplayed().assertIsEnabled().performClick()
+        verify(exactly = 1) { router.back() }
+        compose.runOnIdle { assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>()) }
 
         compose.runOnIdle { controller.navigate(request) }
         compose.onNodeWithContentDescription(back).assertIsDisplayed()
         compose.runOnIdle { backDispatcher.onBackPressed() }
-        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>()) }
         verify(exactly = 2) { router.back() }
     }
 

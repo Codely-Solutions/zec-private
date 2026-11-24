@@ -62021,10 +62021,10 @@ index 000000000..4777cf6e0
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
 new file mode 100644
-index 000000000..c73995f9d
+index 000000000..de7566424
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
-@@ -0,0 +1,274 @@
+@@ -0,0 +1,275 @@
 +package co.electriccoin.zcash.ui
 +
 +import androidx.activity.OnBackPressedDispatcher
@@ -62192,19 +62192,20 @@ index 000000000..c73995f9d
 +    @Test
 +    fun restoredRequestCanExitWhileItsAddressIsStillLoading() {
 +        every { router.back() } answers {
-+            controller.popBackStack()
++            check(controller.popBackStack())
 +        }
 +        install()
 +        val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
 +        compose.runOnIdle { controller.navigate(request) }
 +        val back = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back)
-+        compose.onNodeWithContentDescription(back).assertIsDisplayed().performClick()
-+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
++        compose.onNodeWithContentDescription(back).assertIsDisplayed().assertIsEnabled().performClick()
++        verify(exactly = 1) { router.back() }
++        compose.runOnIdle { assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>()) }
 +
 +        compose.runOnIdle { controller.navigate(request) }
 +        compose.onNodeWithContentDescription(back).assertIsDisplayed()
 +        compose.runOnIdle { backDispatcher.onBackPressed() }
-+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
++        compose.runOnIdle { assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>()) }
 +        verify(exactly = 2) { router.back() }
 +    }
 +
