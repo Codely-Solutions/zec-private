@@ -72330,10 +72330,10 @@ index 8ad312da8..43e9b5894 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
 new file mode 100644
-index 000000000..46b0dd620
+index 000000000..5ff26d696
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,225 @@
 +package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -72350,6 +72350,7 @@ index 000000000..46b0dd620
 +import co.electriccoin.zcash.ui.common.model.SubmitResult
 +import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
 +import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
++import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ParsePCZTException
 +import co.electriccoin.zcash.ui.common.usecase.InvalidKeystonePCZTQRException

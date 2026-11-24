@@ -3013,7 +3013,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionOrchardPrivacyWarningTest.kt": "fbbf7a395a720eaa05fbc9e1a4b58323fbbc32574cb4478ec48ba97dca80fe50",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVMTest.kt": "c71ff58b9f54bc0c347d04d693b5c9d1b0ac0ca455547d5b0bce7ef27600eb8b",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scan/ScanGiftCardLinkTest.kt": "a14c8146c3762fc8da8b45376a665217ad69066f44009e8e41ba14e32b08f3e7",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt": "45e949e948390a10f05aed1940deb0de3a9fd85adf5e23f870e174c003282f4e",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt": "cdb4c0a22632fbe1e4a36f9995907209aea56469f5e307772158b19544372ad7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt": "4e966b2b95382d632caa05540a45768371b0833036a446bc7d3f7a1d0d67ae3c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendAmountReviewTest.kt": "e0451d99c68997b483cfda4e735f6c1f75a70c0421ddb885b564d4a50e736599",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt": "a5c391802994a7d1435a4b485cafc2a235810f86c77aa137db6021dba942cbf8",
