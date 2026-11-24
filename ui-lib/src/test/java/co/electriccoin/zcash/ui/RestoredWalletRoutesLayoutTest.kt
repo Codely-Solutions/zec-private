@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -17,6 +18,7 @@ import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
@@ -33,6 +35,9 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.scankeystone.KeystoneSignatureScanner
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
+import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTViewModel
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionScreen
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionVM
@@ -129,6 +134,22 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
+    fun restoredKeystoneSignatureRouteOffersBackEvenWithTheWalletReady() {
+        install()
+        compose.runOnIdle {
+            controller.navigate(SignKeystoneTransactionArgs)
+            controller.navigate(ScanKeystonePCZTRequest("old-preparation"))
+        }
+        compose.onNodeWithText(context.getString(R.string.private_keystone_unavailable_message)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.general_back), ignoreCase = true).performClick()
+        compose.runOnIdle {
+            assertEquals(
+                SignKeystoneTransactionArgs, controller.currentBackStackEntry?.toRoute<SignKeystoneTransactionArgs>()
+            )
+        }
+    }
+
+    @Test
     fun restoredDepositOffersActivityAtLargeText() {
         install()
         compose.runOnIdle { controller.navigate(ORSwapConfirmationArgs) }
@@ -168,6 +189,10 @@ class RestoredWalletRoutesLayoutTest {
             viewModel {
                 SignKeystoneTransactionVM(GetWalletAccountsUseCase(accounts), keys, router, mockk(), mockk(), mockk())
             }
+            viewModel {
+                val fresh = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
+                ScanKeystonePCZTViewModel(mockk(), get(), fresh)
+            }
         }
         compose.setContent {
             KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
@@ -181,6 +206,11 @@ class RestoredWalletRoutesLayoutTest {
                             dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
                             composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+                            composable<ScanKeystonePCZTRequest> {
+                                KeystoneSignatureScanner(it.toRoute(), org.koin.androidx.compose.koinViewModel(), true) {
+                                    controller.popBackStack()
+                                }
+                            }
                         }
                     }
                 }

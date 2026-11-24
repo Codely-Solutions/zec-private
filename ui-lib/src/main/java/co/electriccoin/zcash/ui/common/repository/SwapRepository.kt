@@ -121,7 +121,10 @@ sealed interface SwapQuoteData {
         private var fundingExpired = false
 
         @Synchronized
-        internal fun canFund(now: kotlin.time.Instant = fundingClock.now(), elapsed: Long = elapsedRealtime()): Boolean {
+        internal fun canFund(
+            now: kotlin.time.Instant = fundingClock.now(),
+            elapsed: Long = elapsedRealtime(),
+        ): Boolean {
             val remaining = quote.deadline - now
             val previous = fundingDeadlineElapsed
             val stop = elapsed + remaining.inWholeMilliseconds.coerceIn(0, Long.MAX_VALUE - elapsed)

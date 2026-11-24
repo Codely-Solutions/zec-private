@@ -8,6 +8,7 @@ import androidx.navigation.compose.DialogNavigator
 import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.toRoute
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
 import co.electriccoin.zcash.ui.design.KeyboardManager
@@ -197,6 +198,20 @@ class KeystoneEnrollmentSavedStateTest {
         }
     }
 
+    @Test
+    fun scannerRouteRestoresItsOpaquePreparationId() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = newController().also { it.installGraph() }
+            val scanner = ScanKeystonePCZTRequest("old-preparation")
+            controller.navigate(scanner)
+            assertEquals(scanner, roundTrip(controller).currentBackStackEntry?.toRoute<ScanKeystonePCZTRequest>())
+            assertEquals(HomeArgs, roundTrip(controller, version = 4).currentBackStackEntry?.toRoute<HomeArgs>())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     private fun roundTrip(first: NavHostController, version: Int = 5): NavHostController {
         val restored = newController()
         val parcel = Parcel.obtain()
@@ -226,6 +241,7 @@ class KeystoneEnrollmentSavedStateTest {
             composable<HomeArgs> { }
             hardwareEnrollmentScreens()
             composable<ThirdPartyScan> { }
+            composable<ScanKeystonePCZTRequest> { }
             dialogComposable<TransactionNote> { }
         }
     }

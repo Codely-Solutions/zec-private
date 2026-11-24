@@ -35,25 +35,25 @@ class ExportPrivateDataUseCase(
 
     suspend operator fun invoke(sourceFile: suspend () -> File): Boolean {
         if (!export.tryLock()) return false
-        try {
+        return try {
             val grant = appAccess.grant.value
             val generation = walletAccess.token()
             val isAllowed = { appAccess.permits(grant) && walletAccess.permits(generation) }
-            if (!isAllowed()) return false
-            biometricRepository.requestBiometrics(
-                BiometricRequest(
-                    message = stringRes(
-                        R.string.authentication_system_ui_subtitle,
-                        stringRes(R.string.authentication_use_case_export_data)
+            isAllowed() && run {
+                biometricRepository.requestBiometrics(
+                    BiometricRequest(
+                        message = stringRes(
+                            R.string.authentication_system_ui_subtitle,
+                            stringRes(R.string.authentication_use_case_export_data)
+                        )
                     )
                 )
-            )
-            if (!isAllowed()) return false
-            return shareApprovedExport(sourceFile, isAllowed)
+                isAllowed() && shareApprovedExport(sourceFile, isAllowed)
+            }
         } catch (_: BiometricsFailureException) {
-            return false
+            false
         } catch (_: BiometricsCancelledException) {
-            return false
+            false
         } finally {
             export.unlock()
         }

@@ -173,7 +173,8 @@ class RestoreTorVMTest {
             coEvery {
                 SdkSynchronizer.estimateBirthdayHeight(context, expectedDate, VersionInfo.NETWORK)
             } throws IllegalStateException("Synthetic estimation failure") coAndThen { retry.await() }
-            val date = RestoreDateVM(dateRoute, navigation, context, ErrorMapperUseCase(mockk(), mockk(), mockk(relaxed = true)))
+            val errors = ErrorMapperUseCase(mockk(), mockk(), mockk(relaxed = true))
+            val date = RestoreDateVM(dateRoute, navigation, context, errors)
                 .also { viewModels += it }
             assertNotNull(date.state.value.content).onYearMonthChange(month)
             val picked = assertNotNull(date.state.first { it.content?.selection == month }.content)

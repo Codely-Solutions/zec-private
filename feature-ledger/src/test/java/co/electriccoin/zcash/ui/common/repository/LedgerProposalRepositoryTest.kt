@@ -77,6 +77,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         every { ledgerSigningDataSource.isLinked } returns true
         coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
         var wall = Instant.parse("2099-12-31T23:59:59Z")
+        val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 0L
         val origin = mockk<SwapAsset>(relaxed = true) {
             every { tokenTicker } returns "zec"
@@ -93,7 +94,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             override val amountInFormatted = BigDecimal.ONE
             override val deadline = Instant.parse("2100-01-01T00:00:00Z")
         }
-        val publication = SwapQuoteData.Success(quote, fundingClock = { wall }, elapsedRealtime = { elapsed })
+        val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
         val approved = ExactInputSwapTransactionProposal(
             WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
             mockk<Proposal>(), quote, ledgerAccount(),
@@ -120,6 +121,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         every { ledgerSigningDataSource.isLinked } returns true
         coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
         var wall = Instant.parse("2099-12-31T23:59:59Z")
+        val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 0L
         val origin = mockk<SwapAsset>(relaxed = true) {
             every { tokenTicker } returns "zec"
@@ -136,7 +138,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             override val amountInFormatted = BigDecimal.ONE
             override val deadline = Instant.parse("2100-01-01T00:00:00Z")
         }
-        val publication = SwapQuoteData.Success(quote, fundingClock = { wall }, elapsedRealtime = { elapsed })
+        val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
         val approved = ExactInputSwapTransactionProposal(
             WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
             mockk<Proposal>(), quote, ledgerAccount(),

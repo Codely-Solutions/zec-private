@@ -26,37 +26,41 @@ import org.koin.compose.koinInject
 @Composable
 internal fun WrapScanKeystonePCZTRequest(args: ScanKeystonePCZTRequest) {
     val navigationRouter = koinInject<NavigationRouter>()
+    val walletViewModel = koinActivityViewModel<WalletViewModel>()
+    val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
+    KeystoneSignatureScanner(args, koinViewModel(), synchronizer != null) { navigationRouter.back() }
+}
+
+@Composable
+internal fun KeystoneSignatureScanner(
+    args: ScanKeystonePCZTRequest,
+    viewModel: ScanKeystonePCZTViewModel,
+    synchronizerReady: Boolean,
+    goBack: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val walletViewModel = koinActivityViewModel<WalletViewModel>()
-    val viewModel = koinViewModel<ScanKeystonePCZTViewModel>()
-    val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val validationState by viewModel.validationState.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val canScan by remember(viewModel, args) { viewModel.observeCanScan(args) }
         .collectAsStateWithLifecycle(initialValue = viewModel.canScan(args))
 
-    BackHandler {
-        navigationRouter.back()
-    }
+    BackHandler(onBack = goBack)
 
     if (!canScan) {
         UnavailableWalletAction(
             screenTitle = stringRes(R.string.keystone_signWith_signTransaction),
             title = stringRes(R.string.private_keystone_unavailable_title),
             message = stringRes(R.string.private_keystone_unavailable_message),
-            action = ButtonState(text = stringRes(R.string.general_back), onClick = { navigationRouter.back() }),
+            action = ButtonState(text = stringRes(R.string.general_back), onClick = goBack),
         )
-    } else if (synchronizer == null) {
-        // TODO [#1146]: Consider moving CircularScreenProgressIndicator from Android layer to View layer
-        // TODO [#1146]: Improve this by allowing screen composition and updating it after the data is available
-        // TODO [#1146]: https://github.com/Electric-Coin-Company/zashi-android/issues/1146
+    } else if (!synchronizerReady) {
         CircularScreenProgressIndicator()
     } else {
         ScanKeystoneView(
             snackbarHostState = snackbarHostState,
-            onBack = { navigationRouter.back() },
+            onBack = goBack,
             onScan = {
                 viewModel.onScanned(it, args)
             },

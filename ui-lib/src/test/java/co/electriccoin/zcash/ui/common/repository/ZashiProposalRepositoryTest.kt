@@ -68,7 +68,9 @@ class ZashiProposalRepositoryTest {
             mockk<UnifiedSpendingKey>()
         }
 
-        val error = assertFailsWith<IllegalStateException> { repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote)) }
+        val error = assertFailsWith<IllegalStateException> {
+            repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote))
+        }
 
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
@@ -100,7 +102,9 @@ class ZashiProposalRepositoryTest {
             WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), mockk<Proposal>()
         )
 
-        assertFailsWith<IllegalStateException> { repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote)) }
+        assertFailsWith<IllegalStateException> {
+            repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote))
+        }
 
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
@@ -148,7 +152,9 @@ class ZashiProposalRepositoryTest {
         }
 
         val approval = async {
-            assertFailsWith<IllegalStateException> { repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote)) }
+            assertFailsWith<IllegalStateException> {
+                repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote))
+            }
         }
         try {
             withTimeout(5.seconds) { trackingStarted.await() }

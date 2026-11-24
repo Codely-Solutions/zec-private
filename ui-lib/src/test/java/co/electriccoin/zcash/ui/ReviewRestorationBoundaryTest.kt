@@ -99,10 +99,10 @@ class ReviewRestorationBoundaryTest {
             )
             val router = mockk<NavigationRouter>(relaxed = true)
             val vm = TransactionProgressVM(
-                reportAccess = co.electriccoin.zcash.ui.screen.error.noReportAccess(),
                 ObserveProposalUseCase(mockk(), mockk(), repository, accounts),
                 ObserveTransactionSubmitStateUseCase(mockk(), mockk(), repository, accounts),
-                mockk(), mockk(), mockk(), mockk(), mockk(), router
+                mockk(), mockk(), mockk(), mockk(), mockk(), router,
+                co.electriccoin.zcash.ui.screen.error.noReportAccess(),
             )
             store.put("progress", vm)
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }

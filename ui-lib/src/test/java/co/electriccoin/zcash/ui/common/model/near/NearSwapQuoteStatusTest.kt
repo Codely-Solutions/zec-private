@@ -6,6 +6,11 @@ import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
+import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
+import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -13,13 +18,21 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import io.mockk.every
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -151,6 +164,63 @@ class NearSwapQuoteStatusTest {
         }
         val resolved = original.copy(response = response("""{"amountOut":"2300001.0"}"""))
         assertEquals(BigDecimal("2.3000010"), resolved.executedAmountOut)
+    }
+
+    @Test
+    fun formattedOnlySettlementUsesTheResolvedPrecisionForEachLeg() {
+        val sparse = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val fields = mapOf(
+            "amountInFormatted" to 8, "depositedAmountFormatted" to 8,
+            "refundedAmountFormatted" to 8, "amountOutFormatted" to 6,
+        )
+        for ((field, decimals) in fields) {
+            val atomicUnit = BigDecimal.ONE.movePointLeft(decimals)
+            val exact = atomicUnit.setScale(decimals + 1)
+            val accepted = sparse.withDecodedDetails("""{"$field":"${exact.toPlainString()}"}""")
+            val amount = when (field) {
+                "amountInFormatted" -> accepted.executedAmountIn
+                "amountOutFormatted" -> accepted.executedAmountOut
+                "depositedAmountFormatted" -> accepted.depositedAmountFormatted
+                else -> accepted.refundedFormatted
+            }
+            assertEquals(exact, amount)
+            assertFailsWith<SwapQuoteMismatchException.AmountInconsistency> {
+                sparse.withDecodedDetails("""{"$field":"${atomicUnit.movePointLeft(1).toPlainString()}"}""")
+            }
+        }
+    }
+
+    @Test
+    fun invalidFormattedRefreshKeepsTheSavedSettlementAvailableToDetails() = runTest {
+        val sparse = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val accepted = sparse.withDecodedDetails("""{"amountOutFormatted":"2.123456"}""")
+        val saved = mockk<TransactionSwapMetadata> {
+            every { status } returns ModelSwapStatus.SUCCESS
+            every { executedAmountOut } returns accepted.executedAmountOut
+        }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(DEPOSIT_ADDRESS) } returns saved
+        }
+        val swaps = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(saved) } answers {
+                sparse.withDecodedDetails("""{"amountOutFormatted":"2.1234567"}""")
+            }
+        }
+
+        val details = GetSwapStatusUseCase(metadata, swaps)(DEPOSIT_ADDRESS)
+        assertIs<SwapQuoteMismatchException.AmountInconsistency>(details.error)
+        assertNull(details.status)
+        assertSame(saved, details.savedMetadata)
+        assertEquals(BigDecimal("2.123456"), details.savedMetadata?.executedAmountOut)
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
+    }
+
+    private fun NearSwapQuoteStatus.withDecodedDetails(details: String): NearSwapQuoteStatus {
+        val quote = Json.encodeToString(QuoteResponseDto.serializer(), response.quoteResponse)
+        val status = Json.decodeFromString<SwapStatusResponseDto>(
+            """{"quoteResponse":$quote,"status":"SUCCESS","updatedAt":"2026-11-23T00:00:00Z","swapDetails":$details}"""
+        )
+        return copy(response = status)
     }
 
     @Test

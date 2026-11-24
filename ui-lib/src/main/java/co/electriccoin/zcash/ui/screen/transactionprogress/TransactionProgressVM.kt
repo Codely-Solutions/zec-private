@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@Suppress("TooManyFunctions")
 class TransactionProgressVM(
     observeTransactionProposal: ObserveProposalUseCase,
     observeTransactionSubmitState: ObserveTransactionSubmitStateUseCase,

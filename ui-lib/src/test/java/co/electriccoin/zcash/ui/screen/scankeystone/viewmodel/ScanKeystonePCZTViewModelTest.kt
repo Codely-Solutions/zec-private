@@ -54,6 +54,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -105,7 +106,8 @@ class ScanKeystonePCZTViewModelTest {
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
         val submit = SubmitKSProposalUseCase(repository, router, mockk(relaxed = true), mockk(), prefillSend)
         submit.scope = this
-        val vm = ScanKeystonePCZTViewModel(ParseKeystonePCZTUseCase(submit, repository, signer), navigateToError, repository)
+        val parser = ParseKeystonePCZTUseCase(submit, repository, signer)
+        val vm = ScanKeystonePCZTViewModel(parser, navigateToError, repository)
 
         val unsigned = Pczt(byteArrayOf(1))
         val proven = Pczt(byteArrayOf(2))
@@ -142,6 +144,7 @@ class ScanKeystonePCZTViewModelTest {
         repository.createPCZTFromProposal()
         repository.approveForSigning(approved)
         val route = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
+        assertTrue(vm.canScan(route))
 
         vm.onScanned(fragments.first(), route).join()
         assertTrue(assertNotNull(vm.state.value.progress) in 1..99)
@@ -164,6 +167,16 @@ class ScanKeystonePCZTViewModelTest {
     @Test
     fun unreadableQrIsInvalid() = runTest {
         assertInvalidScan(InvalidKeystonePCZTQRException())
+    }
+
+    @Test
+    fun coldScannerCannotDecodeWithoutPreparation() = runTest {
+        val repository = KeystoneProposalRepositoryImpl(mockk(), mockk(), mockk(), mockk())
+        val vm = ScanKeystonePCZTViewModel(parse, navigateToError, repository)
+        assertFalse(vm.canScan(route))
+        vm.onScanned("synthetic-qr", route).join()
+        coVerify(exactly = 0) { parse(any(), any()) }
+        assertEquals(ScanValidationState.NONE, vm.validationState.value)
     }
 
     @Test

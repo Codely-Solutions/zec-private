@@ -256,9 +256,10 @@ class SubmitProposalUseCaseTest {
         val proposal = swapProposal("eth", "eth")
         fx.givenZashi(proposal)
         var wall = kotlin.time.Instant.fromEpochMilliseconds(10_000)
+        val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 10_000L
         every { proposal.quote.deadline } returns kotlin.time.Instant.fromEpochMilliseconds(11_000)
-        val publication = SwapQuoteData.Success(proposal.quote, fundingClock = { wall }, elapsedRealtime = { elapsed })
+        val publication = SwapQuoteData.Success(proposal.quote, fundingClock = clock, elapsedRealtime = { elapsed })
         fx.publication.value = publication
         publication.canFund()
         coEvery { fx.biometricRepository.requestBiometrics(any()) } coAnswers {

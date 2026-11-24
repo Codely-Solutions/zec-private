@@ -120,6 +120,7 @@ class SwapBroadcastDeadlineTest {
         private val entered = CompletableDeferred<Unit>()
         private val released = CompletableDeferred<Unit>()
         private var wall = Instant.parse("2099-12-31T23:59:59Z")
+        private val clock = object : kotlin.time.Clock { override fun now() = wall }
         private var elapsed = 0L
         private lateinit var publication: SwapQuoteData.Success
         private val key = mockk<UnifiedSpendingKey>()
@@ -173,7 +174,7 @@ class SwapBroadcastDeadlineTest {
             val reviewedQuote = object : SwapQuote by quote {
                 override val deadline = Instant.parse("2100-01-01T00:00:00Z")
             }
-            publication = SwapQuoteData.Success(reviewedQuote, fundingClock = { wall }, elapsedRealtime = { elapsed })
+            publication = SwapQuoteData.Success(reviewedQuote, fundingClock = clock, elapsedRealtime = { elapsed })
             assertTrue(publication.canFund())
             reviewed = ExactInputSwapTransactionProposal(
                 WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
@@ -197,7 +198,8 @@ class SwapBroadcastDeadlineTest {
             }
         }
 
-        suspend fun submit(): SubmitResult = if (hardware) keystone.submit(reviewed) else software.submit(reviewed, publication)
+        suspend fun submit(): SubmitResult =
+            if (hardware) keystone.submit(reviewed) else software.submit(reviewed, publication)
 
         suspend fun whileSuspended(change: () -> Unit): Result<SubmitResult> = coroutineScope {
             withTimeout(5.seconds) {

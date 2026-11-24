@@ -20,7 +20,11 @@ import kotlin.test.assertNotEquals
 class LedgerErrorCopyTest {
     @Test
     fun theLceSheetOverridesWhateverTheCallSitePassed() {
-        val mapper = ErrorMapperUseCase(reportAccess = mockk(relaxed = true), sendEmail = mockk(relaxed = true), viewOnlyContent = mockk(relaxed = true))
+        val mapper = ErrorMapperUseCase(
+            reportAccess = mockk(relaxed = true),
+            sendEmail = mockk(relaxed = true),
+            viewOnlyContent = mockk(relaxed = true),
+        )
 
         val state =
             mapper.mapToState(
@@ -35,7 +39,11 @@ class LedgerErrorCopyTest {
 
     @Test
     fun anOrdinaryFailureKeepsTheCallSiteCopy() {
-        val mapper = ErrorMapperUseCase(reportAccess = mockk(relaxed = true), sendEmail = mockk(relaxed = true), viewOnlyContent = mockk(relaxed = true))
+        val mapper = ErrorMapperUseCase(
+            reportAccess = mockk(relaxed = true),
+            sendEmail = mockk(relaxed = true),
+            viewOnlyContent = mockk(relaxed = true),
+        )
 
         val state =
             mapper.mapToState(
