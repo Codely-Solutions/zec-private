@@ -45184,7 +45184,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..c0682e015 100644
+index 00fe60557..aaa932d73 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -45285,6 +45285,9 @@ index 00fe60557..c0682e015 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
+@@ -380 +429 @@ class TransactionDetailVM(
+-            data.swap?.error != null && data.swap.status == null -> {
++            data.swap?.error != null -> {
 @@ -388 +437 @@ class TransactionDetailVM(
 -                null
 +                data.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
@@ -77404,10 +77407,10 @@ index 000000000..3b7070542
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..6de3b5624
+index 000000000..f7bbf19f0
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
-@@ -0,0 +1,451 @@
+@@ -0,0 +1,478 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.lifecycle.ViewModelStore
@@ -77674,6 +77677,33 @@ index 000000000..6de3b5624
 +            assertNotNull(detail.primaryButton)
 +            store.clear()
 +        }
++    }
++
++    @Test
++    fun failedPollKeepsTheLastAcceptedStatusAndRetry() = runTest(dispatcher) {
++        val zec = SwapCatalogTestFixture.nativeZec
++        val destination = SwapCatalogTestFixture.externalAssets.first()
++        val accepted = status(SwapStatus.PENDING, zec, destination)
++        val saved = swapMetadata(SwapStatus.PENDING, SwapCatalogTestFixture.simple(zec))
++        val detail = state(
++            data(
++                sent,
++                saved,
++                SwapQuoteStatusData(
++                    status = accepted,
++                    isLoading = false,
++                    error = IllegalStateException("fixture-poll-unavailable"),
++                    savedMetadata = saved,
++                ),
++            )
++        )
++        val info = assertIs<SendSwapState>(detail.info)
++        assertEquals(SwapStatus.PENDING, info.statusRow.status)
++        assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
++        assertFalse(info.statusRow.isLoading)
++        assertLocalFunding(detail, "failed poll")
++        assertNotNull(detail.primaryButton).onClick()
++        verify(exactly = 1) { reload.requestReload() }
 +    }
 +
 +    @Test

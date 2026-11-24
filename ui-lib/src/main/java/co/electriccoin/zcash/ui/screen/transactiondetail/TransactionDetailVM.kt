@@ -426,7 +426,7 @@ class TransactionDetailVM(
                 supportButton
             }
 
-            data.swap?.error != null && data.swap.status == null -> {
+            data.swap?.error != null -> {
                 mapper.createTransactionDetailErrorButtonState(
                     error = data.swap.error,
                     reloadHandle = data.reloadHandle

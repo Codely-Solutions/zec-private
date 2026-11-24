@@ -267,6 +267,33 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun failedPollKeepsTheLastAcceptedStatusAndRetry() = runTest(dispatcher) {
+        val zec = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val accepted = status(SwapStatus.PENDING, zec, destination)
+        val saved = swapMetadata(SwapStatus.PENDING, SwapCatalogTestFixture.simple(zec))
+        val detail = state(
+            data(
+                sent,
+                saved,
+                SwapQuoteStatusData(
+                    status = accepted,
+                    isLoading = false,
+                    error = IllegalStateException("fixture-poll-unavailable"),
+                    savedMetadata = saved,
+                ),
+            )
+        )
+        val info = assertIs<SendSwapState>(detail.info)
+        assertEquals(SwapStatus.PENDING, info.statusRow.status)
+        assertEquals(stringRes(R.string.private_swap_saved_status), info.statusRow.title)
+        assertFalse(info.statusRow.isLoading)
+        assertLocalFunding(detail, "failed poll")
+        assertNotNull(detail.primaryButton).onClick()
+        verify(exactly = 1) { reload.requestReload() }
+    }
+
+    @Test
     fun outgoingStatusWithoutASavedResultStopsLoadingAfterFailure() = runTest(dispatcher) {
         val metadata = swapMetadata(SwapStatus.PENDING).copy(
             recordedStatus = null,
