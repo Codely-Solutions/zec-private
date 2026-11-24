@@ -525,6 +525,7 @@ data class TransactionSwapMetadata(
     internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
     val quotedAmountOut: BigDecimal? = null,
     val executedAmountOut: BigDecimal? = null,
+    internal val statusUpdatedAt: Instant? = null,
 ) {
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
@@ -574,6 +575,7 @@ internal fun SwapMetadataV3.toBusinessObject(
         amountOutFormatted = executedAmountOut ?: quotedAmountOut ?: amountOutFormatted ?: BigDecimal.ZERO,
         quotedAmountOut = quotedAmountOut,
         executedAmountOut = executedAmountOut,
+        statusUpdatedAt = statusUpdatedAt,
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,

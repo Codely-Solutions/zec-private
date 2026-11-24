@@ -97,7 +97,13 @@ class TransactionDetailVM(
     val state =
         transaction
             .filterNotNull()
-            .mapLatest { transaction ->
+            .mapLatest { snapshot ->
+                val recorded = snapshot.metadata.swapMetadata
+                val transaction = if (recorded != null && snapshot.swap != null) {
+                    snapshot.copy(swap = snapshot.swap.withSavedObservation(recorded))
+                } else {
+                    snapshot
+                }
                 var info = createTransactionInfoState(transaction)
                 TransactionDetailState(
                     explorerLinks = createExplorerLinks(transaction),
@@ -577,9 +583,9 @@ class TransactionDetailVM(
                                 }
                             }
                         } else {
-                            val swapStatus =
-                                data.metadata.swapMetadata.outgoingStatus(transaction, data.swap?.status?.status)
-                            when (data.metadata.swapMetadata.mode) {
+                            val saved = data.swap?.savedMetadata ?: data.metadata.swapMetadata
+                            val swapStatus = saved.outgoingStatus(transaction, data.swap?.status?.status)
+                            when (saved.mode) {
                                 EXACT_INPUT -> {
                                     when (swapStatus) {
                                         PROCESSING,

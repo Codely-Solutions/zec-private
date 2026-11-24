@@ -136,4 +136,20 @@ data class SwapQuoteStatusData(
 ) {
     val originAsset = status?.originAsset
     val destinationAsset = status?.destinationAsset
+
+    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
+        val saved = savedMetadata
+        if (saved == null) return copy(savedMetadata = observed)
+        val sameRoute = saved.depositAddress == observed.depositAddress && saved.provider == observed.provider &&
+            saved.lastUpdated == observed.lastUpdated && saved.reviewedIdentity == observed.reviewedIdentity &&
+            saved.origin == observed.origin && saved.destination == observed.destination
+        if (!sameRoute) return copy(status = null, savedMetadata = observed)
+        val previousAt = saved.statusUpdatedAt
+        val observedAt = observed.statusUpdatedAt
+        if (previousAt != null && (observedAt == null || observedAt < previousAt)) return this
+        val sameStatus = saved.recordedStatus == observed.recordedStatus && saved.mode == observed.mode &&
+            saved.executedAmountOut == observed.executedAmountOut &&
+            saved.quotedAmountOut == observed.quotedAmountOut
+        return if (sameStatus) this else copy(status = null, savedMetadata = observed)
+    }
 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 /** Holds sanitized app-launch requests until the corresponding screen graph is accessible. */
 class LaunchNavigationRequests {
     private val pending = MutableStateFlow(emptyList<Request>())
+    private var restoredExternalScans = false
     internal val changes = pending.asStateFlow()
 
     internal fun requestGiftScan() =
@@ -16,6 +17,25 @@ class LaunchNavigationRequests {
 
     internal fun requestThirdPartyScan() =
         offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
+
+    internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->
+        when (request.kind) {
+            Kind.GIFT_SCAN, Kind.THIRD_PARTY_SCAN -> request.kind.name
+            else -> null
+        }
+    }
+
+    internal fun restoreExternalScans(saved: List<String>) {
+        // The same process already owns the current queue, including requests it consumed after saving state.
+        if (restoredExternalScans) return
+        restoredExternalScans = true
+        for (kind in saved) {
+            when (kind) {
+                Kind.GIFT_SCAN.name -> requestGiftScan()
+                Kind.THIRD_PARTY_SCAN.name -> requestThirdPartyScan()
+            }
+        }
+    }
 
     fun requestMigrationProgress(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_PROGRESS, command)
 

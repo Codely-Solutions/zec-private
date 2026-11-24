@@ -294,6 +294,40 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun advancingSavedStatusUpdatesHeaderAndRowWhenRefreshIsUnavailable() = runTest(dispatcher) {
+        val zec = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.fromEpochSeconds(1))
+        val failedRefresh = SwapQuoteStatusData(
+            status = status(SwapStatus.PENDING, zec, destination),
+            isLoading = false,
+            error = IllegalStateException("fixture-provider-offline"),
+            savedMetadata = cached,
+        )
+        val opened = data(sent, cached, failedRefresh)
+        val source = MutableStateFlow(opened)
+        val vm = viewModel(opened, source)
+        val before = vm.state.first { it.info is SendSwapState }
+        assertEquals(stringRes(R.string.swapStatus_swapping), before.header.title)
+        assertEquals(SwapStatus.PENDING, assertIs<SendSwapState>(before.info).statusRow.status)
+
+        source.value = opened.copy(
+            metadata = opened.metadata.copy(
+                swapMetadata = cached.copy(
+                    recordedStatus = SwapStatus.SUCCESS,
+                    statusUpdatedAt = Instant.fromEpochSeconds(2),
+                )
+            )
+        )
+        val after = withTimeout(10_000) {
+            vm.state.first { it.header.title == stringRes(R.string.swapStatus_swapped) }
+        }
+        val visible = assertIs<SendSwapState>(after.info).statusRow
+        assertEquals(stringRes(R.string.private_swap_saved_status), visible.title)
+        assertEquals(SwapStatus.SUCCESS, visible.status)
+    }
+
+    @Test
     fun outgoingStatusWithoutASavedResultStopsLoadingAfterFailure() = runTest(dispatcher) {
         val metadata = swapMetadata(SwapStatus.PENDING).copy(
             recordedStatus = null,

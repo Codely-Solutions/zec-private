@@ -3,8 +3,9 @@
 Manifest schema: {"repository":"owner/repo", "references":[".private/core-acceptance.json"],
 "candidates":[{"id":1,"name":"validated-unsigned-apk","size_in_bytes":1,
 "digest":"sha256:...","run_id":2,"head_sha":"...","reason":"replacement accepted"}]}.
-Reference paths are tracked repository files. Every live JSON manifest in .private is also
-inspected. Run with a trusted checkout and a token restricted to this repository.
+Reference paths are tracked repository files. Direct .private JSON files and the
+release-evidence tree are inventoried in both the checkout and deployed source.
+Run with a trusted checkout and a token restricted to this repository.
 """
 import argparse
 import base64
@@ -12,7 +13,8 @@ import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from urllib.parse import quote
 
 NAMES = {'validated-unsigned-apk', 'isolated-ui-repro-apk', 'core-testnet-candidate', 'core-testnet-baseline', 'dependency-metadata-proposal'}
 
@@ -23,9 +25,15 @@ def gh(path, method='GET'):
     return json.loads(output) if output.strip() else None
 
 
+def reference_paths(tracked):
+    return {name for name in tracked
+            if name.endswith('.json') and (PurePosixPath(name).parent == PurePosixPath('.private')
+                                          or name.startswith('.private/release-evidence/'))}
+
+
 def reference_snapshot(root, paths):
-    tracked = set(subprocess.check_output(['git', 'ls-files'], cwd=root, text=True, timeout=30).splitlines())
-    names = set(paths)
+    tracked = set(subprocess.check_output(['git', 'ls-files', '-z'], cwd=root, text=True, timeout=30).split('\0'))
+    names = set(paths) | reference_paths(tracked)
     names |= {p.relative_to(root).as_posix() for p in (root / '.private').glob('*.json')}
     snapshot = {}
     for name in sorted(names):
@@ -40,18 +48,38 @@ def reference_snapshot(root, paths):
 
 
 def live_references(api, repository, paths):
-    """Read current default-branch manifests; unknown/missing ownership fails closed."""
+    """Read the complete manifest inventory from one immutable default-branch tree."""
     repo = api(f'repos/{repository}')
     branch = repo['default_branch']
-    # Resolve one immutable tree, then check branch identity again before deletion.
-    from urllib.parse import quote
-    head = api(f'repos/{repository}/commits/{quote(branch, safe="")}')['sha']
+    commit = api(f'repos/{repository}/commits/{quote(branch, safe="")}')
+    head = commit['sha']
+    tree = commit['commit']['tree']['sha']
+    if any(not re.fullmatch(r'[a-f0-9]{40}', revision) for revision in (head, tree)):
+        raise ValueError('Expected immutable default-branch source and tree identities')
+    listing = api(f'repos/{repository}/git/trees/{tree}?recursive=1')
+    if listing.get('truncated') is not False or listing.get('sha') != tree:
+        raise ValueError('Incomplete live reference inventory; preserve artifacts')
+    entries = {entry['path']: entry for entry in listing['tree']}
+    if len(entries) != len(listing['tree']):
+        raise ValueError('Duplicate entries in live reference inventory')
+    names = set(paths) | reference_paths(entries)
     values = {}
-    for path in paths:
-        content = api(f'repos/{repository}/contents/{quote(path, safe="/")}?ref={head}')
-        if content.get('encoding') != 'base64':
-            raise ValueError('Unsupported live reference encoding')
-        values[path] = json.loads(base64.b64decode(content['content'], validate=False))
+    for path in sorted(names):
+        entry = entries.get(path)
+        if entry is None:
+            # A local manifest can be newer than the deployed branch. Its local bytes were checked separately.
+            continue
+        if entry['type'] != 'blob' or entry['mode'] not in ('100644', '100755'):
+            raise ValueError('Expected a regular tracked live reference')
+        content = api(f'repos/{repository}/git/blobs/{entry["sha"]}')
+        if content.get('encoding') != 'base64' or content.get('sha') != entry['sha']:
+            raise ValueError('Unsupported live reference encoding or identity')
+        data = base64.b64decode(''.join(content['content'].split()), validate=True)
+        if len(data) != entry['size']:
+            raise ValueError('Incomplete live reference bytes')
+        values[path] = json.loads(data)
+    if not values:
+        raise ValueError('No live reference manifests; preserve artifacts')
     return head, values
 
 

@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.destructive
+import co.electriccoin.zcash.ui.common.model.LceContent
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.withLce
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.CheckboxState
@@ -48,6 +50,8 @@ class ResetZashiVM(
                 message = stringRes(R.string.wallet_reset_failed),
                 supportWithoutDiagnostics = resetZashi.isPending.value,
             )
+        }.combine(resetZashi.failedAttempt) { state, failure ->
+            if (state.content?.isPending != true) state else state.copy(error = failure?.let(::pendingError))
         }.stateIn(
             this,
             LceState(
@@ -59,6 +63,16 @@ class ResetZashiVM(
                 )
             )
         )
+
+    private fun pendingError(failure: ResetZashiUseCase.PendingResetFailure) = errorStateMapper.mapToState(
+        error = LceContent.Error(
+            cause = IllegalStateException("Pending wallet reset failed"),
+            restart = { if (resetZashi.dismissFailure(failure)) onConfirmReset() },
+            dismiss = { resetZashi.dismissFailure(failure) },
+        ),
+        message = stringRes(R.string.wallet_reset_failed),
+        supportWithoutDiagnostics = true,
+    )
 
     private fun createState(
         isKeepFilesChecked: Boolean,
@@ -113,7 +127,11 @@ class ResetZashiVM(
         confirmationDialogFlow.value = null
         resetLce.guardLoading {
             val keepFiles = isKeepFilesChecked.value
-            resetLce.execute { resetZashi(keepFiles) }
+            resetLce.execute {
+                runCatchingRecoverable { resetZashi(keepFiles) }.onFailure {
+                    if (!resetZashi.isPending.value) throw it
+                }
+            }
         }
     }
 }

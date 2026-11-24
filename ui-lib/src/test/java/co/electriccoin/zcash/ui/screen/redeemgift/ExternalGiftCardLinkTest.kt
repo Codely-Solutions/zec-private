@@ -20,7 +20,7 @@ class ExternalGiftCardLinkTest {
         val delivered = mutableListOf<NavigationCommand>()
         val authorized = { session.permits(session.grant.value) }
 
-        repeat(2) { assertTrue(handleExternalLink(host = "gift.zodl.com", isRedelivery = false)) }
+        repeat(2) { assertTrue(handleExternalLink("https", "gift.zodl.com", isRedelivery = false)) }
         launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
         assertTrue(delivered.isEmpty())
 
@@ -39,7 +39,7 @@ class ExternalGiftCardLinkTest {
     fun giftHostIsMatchedIgnoringCase() {
         val launchNavigation = LaunchNavigationRequests()
 
-        assertTrue(HandleExternalLinkUseCase(launchNavigation)("GIFT.ZODL.COM", isRedelivery = false))
+        assertTrue(HandleExternalLinkUseCase(launchNavigation)("https", "GIFT.ZODL.COM", isRedelivery = false))
         assertEquals(LaunchNavigationRequests.Kind.GIFT_SCAN, launchNavigation.changes.value.single().kind)
     }
 
@@ -47,7 +47,7 @@ class ExternalGiftCardLinkTest {
     fun redeliveredGiftLinkDoesNotAskAgain() {
         val launchNavigation = LaunchNavigationRequests()
 
-        assertTrue(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com", isRedelivery = true))
+        assertTrue(HandleExternalLinkUseCase(launchNavigation)("https", "gift.zodl.com", isRedelivery = true))
 
         assertTrue(launchNavigation.changes.value.isEmpty())
     }
@@ -57,7 +57,7 @@ class ExternalGiftCardLinkTest {
         val launchNavigation = LaunchNavigationRequests()
         val delivered = mutableListOf<NavigationCommand>()
 
-        assertFalse(HandleExternalLinkUseCase(launchNavigation)(host = null, isRedelivery = false))
+        assertFalse(HandleExternalLinkUseCase(launchNavigation)("zcash", host = null, isRedelivery = false))
         launchNavigation.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
         assertTrue(delivered.isEmpty())
 
@@ -70,7 +70,33 @@ class ExternalGiftCardLinkTest {
     fun lookalikeHostDoesNotRequestGiftScanner() {
         val launchNavigation = LaunchNavigationRequests()
 
-        assertFalse(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com.evil.example", isRedelivery = false))
-        assertEquals(LaunchNavigationRequests.Kind.THIRD_PARTY_SCAN, launchNavigation.changes.value.single().kind)
+        val handleExternalLink = HandleExternalLinkUseCase(launchNavigation)
+        assertFalse(handleExternalLink("https", "gift.zodl.com.evil.example", isRedelivery = false))
+        assertFalse(handleExternalLink("http", "gift.zodl.com", isRedelivery = false))
+        assertTrue(launchNavigation.changes.value.isEmpty())
+    }
+
+    @Test
+    fun recreationRestoresQueuedScannerAndIgnoresConsumedIntent() = runTest {
+        val original = LaunchNavigationRequests()
+        val handle = HandleExternalLinkUseCase(original)
+        original.restoreExternalScans(emptyList())
+        handle("zcash", null, isRedelivery = false)
+        original.deliver(walletReady = true, hasAppAccess = { true }) { }
+        handle("https", "gift.zodl.com", isRedelivery = false)
+        val saved = original.saveExternalScans()
+        assertEquals(listOf(LaunchNavigationRequests.Kind.GIFT_SCAN.name), saved)
+
+        val restored = LaunchNavigationRequests()
+        restored.restoreExternalScans(saved)
+        HandleExternalLinkUseCase(restored)("zcash", null, isRedelivery = true)
+        val delivered = mutableListOf<NavigationCommand>()
+        restored.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
+        restored.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
+        assertTrue(delivered.isEmpty())
+        restored.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
+        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
+        restored.restoreExternalScans(saved)
+        assertTrue(restored.changes.value.isEmpty())
     }
 }

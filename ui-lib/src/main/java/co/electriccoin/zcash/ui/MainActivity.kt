@@ -82,10 +82,12 @@ class MainActivity : FragmentActivity() {
 
     private val migrationAppHooks: MigrationAppHooks by inject()
     private val handleExternalLink: HandleExternalLinkUseCase by inject()
+    private val launchNavigation: LaunchNavigationRequests by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(restorableNavigationState(savedInstanceState))
         Twig.debug { "Activity state: Create" }
+        launchNavigation.restoreExternalScans(savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty())
 
         setAllowedScreenOrientation()
 
@@ -102,6 +104,7 @@ class MainActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
+        outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -121,9 +124,10 @@ class MainActivity : FragmentActivity() {
         intent: Intent,
         isRecreated: Boolean
     ) {
+        if (intent.action != Intent.ACTION_VIEW) return
         val data = intent.data ?: return
         val isFromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
-        val isGiftCardLink = handleExternalLink(host = data.host, isRedelivery = isRecreated || isFromHistory)
+        val isGiftCardLink = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
         if (isGiftCardLink) {
             intent.data = null
         }
@@ -341,6 +345,7 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
+        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val NAVIGATION_STATE_VERSION = 5
 
         // Forget older navigation stacks when their routes or saved payloads change.

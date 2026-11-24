@@ -47,9 +47,12 @@ class ExportTaxUseCaseTest {
         val context = RuntimeEnvironment.getApplication()
         val year = Year.now().minusYears(1).value
         val taxCache = File(context.cacheDir, "tax_exports").apply { mkdirs() }
-        val legacy = listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
-            File(taxCache, "${prefix}_Transaction_History_$year.csv").apply { writeText("old export") }
+        val legacy = listOf(context.cacheDir, taxCache).flatMap { directory ->
+            listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
+                File(directory, "${prefix}_Transaction_History_$year.csv").apply { writeText("old export") }
+            }
         }
+        val similarlyNamedDirectory = File(context.cacheDir, "Zodl_Transaction_History_2000.csv").apply { mkdir() }
         val unrelated = File(taxCache, "Unrelated_Transaction_History_$year.csv").apply { writeText("unrelated") }
         val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
         val belowGroupingBoundary = mockk<ReceiveTransaction.Pending> {
@@ -108,6 +111,7 @@ class ExportTaxUseCaseTest {
         assertEquals(android.content.Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
         DeleteLegacyTaxExportsUseCase(context).onStartup()
         assertTrue(legacy.none { it.exists() })
+        assertTrue(similarlyNamedDirectory.isDirectory)
         assertEquals("unrelated", unrelated.readText())
         assertEquals(taxCache, output.parentFile?.parentFile)
         val rows = output.readLines().map { it.split(',') }

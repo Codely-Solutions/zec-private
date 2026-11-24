@@ -16,11 +16,14 @@ class DeleteLegacyTaxExportsUseCase(private val context: Context) {
     }
 
     suspend operator fun invoke() = withContext(Dispatchers.IO) {
-        val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).toPath()
-        if (Files.isDirectory(directory, NOFOLLOW_LINKS)) {
-            Files.newDirectoryStream(directory) { path ->
-                LEGACY_CSV.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
-            }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
+        val cache = context.cacheDir.toPath()
+        val taxDirectory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).toPath()
+        for (directory in listOf(cache, taxDirectory)) {
+            if (Files.isDirectory(directory, NOFOLLOW_LINKS)) {
+                Files.newDirectoryStream(directory) { path ->
+                    LEGACY_CSV.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
+                }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
+            }
         }
     }
 

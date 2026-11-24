@@ -25000,10 +25000,10 @@ index 000000000..ed0e92273
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..f424119c7
+index 000000000..c7ff687d7
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,70 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
@@ -25015,6 +25015,7 @@ index 000000000..f424119c7
 +/** Holds sanitized app-launch requests until the corresponding screen graph is accessible. */
 +class LaunchNavigationRequests {
 +    private val pending = MutableStateFlow(emptyList<Request>())
++    private var restoredExternalScans = false
 +    internal val changes = pending.asStateFlow()
 +
 +    internal fun requestGiftScan() =
@@ -25022,6 +25023,25 @@ index 000000000..f424119c7
 +
 +    internal fun requestThirdPartyScan() =
 +        offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
++
++    internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->
++        when (request.kind) {
++            Kind.GIFT_SCAN, Kind.THIRD_PARTY_SCAN -> request.kind.name
++            else -> null
++        }
++    }
++
++    internal fun restoreExternalScans(saved: List<String>) {
++        // The same process already owns the current queue, including requests it consumed after saving state.
++        if (restoredExternalScans) return
++        restoredExternalScans = true
++        for (kind in saved) {
++            when (kind) {
++                Kind.GIFT_SCAN.name -> requestGiftScan()
++                Kind.THIRD_PARTY_SCAN.name -> requestThirdPartyScan()
++            }
++        }
++    }
 +
 +    fun requestMigrationProgress(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_PROGRESS, command)
 +
@@ -25055,23 +25075,33 @@ index 000000000..f424119c7
 +    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..4553053f3 100644
+index 048340e48..09faf525b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
 +import co.electriccoin.zcash.ui.screen.authentication.AppAccessBoundary
-@@ -86 +87 @@ class MainActivity : FragmentActivity() {
+@@ -83,0 +85 @@ class MainActivity : FragmentActivity() {
++    private val launchNavigation: LaunchNavigationRequests by inject()
+@@ -86 +88 @@ class MainActivity : FragmentActivity() {
 -        super.onCreate(savedInstanceState)
 +        super.onCreate(restorableNavigationState(savedInstanceState))
-@@ -100,0 +102,5 @@ class MainActivity : FragmentActivity() {
+@@ -87,0 +90 @@ class MainActivity : FragmentActivity() {
++        launchNavigation.restoreExternalScans(savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty())
+@@ -100,0 +104,6 @@ class MainActivity : FragmentActivity() {
 +    override fun onSaveInstanceState(outState: Bundle) {
 +        super.onSaveInstanceState(outState)
 +        outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
++        outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
 +    }
 +
-@@ -189,0 +196 @@ class MainActivity : FragmentActivity() {
+@@ -117,0 +127 @@ class MainActivity : FragmentActivity() {
++        if (intent.action != Intent.ACTION_VIEW) return
+@@ -120 +130 @@ class MainActivity : FragmentActivity() {
+-        val isGiftCardLink = handleExternalLink(host = data.host, isRedelivery = isRecreated || isFromHistory)
++        val isGiftCardLink = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
+@@ -189,0 +200 @@ class MainActivity : FragmentActivity() {
 +        val appAccessSession = authenticationViewModel.appAccessSession
-@@ -215,2 +222,6 @@ class MainActivity : FragmentActivity() {
+@@ -215,2 +226,6 @@ class MainActivity : FragmentActivity() {
 -                            MainContent()
 -                            AuthenticationForAppAccess()
 +                            AppAccessBoundary(
@@ -25080,24 +25110,25 @@ index 048340e48..4553053f3 100644
 +                            ) { grant ->
 +                                MainContent { appAccessSession.permits(grant) }
 +                            }
-@@ -240 +251 @@ class MainActivity : FragmentActivity() {
+@@ -240 +255 @@ class MainActivity : FragmentActivity() {
 -                    authenticationViewModel.resetAuthenticationResult()
 +                    authenticationViewModel.resetAppAccessResult()
-@@ -272,5 +283 @@ class MainActivity : FragmentActivity() {
+@@ -272,5 +287 @@ class MainActivity : FragmentActivity() {
 -                        lifecycleScope.launch {
 -                            // Wait until the welcome animation finishes, then mark it as presented to the user
 -                            delay((AnimationConstants.durationOnly()).milliseconds)
 -                            authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
 -                        }
 +                        authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
-@@ -296 +303 @@ class MainActivity : FragmentActivity() {
+@@ -296 +307 @@ class MainActivity : FragmentActivity() {
 -    private fun MainContent() {
 +    private fun MainContent(hasAppAccess: () -> Boolean) {
-@@ -298 +305 @@ class MainActivity : FragmentActivity() {
+@@ -298 +309 @@ class MainActivity : FragmentActivity() {
 -        RootNavGraph(secretState, walletViewModel, storageCheckViewModel)
 +        RootNavGraph(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
-@@ -335,0 +343,8 @@ class MainActivity : FragmentActivity() {
+@@ -335,0 +347,9 @@ class MainActivity : FragmentActivity() {
 +        private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
++        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val NAVIGATION_STATE_VERSION = 5
 +
 +        // Forget older navigation stacks when their routes or saved payloads change.
@@ -30901,7 +30932,7 @@ index f9a562c53..21f96f3ee 100644
 -    val error: Exception? = null
 -)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-index a4216cc0a..a937951cf 100644
+index a4216cc0a..397be7f80 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 @@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -31273,7 +31304,7 @@ index a4216cc0a..a937951cf 100644
 @@ -456 +520 @@ data class TransactionSwapMetadata(
 -    val status: SwapStatus,
 +    val recordedStatus: SwapStatus?,
-@@ -458 +522,62 @@ data class TransactionSwapMetadata(
+@@ -458 +522,64 @@ data class TransactionSwapMetadata(
 -)
 +    val reviewedIdentity: String? = null,
 +    internal val ownerAccount: WalletAccount? = null,
@@ -31281,6 +31312,7 @@ index a4216cc0a..a937951cf 100644
 +    internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +    val quotedAmountOut: BigDecimal? = null,
 +    val executedAmountOut: BigDecimal? = null,
++    internal val statusUpdatedAt: Instant? = null,
 +) {
 +    val status: SwapStatus
 +        get() = recordedStatus ?: SwapStatus.SUCCESS
@@ -31330,6 +31362,7 @@ index a4216cc0a..a937951cf 100644
 +        amountOutFormatted = executedAmountOut ?: quotedAmountOut ?: amountOutFormatted ?: BigDecimal.ZERO,
 +        quotedAmountOut = quotedAmountOut,
 +        executedAmountOut = executedAmountOut,
++        statusUpdatedAt = statusUpdatedAt,
 +        provider = provider,
 +        totalFees = totalFees,
 +        totalFeesUsd = totalFeesUsd,
@@ -33137,10 +33170,10 @@ index b174f50af..f307a8a7e 100644
 +        persistABContact(navigationRouter) { addressBookRepository.deleteContact(contact) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt
 new file mode 100644
-index 000000000..1eaeb6fcb
+index 000000000..a2d0bca3f
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacyTaxExportsUseCase.kt
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,33 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Context
@@ -33159,11 +33192,14 @@ index 000000000..1eaeb6fcb
 +    }
 +
 +    suspend operator fun invoke() = withContext(Dispatchers.IO) {
-+        val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).toPath()
-+        if (Files.isDirectory(directory, NOFOLLOW_LINKS)) {
-+            Files.newDirectoryStream(directory) { path ->
-+                LEGACY_CSV.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
-+            }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
++        val cache = context.cacheDir.toPath()
++        val taxDirectory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).toPath()
++        for (directory in listOf(cache, taxDirectory)) {
++            if (Files.isDirectory(directory, NOFOLLOW_LINKS)) {
++                Files.newDirectoryStream(directory) { path ->
++                    LEGACY_CSV.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
++                }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
++            }
 +        }
 +    }
 +
@@ -33631,7 +33667,7 @@ index 9174c2293..1c2415bd7 100644
 @@ -58,0 +59 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..e70bf0085 100644
+index a33c847ad..b5c9cdb5a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -33724,6 +33760,23 @@ index a33c847ad..e70bf0085 100644
 +        IllegalStateException("Swap status refresh was not saved")
 @@ -80,0 +135 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
+@@ -83,0 +139,16 @@ data class SwapQuoteStatusData(
++
++    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
++        val saved = savedMetadata
++        if (saved == null) return copy(savedMetadata = observed)
++        val sameRoute = saved.depositAddress == observed.depositAddress && saved.provider == observed.provider &&
++            saved.lastUpdated == observed.lastUpdated && saved.reviewedIdentity == observed.reviewedIdentity &&
++            saved.origin == observed.origin && saved.destination == observed.destination
++        if (!sameRoute) return copy(status = null, savedMetadata = observed)
++        val previousAt = saved.statusUpdatedAt
++        val observedAt = observed.statusUpdatedAt
++        if (previousAt != null && (observedAt == null || observedAt < previousAt)) return this
++        val sameStatus = saved.recordedStatus == observed.recordedStatus && saved.mode == observed.mode &&
++            saved.executedAmountOut == observed.executedAmountOut &&
++            saved.quotedAmountOut == observed.quotedAmountOut
++        return if (sameStatus) this else copy(status = null, savedMetadata = observed)
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt
 index fbae02e04..f9be37d0a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt
@@ -33759,7 +33812,7 @@ index be3f6dfed..2fc93cdc3 100644
 +    suspend operator fun invoke(txId: String, accountUuid: AccountUuid, token: Long): String? =
 +        metadataRepository.readTxNote(txId, accountUuid, token)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt
-index d668814fa..ef7d2073e 100644
+index d668814fa..269732335 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt
 @@ -3,2 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -33769,20 +33822,38 @@ index d668814fa..ef7d2073e 100644
 @@ -12,2 +11,2 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 - * A gift card link opens the gift card scanner once the wallet is ready, see
 - * [NavigateToRedeemGiftCardUseCase.openRequestedInAppScan]. Only the link's host is looked at to tell the two apart.
-+ * A gift card link opens the gift card scanner once the authorized wallet is ready. Only the host distinguishes
-+ * gift links from other links. Navigation receives the scanner request without any part of the URI.
++ * A gift card link opens the gift card scanner once the authorized wallet is ready. Navigation receives the
++ * scanner request without any part of the URI.
 @@ -15,4 +14 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 -class HandleExternalLinkUseCase(
 -    private val giftCardLinkStore: GiftCardLinkStore,
 -    private val navigationRouter: NavigationRouter,
 -) {
 +class HandleExternalLinkUseCase(private val launchNavigation: LaunchNavigationRequests) {
-@@ -30 +26 @@ class HandleExternalLinkUseCase(
+@@ -20 +16,2 @@ class HandleExternalLinkUseCase(
+-     * @param host the link's host, which is all that is needed to route it.
++     * @param scheme the URI scheme selected by the manifest.
++     * @param host the public host used to recognize gift links.
+@@ -25,0 +23 @@ class HandleExternalLinkUseCase(
++        scheme: String?,
+@@ -28,7 +26,7 @@ class HandleExternalLinkUseCase(
+-    ): Boolean =
+-        if (host.equals(GIFT_CARD_HOST, ignoreCase = true)) {
 -            if (!isRedelivery) giftCardLinkStore.requestInAppScan()
-+            if (!isRedelivery) launchNavigation.requestGiftScan()
-@@ -33 +29 @@ class HandleExternalLinkUseCase(
+-            true
+-        } else {
 -            navigationRouter.forward(ThirdPartyScan)
-+            launchNavigation.requestThirdPartyScan()
+-            false
++    ): Boolean {
++        val gift = scheme.equals("https", ignoreCase = true) && host.equals(GIFT_CARD_HOST, ignoreCase = true)
++        if (!isRedelivery) {
++            when {
++                gift -> launchNavigation.requestGiftScan()
++                scheme.equals("zcash", ignoreCase = true) -> launchNavigation.requestThirdPartyScan()
++            }
+@@ -35,0 +34,2 @@ class HandleExternalLinkUseCase(
++        return gift
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/IsServerAutomaticUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/IsServerAutomaticUseCase.kt
 deleted file mode 100644
 index ff481ba3f..000000000
@@ -37201,42 +37272,48 @@ index d50537e7f..b00724448 100644
 @@ -11,0 +12 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..47ebef074 100644
+index eb47e1885..2323564fb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 @@ -15 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -18,0 +19,2 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+@@ -18,0 +19,3 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
 +import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
-@@ -19,0 +22,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -19,0 +23,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
-@@ -20,0 +26,2 @@ import kotlinx.coroutines.flow.first
+@@ -20,0 +27,2 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.withContext
-@@ -27 +33,0 @@ class ResetZashiUseCase(
+@@ -27 +34,0 @@ class ResetZashiUseCase(
 -    private val flexaRepository: FlexaRepository,
-@@ -36,0 +43,4 @@ class ResetZashiUseCase(
+@@ -36,0 +44,4 @@ class ResetZashiUseCase(
 +    private val progressStore: ResetProgressStore,
 +    private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
 +    private val deleteLegacyTaxExports: DeleteLegacyTaxExportsUseCase,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -38 +48,6 @@ class ResetZashiUseCase(
+@@ -38 +49,10 @@ class ResetZashiUseCase(
 -    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
 +    private val resetMutex = Mutex()
 +    private val running = MutableStateFlow(false)
++    private val pendingFailure = MutableStateFlow<PendingResetFailure?>(null)
 +    val isRunning = running.asStateFlow()
 +    val isPending = progressStore.isPending
++    internal val failedAttempt = pendingFailure.asStateFlow()
++
++    internal fun dismissFailure(failure: PendingResetFailure) = pendingFailure.compareAndSet(failure, null)
 +
 +    @Suppress("TooGenericExceptionCaught", "ReturnCount")
-@@ -39,0 +55,2 @@ class ResetZashiUseCase(
+@@ -39,0 +60,3 @@ class ResetZashiUseCase(
 +        if (!resetMutex.tryLock()) return
 +        running.value = true
-@@ -41,12 +58,18 @@ class ResetZashiUseCase(
++        pendingFailure.value = null
+@@ -41,12 +64,22 @@ class ResetZashiUseCase(
 -            requestBiometrics()
 -            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
 -            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
@@ -37255,22 +37332,26 @@ index eb47e1885..47ebef074 100644
 +            // The pending screen can replace the initiating screen. Finish each confirmed attempt
 +            // even if that transition cancels the first view model.
 +            withContext(NonCancellable) {
-+                progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
-+                prepareReset(keepFiles, stage)
-+                if (stage != ResetStage.CLEAR_PREFERENCES) {
-+                    closeSynchronizer()
-+                    clearSDK()
-+                }
-+                progressStore.store(ResetStage.CLEAR_PREFERENCES)
-+                clearSharedPrefs()
-+                homeMessageCacheRepository.reset()
-+                progressStore.store(null)
-+                walletWriteAccess.finishReset()
++                runCatchingRecoverable {
++                    progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
++                    prepareReset(keepFiles, stage)
++                    if (stage != ResetStage.CLEAR_PREFERENCES) {
++                        closeSynchronizer()
++                        clearSDK()
++                    }
++                    progressStore.store(ResetStage.CLEAR_PREFERENCES)
++                    clearSharedPrefs()
++                    homeMessageCacheRepository.reset()
++                    progressStore.store(null)
++                    walletWriteAccess.finishReset()
++                }.onFailure {
++                    if (isPending.value) pendingFailure.value = PendingResetFailure()
++                }.getOrThrow()
 +            }
-@@ -54 +77 @@ class ResetZashiUseCase(
+@@ -54 +87 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
-@@ -56 +79,21 @@ class ResetZashiUseCase(
+@@ -56 +89,23 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
 +        } finally {
@@ -37279,6 +37360,8 @@ index eb47e1885..47ebef074 100644
 +            resetMutex.unlock()
 +        }
 +    }
++
++    internal class PendingResetFailure
 +
 +    private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
 +        val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
@@ -37293,12 +37376,12 @@ index eb47e1885..47ebef074 100644
 +                progressStore.store(ResetStage.ERASE_SDK)
 +            }
 +            true
-@@ -57,0 +101 @@ class ResetZashiUseCase(
+@@ -57,0 +113 @@ class ResetZashiUseCase(
 +        check(prepared == true) { "Timed out preparing wallet reset" }
-@@ -76 +120 @@ class ResetZashiUseCase(
+@@ -76 +132 @@ class ResetZashiUseCase(
 -     * [deleteLocalFiles] already ran. When no synchronizer materializes in time, this is a no-op —
 +     * local files were already removed. When no synchronizer materializes in time, this is a no-op —
-@@ -84,7 +127,0 @@ class ResetZashiUseCase(
+@@ -84,7 +139,0 @@ class ResetZashiUseCase(
 -    private fun deleteLocalFiles(keepFiles: Boolean) {
 -        if (!keepFiles) {
 -            addressBookRepository.delete()
@@ -37306,11 +37389,11 @@ index eb47e1885..47ebef074 100644
 -        }
 -    }
 -
-@@ -92 +129,2 @@ class ResetZashiUseCase(
+@@ -92 +141,2 @@ class ResetZashiUseCase(
 -        walletCoordinator.deleteSdkDataFlow().first()
 +        val erased = withTimeoutOrNull(ERASE_SDK_TIMEOUT) { walletCoordinator.deleteSdkDataFlow().first() }
 +        check(erased == true) { "Could not erase wallet data" }
-@@ -96,7 +134,4 @@ class ResetZashiUseCase(
+@@ -96,7 +146,4 @@ class ResetZashiUseCase(
 -        standardPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider.purgeQuarantine()
@@ -37322,25 +37405,29 @@ index eb47e1885..47ebef074 100644
 +        val encryptedPreferences = encryptedPreferenceProvider()
 +        check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
 +        check(encryptedPreferences.clearPreferences()) { "Could not clear encrypted wallet preferences" }
-@@ -105,0 +141,2 @@ class ResetZashiUseCase(
+@@ -105,0 +153,2 @@ class ResetZashiUseCase(
 +        private val PREPARE_RESET_TIMEOUT = 30.seconds
 +        private val ERASE_SDK_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
-index 4d406e6c2..06f3552a0 100644
+index 4d406e6c2..acaff0366 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
-@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.model.LceState
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.component.destructive
++import co.electriccoin.zcash.ui.common.model.LceContent
+@@ -7,0 +9 @@ import co.electriccoin.zcash.ui.common.model.LceState
 +import co.electriccoin.zcash.ui.common.model.guardLoading
-@@ -35 +36,3 @@ class ResetZashiVM(
+@@ -10,0 +13 @@ import co.electriccoin.zcash.ui.common.model.withLce
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
+@@ -35 +38,3 @@ class ResetZashiVM(
 -        ) { isKeepFilesChecked, confirmationDialog, lce ->
 +            resetZashi.isPending,
 +            resetZashi.isRunning,
 +        ) { isKeepFilesChecked, confirmationDialog, lce, pending, running ->
-@@ -39 +42,2 @@ class ResetZashiVM(
+@@ -39 +44,2 @@ class ResetZashiVM(
 -                isLoading = lce.loading,
 +                isLoading = lce.loading || running,
 +                isPending = pending,
-@@ -41,2 +45,17 @@ class ResetZashiVM(
+@@ -41,2 +47,29 @@ class ResetZashiVM(
 -        }.withLce(resetLce, errorStateMapper::mapToState)
 -            .stateIn(this, LceState(content = createState(isKeepFilesChecked.value, null, false)))
 +        }.withLce(resetLce) { error ->
@@ -37349,6 +37436,8 @@ index 4d406e6c2..06f3552a0 100644
 +                message = stringRes(R.string.wallet_reset_failed),
 +                supportWithoutDiagnostics = resetZashi.isPending.value,
 +            )
++        }.combine(resetZashi.failedAttempt) { state, failure ->
++            if (state.content?.isPending != true) state else state.copy(error = failure?.let(::pendingError))
 +        }.stateIn(
 +            this,
 +            LceState(
@@ -37360,30 +37449,44 @@ index 4d406e6c2..06f3552a0 100644
 +                )
 +            )
 +        )
-@@ -47,0 +67 @@ class ResetZashiVM(
++
++    private fun pendingError(failure: ResetZashiUseCase.PendingResetFailure) = errorStateMapper.mapToState(
++        error = LceContent.Error(
++            cause = IllegalStateException("Pending wallet reset failed"),
++            restart = { if (resetZashi.dismissFailure(failure)) onConfirmReset() },
++            dismiss = { resetZashi.dismissFailure(failure) },
++        ),
++        message = stringRes(R.string.wallet_reset_failed),
++        supportWithoutDiagnostics = true,
++    )
+@@ -47,0 +81 @@ class ResetZashiVM(
 +        isPending: Boolean,
-@@ -49 +69 @@ class ResetZashiVM(
+@@ -49 +83 @@ class ResetZashiVM(
 -        onBack = { navigationRouter.back() },
 +        onBack = { if (!resetZashi.isRunning.value && !resetZashi.isPending.value) navigationRouter.back() },
-@@ -59 +79,5 @@ class ResetZashiVM(
+@@ -59 +93,5 @@ class ResetZashiVM(
 -                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
 +                text = if (isPending) {
 +                    stringRes(R.string.wallet_initialization_retry)
 +                } else {
 +                    stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
 +                },
-@@ -63,0 +88 @@ class ResetZashiVM(
+@@ -63,0 +102 @@ class ResetZashiVM(
 +        isPending = isPending,
-@@ -69 +94,2 @@ class ResetZashiVM(
+@@ -69 +108,2 @@ class ResetZashiVM(
 -        confirmationDialogFlow.value = createConfirmationState()
 +        if (resetZashi.isRunning.value) return
 +        if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
-@@ -88,2 +114,3 @@ class ResetZashiVM(
+@@ -88,2 +128,7 @@ class ResetZashiVM(
 -        resetLce.execute {
 -            resetZashi(keepFiles = isKeepFilesChecked.value)
 +        resetLce.guardLoading {
 +            val keepFiles = isKeepFilesChecked.value
-+            resetLce.execute { resetZashi(keepFiles) }
++            resetLce.execute {
++                runCatchingRecoverable { resetZashi(keepFiles) }.onFailure {
++                    if (!resetZashi.isPending.value) throw it
++                }
++            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt
 index 88113b433..996eacc93 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt
@@ -45184,7 +45287,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..aaa932d73 100644
+index 00fe60557..a0bc787ad 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -45205,25 +45308,34 @@ index 00fe60557..aaa932d73 100644
 +    private val setTransactionBookmark: SetTransactionBookmarkUseCase,
 @@ -80,0 +86 @@ class TransactionDetailVM(
 +    private var bookmarkJob: Job? = null
-@@ -96,0 +103 @@ class TransactionDetailVM(
+@@ -94 +100,7 @@ class TransactionDetailVM(
+-            .mapLatest { transaction ->
++            .mapLatest { snapshot ->
++                val recorded = snapshot.metadata.swapMetadata
++                val transaction = if (recorded != null && snapshot.swap != null) {
++                    snapshot.copy(swap = snapshot.swap.withSavedObservation(recorded))
++                } else {
++                    snapshot
++                }
+@@ -96,0 +109 @@ class TransactionDetailVM(
 +                    explorerLinks = createExplorerLinks(transaction),
-@@ -110 +117 @@ class TransactionDetailVM(
+@@ -110 +123 @@ class TransactionDetailVM(
 -                            onClick = ::onBookmarkClick,
 +                            onClick = { onBookmarkClick(transaction) },
-@@ -117 +124,4 @@ class TransactionDetailVM(
+@@ -117 +130,4 @@ class TransactionDetailVM(
 -                        ),
 +                        ).takeIf {
 +                            transaction.transaction.accountUuid != null &&
 +                                transaction.metadata.bookmarkWriteToken != null
 +                        },
-@@ -133,2 +143,4 @@ class TransactionDetailVM(
+@@ -133,2 +149,4 @@ class TransactionDetailVM(
 -                if (transaction.transaction.memoCount > 0) {
 -                    markTxMemoAsRead(transactionDetailArgs.transactionId)
 +                val accountUuid = transaction.transaction.accountUuid
 +                val token = transaction.metadata.bookmarkWriteToken
 +                if (transaction.transaction.memoCount > 0 && accountUuid != null && token != null) {
 +                    markTxMemoAsRead(transactionDetailArgs.transactionId, accountUuid, token)
-@@ -162,2 +174,29 @@ class TransactionDetailVM(
+@@ -162,2 +180,29 @@ class TransactionDetailVM(
 -    private fun onAddOrEditNoteClick() {
 -        navigationRouter.forward(TransactionNote(transactionDetailArgs.transactionId))
 +    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
@@ -45255,26 +45367,26 @@ index 00fe60557..aaa932d73 100644
 +            testnet = testnet,
 +            router = navigationRouter
 +        )
-@@ -178 +217,3 @@ class TransactionDetailVM(
+@@ -178 +223,3 @@ class TransactionDetailVM(
 -                            status = transaction.swap.status?.status,
 +                            statusRow = transaction.swap.toDetailStatusRow(
 +                                metadata = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata,
 +                            ),
-@@ -184 +225,2 @@ class TransactionDetailVM(
+@@ -184 +231,2 @@ class TransactionDetailVM(
 -                                    destinationAsset = transaction.swap.destinationAsset
 +                                    destinationAsset = transaction.swap.destinationAsset,
 +                                    savedMetadata = transaction.swap.savedMetadata,
-@@ -191,2 +233 @@ class TransactionDetailVM(
+@@ -191,2 +239 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -202 +243 @@ class TransactionDetailVM(
+@@ -202 +249 @@ class TransactionDetailVM(
 -                                    ?.refundedFormatted
 +                                    ?.positiveRefund
-@@ -205,2 +245,0 @@ class TransactionDetailVM(
+@@ -205,2 +251,0 @@ class TransactionDetailVM(
 -                                    }?.takeIf {
 -                                        transaction.swap.status.status == REFUNDED
-@@ -227,0 +267,10 @@ class TransactionDetailVM(
+@@ -227,0 +273,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -45285,13 +45397,13 @@ index 00fe60557..aaa932d73 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -380 +429 @@ class TransactionDetailVM(
+@@ -380 +435 @@ class TransactionDetailVM(
 -            data.swap?.error != null && data.swap.status == null -> {
 +            data.swap?.error != null -> {
-@@ -388 +437 @@ class TransactionDetailVM(
+@@ -388 +443 @@ class TransactionDetailVM(
 -                null
 +                data.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
-@@ -420,2 +469,5 @@ class TransactionDetailVM(
+@@ -420,2 +475,5 @@ class TransactionDetailVM(
 -        fun createAddNoteButtonState() =
 -            ButtonState(
 +        fun createAddNoteButtonState(): ButtonState? {
@@ -45299,20 +45411,20 @@ index 00fe60557..aaa932d73 100644
 +            val token = transaction.metadata.bookmarkWriteToken
 +            if (accountUuid == null || token == null) return null
 +            return ButtonState(
-@@ -428 +480,5 @@ class TransactionDetailVM(
+@@ -428 +486,5 @@ class TransactionDetailVM(
 -                onClick = ::onAddOrEditNoteClick
 +                onClick = {
 +                    navigationRouter.forward(
 +                        TransactionNote(transactionDetailArgs.transactionId, accountUuid.toStorageKeyId(), token)
 +                    )
 +                }
-@@ -429,0 +486 @@ class TransactionDetailVM(
+@@ -429,0 +492 @@ class TransactionDetailVM(
 +        }
-@@ -431,0 +489,3 @@ class TransactionDetailVM(
+@@ -431,0 +495,3 @@ class TransactionDetailVM(
 +            transaction.swap?.error != null && transaction.swap.status == null ->
 +                transaction.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
 +
-@@ -520,12 +580,7 @@ class TransactionDetailVM(
+@@ -520,12 +586,7 @@ class TransactionDetailVM(
 -                            if (transaction is SendTransaction.Failed) {
 -                                when (data.metadata.swapMetadata.mode) {
 -                                    EXACT_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -45325,32 +45437,32 @@ index 00fe60557..aaa932d73 100644
 -                                        when (data.metadata.swapMetadata.status) {
 -                                            PROCESSING,
 -                                            PENDING -> stringRes(R.string.swapStatus_swapping)
-+                            val swapStatus =
-+                                data.metadata.swapMetadata.outgoingStatus(transaction, data.swap?.status?.status)
-+                            when (data.metadata.swapMetadata.mode) {
++                            val saved = data.swap?.savedMetadata ?: data.metadata.swapMetadata
++                            val swapStatus = saved.outgoingStatus(transaction, data.swap?.status?.status)
++                            when (saved.mode) {
 +                                EXACT_INPUT -> {
 +                                    when (swapStatus) {
 +                                        PROCESSING,
 +                                        PENDING -> stringRes(R.string.swapStatus_swapping)
-@@ -533 +588 @@ class TransactionDetailVM(
+@@ -533 +594 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
-@@ -535 +590 @@ class TransactionDetailVM(
+@@ -535 +596 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -537 +592 @@ class TransactionDetailVM(
+@@ -537 +598 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -539 +594 @@ class TransactionDetailVM(
+@@ -539 +600 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                        FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -541,2 +596 @@ class TransactionDetailVM(
+@@ -541,2 +602 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                        }
 +                                        EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -543,0 +598 @@ class TransactionDetailVM(
+@@ -543,0 +604 @@ class TransactionDetailVM(
 +                                }
-@@ -545,4 +600,4 @@ class TransactionDetailVM(
+@@ -545,4 +606,4 @@ class TransactionDetailVM(
 -                                    EXACT_OUTPUT -> {
 -                                        when (data.metadata.swapMetadata.status) {
 -                                            PROCESSING,
@@ -45359,31 +45471,31 @@ index 00fe60557..aaa932d73 100644
 +                                    when (swapStatus) {
 +                                        PROCESSING,
 +                                        PENDING -> stringRes(R.string.swapStatus_paying)
-@@ -550 +605 @@ class TransactionDetailVM(
+@@ -550 +611 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
-@@ -552 +607 @@ class TransactionDetailVM(
+@@ -552 +613 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -554 +609 @@ class TransactionDetailVM(
+@@ -554 +615 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -556 +611 @@ class TransactionDetailVM(
+@@ -556 +617 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                        FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -558,2 +613 @@ class TransactionDetailVM(
+@@ -558,2 +619 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                        }
 +                                        EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -560,0 +615 @@ class TransactionDetailVM(
+@@ -560,0 +621 @@ class TransactionDetailVM(
 +                                }
-@@ -562,3 +617,2 @@ class TransactionDetailVM(
+@@ -562,3 +623,2 @@ class TransactionDetailVM(
 -                                    FLEX_INPUT -> {
 -                                        throw UnsupportedOperationException("FLEX_INPUT not supported")
 -                                    }
 +                                FLEX_INPUT -> {
 +                                    throw UnsupportedOperationException("FLEX_INPUT not supported")
-@@ -626,3 +680,9 @@ class TransactionDetailVM(
+@@ -626,3 +686,9 @@ class TransactionDetailVM(
 -    private fun onBookmarkClick() =
 -        viewModelScope.launch {
 -            flipTransactionBookmark(transactionDetailArgs.transactionId)
@@ -45396,9 +45508,9 @@ index 00fe60557..aaa932d73 100644
 +                    data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token
 +                )
 +            }
-@@ -629,0 +690 @@ class TransactionDetailVM(
+@@ -629,0 +696 @@ class TransactionDetailVM(
 +    }
-@@ -630,0 +692,2 @@ class TransactionDetailVM(
+@@ -630,0 +698,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
@@ -46120,10 +46232,10 @@ index 000000000..fca45c2b2
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..1f6072f3e
+index 000000000..fcdecfc42
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,181 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -46196,24 +46308,27 @@ index 000000000..1f6072f3e
 +            val last = lastAttempt
 +            if (!UpdatePolicy.shouldCheck(now, last, manual)) return
 +            val previous = mutableState.value
-+            preferences.edit().putLong("last_check", now).apply()
 +            mutableState.value = AppUpdateState.Checking
 +            try {
 +                val release = readLatestRelease()
++                val completedAt = nowMillis()
 +                preferences.edit()
 +                    .putString("release", encodeCache(release))
-+                    .putLong("release_checked_at", nowMillis())
++                    .putLong("release_checked_at", completedAt)
++                    .putLong("last_completed_check", completedAt)
++                    .remove("last_check")
 +                    .remove("last_check_failed")
 +                    .apply()
 +                mutableState.value = cachedAvailability() ?: AppUpdateState.Current
 +            } catch (cancelled: CancellationException) {
-+                val editor = preferences.edit()
-+                if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
-+                editor.apply()
 +                mutableState.value = if (previous is AppUpdateState.Available) cachedState() else previous
 +                throw cancelled
 +            } catch (_: Exception) {
-+                preferences.edit().putBoolean("last_check_failed", true).apply()
++                preferences.edit()
++                    .putLong("last_completed_check", nowMillis())
++                    .remove("last_check")
++                    .putBoolean("last_check_failed", true)
++                    .apply()
 +                mutableState.value = AppUpdateState.Failed
 +            }
 +        } finally {
@@ -46243,7 +46358,14 @@ index 000000000..1f6072f3e
 +    }
 +
 +    private val lastAttempt: Long?
-+        get() = preferences.getLong("last_check", -1L).takeIf { it >= 0 }
++        get() {
++            val completedAt = preferences.getLong("last_completed_check", -1L)
++            if (completedAt >= 0) return completedAt
++            // The old attempt timestamp was written before I/O. Only a successful result has a proven end time.
++            return preferences.getLong("release_checked_at", -1L).takeIf {
++                it >= 0 && !preferences.getBoolean("last_check_failed", false)
++            }
++        }
 +
 +    private fun cachedState(): AppUpdateState =
 +        if (preferences.getBoolean("last_check_failed", false)) AppUpdateState.Failed
@@ -62474,10 +62596,10 @@ index 000000000..b8a1b9401
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 new file mode 100644
-index 000000000..45728da48
+index 000000000..e7d55c0a4
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,167 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -62527,9 +62649,12 @@ index 000000000..45728da48
 +        val context = RuntimeEnvironment.getApplication()
 +        val year = Year.now().minusYears(1).value
 +        val taxCache = File(context.cacheDir, "tax_exports").apply { mkdirs() }
-+        val legacy = listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
-+            File(taxCache, "${prefix}_Transaction_History_$year.csv").apply { writeText("old export") }
++        val legacy = listOf(context.cacheDir, taxCache).flatMap { directory ->
++            listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
++                File(directory, "${prefix}_Transaction_History_$year.csv").apply { writeText("old export") }
++            }
 +        }
++        val similarlyNamedDirectory = File(context.cacheDir, "Zodl_Transaction_History_2000.csv").apply { mkdir() }
 +        val unrelated = File(taxCache, "Unrelated_Transaction_History_$year.csv").apply { writeText("unrelated") }
 +        val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
 +        val belowGroupingBoundary = mockk<ReceiveTransaction.Pending> {
@@ -62588,6 +62713,7 @@ index 000000000..45728da48
 +        assertEquals(android.content.Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
 +        DeleteLegacyTaxExportsUseCase(context).onStartup()
 +        assertTrue(legacy.none { it.exists() })
++        assertTrue(similarlyNamedDirectory.isDirectory)
 +        assertEquals("unrelated", unrelated.readText())
 +        assertEquals(taxCache, output.parentFile?.parentFile)
 +        val rows = output.readLines().map { it.split(',') }
@@ -67611,10 +67737,10 @@ index 000000000..9178ddecf
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..52e6c97ee
+index 000000000..a62b51007
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,277 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -67694,6 +67820,7 @@ index 000000000..52e6c97ee
 +    private val diagnostics = mockk<GetSupportUseCase>()
 +    private lateinit var reportAccess: WalletReportAccess
 +    private lateinit var progress: ResetProgressStore
++    private lateinit var newViewModel: () -> ResetZashiVM
 +    private lateinit var vm: ResetZashiVM
 +
 +    @BeforeTest
@@ -67809,6 +67936,46 @@ index 000000000..52e6c97ee
 +        coVerify(exactly = 1) { metadata.delete() }
 +    }
 +
++    @Test
++    fun pendingRootOwnerReceivesFirstFailureAfterSettingsOwnerIsReplaced(): Unit = runBlocking {
++        val enteredErase = CompletableDeferred<Unit>()
++        val firstResult = CompletableDeferred<Boolean>()
++        every { coordinator.deleteSdkDataFlow() } returnsMany listOf(
++            flow {
++                enteredErase.complete(Unit)
++                emit(firstResult.await())
++            },
++            flowOf(true),
++        )
++        createViewModel()
++        val settingsOwner = vm
++        assertNotNull(vm.state.value.content).buttonState.onClick()
++        val confirmed = awaitState { it.content?.confirmationDialog != null }
++        val confirmation = assertNotNull(confirmed.content?.confirmationDialog)
++        try {
++            confirmation.primaryAction.onClick()
++            withTimeout(10.seconds) { enteredErase.await() }
++            vm = newViewModel()
++            assertTrue(assertNotNull(vm.state.value.content).isPending)
++            settingsOwner.viewModelScope.coroutineContext[Job]?.cancel()
++        } finally {
++            firstResult.complete(false)
++            settingsOwner.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
++        }
++
++        val failure = awaitState { it.error != null && it.content?.isPending == true }
++        val sheet = assertIs<LceError.BottomSheet>(failure.error).state
++        assertEquals(stringRes(R.string.wallet_reset_failed), sheet.message)
++        assertNotNull(sheet.secondaryAction).onClick()
++        val chooser = assertNotNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
++        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
++        coVerify(exactly = 0) { diagnostics() }
++        val pending = assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content)
++        pending.buttonState.onClick()
++        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
++        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
++    }
++
 +    private fun createViewModel() {
 +        val context = mockk<Context> {
 +            every { noBackupFilesDir } returns directory.root
@@ -67843,7 +68010,9 @@ index 000000000..52e6c97ee
 +            walletWriteAccess = writeAccess,
 +        )
 +        val sendEmail = SendEmailUseCase(RuntimeEnvironment.getApplication(), diagnostics, mockk())
-+        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(sendEmail, mockk(), reportAccess))
++        val errorMapper = ErrorMapperUseCase(sendEmail, mockk(), reportAccess)
++        newViewModel = { ResetZashiVM(navigation, reset, errorMapper) }
++        vm = newViewModel()
 +    }
 +
 +    private suspend fun awaitState(predicate: (LceState<ResetZashiState>) -> Boolean) =
@@ -70534,7 +70703,7 @@ index 39f9284c9..f2c95284d 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
-index 461fb8fbb..64d0c613c 100644
+index 461fb8fbb..bdb4946e2 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
 @@ -3,3 +3,3 @@ package co.electriccoin.zcash.ui.screen.redeemgift
@@ -70585,7 +70754,7 @@ index 461fb8fbb..64d0c613c 100644
 +        val delivered = mutableListOf<NavigationCommand>()
 +        val authorized = { session.permits(session.grant.value) }
 +
-+        repeat(2) { assertTrue(handleExternalLink(host = "gift.zodl.com", isRedelivery = false)) }
++        repeat(2) { assertTrue(handleExternalLink("https", "gift.zodl.com", isRedelivery = false)) }
 +        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
 +        assertTrue(delivered.isEmpty())
 +
@@ -70606,7 +70775,7 @@ index 461fb8fbb..64d0c613c 100644
 @@ -50,2 +42,2 @@ class ExternalGiftCardLinkTest {
 -        assertTrue(HandleExternalLinkUseCase(store, RecordingNavigationRouter())("GIFT.ZODL.COM", isRedelivery = false))
 -        assertTrue(store.isInAppScanRequested.value)
-+        assertTrue(HandleExternalLinkUseCase(launchNavigation)("GIFT.ZODL.COM", isRedelivery = false))
++        assertTrue(HandleExternalLinkUseCase(launchNavigation)("https", "GIFT.ZODL.COM", isRedelivery = false))
 +        assertEquals(LaunchNavigationRequests.Kind.GIFT_SCAN, launchNavigation.changes.value.single().kind)
 @@ -56,2 +48 @@ class ExternalGiftCardLinkTest {
 -        val store = GiftCardLinkStoreImpl()
@@ -70614,7 +70783,7 @@ index 461fb8fbb..64d0c613c 100644
 +        val launchNavigation = LaunchNavigationRequests()
 @@ -59 +50 @@ class ExternalGiftCardLinkTest {
 -        assertTrue(HandleExternalLinkUseCase(store, router)(host = "gift.zodl.com", isRedelivery = true))
-+        assertTrue(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com", isRedelivery = true))
++        assertTrue(HandleExternalLinkUseCase(launchNavigation)("https", "gift.zodl.com", isRedelivery = true))
 @@ -61,2 +52 @@ class ExternalGiftCardLinkTest {
 -        assertFalse(store.isInAppScanRequested.value)
 -        assertTrue(router.forwardedRoutes.isEmpty())
@@ -70628,7 +70797,7 @@ index 461fb8fbb..64d0c613c 100644
 +        val delivered = mutableListOf<NavigationCommand>()
 @@ -70 +60,3 @@ class ExternalGiftCardLinkTest {
 -        assertFalse(HandleExternalLinkUseCase(store, router)(host = null, isRedelivery = false))
-+        assertFalse(HandleExternalLinkUseCase(launchNavigation)(host = null, isRedelivery = false))
++        assertFalse(HandleExternalLinkUseCase(launchNavigation)("zcash", host = null, isRedelivery = false))
 +        launchNavigation.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
 +        assertTrue(delivered.isEmpty())
 @@ -72,2 +64,3 @@ class ExternalGiftCardLinkTest {
@@ -70637,28 +70806,49 @@ index 461fb8fbb..64d0c613c 100644
 +        launchNavigation.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
 +        assertEquals(listOf<NavigationCommand>(NavigationCommand.Forward(listOf(ThirdPartyScan))), delivered)
 +        assertTrue(launchNavigation.changes.value.isEmpty())
-@@ -77,15 +70,2 @@ class ExternalGiftCardLinkTest {
+@@ -77,3 +70,2 @@ class ExternalGiftCardLinkTest {
 -    fun otherHostsAreNotTreatedAsGiftLinks() {
 -        val store = GiftCardLinkStoreImpl()
 -        val router = RecordingNavigationRouter()
--
++    fun lookalikeHostDoesNotRequestGiftScanner() {
++        val launchNavigation = LaunchNavigationRequests()
+@@ -81,4 +73,4 @@ class ExternalGiftCardLinkTest {
 -        assertFalse(HandleExternalLinkUseCase(store, router)("gift.zodl.com.evil.example", isRedelivery = false))
 -
 -        assertFalse(store.isInAppScanRequested.value)
 -        assertEquals(listOf<Any>(ThirdPartyScan), router.forwardedRoutes)
--    }
--
--    @Test
++        val handleExternalLink = HandleExternalLinkUseCase(launchNavigation)
++        assertFalse(handleExternalLink("https", "gift.zodl.com.evil.example", isRedelivery = false))
++        assertFalse(handleExternalLink("http", "gift.zodl.com", isRedelivery = false))
++        assertTrue(launchNavigation.changes.value.isEmpty())
+@@ -88,6 +80,21 @@ class ExternalGiftCardLinkTest {
 -    fun noScannerIsOpenedWithoutARequest() {
 -        val router = RecordingNavigationRouter()
 -
 -        NavigateToRedeemGiftCardUseCase(mockk(), GiftCardLinkStoreImpl(), router).openRequestedInAppScan()
-+    fun lookalikeHostDoesNotRequestGiftScanner() {
-+        val launchNavigation = LaunchNavigationRequests()
-@@ -93 +73,2 @@ class ExternalGiftCardLinkTest {
+-
 -        assertTrue(router.forwardedRoutes.isEmpty())
-+        assertFalse(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com.evil.example", isRedelivery = false))
-+        assertEquals(LaunchNavigationRequests.Kind.THIRD_PARTY_SCAN, launchNavigation.changes.value.single().kind)
++    fun recreationRestoresQueuedScannerAndIgnoresConsumedIntent() = runTest {
++        val original = LaunchNavigationRequests()
++        val handle = HandleExternalLinkUseCase(original)
++        original.restoreExternalScans(emptyList())
++        handle("zcash", null, isRedelivery = false)
++        original.deliver(walletReady = true, hasAppAccess = { true }) { }
++        handle("https", "gift.zodl.com", isRedelivery = false)
++        val saved = original.saveExternalScans()
++        assertEquals(listOf(LaunchNavigationRequests.Kind.GIFT_SCAN.name), saved)
++
++        val restored = LaunchNavigationRequests()
++        restored.restoreExternalScans(saved)
++        HandleExternalLinkUseCase(restored)("zcash", null, isRedelivery = true)
++        val delivered = mutableListOf<NavigationCommand>()
++        restored.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
++        restored.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
++        assertTrue(delivered.isEmpty())
++        restored.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
++        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
++        restored.restoreExternalScans(saved)
++        assertTrue(restored.changes.value.isEmpty())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 index 1dec990ab..4804e8d55 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
@@ -77407,10 +77597,10 @@ index 000000000..3b7070542
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..f7bbf19f0
+index 000000000..9ece65ddb
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
-@@ -0,0 +1,478 @@
+@@ -0,0 +1,512 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.lifecycle.ViewModelStore
@@ -77704,6 +77894,40 @@ index 000000000..f7bbf19f0
 +        assertLocalFunding(detail, "failed poll")
 +        assertNotNull(detail.primaryButton).onClick()
 +        verify(exactly = 1) { reload.requestReload() }
++    }
++
++    @Test
++    fun advancingSavedStatusUpdatesHeaderAndRowWhenRefreshIsUnavailable() = runTest(dispatcher) {
++        val zec = SwapCatalogTestFixture.nativeZec
++        val destination = SwapCatalogTestFixture.externalAssets.first()
++        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.fromEpochSeconds(1))
++        val failedRefresh = SwapQuoteStatusData(
++            status = status(SwapStatus.PENDING, zec, destination),
++            isLoading = false,
++            error = IllegalStateException("fixture-provider-offline"),
++            savedMetadata = cached,
++        )
++        val opened = data(sent, cached, failedRefresh)
++        val source = MutableStateFlow(opened)
++        val vm = viewModel(opened, source)
++        val before = vm.state.first { it.info is SendSwapState }
++        assertEquals(stringRes(R.string.swapStatus_swapping), before.header.title)
++        assertEquals(SwapStatus.PENDING, assertIs<SendSwapState>(before.info).statusRow.status)
++
++        source.value = opened.copy(
++            metadata = opened.metadata.copy(
++                swapMetadata = cached.copy(
++                    recordedStatus = SwapStatus.SUCCESS,
++                    statusUpdatedAt = Instant.fromEpochSeconds(2),
++                )
++            )
++        )
++        val after = withTimeout(10_000) {
++            vm.state.first { it.header.title == stringRes(R.string.swapStatus_swapped) }
++        }
++        val visible = assertIs<SendSwapState>(after.info).statusRow
++        assertEquals(stringRes(R.string.private_swap_saved_status), visible.title)
++        assertEquals(SwapStatus.SUCCESS, visible.status)
 +    }
 +
 +    @Test
@@ -78682,10 +78906,10 @@ index 39dd717c7..805b282ea 100644
 -        requireNotNull(vm.state().secondaryButton) { "The found note should show the save button" }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..d3496d646
+index 000000000..d69763b6b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,310 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -78827,7 +79051,7 @@ index 000000000..d3496d646
 +    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry(): Unit = runBlocking {
 +        for (previous in listOf<Long?>(null, 123L)) {
 +            preferences.edit().clear().apply()
-+            previous?.let { preferences.edit().putLong("last_check", it).apply() }
++            previous?.let { preferences.edit().putLong("last_completed_check", it).apply() }
 +            val entered = CompletableDeferred<Unit>()
 +            val provider = UpdateTestClientProvider {
 +                entered.complete(Unit)
@@ -78838,10 +79062,10 @@ index 000000000..d3496d646
 +            val checking = launch { repository.check() }
 +            withTimeout(10_000) { entered.await() }
 +            assertIs<AppUpdateState.Checking>(repository.state.value)
++            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
 +            checking.cancelAndJoin()
 +
-+            assertEquals(previous != null, preferences.contains("last_check"))
-+            previous?.let { assertEquals(it, preferences.getLong("last_check", 0)) }
++            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
 +            assertIs<AppUpdateState.Idle>(repository.state.value)
 +            provider.reply = { releaseMetadata(200) }
 +            repository.check()
@@ -78851,19 +79075,38 @@ index 000000000..d3496d646
 +    }
 +
 +    @Test
++    fun interruptedLegacyAttemptDoesNotSuppressAutomaticCheck(): Unit = runBlocking {
++        val now = UPDATE_INTERVAL_MILLIS * 2
++        preferences.edit()
++            .putLong("last_check", now - 1)
++            .putLong("release_checked_at", now - UPDATE_INTERVAL_MILLIS)
++            .putBoolean("last_check_failed", true)
++            .apply()
++        val provider = UpdateTestClientProvider { releaseMetadata(200) }
++        val repository = AppUpdateRepository(context, provider) { now }
++
++        repository.check()
++
++        assertEquals(1, provider.requests)
++        assertEquals(now, preferences.getLong("last_completed_check", -1L))
++        assertFalse(preferences.contains("last_check"))
++        assertEquals(200, repository.cachedNotice()?.versionCode)
++    }
++
++    @Test
 +    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries(): Unit = runBlocking {
 +        val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
 +        val repository = AppUpdateRepository(context, provider)
 +        assertTrue(repository.enabled)
 +        repository.check()
 +        assertIs<AppUpdateState.Failed>(repository.state.value)
-+        val lastCheck = preferences.getLong("last_check", 0)
++        val lastCheck = preferences.getLong("last_completed_check", 0)
 +        assertTrue(lastCheck > 0)
 +
 +        val recreated = AppUpdateRepository(context, provider)
 +        recreated.check()
 +        assertEquals(1, provider.requests)
-+        assertEquals(lastCheck, preferences.getLong("last_check", 0))
++        assertEquals(lastCheck, preferences.getLong("last_completed_check", 0))
 +        provider.reply = { releaseMetadata(200) }
 +        recreated.check(manual = true)
 +        assertEquals(2, provider.requests)

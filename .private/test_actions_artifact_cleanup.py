@@ -1,4 +1,7 @@
 """Identity, reference, run-state and dry-run cleanup safeguards."""
+import base64
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +29,45 @@ class CleanupTests(unittest.TestCase):
         for value in (10, '20', 'b' * 40, 'sha256:' + 'a' * 64):
             self.assertTrue(cleanup.referenced({'nested': [{'input': value}]}, CANDIDATE))
         self.assertFalse(cleanup.referenced({'id': 999}, CANDIDATE))
+
+    def test_collects_tracked_nested_evidence_without_explicit_paths(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            subtree = root / '.private' / 'release-evidence'
+            subtree.mkdir(parents=True)
+            evidence = subtree / 'release.json'
+            evidence.write_bytes(b'{"archive":{"artifact_id":10}}')
+            subprocess.run(['git', 'init', '-q', str(root)], check=True, timeout=30)
+            subprocess.run(['git', 'add', '.private'], cwd=root, check=True, timeout=30)
+            found = cleanup.reference_snapshot(root, [])
+            self.assertTrue(cleanup.referenced(found['.private/release-evidence/release.json'][1], CANDIDATE))
+            evidence.unlink()
+            with self.assertRaisesRegex(ValueError, 'missing'):
+                cleanup.reference_snapshot(root, [])
+
+    def test_live_inventory_includes_references_absent_from_checkout(self):
+        head, tree, blob = 'a' * 40, 'b' * 40, 'c' * 40
+        data = b'{"original_artifact":10}'
+        name = '.private/release-evidence/remote-only.json'
+        prefix = 'repos/owner/repo'
+        routes = {
+            prefix: {'default_branch': 'main'},
+            f'{prefix}/commits/main': {'sha': head, 'commit': {'tree': {'sha': tree}}},
+            f'{prefix}/git/trees/{tree}?recursive=1': {
+                'sha': tree, 'truncated': False, 'tree': [
+                    dict(path=name, mode='100644', type='blob', sha=blob, size=len(data)),
+                ],
+            },
+            f'{prefix}/git/blobs/{blob}': {
+                'sha': blob, 'encoding': 'base64', 'content': base64.b64encode(data).decode('ascii'),
+            },
+        }
+        revision, found = cleanup.live_references(routes.__getitem__, 'owner/repo', ['.private/local-only.json'])
+        self.assertEqual(revision, head)
+        self.assertTrue(cleanup.referenced(found[name], CANDIDATE))
+        routes[f'{prefix}/git/trees/{tree}?recursive=1']['truncated'] = True
+        with self.assertRaisesRegex(ValueError, 'Incomplete'):
+            cleanup.live_references(routes.__getitem__, 'owner/repo', [])
 
     def test_default_dry_run_never_deletes(self):
         calls = []

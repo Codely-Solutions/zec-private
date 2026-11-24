@@ -162,15 +162,13 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
                     continue
             try:
                 proof = resolve(run_id, attempt, artifact_id, target=latest)
-            except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            except ValueError:
                 continue
             if proof is not None and proof['release_tag'] == tag:
                 matches.add((run_id, attempt, artifact_id))
         if len(artifacts) < 100:
             break
     else:
-        if recorded is not None and not matches:
-            return None
         raise ValueError('Publication proof search reached 1000 artifacts; recover the exact publisher run manually')
     if recorded is not None and not matches:
         return None

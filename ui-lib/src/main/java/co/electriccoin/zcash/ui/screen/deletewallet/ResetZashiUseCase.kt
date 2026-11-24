@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
 import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -47,13 +48,18 @@ class ResetZashiUseCase(
 ) {
     private val resetMutex = Mutex()
     private val running = MutableStateFlow(false)
+    private val pendingFailure = MutableStateFlow<PendingResetFailure?>(null)
     val isRunning = running.asStateFlow()
     val isPending = progressStore.isPending
+    internal val failedAttempt = pendingFailure.asStateFlow()
+
+    internal fun dismissFailure(failure: PendingResetFailure) = pendingFailure.compareAndSet(failure, null)
 
     @Suppress("TooGenericExceptionCaught", "ReturnCount")
     suspend operator fun invoke(keepFiles: Boolean) {
         if (!resetMutex.tryLock()) return
         running.value = true
+        pendingFailure.value = null
         try {
             val stage = progressStore.getStage()
             if (stage == null) requestBiometrics()
@@ -61,17 +67,21 @@ class ResetZashiUseCase(
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
-                progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
-                prepareReset(keepFiles, stage)
-                if (stage != ResetStage.CLEAR_PREFERENCES) {
-                    closeSynchronizer()
-                    clearSDK()
-                }
-                progressStore.store(ResetStage.CLEAR_PREFERENCES)
-                clearSharedPrefs()
-                homeMessageCacheRepository.reset()
-                progressStore.store(null)
-                walletWriteAccess.finishReset()
+                runCatchingRecoverable {
+                    progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
+                    prepareReset(keepFiles, stage)
+                    if (stage != ResetStage.CLEAR_PREFERENCES) {
+                        closeSynchronizer()
+                        clearSDK()
+                    }
+                    progressStore.store(ResetStage.CLEAR_PREFERENCES)
+                    clearSharedPrefs()
+                    homeMessageCacheRepository.reset()
+                    progressStore.store(null)
+                    walletWriteAccess.finishReset()
+                }.onFailure {
+                    if (isPending.value) pendingFailure.value = PendingResetFailure()
+                }.getOrThrow()
             }
         } catch (_: BiometricsFailureException) {
             // Wait for another confirmation.
@@ -83,6 +93,8 @@ class ResetZashiUseCase(
             resetMutex.unlock()
         }
     }
+
+    internal class PendingResetFailure
 
     private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {

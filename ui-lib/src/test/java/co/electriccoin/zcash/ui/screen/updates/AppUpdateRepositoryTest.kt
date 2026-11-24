@@ -139,7 +139,7 @@ class AppUpdateRepositoryTest {
     fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry(): Unit = runBlocking {
         for (previous in listOf<Long?>(null, 123L)) {
             preferences.edit().clear().apply()
-            previous?.let { preferences.edit().putLong("last_check", it).apply() }
+            previous?.let { preferences.edit().putLong("last_completed_check", it).apply() }
             val entered = CompletableDeferred<Unit>()
             val provider = UpdateTestClientProvider {
                 entered.complete(Unit)
@@ -150,10 +150,10 @@ class AppUpdateRepositoryTest {
             val checking = launch { repository.check() }
             withTimeout(10_000) { entered.await() }
             assertIs<AppUpdateState.Checking>(repository.state.value)
+            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
             checking.cancelAndJoin()
 
-            assertEquals(previous != null, preferences.contains("last_check"))
-            previous?.let { assertEquals(it, preferences.getLong("last_check", 0)) }
+            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
             assertIs<AppUpdateState.Idle>(repository.state.value)
             provider.reply = { releaseMetadata(200) }
             repository.check()
@@ -163,19 +163,38 @@ class AppUpdateRepositoryTest {
     }
 
     @Test
+    fun interruptedLegacyAttemptDoesNotSuppressAutomaticCheck(): Unit = runBlocking {
+        val now = UPDATE_INTERVAL_MILLIS * 2
+        preferences.edit()
+            .putLong("last_check", now - 1)
+            .putLong("release_checked_at", now - UPDATE_INTERVAL_MILLIS)
+            .putBoolean("last_check_failed", true)
+            .apply()
+        val provider = UpdateTestClientProvider { releaseMetadata(200) }
+        val repository = AppUpdateRepository(context, provider) { now }
+
+        repository.check()
+
+        assertEquals(1, provider.requests)
+        assertEquals(now, preferences.getLong("last_completed_check", -1L))
+        assertFalse(preferences.contains("last_check"))
+        assertEquals(200, repository.cachedNotice()?.versionCode)
+    }
+
+    @Test
     fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries(): Unit = runBlocking {
         val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
         val repository = AppUpdateRepository(context, provider)
         assertTrue(repository.enabled)
         repository.check()
         assertIs<AppUpdateState.Failed>(repository.state.value)
-        val lastCheck = preferences.getLong("last_check", 0)
+        val lastCheck = preferences.getLong("last_completed_check", 0)
         assertTrue(lastCheck > 0)
 
         val recreated = AppUpdateRepository(context, provider)
         recreated.check()
         assertEquals(1, provider.requests)
-        assertEquals(lastCheck, preferences.getLong("last_check", 0))
+        assertEquals(lastCheck, preferences.getLong("last_completed_check", 0))
         provider.reply = { releaseMetadata(200) }
         recreated.check(manual = true)
         assertEquals(2, provider.requests)

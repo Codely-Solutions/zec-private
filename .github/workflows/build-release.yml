@@ -657,9 +657,24 @@ jobs:
           ATTESTATION_DIGEST: ${{ steps.publication.outputs.attestation_digest }}
           PUBLISH_SIGNED_RELEASE: 'true'
         run: python3 -B .private/publish.py
-  resume_draft:
+  draft_readiness:
     needs: [admit, reconcile_input]
-    if: github.event_name == 'workflow_dispatch' && needs.reconcile_input.result == 'success' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
+    if: needs.reconcile_input.result == 'success' && inputs.resume_draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Check draft recovery readiness
+        env:
+          SIGNING_READY: ${{ vars.PRODUCTION_SIGNING_READY }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$SIGNING_READY" != true ]]; then
+            echo '::error::Draft recovery requires a main workflow dispatch and enabled production signing.'
+            exit 1
+          fi
+  resume_draft:
+    needs: [admit, reconcile_input, draft_readiness]
+    if: github.event_name == 'workflow_dispatch' && needs.reconcile_input.result == 'success' && needs.draft_readiness.result == 'success' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
     concurrency:
       group: zec-private-release
       queue: max
@@ -822,7 +837,7 @@ jobs:
         run: python3 -B .private/notify.py 'ZEC Private candidate validation passed.'
   failed:
     if: ${{ always() && !cancelled() && needs.admit.outputs.main == 'true' && needs.reconcile_input.outputs.invalid != 'true' && (!inputs.preflight_only || needs.reconcile_input.result == 'failure' || needs.reconcile_input.result == 'cancelled') && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
-    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration, admit, reconcile_input]
+    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, draft_readiness, resume_draft, reconcile, verify_publication, record_integration, admit, reconcile_input]
     concurrency:
       group: zec-private-blocker
       queue: max
@@ -846,14 +861,17 @@ jobs:
           PUBLICATION: ${{ needs.publish.result }}
           RECONCILIATION: ${{ needs.reconcile.result }}
           RECONCILIATION_ADMISSION: ${{ needs.reconcile_input.result }}
+          DRAFT_READINESS: ${{ needs.draft_readiness.result }}
           PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
           INTEGRATION: ${{ needs.record_integration.result }}
           HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
           QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}
-          BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
+          BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; draft-readiness=${{ needs.draft_readiness.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
         run: |
           if [[ "$RECONCILIATION_ADMISSION" == failure || "$RECONCILIATION_ADMISSION" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private reconciliation admission result is $RECONCILIATION_ADMISSION. Check the workflow and retry the dispatch."
+          elif [[ "$DRAFT_READINESS" == failure || "$DRAFT_READINESS" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private draft recovery stopped at the readiness check. Verify production signing is enabled before retrying the same exact publisher."
           elif [[ "$PUBLIC_VERIFICATION" == failure || "$PUBLIC_VERIFICATION" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification result is $PUBLIC_VERIFICATION."
           elif [[ "$INTEGRATION" == failure || "$INTEGRATION" == cancelled ]]; then

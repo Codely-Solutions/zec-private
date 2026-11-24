@@ -306,7 +306,7 @@ class PublishMetadataTest(unittest.TestCase):
             'actions/runs/7/artifacts?per_page=100': [{'artifacts': [artifact]}],
             'actions/runs/7/attempts/1': run,
             'actions/runs/7/attempts/1/jobs?per_page=100': [{'jobs': [job]}],
-            'releases/tags/' + tag: live,
+            'releases?per_page=100': [[live]],
             'git/matching-refs/tags/' + tag: [{'ref': 'refs/tags/' + tag,
                                                 'object': {'sha': source, 'type': 'commit'}}],
         }
@@ -349,6 +349,17 @@ class PublishMetadataTest(unittest.TestCase):
                 reconcile.resolve('7', '2', '54')
             download.assert_not_called()
             self.assertEqual(reconcile.resolve('7'), result)
+
+            unreadable = 'actions/runs/7/attempts/2'
+            def timeout_second(path, *_):
+                if path == unreadable:
+                    raise subprocess.TimeoutExpired('gh api', 30)
+                return routes[path]
+
+            with patch.object(reconcile, 'gh', side_effect=timeout_second):
+                with self.assertRaisesRegex(reconcile.IncompleteProofSearch, 'read GitHub proof data'):
+                    reconcile.resolve('7')
+                self.assertEqual(reconcile.resolve('7', '1', '53'), result)
 
             # Another job can upload into the same run during the publisher's job window.
             publisher_archive_time = artifact['created_at']

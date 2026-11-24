@@ -22,6 +22,17 @@ PUBLISHERS = {
 PUBLISHER_CONCLUSIONS = ('success', 'failure', 'cancelled')
 
 
+class IncompleteProofSearch(RuntimeError):
+    """An operational failure prevented an observed publisher proof from being classified."""
+
+
+def proof_api(path, *options):
+    try:
+        return gh(path, *options)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        raise IncompleteProofSearch('Could not read GitHub proof data; retry or use the exact publisher selector') from error
+
+
 def publisher_job(run, jobs, run_id, repository, *, attempt=None):
     definition = PUBLISHERS.get(run.get('path'))
     require(definition is not None and run['id'] == run_id
@@ -79,7 +90,7 @@ def validate_selector(run_id, attempt, artifact_id, *, allow_draft=False):
 
 def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
     validate_selector(run_id, attempt, artifact_id, allow_draft=allow_draft)
-    pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
+    pages = proof_api(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     artifacts = [item for page in pages for item in page['artifacts']]
     attestations = [item for item in artifacts if item['expired'] is False
                     and re.fullmatch(r'release-attestation-[1-9][0-9]*', item['name'])]
@@ -91,9 +102,11 @@ def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
     for item in attestations:
         try:
             matches.append(verify_attempt(run_id, item, artifacts, allow_draft=allow_draft, target=target))
-        except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        except ValueError:
             if artifact_id:
                 raise
+        except (OSError, subprocess.SubprocessError) as error:
+            raise IncompleteProofSearch('Could not read publisher proof bytes; retry or use the exact publisher selector') from error
     require(len(matches) == 1, 'Expected one live publisher attestation matching the release')
     return matches[0]
 
@@ -102,12 +115,12 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
     attempt = int(artifact['name'].removeprefix('release-attestation-'))
     require(sum(row['name'] == artifact['name'] and row['expired'] is False for row in artifacts) == 1,
             'Ambiguous attestation for the original publisher attempt')
-    run = gh(f'actions/runs/{run_id}/attempts/{attempt}')
-    pages = gh(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100', '--paginate', '--slurp')
+    run = proof_api(f'actions/runs/{run_id}/attempts/{attempt}')
+    pages = proof_api(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100', '--paginate', '--slurp')
     job = publisher_job(run, [job for page in pages for job in page['jobs']], int(run_id),
                         os.environ['GITHUB_REPOSITORY'], attempt=attempt)
     producer = artifact_producer_job(run, [job], artifact,
-                                     lambda number: gh(f'actions/runs/{run_id}/attempts/{number}'),
+                                     lambda number: proof_api(f'actions/runs/{run_id}/attempts/{number}'),
                                      role='attestation', conclusions=PUBLISHER_CONCLUSIONS)
     verify_attestation_upload(producer, artifact)
     raw = archive_bytes(artifact, run, 'release-attestation')
@@ -134,7 +147,7 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
     elif allow_draft:
         release = release_for_tag(tag)
     else:
-        release = gh(f'releases/tags/{tag}')
+        release = release_for_tag(tag, releases=proof_api('releases?per_page=100', '--paginate', '--slurp'))
     pending = release is None or release['draft'] is True
     require(not pending or allow_draft, 'Public reconciliation requires the complete live release')
     if release is not None:
@@ -143,9 +156,9 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
         from published_history import release_tag_matches
 
         from publish import tag_object
-        obj = tag_object(tag, gh)
+        obj = tag_object(tag, proof_api)
         require(obj is not None and release_tag_matches(tag, attestation['source_sha'], attestation['apk_sha256'],
-                                                        release['id'], obj, gh), 'Public tag differs from the attestation')
+                                                        release['id'], obj, proof_api), 'Public tag differs from the attestation')
     output = dict(release_tag=tag, attestation_id=artifact['id'], attestation_digest=digest(data),
                   attestation_attempt=attempt, controller_sha=run['head_sha'])
     return output, attestation, release

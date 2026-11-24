@@ -77,6 +77,7 @@ class ResetZashiVMTest {
     private val diagnostics = mockk<GetSupportUseCase>()
     private lateinit var reportAccess: WalletReportAccess
     private lateinit var progress: ResetProgressStore
+    private lateinit var newViewModel: () -> ResetZashiVM
     private lateinit var vm: ResetZashiVM
 
     @BeforeTest
@@ -192,6 +193,46 @@ class ResetZashiVMTest {
         coVerify(exactly = 1) { metadata.delete() }
     }
 
+    @Test
+    fun pendingRootOwnerReceivesFirstFailureAfterSettingsOwnerIsReplaced(): Unit = runBlocking {
+        val enteredErase = CompletableDeferred<Unit>()
+        val firstResult = CompletableDeferred<Boolean>()
+        every { coordinator.deleteSdkDataFlow() } returnsMany listOf(
+            flow {
+                enteredErase.complete(Unit)
+                emit(firstResult.await())
+            },
+            flowOf(true),
+        )
+        createViewModel()
+        val settingsOwner = vm
+        assertNotNull(vm.state.value.content).buttonState.onClick()
+        val confirmed = awaitState { it.content?.confirmationDialog != null }
+        val confirmation = assertNotNull(confirmed.content?.confirmationDialog)
+        try {
+            confirmation.primaryAction.onClick()
+            withTimeout(10.seconds) { enteredErase.await() }
+            vm = newViewModel()
+            assertTrue(assertNotNull(vm.state.value.content).isPending)
+            settingsOwner.viewModelScope.coroutineContext[Job]?.cancel()
+        } finally {
+            firstResult.complete(false)
+            settingsOwner.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+        }
+
+        val failure = awaitState { it.error != null && it.content?.isPending == true }
+        val sheet = assertIs<LceError.BottomSheet>(failure.error).state
+        assertEquals(stringRes(R.string.wallet_reset_failed), sheet.message)
+        assertNotNull(sheet.secondaryAction).onClick()
+        val chooser = assertNotNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        coVerify(exactly = 0) { diagnostics() }
+        val pending = assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content)
+        pending.buttonState.onClick()
+        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
+        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
+    }
+
     private fun createViewModel() {
         val context = mockk<Context> {
             every { noBackupFilesDir } returns directory.root
@@ -226,7 +267,9 @@ class ResetZashiVMTest {
             walletWriteAccess = writeAccess,
         )
         val sendEmail = SendEmailUseCase(RuntimeEnvironment.getApplication(), diagnostics, mockk())
-        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(sendEmail, mockk(), reportAccess))
+        val errorMapper = ErrorMapperUseCase(sendEmail, mockk(), reportAccess)
+        newViewModel = { ResetZashiVM(navigation, reset, errorMapper) }
+        vm = newViewModel()
     }
 
     private suspend fun awaitState(predicate: (LceState<ResetZashiState>) -> Boolean) =

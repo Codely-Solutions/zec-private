@@ -8,27 +8,31 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
  * could have altered it on its way in. As with ZIP 321 `zcash:` URIs, which go to [ThirdPartyScan] and from there to
  * the app's own scanner, the user is asked to scan the code again with the app.
  *
- * A gift card link opens the gift card scanner once the authorized wallet is ready. Only the host distinguishes
- * gift links from other links. Navigation receives the scanner request without any part of the URI.
+ * A gift card link opens the gift card scanner once the authorized wallet is ready. Navigation receives the
+ * scanner request without any part of the URI.
  */
 class HandleExternalLinkUseCase(private val launchNavigation: LaunchNavigationRequests) {
     /**
-     * @param host the link's host, which is all that is needed to route it.
+     * @param scheme the URI scheme selected by the manifest.
+     * @param host the public host used to recognize gift links.
      * @param isRedelivery whether the intent is one that was already handled (a recreated activity, a relaunch from
      * recents).
      * @return whether the link was a gift card link, which the caller must then drop from the intent.
      */
     operator fun invoke(
+        scheme: String?,
         host: String?,
         isRedelivery: Boolean
-    ): Boolean =
-        if (host.equals(GIFT_CARD_HOST, ignoreCase = true)) {
-            if (!isRedelivery) launchNavigation.requestGiftScan()
-            true
-        } else {
-            launchNavigation.requestThirdPartyScan()
-            false
+    ): Boolean {
+        val gift = scheme.equals("https", ignoreCase = true) && host.equals(GIFT_CARD_HOST, ignoreCase = true)
+        if (!isRedelivery) {
+            when {
+                gift -> launchNavigation.requestGiftScan()
+                scheme.equals("zcash", ignoreCase = true) -> launchNavigation.requestThirdPartyScan()
+            }
         }
+        return gift
+    }
 
     companion object {
         /** Must match the app link intent filter in the app module's manifest. */

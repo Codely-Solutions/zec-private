@@ -443,6 +443,24 @@ class MaintenanceWatchTest(unittest.TestCase):
                     self.assertEqual(len(fixture.messages), 1)
                     self.assertIn('Reconciliation admission stopped', fixture.messages[0])
 
+    def test_admitted_draft_recovery_checks_readiness_before_entering_signing(self):
+        workflow = 'build-release.yml'
+        gate = workflow_job(workflow, 'draft_readiness')
+        signing = workflow_job(workflow, 'resume_draft')
+        failed = workflow_job(workflow, 'failed')
+        values = {'inputs.resume_draft': True, 'inputs.reconciliation_run': '7',
+                  'inputs.reconciliation_attempt': '1', 'inputs.reconciliation_artifact': '53',
+                  'inputs.candidate_run': '', 'github.event_name': 'workflow_dispatch'}
+        self.assertTrue(job_activates(gate, dict(reconcile_input='success'), **values))
+        self.assertFalse(job_activates(gate, dict(reconcile_input='failure'), **values))
+        self.assertNotIn('environment:', gate['block'])
+        self.assertIn('permissions: {}', gate['block'])
+        self.assertIn('"$SIGNING_READY" != true', gate['block'])
+        self.assertFalse(job_activates(signing, dict(reconcile_input='success', draft_readiness='failure'), **values))
+        self.assertTrue(job_activates(failed, dict(reconcile_input='success', draft_readiness='failure'), **values))
+        self.assertTrue(job_activates(signing, dict(reconcile_input='success', draft_readiness='success'), **values))
+        self.assertIn('Verify production signing is enabled', failed['block'])
+
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
         recovery = workflow_job('sync-upstream-main.yml', 'discovery_recovered')
         passed = dict(maintenance='success', prepare='success')
@@ -726,6 +744,11 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertEqual(pending_recovery('repos/fork/wallet', directory),
                                  dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='42'))
                 lookup.assert_called_once_with('4', '2', '42', target=latest)
+            from reconcile_release import IncompleteProofSearch
+            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+                    patch('reconcile_release.lookup', side_effect=IncompleteProofSearch('Proof read timed out')):
+                with self.assertRaisesRegex(IncompleteProofSearch, 'timed out'):
+                    pending_recovery('repos/fork/wallet', directory)
             notices.run_notice('Original publisher verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
                                NTFY_URL='', BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:4:2:42',
                                BLOCKER_ATTESTATION='42', GITHUB_RUN_ID='22')
