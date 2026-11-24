@@ -17,7 +17,7 @@ class HandleExternalLinkUseCase(private val launchNavigation: LaunchNavigationRe
      * @param host the public host used to recognize gift links.
      * @param isRedelivery whether the intent is one that was already handled (a recreated activity, a relaunch from
      * recents).
-     * @return whether the link was a gift card link, which the caller must then drop from the intent.
+     * @return whether the caller should drop the recognized URI from the intent.
      */
     operator fun invoke(
         scheme: String?,
@@ -25,13 +25,14 @@ class HandleExternalLinkUseCase(private val launchNavigation: LaunchNavigationRe
         isRedelivery: Boolean
     ): Boolean {
         val gift = scheme.equals("https", ignoreCase = true) && host.equals(GIFT_CARD_HOST, ignoreCase = true)
+        val payment = scheme.equals("zcash", ignoreCase = true)
         if (!isRedelivery) {
             when {
                 gift -> launchNavigation.requestGiftScan()
-                scheme.equals("zcash", ignoreCase = true) -> launchNavigation.requestThirdPartyScan()
+                payment -> launchNavigation.requestThirdPartyScan()
             }
         }
-        return gift
+        return gift || payment
     }
 
     companion object {

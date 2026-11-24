@@ -297,7 +297,7 @@ val useCaseModule =
         factoryOf(::ValidateSwapABContactAddressUseCase)
         factoryOf(::NavigateToNearPayUseCase)
         factoryOf(::SaveORSwapUseCase)
-        factoryOf(::GetReloadableSwapQuoteUseCase)
+        factory { GetReloadableSwapQuoteUseCase(get(), get()) }
         factoryOf(::ShareQRUseCase)
         factoryOf(::GetVKUseCase)
         factoryOf(::GetActivitiesUseCase)

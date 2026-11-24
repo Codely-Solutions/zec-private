@@ -67,7 +67,9 @@ class ResetZashiVM(
     private fun pendingError(failure: ResetZashiUseCase.PendingResetFailure) = errorStateMapper.mapToState(
         error = LceContent.Error(
             cause = IllegalStateException("Pending wallet reset failed"),
-            restart = { if (resetZashi.dismissFailure(failure)) onConfirmReset() },
+            restart = {
+                if (!resetZashi.isRunning.value && resetZashi.dismissFailure(failure)) onConfirmReset()
+            },
             dismiss = { resetZashi.dismissFailure(failure) },
         ),
         message = stringRes(R.string.wallet_reset_failed),

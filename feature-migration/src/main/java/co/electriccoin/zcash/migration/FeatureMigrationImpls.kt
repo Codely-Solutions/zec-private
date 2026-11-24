@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationGateBypassStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.CheckMigrationRecoveryUseCase
 import co.electriccoin.zcash.ui.common.usecase.DebugStartMigrationE2EUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
@@ -152,6 +153,7 @@ class MigrationAppHooksImpl(
     private val resetProgress: ResetProgressStore,
     private val migrationLiveDriver: MigrationLiveDriver,
     private val migrationDriveOnce: MigrationDriveOnce,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
 ) : MigrationAppHooks {
     override fun handleIntent(
         intent: Intent,
@@ -169,33 +171,11 @@ class MigrationAppHooksImpl(
 
             intent.component != ComponentName(context, MainActivity::class.java) -> false
 
-            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
-                // replaceAll ensures Home is always on the back stack regardless of how the app
-                // was opened. Account selection first — the migration screens read the SELECTED
-                // account, so a Keystone notification tapped with Zodl selected must switch.
-                scope.launch {
-                    selectNotificationAccount(intent)
-                    requestProgressScreen()
-                }
-                true
-            }
-
-            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
-                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
-                // app open exists purely to give the OS a live process. RE-KICK the worker
-                // immediately (it runs fine while the app is foreground) and land on Progress so
-                // the user watches the step happen; the worker's run start clears the
-                // notification.
-                scope.launch {
-                    selectNotificationAccount(intent)
-                    intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)?.takeUnless {
-                        resetProgress.isPending.value
-                    }?.let { key ->
-                        migrationLog("AppHooks: step-due tap — kicking the worker for $key")
-                        MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
-                    }
-                    requestProgressScreen()
-                }
+            isMigrationNotification(intent) -> {
+                val ownerKey = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)
+                openNotificationProgress(
+                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
+                )
                 true
             }
 
@@ -204,42 +184,31 @@ class MigrationAppHooksImpl(
             }
         }
 
-    private fun requestProgressScreen() {
-        if (!resetProgress.isPending.value) {
-            launchNavigation.requestMigrationProgress(
-                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs))
-            )
-        }
-    }
+    private fun isMigrationNotification(intent: Intent) =
+        intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
+            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 
-    /**
-     * Selects the account the tapped notification belongs to (its storage-key id travels in
-     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
-     * SELECTED account — are pushed. No-op when the extra is absent (pre-upgrade notification),
-     * the account no longer exists (deleted/disconnected — the kill switch already cancelled its
-     * notifications; navigation then just shows the selected account, same as before), or it is
-     * already selected. Best-effort: a failure here must never block the navigation itself.
-     */
-    private suspend fun selectNotificationAccount(intent: Intent) {
-        val accountKeyId = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID) ?: return
-        runCatching {
-            val target =
-                accountDataSource
-                    .getAllAccounts()
-                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == accountKeyId }
-                    ?: return
-            if (accountDataSource
-                    .getSelectedAccount()
-                    .sdkAccount.accountUuid
-                    .toStorageKeyId() != accountKeyId
-            ) {
-                migrationLog("AppHooks: notification tap — switching to account $accountKeyId")
-                accountDataSource.selectAccount(target)
+    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope) =
+        openNotificationProgress(ownerKey, scope, runStep = false)
+
+    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
+        if (resetProgress.isPending.value) return
+        val generation = walletWriteAccess.token()
+        val key = ownerKey?.takeIf(ACCOUNT_KEY::matches)
+        scope.launch {
+            val target = key?.let {
+                accountDataSource.getAllAccounts().firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
             }
-        }.onFailure {
-            migrationLog(
-                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
-            )
+            walletWriteAccess.write(generation) {
+                target?.let { accountDataSource.selectAccount(it) }
+                if (target != null && key != null && runStep) {
+                    MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
+                }
+                launchNavigation.requestMigrationProgress(
+                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)),
+                    key.takeIf { target != null },
+                )
+            }
         }
     }
 
@@ -272,6 +241,10 @@ class MigrationAppHooksImpl(
             migrationNotifier.cancel(key)
         }
         migrationLog("AppHooks: cancelled migration work (accounts=${keys.size}, sweep=${accountKeyId == null})")
+    }
+
+    private companion object {
+        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
     }
 }
 

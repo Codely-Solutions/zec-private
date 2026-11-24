@@ -25,9 +25,9 @@ class LaunchNavigationRequests {
         }
     }
 
-    internal fun restoreExternalScans(saved: List<String>) {
+    internal fun restoreExternalScans(saved: List<String>): Boolean {
         // The same process already owns the current queue, including requests it consumed after saving state.
-        if (restoredExternalScans) return
+        if (restoredExternalScans) return false
         restoredExternalScans = true
         for (kind in saved) {
             when (kind) {
@@ -35,9 +35,14 @@ class LaunchNavigationRequests {
                 Kind.THIRD_PARTY_SCAN.name -> requestThirdPartyScan()
             }
         }
+        return true
     }
 
-    fun requestMigrationProgress(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_PROGRESS, command)
+    fun requestMigrationProgress(command: NavigationCommand.ReplaceAll, ownerKey: String? = null) =
+        offer(Kind.MIGRATION_PROGRESS, command, ownerKey)
+
+    internal fun saveMigrationNotice(): ArrayList<String>? =
+        pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS }?.let { ArrayList(listOfNotNull(it.ownerKey)) }
 
     fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 
@@ -63,14 +68,14 @@ class LaunchNavigationRequests {
         }
     }
 
-    private fun offer(kind: Kind, command: NavigationCommand) {
+    private fun offer(kind: Kind, command: NavigationCommand, ownerKey: String? = null) {
         pending.update { queue ->
-            val request = Request(kind, command)
+            val request = Request(kind, command, ownerKey)
             if (request in queue) queue else queue.filterNot { it.kind == kind } + request
         }
     }
 
-    internal data class Request(val kind: Kind, val command: NavigationCommand)
+    internal data class Request(val kind: Kind, val command: NavigationCommand, val ownerKey: String? = null)
 
     internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
 }

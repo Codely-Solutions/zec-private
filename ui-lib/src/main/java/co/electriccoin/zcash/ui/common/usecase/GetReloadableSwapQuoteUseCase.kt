@@ -1,18 +1,23 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 class GetReloadableSwapQuoteUseCase(
     private val getSwapStatus: GetSwapStatusUseCase,
+    private val metadataRepository: MetadataRepository? = null,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(depositAddress: String) =
@@ -33,20 +38,27 @@ class GetReloadableSwapQuoteUseCase(
                     .onStart { emit(Unit) }
                     .flatMapLatest { getSwapStatus.observe(depositAddress) }
 
-            swapFlow
-                .map { status ->
-                    SwapData(
-                        data = status,
-                        handle = reloadHandle
-                    )
-                }.collect {
-                    send(it)
-                }
+            val accepted = metadataRepository?.observeSwapMetadata()?.map { swaps ->
+                swaps?.firstOrNull { it.depositAddress == depositAddress }
+            } ?: flowOf(null)
+            swapFlow.combine(accepted.onStart { emit(null) }) { status, saved ->
+                SwapData(data = status.withAcceptedStatus(saved), handle = reloadHandle)
+            }.collect { send(it) }
 
             awaitClose {
                 // do nothing
             }
         }.distinctUntilChanged()
+
+    private fun SwapQuoteStatusData.withAcceptedStatus(saved: TransactionSwapMetadata?): SwapQuoteStatusData {
+        val previous = savedMetadata
+        val owner = previous?.ownerAccount?.sdkAccount?.accountUuid
+        return if (previous != null && saved != null && owner != null &&
+            saved.ownerAccount?.sdkAccount?.accountUuid == owner &&
+            previous.walletWriteToken == saved.walletWriteToken &&
+            previous.matchesStoredSwap(saved)
+        ) withSavedObservation(saved) else this
+    }
 }
 
 data class SwapData(

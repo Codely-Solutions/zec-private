@@ -324,6 +324,28 @@ class SwapSupportVMTest {
         }
     }
 
+    @Test
+    fun pendingResetRevokesOriginalQuoteShareWhileTheFinalReadIsSuspended() = runTest {
+        withQuoteSupport {
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } coAnswers {
+                entered.complete(Unit)
+                release.await()
+                tracked
+            }
+            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
+            assertTrue(shareQuote.isEnabled)
+            shareQuote.onClick()
+            runCurrent()
+            assertTrue(entered.isCompleted)
+            pendingReset.value = true
+            release.complete(Unit)
+            runCurrent()
+            assertNull(nextChooser())
+        }
+    }
+
     private fun TestScope.withQuoteSupport(test: QuoteSupportFixture.() -> Unit) {
         val application = RuntimeEnvironment.getApplication()
         val share = SendEmailUseCase(application, mockk(), BlockchainProviderImpl(application))
@@ -332,7 +354,7 @@ class SwapSupportVMTest {
         }
         val tracked = saved.copy(
             ownerAccount = owner,
-            walletWriteToken = 2L,
+            walletWriteToken = 0L,
             signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote),
         )
         val getStatus = mockk<GetSwapStatusUseCase> {
@@ -343,6 +365,10 @@ class SwapSupportVMTest {
             coEvery { reloadSwapMetadata(tracked) } returns tracked
         }
         val session = AppAccessSession().apply { unlock() }
+        val pendingReset = MutableStateFlow(false)
+        val progress = mockk<co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore> {
+            every { isPending } returns pendingReset
+        }
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
             GetReloadableSwapQuoteUseCase(getStatus),
@@ -351,12 +377,14 @@ class SwapSupportVMTest {
             metadata,
             session,
             accountSource(MutableStateFlow(owner)),
-            WalletWriteAccess(),
+            WalletWriteAccess(progress),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
             runCurrent()
-            QuoteSupportFixture(vm, metadata, tracked, session) { shadowOf(application).nextStartedActivity }.test()
+            QuoteSupportFixture(vm, metadata, tracked, session, pendingReset) {
+                shadowOf(application).nextStartedActivity
+            }.test()
         } finally {
             subscription.cancel()
             vm.viewModelScope.cancel()
@@ -376,6 +404,7 @@ class SwapSupportVMTest {
         val metadata: MetadataRepository,
         val tracked: TransactionSwapMetadata,
         val session: AppAccessSession,
+        val pendingReset: MutableStateFlow<Boolean>,
         val nextChooser: () -> Intent?,
     )
 

@@ -178,13 +178,11 @@ class SwapActivityStatusTest {
         val poll = UpdateSwapActivityMetadataUseCase(
             accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
         )
-        runCurrent()
         repeat(3) { poll(ActivityData.BySwap(pendingFirst)) }
         runCurrent()
         coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
 
         selection.value = second
-        runCurrent()
         poll(ActivityData.BySwap(pendingFirst))
         repeat(3) { poll(ActivityData.BySwap(pendingSecond)) }
         runCurrent()

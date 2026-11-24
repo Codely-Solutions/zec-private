@@ -110,9 +110,9 @@ class GetSwapStatusUseCase(
         }
 
     private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
-        status == saved.status &&
+        this === saved || (statusUpdatedAt == saved.statusUpdatedAt && status == saved.status &&
             (executedAmountOut == null) == (saved.executedAmountOut == null) &&
-            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0
+            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0)
 
     private suspend fun refresh(
         depositAddress: String,
@@ -160,7 +160,7 @@ data class SwapQuoteStatusData(
         return when {
             !saved.matchesStoredSwap(observed) -> copy(status = null, savedMetadata = observed)
             previousAt != null && (observedAt == null || observedAt < previousAt) -> this
-            saved.matchesDisplayStatus(observed) -> copy(savedMetadata = observed)
+            previousAt == observedAt && saved.matchesDisplayStatus(observed) -> copy(savedMetadata = observed)
             else -> copy(status = null, savedMetadata = observed)
         }
     }

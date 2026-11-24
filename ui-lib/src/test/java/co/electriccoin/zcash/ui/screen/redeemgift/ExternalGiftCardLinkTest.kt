@@ -57,7 +57,7 @@ class ExternalGiftCardLinkTest {
         val launchNavigation = LaunchNavigationRequests()
         val delivered = mutableListOf<NavigationCommand>()
 
-        assertFalse(HandleExternalLinkUseCase(launchNavigation)("zcash", host = null, isRedelivery = false))
+        assertTrue(HandleExternalLinkUseCase(launchNavigation)("zcash", host = null, isRedelivery = false))
         launchNavigation.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
         assertTrue(delivered.isEmpty())
 

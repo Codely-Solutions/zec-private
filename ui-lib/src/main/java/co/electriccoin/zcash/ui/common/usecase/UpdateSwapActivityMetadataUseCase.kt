@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -11,12 +12,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -24,20 +28,22 @@ class UpdateSwapActivityMetadataUseCase(
     accountDataSource: AccountDataSource,
     private val metadataRepository: MetadataRepository,
     private val getSwapStatus: GetSwapStatusUseCase,
-    scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
-    private val active = AtomicReference<PollingSession?>()
+    private val active = MutableStateFlow<PollingSession?>(null)
+    private val selectedAccounts = accountDataSource.selectedAccount
+        .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+    private val awaitingSession = ConcurrentHashMap.newKeySet<Pair<AccountUuid, String>>()
 
     init {
         scope.launch {
-            accountDataSource.selectedAccount
-                .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+            selectedAccounts
                 .collectLatest { owner ->
                     if (owner != null) {
                         supervisorScope {
                             val session = PollingSession(owner, this)
-                            active.set(session)
+                            active.value = session
                             try {
                                 awaitCancellation()
                             } finally {
@@ -50,13 +56,27 @@ class UpdateSwapActivityMetadataUseCase(
     }
 
     operator fun invoke(activity: ActivityData) {
-        val session = active.get() ?: return
         val (metadata, owner) = when (activity) {
             is ActivityData.BySwap -> activity.swap to activity.swap.ownerAccount?.sdkAccount?.accountUuid
             is ActivityData.ByTransaction -> activity.metadata.swapMetadata to activity.transaction.accountUuid
         }
-        if (metadata != null && !metadata.status.isTerminal && owner == session.account.sdkAccount.accountUuid) {
-            session.enqueue(metadata.depositAddress)
+        if (metadata != null && !metadata.status.isTerminal && owner != null) {
+            enqueueWhenActive(owner, metadata.depositAddress)
+        }
+    }
+
+    private fun enqueueWhenActive(owner: AccountUuid, depositAddress: String) {
+        val request = owner to depositAddress
+        if (!awaitingSession.add(request)) return
+        scope.launch {
+            try {
+                val (selected, session) = combine(selectedAccounts, active, ::Pair).first { (account, polling) ->
+                    account?.sdkAccount?.accountUuid != owner || polling?.account?.sdkAccount?.accountUuid == owner
+                }
+                if (selected?.sdkAccount?.accountUuid == owner) session?.enqueue(depositAddress)
+            } finally {
+                awaitingSession.remove(request)
+            }
         }
     }
 

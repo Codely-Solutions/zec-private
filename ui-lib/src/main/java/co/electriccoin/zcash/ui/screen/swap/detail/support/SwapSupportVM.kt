@@ -74,7 +74,8 @@ class SwapSupportVM(
                             ButtonState(
                                 text = stringRes(R.string.reportSwap_shareQuote),
                                 style = ButtonStyle.SECONDARY,
-                                onClick = { onShareOriginalQuote(saved, grant) },
+                                isEnabled = isAllowed(),
+                                onClick = { onShareOriginalQuote(saved, isAllowed) },
                             )
                         }
                 )
@@ -92,19 +93,19 @@ class SwapSupportVM(
         }
     }
 
-    private fun onShareOriginalQuote(expected: TransactionSwapMetadata, grant: AppAccessSession.Grant?) {
+    private fun onShareOriginalQuote(expected: TransactionSwapMetadata, isAllowed: () -> Boolean) {
         val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
         viewModelScope.launch {
-            if (!appAccessSession.permits(grant)) return@launch
+            if (!isAllowed()) return@launch
             val evidence = runCatchingRecoverable {
                 metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
             }.getOrNull() ?: return@launch
-            if (!appAccessSession.permits(grant)) return@launch
+            if (!isAllowed()) return@launch
             val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
             if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
                 selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
             ) return@launch
-            if (appAccessSession.permits(grant)) sendEmailUseCase.shareOriginalQuote(evidence)
+            if (isAllowed()) sendEmailUseCase.shareOriginalQuote(evidence)
         }
     }
 }

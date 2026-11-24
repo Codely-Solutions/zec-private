@@ -87,7 +87,14 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(restorableNavigationState(savedInstanceState))
         Twig.debug { "Activity state: Create" }
-        launchNavigation.restoreExternalScans(savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty())
+        val restoredInNewProcess = launchNavigation.restoreExternalScans(
+            savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty(),
+        )
+        if (restoredInNewProcess) {
+            savedInstanceState?.getStringArrayList(PENDING_MIGRATION_NOTICE)?.let {
+                migrationAppHooks.restoreNotificationProgress(it.singleOrNull(), lifecycleScope)
+            }
+        }
 
         setAllowedScreenOrientation()
 
@@ -105,6 +112,7 @@ class MainActivity : FragmentActivity() {
         super.onSaveInstanceState(outState)
         outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
+        launchNavigation.saveMigrationNotice()?.let { outState.putStringArrayList(PENDING_MIGRATION_NOTICE, it) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -116,9 +124,8 @@ class MainActivity : FragmentActivity() {
 
     /**
      * Links from outside the app are never used as they are: `zcash:` URIs go to the third party scan screen and gift
-     * card app links to the gift card scanner, both asking the user to scan the code with the app instead. A gift
-     * card link is then dropped from the intent: it is not trusted, and it carries a spending secret that must not
-     * stay around in the activity's intent.
+     * card app links to the gift card scanner, both asking the user to scan the code with the app instead. The
+     * recognized link is dropped from the intent after classification.
      */
     private fun handleViewIntent(
         intent: Intent,
@@ -127,8 +134,8 @@ class MainActivity : FragmentActivity() {
         if (intent.action != Intent.ACTION_VIEW) return
         val data = intent.data ?: return
         val isFromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
-        val isGiftCardLink = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
-        if (isGiftCardLink) {
+        val consumed = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
+        if (consumed) {
             intent.data = null
         }
     }
@@ -350,6 +357,7 @@ class MainActivity : FragmentActivity() {
     companion object {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
+        private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
         private const val NAVIGATION_STATE_VERSION = 5
 
         // Forget older navigation stacks when their routes or saved payloads change.
