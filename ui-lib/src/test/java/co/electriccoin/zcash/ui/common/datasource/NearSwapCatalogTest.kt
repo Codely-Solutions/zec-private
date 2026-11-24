@@ -168,13 +168,6 @@ class NearSwapCatalogTest {
                 "\"minAmountOut\": \"${route.destinationAmount.atomic}\"",
                 "\"minAmountOut\": \"${route.destinationAmount.executedAtomic}\""
             ),
-            quote.replace(
-                "\"amountOut\": \"${route.destinationAmount.atomic}\"",
-                "\"amountOut\": \"$fractional\""
-            ).replace(
-                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
-                "\"amountOutFormatted\": \"$formattedFractional\""
-            ),
             quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0\""),
             quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0.5\""),
         )
@@ -182,6 +175,19 @@ class NearSwapCatalogTest {
             coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalid)
             assertFailsWith<SwapQuoteMismatchException.Rejected> { requestQuote(route, SwapMode.FLEX_INPUT) }
         }
+
+        val invalidFraction = quote.replace(
+            "\"amountOut\": \"${route.destinationAmount.atomic}\"",
+            "\"amountOut\": \"$fractional\""
+        ).replace(
+            "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
+            "\"amountOutFormatted\": \"$formattedFractional\""
+        )
+        coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalidFraction)
+        val precision = assertFailsWith<SwapQuoteMismatchException.AmountInconsistency> {
+            requestQuote(route, SwapMode.FLEX_INPUT)
+        }
+        assertEquals(SwapQuoteMismatchType.OUTPUT_AMOUNT, precision.type)
     }
 
     @Test

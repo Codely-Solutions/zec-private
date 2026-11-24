@@ -2788,7 +2788,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt": "54f1ef94ee54cd3edb34d1d15f6b2a290034a453a8e33ab4917dee7e055e87d4",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceTest.kt": "2b0174b1b2b1d397965b291292142602c1f2882ed65b271a3484951efb73d111",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt": "5496dee96eb8ec9bc2981d54ce5da95f9bcd6101058ac61b88dad3363652d0d7",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt": "ad95675a8f5a914a1bb8a5a770cafdca2ea1effdcdfc5252a63a3cdc3dd0e6a2",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt": "81e5303680563c89928f98276c7f4460b9f6e6b639edee61941896ad72854f92",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt": "f557b9cd3d0ee90f78fa36440aded339acc5a1a8be8f803a5d4ee57432337aed",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt": "467d868af1443bb2df5cb5af7d9d51ca0807775cdb1411f8a16908dce295bd01",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt": "bf3b345f38a38b21154181be6c924184d9a389a65d55a725bf6a82a20463502c",

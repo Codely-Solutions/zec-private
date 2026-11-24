@@ -58437,10 +58437,10 @@ index 6cb0997ff..5cc74da4e 100644
 +            SubmitResult.GrpcFailure(txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString())),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
 new file mode 100644
-index 000000000..67f50842c
+index 000000000..cabb8f167
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
-@@ -0,0 +1,472 @@
+@@ -0,0 +1,478 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -58611,13 +58611,6 @@ index 000000000..67f50842c
 +                "\"minAmountOut\": \"${route.destinationAmount.atomic}\"",
 +                "\"minAmountOut\": \"${route.destinationAmount.executedAtomic}\""
 +            ),
-+            quote.replace(
-+                "\"amountOut\": \"${route.destinationAmount.atomic}\"",
-+                "\"amountOut\": \"$fractional\""
-+            ).replace(
-+                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
-+                "\"amountOutFormatted\": \"$formattedFractional\""
-+            ),
 +            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0\""),
 +            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0.5\""),
 +        )
@@ -58625,6 +58618,19 @@ index 000000000..67f50842c
 +            coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalid)
 +            assertFailsWith<SwapQuoteMismatchException.Rejected> { requestQuote(route, SwapMode.FLEX_INPUT) }
 +        }
++
++        val invalidFraction = quote.replace(
++            "\"amountOut\": \"${route.destinationAmount.atomic}\"",
++            "\"amountOut\": \"$fractional\""
++        ).replace(
++            "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
++            "\"amountOutFormatted\": \"$formattedFractional\""
++        )
++        coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalidFraction)
++        val precision = assertFailsWith<SwapQuoteMismatchException.AmountInconsistency> {
++            requestQuote(route, SwapMode.FLEX_INPUT)
++        }
++        assertEquals(SwapQuoteMismatchType.OUTPUT_AMOUNT, precision.type)
 +    }
 +
 +    @Test
