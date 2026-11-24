@@ -233,8 +233,8 @@ class LedgerProposalRepositoryImpl(
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
 
-    override fun approveForSigning(expectedProposal: TransactionProposal?) =
-        hardwareProposal.approve(transactionProposal.value, expectedProposal)
+    override fun approveForSigning(expectedProposal: TransactionProposal?, reviewedQuote: SwapQuoteData.Success?) =
+        hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote)
 
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex
@@ -564,9 +564,10 @@ class LedgerProposalRepositoryImpl(
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction.reserveFunding(proposal) {
                         requireCurrentApproval(prepared)
+                        proposal.requireFundingApproval(prepared.reviewedQuote)
                         ZecSwapComposition.validate(proposal.quote)
                     }
-                    ZecSwapComposition.validate(proposal.quote)
+                    proposal.requireFundingApproval(prepared.reviewedQuote)
                 }
                 requireCurrentApproval(prepared)
                 val result =
@@ -576,6 +577,7 @@ class LedgerProposalRepositoryImpl(
                         beforeFirstSubmission = {
                             requireCurrentApproval(prepared)
                             if (proposal is SwapTransactionProposal) {
+                                proposal.requireFundingApproval(prepared.reviewedQuote)
                                 ZecSwapComposition.validate(proposal.quote)
                             }
                         }

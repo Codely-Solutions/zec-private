@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveTransactionSubmitStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccessfulProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionsAfterSuccessfulProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -53,7 +54,15 @@ class TransactionProgressVM(
     private val sendEmail: SendEmailUseCase,
     private val copyToClipboard: CopyToClipboardUseCase,
     private val navigationRouter: NavigationRouter,
+    reportAccess: WalletReportAccess,
 ) : ViewModel() {
+    private val reportPermission = reportAccess.bind(viewModelScope)
+
+    private fun shareReport(send: suspend (() -> Boolean) -> Unit) {
+        val allowed = reportPermission()
+        if (allowed()) viewModelScope.launch { send(allowed) }
+    }
+
     val state: StateFlow<TransactionProgressState?> =
         combine(observeTransactionProposal.observeNullable(), observeTransactionSubmitState()) {
                 proposal, submitState ->
@@ -133,7 +142,7 @@ class TransactionProgressVM(
             primaryButton =
                 ButtonState(
                     text = stringRes(R.string.errorPage_action_contactSupport),
-                    onClick = { viewModelScope.launch { sendEmail(result) } },
+                    onClick = { shareReport { sendEmail(result, it) } },
                     style = ButtonStyle.PRIMARY
                 ),
             image = imageRes(R.drawable.ic_multi_trx_send_failed),
@@ -440,10 +449,10 @@ class TransactionProgressVM(
                 ButtonState(
                     text = stringRes(co.electriccoin.zcash.ui.design.R.string.send_report),
                     onClick = {
-                        viewModelScope.launch {
+                        shareReport { allowed ->
                             when (result) {
-                                is SubmitResult.Error -> sendEmail(result)
-                                is SubmitResult.Failure -> sendEmail(result)
+                                is SubmitResult.Error -> sendEmail(result, allowed)
+                                is SubmitResult.Failure -> sendEmail(result, allowed)
                             }
                         }
                     },

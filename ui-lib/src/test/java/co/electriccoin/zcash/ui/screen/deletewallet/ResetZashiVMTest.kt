@@ -183,7 +183,7 @@ class ResetZashiVMTest {
             progressStore = progress,
             deleteSharedQRImages = mockk(relaxed = true),
         )
-        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(mockk(), mockk()))
+        vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(mockk(), mockk(), mockk(relaxed = true)))
     }
 
     private suspend fun awaitState(predicate: (LceState<ResetZashiState>) -> Boolean) =

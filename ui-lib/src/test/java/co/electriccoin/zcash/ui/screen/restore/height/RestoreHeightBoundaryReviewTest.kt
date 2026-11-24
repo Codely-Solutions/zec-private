@@ -66,7 +66,7 @@ class RestoreHeightBoundaryReviewTest {
     private val invalid = listOf("$target.5", wrapped, "-1", "${minimum - 1}", "${maximum + 1}", "")
     private val valid = listOf("$minimum" to minimum, "$maximum" to maximum)
     private val router = mockk<NavigationRouter>(relaxed = true)
-    private val errorMapper = ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true))
+    private val errorMapper = ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
 
     @BeforeTest
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())

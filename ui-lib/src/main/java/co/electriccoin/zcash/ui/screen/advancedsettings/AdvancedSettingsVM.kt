@@ -15,7 +15,7 @@ import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletRestoringStateUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToExportPrivateDataUseCase
+import co.electriccoin.zcash.ui.NavigationTargets.EXPORT_PRIVATE_DATA
 import co.electriccoin.zcash.ui.common.usecase.NavigateToResetWalletUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToTaxExportUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToWalletBackupUseCase
@@ -44,7 +44,6 @@ class AdvancedSettingsVM(
     private val navigateToWalletBackup: NavigateToWalletBackupUseCase,
     private val getVersionInfo: GetVersionInfoProvider,
     private val navigateToResetWallet: NavigateToResetWalletUseCase,
-    private val navigateToExportPrivateData: NavigateToExportPrivateDataUseCase,
     private val migrationGate: MigrationGate,
     private val migrationNavigator: MigrationNavigator,
 ) : ViewModel() {
@@ -174,7 +173,7 @@ class AdvancedSettingsVM(
             navigateToWalletBackup(isOpenedFromSeedBackupInfo = false)
         }
 
-    private fun onExportPrivateDataClick() = viewModelScope.launch { navigateToExportPrivateData() }
+    private fun onExportPrivateDataClick() = navigationRouter.forward(EXPORT_PRIVATE_DATA)
 
     private fun onExportVKClick() = navigationRouter.forward(ExportVKArgs)
 

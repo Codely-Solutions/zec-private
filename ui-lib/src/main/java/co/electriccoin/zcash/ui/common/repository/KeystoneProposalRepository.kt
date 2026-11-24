@@ -38,7 +38,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -49,6 +51,10 @@ interface KeystoneProposalRepository {
     val transactionProposal: StateFlow<TransactionProposal?>
 
     val submitState: StateFlow<SubmitProposalState?>
+
+    val signingPreparationIds: Flow<String?>
+
+    fun signingPreparationId(): String?
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createProposal(zecSend: ZecSend)
@@ -87,7 +93,10 @@ interface KeystoneProposalRepository {
     )
     suspend fun createPCZTFromProposal()
 
-    fun approveForSigning(expectedProposal: TransactionProposal? = null)
+    fun approveForSigning(
+        expectedProposal: TransactionProposal? = null,
+        reviewedQuote: SwapQuoteData.Success? = null,
+    )
 
     @Throws(IllegalStateException::class)
     suspend fun createPCZTEncoder(): UREncoder
@@ -100,9 +109,9 @@ interface KeystoneProposalRepository {
      * at all) before they can reach submission.
      */
     @Throws(ParsePCZTException::class)
-    suspend fun parsePCZT(ur: UR): TransactionProposal
+    suspend fun parsePCZT(ur: UR, preparationId: String): TransactionProposal
 
-    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
+    suspend fun submit(expectedProposal: TransactionProposal? = null, preparationId: String? = null): SubmitResult
 
     fun clear()
 
@@ -112,6 +121,8 @@ interface KeystoneProposalRepository {
 }
 
 class ParsePCZTException : Exception()
+
+class MissingKeystoneSigningPreparation : IllegalStateException("The signing session is unavailable.")
 
 /**
  * The scanned signed PCZT came from Keystone firmware below
@@ -147,6 +158,12 @@ class KeystoneProposalRepositoryImpl(
     override val submitState = MutableStateFlow<SubmitProposalState?>(null)
 
     private val hardwareProposal = HardwareProposalBinding()
+
+    override val signingPreparationIds = combine(transactionProposal, hardwareProposal.approved) { _, _ ->
+        signingPreparationId()
+    }
+
+    override fun signingPreparationId(): String? = hardwareProposal.getApproved(transactionProposal.value)?.id
 
     private var pcztWithProofsJob: Job? = null
 
@@ -221,8 +238,8 @@ class KeystoneProposalRepositoryImpl(
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
 
-    override fun approveForSigning(expectedProposal: TransactionProposal?) =
-        hardwareProposal.approve(transactionProposal.value, expectedProposal)
+    override fun approveForSigning(expectedProposal: TransactionProposal?, reviewedQuote: SwapQuoteData.Success?) =
+        hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote)
 
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex
@@ -241,9 +258,10 @@ class KeystoneProposalRepositoryImpl(
             }
         }
 
-    override suspend fun parsePCZT(ur: UR) =
+    override suspend fun parsePCZT(ur: UR, preparationId: String) =
         withContext(Dispatchers.IO) {
-            val prepared = hardwareProposal.requireApproved(transactionProposal.value)
+            val prepared = hardwareProposal.getApproved(transactionProposal.value)
+                ?.takeIf { it.id == preparationId } ?: throw MissingKeystoneSigningPreparation()
             val parsed =
                 try {
                     keystoneSDKProvider.parsePczt(ur)
@@ -265,18 +283,19 @@ class KeystoneProposalRepositoryImpl(
                 Twig.info(logMessage)
             }
 
-            check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
-                "The reviewed transaction changed during signing."
+            if (hardwareProposal.getApproved(transactionProposal.value) !== prepared) {
+                throw MissingKeystoneSigningPreparation()
             }
             prepared.signatures = Pczt(parsed)
             prepared.proposal
         }
 
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
+    override suspend fun submit(expectedProposal: TransactionProposal?, preparationId: String?): SubmitResult =
         scope.async {
             try {
                 val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
+                if (preparationId != null && prepared.id != preparationId) throw MissingKeystoneSigningPreparation()
                 val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
                 submitState.update { SubmitProposalState.Submitting }
                 val proofs = prepared.proofs.await()
@@ -284,9 +303,10 @@ class KeystoneProposalRepositoryImpl(
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction.reserveFunding(proposal) {
                         requireCurrentApproval(prepared)
+                        proposal.requireFundingApproval(prepared.reviewedQuote)
                         ZecSwapComposition.validate(proposal.quote)
                     }
-                    ZecSwapComposition.validate(proposal.quote)
+                    proposal.requireFundingApproval(prepared.reviewedQuote)
                 }
                 requireCurrentApproval(prepared)
                 val result =
@@ -296,6 +316,7 @@ class KeystoneProposalRepositoryImpl(
                         beforeFirstSubmission = {
                             requireCurrentApproval(prepared)
                             if (proposal is SwapTransactionProposal) {
+                                proposal.requireFundingApproval(prepared.reviewedQuote)
                                 ZecSwapComposition.validate(proposal.quote)
                             }
                         }

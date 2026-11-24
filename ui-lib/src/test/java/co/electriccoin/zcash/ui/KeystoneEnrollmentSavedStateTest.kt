@@ -197,7 +197,7 @@ class KeystoneEnrollmentSavedStateTest {
         }
     }
 
-    private fun roundTrip(first: NavHostController, version: Int = 4): NavHostController {
+    private fun roundTrip(first: NavHostController, version: Int = 5): NavHostController {
         val restored = newController()
         val parcel = Parcel.obtain()
         try {

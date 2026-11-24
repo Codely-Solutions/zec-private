@@ -15,14 +15,20 @@ class WalletReportAccess(
     private val walletWriteAccess: WalletWriteAccess,
     private val observeAccount: ObserveSelectedWalletAccountUseCase,
 ) {
+    internal fun captureWallet(): () -> Boolean {
+        val token = walletWriteAccess.token()
+        val grant = appAccessSession.grant.value
+        return { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
+    }
+
     internal fun bind(scope: CoroutineScope): () -> (() -> Boolean) {
         val token = walletWriteAccess.token()
         var owner: Any? = null
         val selections = observeAccount()
             .map { it?.sdkAccount?.accountUuid }
             .distinctUntilChanged()
-            .map { Any() }
-            .onEach { if (owner == null) owner = it }
+            .map { account -> account?.let { Any() } }
+            .onEach { if (owner == null && it != null) owner = it }
             .stateIn(scope, SharingStarted.Eagerly, null)
         return {
             val grant = appAccessSession.grant.value

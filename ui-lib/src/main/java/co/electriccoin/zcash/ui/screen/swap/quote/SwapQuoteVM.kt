@@ -150,7 +150,7 @@ internal class SwapQuoteVM(
         return swapQuoteSuccessMapper.createState(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),
             onBack = { if (swapRepository.quote.value === quote) onBack() },
-            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal) } },
+            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal, quote) } },
             onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
             priceCheck = assessment,
             canFund = { quote.canFund(Clock.System.now()) },
@@ -239,7 +239,8 @@ internal class SwapQuoteVM(
         action()
     }
 
-    private fun onSubmitQuoteClick(proposal: TransactionProposal?) = viewModelScope.launch { submitProposal(proposal) }
+    private fun onSubmitQuoteClick(proposal: TransactionProposal?, quote: SwapQuoteData.Success) =
+        viewModelScope.launch { submitProposal(proposal, quote) }
 
     private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 }

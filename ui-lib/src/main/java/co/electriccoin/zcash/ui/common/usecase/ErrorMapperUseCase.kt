@@ -36,6 +36,7 @@ fun Throwable?.isMigrationWalletTipUnavailable(): Boolean =
 class ErrorMapperUseCase(
     private val sendEmail: SendEmailUseCase,
     private val viewOnlyContent: ViewOnlyContent,
+    private val reportAccess: WalletReportAccess,
 ) {
     private val scope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 
@@ -56,6 +57,7 @@ class ErrorMapperUseCase(
         secondaryStyle: ButtonStyle? = null,
         isSupportFirst: Boolean = false,
         @DrawableRes icon: Int? = null,
+        walletlessOnboarding: Boolean = false,
     ): LceError.BottomSheet {
         val unsupported = (error.cause as? AccountOperationUnsupportedException)?.kind?.errorCopy(viewOnlyContent)
         val isMigrationPaused = error.cause.isMigrationPausedUntilNetworkUpgrade()
@@ -103,6 +105,19 @@ class ErrorMapperUseCase(
             secondaryStyle = secondaryStyle,
             isSupportFirst = isSupportFirst,
             icon = icon,
+            onReport = if (walletlessOnboarding) {
+                { sendEmail.sendOnboardingSupport() }
+            } else {
+                val allowed = reportAccess.captureWallet()
+                val onClick: () -> Unit = {
+                    if (allowed()) {
+                        scope.launch {
+                            sendEmail(error.cause as? Exception ?: Exception(error.cause.message, error.cause), allowed)
+                        }
+                    }
+                }
+                onClick
+            },
         )
     }
 
@@ -114,6 +129,7 @@ class ErrorMapperUseCase(
         secondaryStyle: ButtonStyle?,
         isSupportFirst: Boolean,
         @DrawableRes icon: Int?,
+        onReport: () -> Unit,
     ) = LceError.BottomSheet(
         ZashiConfirmationState.error(
             title = title,
@@ -126,9 +142,7 @@ class ErrorMapperUseCase(
             onBack = error.dismiss,
             onSecondary = {
                 error.dismiss()
-                scope.launch {
-                    sendEmail(error.cause as? Exception ?: Exception(error.cause.message, error.cause))
-                }
+                onReport()
             },
         )
     )

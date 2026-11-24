@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Clock
 
 @Suppress("TooManyFunctions")
 interface SwapRepository {
@@ -113,12 +114,14 @@ sealed interface SwapQuoteData {
     data class Success(
         val quote: SwapQuote,
         val incomingOwner: IncomingSwapOwner? = null,
+        private val fundingClock: Clock = Clock.System,
+        private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     ) : SwapQuoteData {
         private var fundingDeadlineElapsed: Long? = null
         private var fundingExpired = false
 
         @Synchronized
-        internal fun canFund(now: kotlin.time.Instant, elapsed: Long = SystemClock.elapsedRealtime()): Boolean {
+        internal fun canFund(now: kotlin.time.Instant = fundingClock.now(), elapsed: Long = elapsedRealtime()): Boolean {
             val remaining = quote.deadline - now
             val previous = fundingDeadlineElapsed
             val stop = elapsed + remaining.inWholeMilliseconds.coerceIn(0, Long.MAX_VALUE - elapsed)
@@ -140,6 +143,12 @@ sealed interface SwapQuoteData {
     ) : SwapQuoteData
 
     data object Loading : SwapQuoteData
+}
+
+fun SwapTransactionProposal.requireFundingApproval(publication: SwapQuoteData.Success?) {
+    check(publication != null && publication.quote === quote && publication.canFund()) {
+        "The reviewed swap quote is unavailable or expired. Request a fresh quote before sending."
+    }
 }
 
 data class SwapAssetsData(

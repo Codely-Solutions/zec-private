@@ -63,7 +63,10 @@ interface ZashiProposalRepository {
      */
     fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal
 
-    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
+    suspend fun submit(
+        expectedProposal: TransactionProposal? = null,
+        reviewedQuote: SwapQuoteData.Success? = null,
+    ): SubmitResult
 
     suspend fun getTransactionProposal(): TransactionProposal
 
@@ -143,7 +146,10 @@ class ZashiProposalRepositoryImpl(
         MigrationSweepTransactionProposal(amount, proposal).also { sweep -> transactionProposal.update { sweep } }
 
     @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
-    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
+    override suspend fun submit(
+        expectedProposal: TransactionProposal?,
+        reviewedQuote: SwapQuoteData.Success?,
+    ): SubmitResult =
         scope
             .async {
                 val transactionProposal = transactionProposal.value
@@ -179,9 +185,10 @@ class ZashiProposalRepositoryImpl(
                         if (transactionProposal is SwapTransactionProposal) {
                             processSwapTransaction.reserveFunding(transactionProposal) {
                                 requireCurrentProposal(transactionProposal)
+                                transactionProposal.requireFundingApproval(reviewedQuote)
                                 ZecSwapComposition.validate(transactionProposal.quote)
                             }
-                            ZecSwapComposition.validate(transactionProposal.quote)
+                            transactionProposal.requireFundingApproval(reviewedQuote)
                         }
                         requireCurrentProposal(transactionProposal)
                         val result =
@@ -191,6 +198,7 @@ class ZashiProposalRepositoryImpl(
                                 beforeFirstSubmission = {
                                     requireCurrentProposal(transactionProposal)
                                     if (transactionProposal is SwapTransactionProposal) {
+                                        transactionProposal.requireFundingApproval(reviewedQuote)
                                         ZecSwapComposition.validate(transactionProposal.quote)
                                     }
                                 }

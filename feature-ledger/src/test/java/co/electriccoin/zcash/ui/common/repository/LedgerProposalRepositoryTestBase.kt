@@ -69,6 +69,7 @@ abstract class LedgerProposalRepositoryTestBase {
         proofsGate: CompletableDeferred<Unit>? = null,
         onProofsCancelled: () -> Unit = {},
         proposal: TransactionProposal? = null,
+        publication: SwapQuoteData.Success? = null,
     ): Pczt {
         coEvery { accountDataSource.getSelectedAccount() } returns account
         coEvery { proposalDataSource.createProposal(any(), any()) } returns
@@ -99,7 +100,7 @@ abstract class LedgerProposalRepositoryTestBase {
         )
         if (proposal != null) repository.transactionProposal.value = proposal
         repository.createPCZTFromProposal()
-        repository.approveForSigning(repository.getTransactionProposal())
+        repository.approveForSigning(repository.getTransactionProposal(), publication)
         return pczt
     }
 

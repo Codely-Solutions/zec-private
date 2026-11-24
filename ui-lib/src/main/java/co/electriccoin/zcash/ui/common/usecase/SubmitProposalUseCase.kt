@@ -21,6 +21,8 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+import co.electriccoin.zcash.ui.common.repository.requireFundingApproval
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
@@ -57,7 +59,10 @@ class SubmitProposalUseCase(
      * unsupported-operation error instead, before any proposal is read. The proposal must still be the one
      * displayed for review when authentication completes.
      */
-    suspend operator fun invoke(reviewedProposal: TransactionProposal?) {
+    suspend operator fun invoke(
+        reviewedProposal: TransactionProposal?,
+        reviewedQuote: SwapQuoteData.Success? = null,
+    ) {
         if (!submissionMutex.tryLock()) return
         try {
             biometricRepository.requestBiometrics(
@@ -85,17 +90,18 @@ class SubmitProposalUseCase(
             check(proposal === reviewedProposal) {
                 "The reviewed transaction changed. Review it again before sending."
             }
-            check(proposal !is SwapTransactionProposal || kotlin.time.Clock.System.now() < proposal.quote.deadline) {
-                "The swap quote expired. Request a fresh quote before sending."
+            if (proposal is SwapTransactionProposal) {
+                check(swapRepository.quote.value === reviewedQuote) { "The reviewed swap quote changed." }
+                proposal.requireFundingApproval(reviewedQuote)
             }
             when (account) {
                 is KeystoneAccount -> {
-                    keystoneProposalRepository.approveForSigning(proposal)
+                    keystoneProposalRepository.approveForSigning(proposal, reviewedQuote)
                     navigationRouter.replace(SignKeystoneTransactionArgs)
                 }
 
                 is LedgerAccount -> {
-                    ledgerProposalPipeline.approveForSigning(proposal)
+                    ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote)
                     ledgerNavigator.forwardToSign()
                 }
 
@@ -105,7 +111,7 @@ class SubmitProposalUseCase(
 
                 is ZodlAccount -> {
                     swapRepository.clear()
-                    submitZashiProposal(proposal)
+                    submitZashiProposal(proposal, reviewedQuote)
                     navigationRouter.replace(TransactionProgressArgs)
                 }
             }
@@ -128,10 +134,10 @@ class SubmitProposalUseCase(
             is ZodlAccount -> zashiProposalRepository.transactionProposal.value
         }
 
-    private fun submitZashiProposal(proposal: TransactionProposal) {
+    private fun submitZashiProposal(proposal: TransactionProposal, reviewedQuote: SwapQuoteData.Success?) {
         scope.launch {
             try {
-                val result = zashiProposalRepository.submit(proposal)
+                val result = zashiProposalRepository.submit(proposal, reviewedQuote)
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }

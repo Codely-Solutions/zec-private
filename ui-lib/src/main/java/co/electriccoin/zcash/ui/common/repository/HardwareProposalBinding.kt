@@ -7,11 +7,19 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /** The proposal, device input, proofs and signatures stay with the same preparation. */
 class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt) {
+    internal val id = UUID.randomUUID().toString()
     val proofs = CompletableDeferred<Pczt>()
+
+    @Volatile
+    var reviewedQuote: SwapQuoteData.Success? = null
+        internal set
 
     @Volatile
     var signatures: Pczt? = null
@@ -36,16 +44,21 @@ class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt
 /** An approval is invalidated whenever its prepared artifact is replaced or cleared. */
 class HardwareProposalBinding {
     private var prepared: PreparedHardwareProposal? = null
-    private var approved: PreparedHardwareProposal? = null
+    private val approval = MutableStateFlow<PreparedHardwareProposal?>(null)
+    internal val approved = approval.asStateFlow()
 
     @Synchronized
     fun prepare(proposal: TransactionProposal, pczt: Pczt): PreparedHardwareProposal {
-        approved = null
+        approval.value = null
         return PreparedHardwareProposal(proposal, pczt).also { prepared = it }
     }
 
     @Synchronized
-    fun approve(current: TransactionProposal?, expected: TransactionProposal?) {
+    fun approve(
+        current: TransactionProposal?,
+        expected: TransactionProposal?,
+        reviewedQuote: SwapQuoteData.Success? = null,
+    ) {
         val artifact = checkNotNull(prepared) { "The transaction has no prepared PCZT." }
         check(current === artifact.proposal && (expected == null || expected === current)) {
             "The reviewed transaction changed before signing."
@@ -53,12 +66,14 @@ class HardwareProposalBinding {
         check(current !is SwapTransactionProposal || current === expected) {
             "Review the prepared swap transaction before signing."
         }
-        approved = artifact
+        if (current is SwapTransactionProposal) current.requireFundingApproval(reviewedQuote)
+        artifact.reviewedQuote = reviewedQuote
+        approval.value = artifact
     }
 
     @Synchronized
     fun getApproved(current: TransactionProposal?): PreparedHardwareProposal? =
-        approved?.takeIf { it.proposal === current }
+        approval.value?.takeIf { it.proposal === current }
 
     fun requireApproved(
         current: TransactionProposal?,
@@ -75,7 +90,7 @@ class HardwareProposalBinding {
 
     @Synchronized
     fun clear() {
-        approved = null
+        approval.value = null
         prepared = null
     }
 }

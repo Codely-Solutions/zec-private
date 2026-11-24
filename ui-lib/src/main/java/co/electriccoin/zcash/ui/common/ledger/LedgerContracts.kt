@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.ledger
 
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+
 import androidx.navigation.NavGraphBuilder
 import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.exception.PcztException
@@ -65,7 +67,10 @@ interface LedgerProposalPipeline {
     )
     suspend fun createPCZTFromProposal()
 
-    fun approveForSigning(expectedProposal: TransactionProposal? = null)
+    fun approveForSigning(
+        expectedProposal: TransactionProposal? = null,
+        reviewedQuote: SwapQuoteData.Success? = null,
+    )
 
     fun clear()
 

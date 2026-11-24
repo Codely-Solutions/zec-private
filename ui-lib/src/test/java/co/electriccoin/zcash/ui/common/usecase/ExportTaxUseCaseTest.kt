@@ -26,12 +26,17 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.StringWriter
 import java.time.Instant
 import java.time.Year
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -74,6 +79,7 @@ class ExportTaxUseCaseTest {
             every { isDebuggable } returns true
         }
         lateinit var output: File
+        var registered = false
         mockkStatic(FileProvider::class)
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
@@ -82,12 +88,19 @@ class ExportTaxUseCaseTest {
                 Uri.parse("content://synthetic/tax.csv")
             }
             ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())
-                .apply { scheduleCleanup = {} }(accounts.getSelectedAccount()) { true }
+                .apply {
+                    scheduleCleanup = { staging ->
+                        assertTrue(staging.listFiles().orEmpty().isEmpty())
+                        registered = true
+                    }
+                }(accounts.getSelectedAccount()) { true }
         } finally {
             unmockkStatic(FileProvider::class)
             Dispatchers.resetMain()
         }
 
+        assertTrue(registered)
+        assertEquals(android.content.Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
         val rows = output.readLines().map { it.split(',') }
         val date = "06/15/$year 12:00:00"
         assertEquals(
@@ -103,6 +116,26 @@ class ExportTaxUseCaseTest {
             ),
             rows,
         )
+    }
+
+    @Test
+    fun failedRegistrationLeavesNoStagingDirectoryOrChooser() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val account = EditAccountFixtures.zodl()
+        val transactions = mockk<TransactionRepository> {
+            coEvery { getTransactions(any()) } returns emptyList()
+        }
+        lateinit var staging: File
+        val useCase = ExportTaxUseCase(transactions, mockk(), mockk(), context, mockk(), mockk())
+        useCase.scheduleCleanup = {
+            staging = it
+            assertTrue(it.listFiles().orEmpty().isEmpty())
+            error("synthetic scheduler failure")
+        }
+
+        assertFailsWith<IllegalStateException> { useCase(account) { true } }
+        assertFalse(staging.exists())
+        assertNull(shadowOf(context).nextStartedActivity)
     }
 
     @Test

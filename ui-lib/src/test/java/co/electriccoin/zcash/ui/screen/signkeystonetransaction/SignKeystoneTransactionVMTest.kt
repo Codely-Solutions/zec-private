@@ -84,7 +84,7 @@ class SignKeystoneTransactionVMTest {
         failed.positiveButton.onClick()
         verify(exactly = 0) { h.router.forward(any()) }
         ready.positiveButton.onClick()
-        verify(exactly = 1) { h.router.forward(ScanKeystonePCZTRequest) }
+        verify(exactly = 1) { h.router.forward(ScanKeystonePCZTRequest("prepared")) }
         coVerify(exactly = 2) { h.repository.createPCZTEncoder() }
     }
 
@@ -230,7 +230,10 @@ class SignKeystoneTransactionVMTest {
     private fun harness(): Harness {
         val proposals = MutableStateFlow<TransactionProposal?>(ShieldTransactionProposal(mockk()))
         val wallets = MutableStateFlow<List<WalletAccount>?>(listOf(EditAccountFixtures.keystone(isSelected = true)))
-        val repository = mockk<KeystoneProposalRepository> { every { transactionProposal } returns proposals }
+        val repository = mockk<KeystoneProposalRepository> {
+            every { transactionProposal } returns proposals
+            every { signingPreparationId() } returns "prepared"
+        }
         val router = mockk<NavigationRouter>(relaxed = true)
         val cancel = mockk<CancelProposalFlowUseCase>(relaxed = true)
         val vm = SignKeystoneTransactionVM(

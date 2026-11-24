@@ -80,6 +80,7 @@ class MigrationSetupVMViewOnlyTest {
                     navigationRouter = mockk(relaxed = true),
                     errorStateMapper =
                         ErrorMapperUseCase(
+                            reportAccess = mockk(relaxed = true),
                             sendEmail = mockk(relaxed = true),
                             viewOnlyContent =
                                 mockk<ViewOnlyContent>(relaxed = true) {

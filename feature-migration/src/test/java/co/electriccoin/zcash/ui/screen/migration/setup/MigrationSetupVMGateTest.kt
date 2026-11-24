@@ -78,7 +78,7 @@ class MigrationSetupVMGateTest {
                 },
             navigationRouter = mockk(relaxed = true),
             errorStateMapper =
-                ErrorMapperUseCase(sendEmail = mockk(relaxed = true), viewOnlyContent = mockk(relaxed = true)),
+                ErrorMapperUseCase(reportAccess = mockk(relaxed = true), sendEmail = mockk(relaxed = true), viewOnlyContent = mockk(relaxed = true)),
             getMigrationPrivacyOrReviewDestination = mockk(relaxed = true),
             getMigrationGateInfo =
                 mockk<GetMigrationGateInfoUseCase> {

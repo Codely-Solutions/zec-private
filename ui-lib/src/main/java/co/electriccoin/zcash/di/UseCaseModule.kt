@@ -71,7 +71,7 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToExportPrivateDataUseCase
+import co.electriccoin.zcash.ui.common.usecase.ExportPrivateDataUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToNearPayUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
@@ -300,7 +300,7 @@ val useCaseModule =
         factoryOf(::GetVKUseCase)
         factoryOf(::GetActivitiesUseCase)
         factoryOf(::GetResyncDataFromHeightUseCase)
-        factoryOf(::NavigateToExportPrivateDataUseCase)
+        singleOf(::ExportPrivateDataUseCase)
         factoryOf(::NavigateToResetWalletUseCase)
         factoryOf(::IsScreenTimeoutDisabledDuringRestoreUseCase)
         singleOf(::UpdateSwapActivityMetadataUseCase)

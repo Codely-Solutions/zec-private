@@ -258,7 +258,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
-        composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest() }
+        composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute()) }
         composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
         composable<AccountListArgs> { AccountListScreen() }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }

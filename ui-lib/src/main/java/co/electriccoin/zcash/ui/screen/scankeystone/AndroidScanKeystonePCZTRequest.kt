@@ -13,6 +13,9 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
+import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
 import co.electriccoin.zcash.ui.screen.scankeystone.view.ScanKeystoneView
 import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTViewModel
 import co.electriccoin.zcash.ui.util.SettingsUtil
@@ -21,7 +24,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 @Composable
-internal fun WrapScanKeystonePCZTRequest() {
+internal fun WrapScanKeystonePCZTRequest(args: ScanKeystonePCZTRequest) {
     val navigationRouter = koinInject<NavigationRouter>()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -31,12 +34,21 @@ internal fun WrapScanKeystonePCZTRequest() {
     val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val validationState by viewModel.validationState.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val canScan by remember(viewModel, args) { viewModel.observeCanScan(args) }
+        .collectAsStateWithLifecycle(initialValue = viewModel.canScan(args))
 
     BackHandler {
         navigationRouter.back()
     }
 
-    if (synchronizer == null) {
+    if (!canScan) {
+        UnavailableWalletAction(
+            screenTitle = stringRes(R.string.keystone_signWith_signTransaction),
+            title = stringRes(R.string.private_keystone_unavailable_title),
+            message = stringRes(R.string.private_keystone_unavailable_message),
+            action = ButtonState(text = stringRes(R.string.general_back), onClick = { navigationRouter.back() }),
+        )
+    } else if (synchronizer == null) {
         // TODO [#1146]: Consider moving CircularScreenProgressIndicator from Android layer to View layer
         // TODO [#1146]: Improve this by allowing screen composition and updating it after the data is available
         // TODO [#1146]: https://github.com/Electric-Coin-Company/zashi-android/issues/1146
@@ -46,7 +58,7 @@ internal fun WrapScanKeystonePCZTRequest() {
             snackbarHostState = snackbarHostState,
             onBack = { navigationRouter.back() },
             onScan = {
-                viewModel.onScanned(it)
+                viewModel.onScanned(it, args)
             },
             onOpenSettings = {
                 runCatching {

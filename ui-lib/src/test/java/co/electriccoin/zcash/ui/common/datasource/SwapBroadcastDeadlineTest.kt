@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import io.mockk.coEvery
@@ -47,7 +48,7 @@ class SwapBroadcastDeadlineTest {
             val fixture = Fixture(hardware)
             fixture.prepare()
             val result = fixture.whileSuspended { fixture.expire() }
-            assertIs<IllegalArgumentException>(result.exceptionOrNull())
+            assertIs<IllegalStateException>(result.exceptionOrNull())
             fixture.verifyNoBroadcast()
             // The durable reference remains reserved, so repeating approval cannot create a second funding.
             assertTrue(runCatching { fixture.submit() }.isFailure)
@@ -60,7 +61,7 @@ class SwapBroadcastDeadlineTest {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware, pauseEndpoints = true)
             fixture.prepare()
-            assertIs<IllegalArgumentException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
+            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
             fixture.verifyNoBroadcast()
         }
     }
@@ -118,7 +119,9 @@ class SwapBroadcastDeadlineTest {
         private val endpoint = LightWalletEndpoint("synthetic.invalid", 443, true)
         private val entered = CompletableDeferred<Unit>()
         private val released = CompletableDeferred<Unit>()
-        private var deadline = Instant.parse("2100-01-01T00:00:00Z")
+        private var wall = Instant.parse("2099-12-31T23:59:59Z")
+        private var elapsed = 0L
+        private lateinit var publication: SwapQuoteData.Success
         private val key = mockk<UnifiedSpendingKey>()
         private val accounts = mockk<AccountDataSource>()
         private val signer = mockk<co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider>()
@@ -168,8 +171,10 @@ class SwapBroadcastDeadlineTest {
                 refundAddress = "synthetic-refund"
             )
             val reviewedQuote = object : SwapQuote by quote {
-                override val deadline: Instant get() = this@Fixture.deadline
+                override val deadline = Instant.parse("2100-01-01T00:00:00Z")
             }
+            publication = SwapQuoteData.Success(reviewedQuote, fundingClock = { wall }, elapsedRealtime = { elapsed })
+            assertTrue(publication.canFund())
             reviewed = ExactInputSwapTransactionProposal(
                 WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
                 mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) }, reviewedQuote, mockk()
@@ -185,14 +190,14 @@ class SwapBroadcastDeadlineTest {
                 coEvery { signer.parsePczt(any()) } returns
                     ("keystone:fw_version".toByteArray() + byteArrayOf(3, 13, 0, 1))
                 keystone.createPCZTFromProposal()
-                keystone.approveForSigning(reviewed)
-                keystone.parsePCZT(mockk())
+                keystone.approveForSigning(reviewed, publication)
+                keystone.parsePCZT(mockk(), checkNotNull(keystone.signingPreparationId()))
             } else {
                 software.transactionProposal.value = reviewed
             }
         }
 
-        suspend fun submit(): SubmitResult = if (hardware) keystone.submit(reviewed) else software.submit(reviewed)
+        suspend fun submit(): SubmitResult = if (hardware) keystone.submit(reviewed) else software.submit(reviewed, publication)
 
         suspend fun whileSuspended(change: () -> Unit): Result<SubmitResult> = coroutineScope {
             withTimeout(5.seconds) {
@@ -208,7 +213,10 @@ class SwapBroadcastDeadlineTest {
             }
         }
 
-        fun expire() { deadline = Instant.parse("2000-01-01T00:00:00Z") }
+        fun expire() {
+            wall -= 2.seconds
+            elapsed = 1_000L
+        }
         fun clear() { if (hardware) keystone.clear() else software.clear() }
         fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
         private suspend fun pause() {

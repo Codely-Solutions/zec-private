@@ -359,6 +359,7 @@ class DisconnectVMTest {
         navigationRouter = navigationRouter,
         errorStateMapper =
             ErrorMapperUseCase(
+                reportAccess = mockk(relaxed = true),
                 sendEmail = mockk(relaxed = true),
                 viewOnlyContent = mockk(relaxed = true),
             ),

@@ -38,19 +38,19 @@ class SubmitKSProposalUseCaseTest {
             val proposal = swapProposal()
             val submitResult = mockk<SubmitResult>(relaxed = true)
             every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-            coEvery { fx.keystoneProposalRepository.submit(any()) } returns submitResult
+            coEvery { fx.keystoneProposalRepository.submit(any(), eq("prepared")) } returns submitResult
 
-            fx.useCase(proposal)
+            fx.useCase(proposal, "prepared")
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
+            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any(), eq("prepared")) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, submitResult) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
             // Swap state is cleared before submitting, and navigation happens after submit is kicked off.
             coVerifyOrder {
                 fx.swapRepository.clear()
-                fx.keystoneProposalRepository.submit(any())
+                fx.keystoneProposalRepository.submit(any(), eq("prepared"))
                 fx.navigationRouter.replace(TransactionProgressArgs)
             }
         }
@@ -61,12 +61,12 @@ class SubmitKSProposalUseCaseTest {
             val fx = useCase()
             val proposal = mockk<TransactionProposal>()
             every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-            coEvery { fx.keystoneProposalRepository.submit(any()) } returns mockk(relaxed = true)
+            coEvery { fx.keystoneProposalRepository.submit(any(), eq("prepared")) } returns mockk(relaxed = true)
 
-            fx.useCase(proposal)
+            fx.useCase(proposal, "prepared")
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
+            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any(), eq("prepared")) }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
@@ -78,9 +78,9 @@ class SubmitKSProposalUseCaseTest {
             val fx = useCase()
             val proposal = swapProposal()
             every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-            coEvery { fx.keystoneProposalRepository.submit(any()) } throws RuntimeException("boom")
+            coEvery { fx.keystoneProposalRepository.submit(any(), eq("prepared")) } throws RuntimeException("boom")
 
-            fx.useCase(proposal)
+            fx.useCase(proposal, "prepared")
 
             // The submit failure is swallowed: no swap processing, but the prefill is still cleared
             // (finally) and navigation to progress happens regardless of the async outcome.
@@ -95,9 +95,9 @@ class SubmitKSProposalUseCaseTest {
         val signed = swapProposal()
         every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(swapProposal())
 
-        assertFailsWith<IllegalStateException> { fx.useCase(signed) }
+        assertFailsWith<IllegalStateException> { fx.useCase(signed, "prepared") }
 
-        coVerify(exactly = 0) { fx.keystoneProposalRepository.submit(any()) }
+        coVerify(exactly = 0) { fx.keystoneProposalRepository.submit(any(), eq("prepared")) }
         verify(exactly = 0) { fx.swapRepository.clear() }
         verify(exactly = 0) { fx.navigationRouter.replace(TransactionProgressArgs) }
     }
@@ -119,7 +119,9 @@ class SubmitKSProposalUseCaseTest {
     }
 
     private class Fixtures {
-        val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
+        val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
+            every { signingPreparationId() } returns "prepared"
+        }
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
         val swapRepository = mockk<SwapRepository>(relaxed = true)
         val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)

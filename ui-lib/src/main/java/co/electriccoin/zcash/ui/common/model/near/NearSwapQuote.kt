@@ -157,15 +157,15 @@ internal fun requireConsistent(
     decimals: Int
 ) {
     requireNearTokenDecimals(decimals)
-    if (raw == null || formatted == null) return
-    if (raw.compareTo(formatted.movePointRight(decimals)) != 0) {
+    if (formatted == null) return
+    val representable = formatted.stripTrailingZeros().scale() <= decimals
+    if (!representable || raw != null && raw.compareTo(formatted.movePointRight(decimals)) != 0) {
         throw SwapQuoteMismatchException.AmountInconsistency(
             type = type,
             field = name,
             decimals = decimals,
             message =
-                "Swap amount inconsistency: $name ($raw) does not match " +
-                    "${name}Formatted ($formatted) at $decimals decimals"
+                "Swap amount inconsistency for $name at $decimals decimals"
         )
     }
 }

@@ -341,7 +341,7 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
-        private const val NAVIGATION_STATE_VERSION = 4
+        private const val NAVIGATION_STATE_VERSION = 5
 
         // Forget older navigation stacks when their routes or saved payloads change.
         // Version 3 adds the transaction note's account and wallet session to its typed route.

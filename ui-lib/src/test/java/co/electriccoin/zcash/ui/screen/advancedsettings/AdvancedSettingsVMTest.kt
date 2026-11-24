@@ -123,7 +123,6 @@ class AdvancedSettingsVMTest {
                 navigateToWalletBackup = mockk(relaxed = true),
                 getVersionInfo = getVersionInfo,
                 navigateToResetWallet = mockk(relaxed = true),
-                navigateToExportPrivateData = mockk(relaxed = true),
                 migrationGate = mockk<MigrationGate> { coEvery { isRestartAvailable() } returns false },
                 migrationNavigator = mockk(relaxed = true),
             )

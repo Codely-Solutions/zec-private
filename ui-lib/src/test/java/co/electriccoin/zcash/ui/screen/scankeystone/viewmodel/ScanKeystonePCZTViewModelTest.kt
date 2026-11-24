@@ -76,16 +76,21 @@ class ScanKeystonePCZTViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val route = ScanKeystonePCZTRequest("prepared")
+    private val ready = mockk<KeystoneProposalRepository> {
+        every { signingPreparationId() } returns route.preparationId
+    }
+
     @Test
     fun scannedFragmentsUpdateProgress() = runTest {
-        coEvery { parse("first-fragment") } returns ParseKeystoneQrResult(37, isFinished = false)
-        coEvery { parse("last-fragment") } returns ParseKeystoneQrResult(100, isFinished = true)
-        val vm = ScanKeystonePCZTViewModel(parse, navigateToError)
+        coEvery { parse("first-fragment", route.preparationId) } returns ParseKeystoneQrResult(37, isFinished = false)
+        coEvery { parse("last-fragment", route.preparationId) } returns ParseKeystoneQrResult(100, isFinished = true)
+        val vm = ScanKeystonePCZTViewModel(parse, navigateToError, ready)
 
         assertNull(vm.state.value.progress)
-        vm.onScanned("first-fragment").join()
+        vm.onScanned("first-fragment", route).join()
         assertEquals(37, vm.state.value.progress)
-        vm.onScanned("last-fragment").join()
+        vm.onScanned("last-fragment", route).join()
         assertEquals(100, vm.state.value.progress)
         assertEquals(ScanValidationState.NONE, vm.validationState.value)
     }
@@ -100,7 +105,7 @@ class ScanKeystonePCZTViewModelTest {
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
         val submit = SubmitKSProposalUseCase(repository, router, mockk(relaxed = true), mockk(), prefillSend)
         submit.scope = this
-        val vm = ScanKeystonePCZTViewModel(ParseKeystonePCZTUseCase(submit, repository, signer), navigateToError)
+        val vm = ScanKeystonePCZTViewModel(ParseKeystonePCZTUseCase(submit, repository, signer), navigateToError, repository)
 
         val unsigned = Pczt(byteArrayOf(1))
         val proven = Pczt(byteArrayOf(2))
@@ -136,13 +141,14 @@ class ScanKeystonePCZTViewModelTest {
         repository.createProposal(send)
         repository.createPCZTFromProposal()
         repository.approveForSigning(approved)
+        val route = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
 
-        vm.onScanned(fragments.first()).join()
+        vm.onScanned(fragments.first(), route).join()
         assertTrue(assertNotNull(vm.state.value.progress) in 1..99)
         verify(exactly = 0) { router.replace(TransactionProgressArgs) }
-        fragments.drop(1).dropLast(1).forEach { vm.onScanned(it).join() }
+        fragments.drop(1).dropLast(1).forEach { vm.onScanned(it, route).join() }
 
-        List(3) { vm.onScanned(fragments.last()) }.joinAll()
+        List(3) { vm.onScanned(fragments.last(), route) }.joinAll()
 
         assertEquals(100, vm.state.value.progress)
         assertEquals(ScanValidationState.NONE, vm.validationState.value)
@@ -167,7 +173,7 @@ class ScanKeystonePCZTViewModelTest {
 
     @Test
     fun closingFirmwareSheetReturnsToSigning() = runTest {
-        val routes = mutableListOf<Any>(SignKeystoneTransactionArgs, ScanKeystonePCZTRequest)
+        val routes = mutableListOf<Any>(SignKeystoneTransactionArgs, route)
         every { router.forward(ofType<ErrorBottomSheet>()) } answers { routes.add(firstArg<Array<Any>>().single()) }
         every { router.replace(ofType<ErrorBottomSheet>()) } answers {
             routes.removeAt(routes.lastIndex)
@@ -175,10 +181,10 @@ class ScanKeystonePCZTViewModelTest {
         }
         every { router.back() } answers { routes.removeAt(routes.lastIndex) }
         val obsolete = KeystoneFirmwareBelowMinimumException(detected = null)
-        coEvery { parse("legacy-signer-qr") } throws obsolete
-        val vm = ScanKeystonePCZTViewModel(parse, navigateToError)
+        coEvery { parse("legacy-signer-qr", route.preparationId) } throws obsolete
+        val vm = ScanKeystonePCZTViewModel(parse, navigateToError, ready)
 
-        vm.onScanned("legacy-signer-qr").join()
+        vm.onScanned("legacy-signer-qr", route).join()
 
         assertEquals(SignKeystoneTransactionArgs, routes.first())
         val errorRoute = assertIs<ErrorBottomSheet>(routes.last())
@@ -193,10 +199,10 @@ class ScanKeystonePCZTViewModelTest {
     }
 
     private suspend fun assertInvalidScan(error: Exception) {
-        coEvery { parse("invalid-qr") } throws error
-        val vm = ScanKeystonePCZTViewModel(parse, navigateToError)
+        coEvery { parse("invalid-qr", route.preparationId) } throws error
+        val vm = ScanKeystonePCZTViewModel(parse, navigateToError, ready)
 
-        vm.onScanned("invalid-qr").join()
+        vm.onScanned("invalid-qr", route).join()
 
         assertEquals(ScanValidationState.INVALID, vm.validationState.value)
         assertNull(vm.state.value.progress)

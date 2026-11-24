@@ -51,6 +51,7 @@ class SendEmailUseCase(
      * Sends a support email for an exception with full stack trace and support info.
      */
     suspend operator fun invoke(exception: Exception, isAllowed: () -> Boolean = { true }): Boolean {
+        if (!isAllowed()) return false
         val messageBody =
                 EmailUtil.formatMessage(
                     body = exception.stackTraceToString(),
@@ -65,6 +66,7 @@ class SendEmailUseCase(
      * Sends a support email for a synchronizer error.
      */
     suspend operator fun invoke(synchronizerError: SynchronizerError, isAllowed: () -> Boolean = { true }): Boolean {
+        if (!isAllowed()) return false
         val messageBody =
                 EmailUtil.formatMessage(
                     body = synchronizerError.getStackTrace(null),
@@ -79,6 +81,7 @@ class SendEmailUseCase(
      * Sends a support email for partial transaction submission results.
      */
     suspend operator fun invoke(submitResult: SubmitResult.Partial, isAllowed: () -> Boolean = { true }): Boolean {
+        if (!isAllowed()) return false
         val messageBody =
                 EmailUtil.formatMessage(
                     prefix = context.getString(R.string.send_confirmation_multiple_report_text),
@@ -92,6 +95,11 @@ class SendEmailUseCase(
         return withContext(Dispatchers.Main.immediate) {
             sendSupportEmail(context.getString(R.string.app_name), messageBody, isAllowed)
         }
+    }
+
+    /** A restore screen can open a blank support draft before a wallet grant exists. */
+    internal fun sendOnboardingSupport() {
+        sendSupportEmail(context.getString(R.string.app_name), "")
     }
 
     /**

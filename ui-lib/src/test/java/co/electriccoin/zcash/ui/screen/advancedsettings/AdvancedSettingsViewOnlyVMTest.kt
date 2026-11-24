@@ -98,7 +98,6 @@ class AdvancedSettingsViewOnlyVMTest {
                     every { this@mockk() } returns VersionInfoFixture.new()
                 },
             navigateToResetWallet = mockk(relaxed = true),
-            navigateToExportPrivateData = mockk(relaxed = true),
             migrationGate =
                 mockk<MigrationGate> {
                     coEvery { isRestartAvailable() } returns false

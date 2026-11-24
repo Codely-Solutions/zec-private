@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.MissingKeystoneSigningPreparation
 import co.electriccoin.zcash.ui.common.repository.ParsePCZTException
 import co.electriccoin.zcash.ui.common.usecase.InvalidKeystonePCZTQRException
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystonePCZTUseCase
@@ -11,15 +13,27 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal class ScanKeystonePCZTViewModel(
     private val parseKeystonePCZT: ParseKeystonePCZTUseCase,
     private val navigateToError: NavigateToErrorUseCase,
+    private val repository: KeystoneProposalRepository,
 ) : ViewModel() {
+    private val lostPreparation = MutableStateFlow(false)
+
+    fun canScan(args: ScanKeystonePCZTRequest) = !lostPreparation.value &&
+        repository.signingPreparationId() == args.preparationId
+
+    fun observeCanScan(args: ScanKeystonePCZTRequest) =
+        combine(repository.signingPreparationIds, lostPreparation) { _, _ -> canScan(args) }
+
     val validationState = MutableStateFlow(ScanValidationState.NONE)
 
     val state =
@@ -30,10 +44,11 @@ internal class ScanKeystonePCZTViewModel(
             )
         )
 
-    fun onScanned(result: String) =
+    fun onScanned(result: String, args: ScanKeystonePCZTRequest) =
         viewModelScope.launch {
+            if (!canScan(args)) return@launch
             try {
-                val scanResult = parseKeystonePCZT(result)
+                val scanResult = parseKeystonePCZT(result, args.preparationId)
                 state.update { it.copy(progress = scanResult.progress) }
             } catch (e: KeystoneFirmwareBelowMinimumException) {
                 // MOB-1510: the QR decoded fine but the device firmware is too old — replace the
@@ -44,6 +59,10 @@ internal class ScanKeystonePCZTViewModel(
                 validationState.update { ScanValidationState.INVALID }
             } catch (_: ParsePCZTException) {
                 validationState.update { ScanValidationState.INVALID }
+            } catch (_: MissingKeystoneSigningPreparation) {
+                lostPreparation.value = true
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // do nothing
             }

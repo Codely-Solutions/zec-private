@@ -40,7 +40,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class SignKeystoneTransactionVM(
     getWalletAccounts: GetWalletAccountsUseCase,
-    keystoneProposalRepository: KeystoneProposalRepository,
+    private val keystoneProposalRepository: KeystoneProposalRepository,
     private val navigationRouter: NavigationRouter,
     private val createKeystoneProposalPCZTEncoder: CreateKeystoneProposalPCZTEncoderUseCase,
     private val cancelKeystoneProposalFlow: CancelProposalFlowUseCase,
@@ -120,7 +120,9 @@ class SignKeystoneTransactionVM(
                         text = stringRes(R.string.keystone_signWith_getSignature),
                         onClick = {
                             if (attempt != null && ready && isReady(attempt)) {
-                                navigationRouter.forward(ScanKeystonePCZTRequest)
+                                keystoneProposalRepository.signingPreparationId()?.let {
+                                    navigationRouter.forward(ScanKeystonePCZTRequest(it))
+                                }
                             }
                         },
                         isEnabled = ready

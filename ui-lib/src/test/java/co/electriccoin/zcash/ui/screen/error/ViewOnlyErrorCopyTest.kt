@@ -32,7 +32,7 @@ class ViewOnlyErrorCopyTest {
 
     @Test
     fun theLceSheetShowsTheViewOnlyCopyWhateverTheCallSitePassed() {
-        val mapper = ErrorMapperUseCase(sendEmail = mockk(relaxed = true), viewOnlyContent = viewOnlyContent)
+        val mapper = ErrorMapperUseCase(reportAccess = mockk(relaxed = true), sendEmail = mockk(relaxed = true), viewOnlyContent = viewOnlyContent)
 
         val state =
             mapper.mapToState(

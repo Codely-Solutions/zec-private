@@ -86,6 +86,9 @@ class ExportTaxUseCase(
             try {
                 val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid)
                 if (!isAllowed()) return@withContext
+                scheduleCleanup(staging)
+                currentCoroutineContext().ensureActive()
+                if (!isAllowed()) return@withContext
                 writeCsvToFile(outputFile = outputFile, data = entries)
                 val intent =
                     FileShareUtil.newShareContentIntent(
@@ -97,7 +100,6 @@ class ExportTaxUseCase(
                         fileType = ZASHI_INTERNAL_DATA_MIME_TYPE
                     )
 
-                scheduleCleanup(staging)
                 withContext(Dispatchers.Main.immediate) handoff@{
                     if (!isAllowed()) return@handoff
                     check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==

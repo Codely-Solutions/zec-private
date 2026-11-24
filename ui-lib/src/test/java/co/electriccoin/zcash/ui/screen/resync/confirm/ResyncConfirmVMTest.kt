@@ -130,7 +130,7 @@ class ResyncConfirmVMTest {
                 confirmResync = confirm,
                 getResyncDataFromHeight = estimate,
                 errorStateMapper = ResyncErrorMapperUseCase(
-                    ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true))
+                    ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
                 ),
             )
             store.put("resync", vm)
