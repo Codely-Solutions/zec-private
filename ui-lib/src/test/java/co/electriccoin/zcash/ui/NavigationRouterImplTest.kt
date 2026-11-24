@@ -91,7 +91,15 @@ class NavigationRouterImplTest {
 
             router.forward(ExportVKArgs)
             runCurrent()
-            launchNavigation.requestMigrationProgress(requestedProgress)
+            val notice = launchNavigation.beginMigrationProgress("owner")
+            assertEquals("owner", launchNavigation.saveMigrationNotice())
+            assertEquals("owner", launchNavigation.pendingMigrationLookup())
+            launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
+            assertTrue(delivered.isEmpty())
+
+            launchNavigation.finishMigrationProgress(notice, requestedProgress)
+            assertEquals(null, launchNavigation.pendingMigrationLookup())
+            assertEquals("owner", launchNavigation.saveMigrationNotice())
             launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
             assertTrue(delivered.isEmpty())
 

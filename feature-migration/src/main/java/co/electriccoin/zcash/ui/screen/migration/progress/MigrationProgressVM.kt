@@ -43,6 +43,7 @@ import kotlin.time.Instant
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 class MigrationProgressVM(
+    private val args: MigrationProgressArgs,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val observeMigrationLiveReadout: ObserveMigrationLiveReadoutUseCase,
     private val navigationRouter: NavigationRouter,
@@ -94,7 +95,7 @@ class MigrationProgressVM(
     // (re)collected.
     private fun liveReadoutFlow(): Flow<MigrationLiveReadout?> =
         flow {
-            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+            val accountKeyId = args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
             emitAll(observeMigrationLiveReadout(accountKeyId))
         }
 

@@ -1,6 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.WalletAddress
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
@@ -17,6 +20,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
@@ -30,11 +34,25 @@ class GetTransactionDetailByIdUseCase(
     private val transactionRepository: TransactionRepository,
     private val addressBookRepository: AddressBookRepository,
     private val metadataRepository: MetadataRepository,
-    private val getSwapStatus: GetSwapStatusUseCase
+    private val getSwapStatus: GetSwapStatusUseCase,
+    private val accountDataSource: AccountDataSource,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(txId: String) =
-        channelFlow {
+    fun observe(txId: String, accountKeyId: String? = null): Flow<DetailedTransactionData?> =
+        accountDataSource.selectedAccount
+            .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+            .flatMapLatest { account ->
+                val key = account?.sdkAccount?.accountUuid?.toStorageKeyId()
+                if (account != null && (accountKeyId == null || accountKeyId == key)) {
+                    observeForAccount(txId, account)
+                } else {
+                    flowOf(null)
+                }
+            }.distinctUntilChanged()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeForAccount(txId: String, account: WalletAccount): Flow<DetailedTransactionData?> =
+        channelFlow<DetailedTransactionData?> {
             val requestSwipeReloadPipeline = MutableSharedFlow<Unit>()
 
             val reloadHandle =
@@ -46,11 +64,12 @@ class GetTransactionDetailByIdUseCase(
                     }
                 }
 
-            val transactionFlow =
-                transactionRepository
-                    .observeTransaction(txId)
-                    .filterNotNull()
-                    .stateIn(this)
+            val owner = account.sdkAccount.accountUuid
+            val scopedTransaction = transactionRepository.observeTransaction(txId)
+                .map { transaction -> transaction?.takeIf { it.accountUuid == owner } }
+                .stateIn(this)
+            val transactionFlow = scopedTransaction.filterNotNull()
+            launch { scopedTransaction.filter { it == null }.collect { send(null) } }
 
             val memosFlow: Flow<List<String>?> =
                 transactionFlow
@@ -94,7 +113,7 @@ class GetTransactionDetailByIdUseCase(
                                             if (depositAddress == null) {
                                                 flowOf(null)
                                             } else {
-                                                getSwapStatus.observe(depositAddress)
+                                                getSwapStatus.observeForAccount(depositAddress, account)
                                             }
                                         }
                                 }
@@ -125,7 +144,7 @@ class GetTransactionDetailByIdUseCase(
                     reloadHandle = reloadHandle,
                 )
             }.collect {
-                send(it)
+                if (scopedTransaction.value != null) send(it)
             }
 
             awaitClose {
@@ -147,3 +166,5 @@ data class DetailedTransactionData(
 interface ReloadHandle {
     fun requestReload()
 }
+
+internal class ActivityDetailUnavailableException : IllegalStateException("Activity details are unavailable")

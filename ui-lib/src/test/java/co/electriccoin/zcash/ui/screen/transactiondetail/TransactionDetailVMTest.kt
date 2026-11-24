@@ -116,6 +116,17 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun savedRefundOffersGenericSupportDuringAProviderOutage() = runTest(dispatcher) {
+        val saved = swapMetadata(SwapStatus.REFUNDED)
+        val observation = SwapQuoteStatusData(isLoading = false, error = IllegalStateException("fixture outage"))
+        val detail = state(data(sent, saved, observation))
+        val support = assertNotNull(detail.secondaryButton)
+        assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
+        support.onClick()
+        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress)) }
+    }
+
+    @Test
     fun ordinaryReceivedDetailUsesTheLocalReceiptWithoutSwapControls() = runTest(dispatcher) {
         val received = ReceiveTransaction.Success(
             TransactionId.new(ByteArray(32) { 2 }), Zatoshi(123_000_000), Instant.EPOCH,

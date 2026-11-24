@@ -17,6 +17,7 @@ import socket
 import ssl
 import subprocess
 import tarfile
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -238,6 +239,20 @@ def readiness(root):
     with ready_session(root) as (result,_):return result
 
 
+def record_closed_claim_window(ledger, state):
+    state.update(status='closed-before-post', claim_requests=0)
+    temporary = tempfile.NamedTemporaryFile('w', dir=ledger.parent, prefix='.claim-', delete=False)
+    staged = Path(temporary.name)
+    try:
+        with temporary as stream:
+            json.dump(state, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(staged, ledger)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 def claim(address,root,port,negative,*,post_by=None):
     if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
         raise ValueError('Only a testnet unified address may be funded')
@@ -293,7 +308,11 @@ def claim(address,root,port,negative,*,post_by=None):
         with ledger.open('x') as stream:
             json.dump(state,stream);stream.flush();os.fsync(stream.fileno())
         owns_ledger=True
-        require_funding_window(post_by)
+        try:
+            require_funding_window(post_by)
+        except FundingWindowExpired:
+            record_closed_claim_window(ledger, state)
+            raise
         if time.time() >= expires:
             raise ValueError('Challenge expired while recording the claim ledger; preserve the ledger')
         status,raw=request(client,'POST','/api/claim',payload)

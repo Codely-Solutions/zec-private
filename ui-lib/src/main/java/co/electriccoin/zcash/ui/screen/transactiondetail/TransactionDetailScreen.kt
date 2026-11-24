@@ -22,5 +22,6 @@ fun TransactionDetailScreen(transactionDetailArgs: TransactionDetailArgs) {
 
 @Serializable
 data class TransactionDetailArgs(
-    val transactionId: String
+    val transactionId: String,
+    val accountKeyId: String? = null,
 )

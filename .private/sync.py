@@ -73,7 +73,7 @@ def output(**values):
         for key,value in values.items(): stream.write(f'{key}={value}\n')
 
 def source_state(root):
-    paths=run('git','ls-files',cwd=root).splitlines()
+    paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root, timeout=30).decode('utf-8').split('\0')
     def digest(path):
         data=path.read_bytes()
         try:
@@ -82,7 +82,7 @@ def source_state(root):
         except UnicodeDecodeError: pass
         return hashlib.sha256(data).hexdigest()
     return {p:digest(root/p) for p in paths
-            if not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
+            if p and not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
 
 def excluded_projects():
     projects=json.loads((ROOT/'.private/excluded-features.json').read_text())['forbidden_projects']

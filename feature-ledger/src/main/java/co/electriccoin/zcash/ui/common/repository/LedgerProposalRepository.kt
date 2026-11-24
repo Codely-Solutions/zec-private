@@ -561,27 +561,26 @@ class LedgerProposalRepositoryImpl(
                 submitState.update { SubmitProposalState.Submitting }
                 val proofs = prepared.proofs.await()
                 val proposal = prepared.proposal
-                if (proposal is SwapTransactionProposal) {
-                    processSwapTransaction.reserveFunding(proposal) {
-                        requireCurrentApproval(prepared)
+                val validateFunding: () -> Unit = {
+                    requireCurrentApproval(prepared)
+                    if (proposal is SwapTransactionProposal) {
                         proposal.requireFundingApproval(prepared.reviewedQuote)
                         ZecSwapComposition.validate(proposal.quote)
                     }
-                    proposal.requireFundingApproval(prepared.reviewedQuote)
                 }
-                requireCurrentApproval(prepared)
-                val result =
+                val submit: suspend (() -> Unit) -> SubmitResult = { beforeSubmission ->
                     proposalDataSource.submitTransaction(
                         pcztWithProofs = proofs,
                         pcztWithSignatures = signed,
-                        beforeFirstSubmission = {
-                            requireCurrentApproval(prepared)
-                            if (proposal is SwapTransactionProposal) {
-                                proposal.requireFundingApproval(prepared.reviewedQuote)
-                                ZecSwapComposition.validate(proposal.quote)
-                            }
-                        }
+                        beforeFirstSubmission = beforeSubmission,
                     )
+                }
+                val result = if (proposal is SwapTransactionProposal) {
+                    processSwapTransaction.submitReservedFunding(proposal, validateFunding, submit)
+                } else {
+                    validateFunding()
+                    submit(validateFunding)
+                }
                 submitState.update { SubmitProposalState.Result(result) }
                 result
             } catch (e: Exception) {

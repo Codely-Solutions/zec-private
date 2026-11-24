@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -42,18 +43,23 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class SwapActivityStatusTest {
     private val id = TransactionId.new(ByteArray(32))
     private val deposit = "fixture-deposit"
+    private val owner = EditAccountFixtures.zodl()
     private val overview = mockk<TransactionOverview> {
         every { zip318Kind } returns Zip318Kind.NOT_CLASSIFIED
     }
     private val failed = SendTransaction.Failed(
-        id, Zatoshi(100_000), null, 0, Zatoshi(10_000), emptyList(), overview, deposit
+        id, Zatoshi(100_000), null, 0, Zatoshi(10_000), emptyList(), overview, deposit,
+        accountUuid = owner.sdkAccount.accountUuid,
     )
     private val confirmed = SendTransaction.Success(
-        id, failed.amount, Instant.EPOCH, 0, failed.fee, emptyList(), overview, deposit
+        id, failed.amount, Instant.EPOCH, 0, failed.fee, emptyList(), overview, deposit,
+        accountUuid = owner.sdkAccount.accountUuid,
     )
 
     @Test
@@ -70,7 +76,7 @@ class SwapActivityStatusTest {
             every { destinationAsset } returns destination
         }
         val metadataRepository = mockk<MetadataRepository>(relaxed = true) {
-            coEvery { getSwapMetadata(deposit) } returns storedSwap
+            coEvery { getSwapMetadata(deposit, owner) } returns storedSwap
             every { observeTransactionMetadata(failed) } returns metadata
             coEvery { updateSwap(storedSwap, any()) } answers {
                 val status = secondArg<SwapQuoteStatus>()
@@ -91,9 +97,10 @@ class SwapActivityStatusTest {
             coEvery { checkSwapStatus(storedSwap) } returns remote
         }
         assertFailed(activity(failed, metadata.value.swapMetadata), stringRes(R.string.swapStatus_swapFailed))
-        val details = GetTransactionDetailByIdUseCase(
-            transactions, contacts, metadataRepository, GetSwapStatusUseCase(metadataRepository, swaps)
-        ).observe(id.txIdString()).first { it.swap?.status != null }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
+        val details = assertNotNull(GetTransactionDetailByIdUseCase(
+            transactions, contacts, metadataRepository, GetSwapStatusUseCase(metadataRepository, swaps), accounts,
+        ).observe(id.txIdString()).first { it?.swap?.status != null })
 
         assertEquals(SwapStatus.SUCCESS, details.swap?.status?.status)
         assertEquals(SwapStatus.SUCCESS, storedSwap.outgoingStatus(failed, details.swap?.status?.status))
@@ -112,6 +119,19 @@ class SwapActivityStatusTest {
         val metadata = swap(SwapStatus.FAILED)
         assertFailed(activity(confirmed, metadata), stringRes(R.string.swapStatus_swapFailed))
         assertEquals(SwapStatus.FAILED, metadata.outgoingStatus(confirmed, SwapStatus.FAILED))
+    }
+
+    @Test
+    fun providerRefundAndExpiryTakePrecedenceOverTheLocalFundingFailure() {
+        for (status in listOf(SwapStatus.REFUNDED, SwapStatus.EXPIRED)) {
+            val saved = swap(status)
+            val expectedTitle = when (status) {
+                SwapStatus.REFUNDED -> R.string.swapStatus_swapRefunded
+                else -> R.string.swapAndPay_expiredTitle
+            }
+            assertEquals(stringRes(expectedTitle), activity(failed, saved).title)
+            assertEquals(status, swap(SwapStatus.PENDING).outgoingStatus(failed, status))
+        }
     }
 
     @Test
@@ -143,10 +163,13 @@ class SwapActivityStatusTest {
             every { observeSwapMetadata() } returns flowOf(listOf(saved))
             every { observeTransactionMetadata(confirmed) } returns flowOf(stored)
         }
-        val activity = GetActivitiesUseCase(transactions, repository).observe()
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
+        val activity = GetActivitiesUseCase(transactions, repository, accounts).observe()
         val onlyTracked = assertIs<ActivityData.BySwap>(activity.first()?.single())
         var openedReference: String? = null
-        val row = ActivityMapper().createTransactionState(onlyTracked, Instant.EPOCH, {}, { openedReference = it }, {})
+        val row = ActivityMapper().createTransactionState(
+            onlyTracked, Instant.EPOCH, {}, { openedReference = it.depositAddress }, {},
+        )
         assertEquals(stringRes(R.string.private_swap_funding_unconfirmed), row.title)
         row.onClick()
         assertEquals(deposit, openedReference)
@@ -154,6 +177,38 @@ class SwapActivityStatusTest {
         history.value = listOf(confirmed)
         val withFunding = assertIs<ActivityData.ByTransaction>(activity.first()?.single())
         assertEquals(confirmed, withFunding.transaction)
+    }
+
+    @Test
+    fun accountChangeHidesOldTransactionsAndRefusesOldDetailRoutes() = runTest {
+        val nextOwner = EditAccountFixtures.keystone()
+        val selection = MutableStateFlow<WalletAccount?>(owner)
+        val history = MutableStateFlow<List<Transaction>?>(listOf(confirmed))
+        val shown = MutableStateFlow(listOf(swap(SwapStatus.PENDING)))
+        val transactions = mockk<TransactionRepository> {
+            every { this@mockk.transactions } returns history
+        }
+        val metadata = mockk<MetadataRepository> {
+            every { observeSwapMetadata() } returns shown
+            every { observeTransactionMetadata(confirmed) } returns flowOf(TransactionMetadata(false, true, null, null))
+        }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selection }
+        val activities = GetActivitiesUseCase(transactions, metadata, accounts).observe()
+        assertEquals(2, activities.first()?.size)
+
+        selection.value = nextOwner
+        shown.value = listOf(swap(SwapStatus.PENDING).copy(ownerAccount = nextOwner))
+        val current = assertIs<ActivityData.BySwap>(activities.first()?.single())
+        assertEquals(nextOwner, current.swap.ownerAccount)
+        assertEquals(listOf(confirmed), history.value)
+
+        val firstOwnerKey = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val details = GetTransactionDetailByIdUseCase(transactions, mockk(), metadata, mockk(), accounts)
+        assertNull(details.observe(id.txIdString(), firstOwnerKey).first())
+        val swapStatus = mockk<GetSwapStatusUseCase>()
+        val swaps = GetReloadableSwapQuoteUseCase(swapStatus, metadata, accounts)
+        assertIs<ActivityDetailUnavailableException>(swaps.observe(deposit, firstOwnerKey).first().error)
+        coVerify(exactly = 0) { swapStatus.observeForAccount(any(), any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -206,7 +261,8 @@ class SwapActivityStatusTest {
             destination = SwapAssetTestFixture.simpleAsset(),
             mode = SwapMode.EXACT_INPUT,
             recordedStatus = status,
-            amountOutFormatted = BigDecimal.ZERO
+            amountOutFormatted = BigDecimal.ZERO,
+            ownerAccount = owner,
         )
 
     private fun activity(transaction: Transaction, swap: TransactionSwapMetadata?) =

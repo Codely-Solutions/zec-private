@@ -101,7 +101,8 @@ class SwapBroadcastDeadlineTest {
             }
             coVerify(exactly = 1) {
                 fixture.metadata.markTxAsSwap(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                    account = any(), walletWriteToken = 0L,
                 )
             }
         }
@@ -147,7 +148,8 @@ class SwapBroadcastDeadlineTest {
             coEvery { metadata.getSwapMetadata(any(), any()) } returns null
             coEvery {
                 metadata.markTxAsSwap(
-                    any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                    account = any(), walletWriteToken = 0L,
                 )
             } returns true
             coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {

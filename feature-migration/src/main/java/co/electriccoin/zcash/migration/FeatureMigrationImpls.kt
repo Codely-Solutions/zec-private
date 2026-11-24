@@ -76,6 +76,7 @@ import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class MigrationGateImpl(
@@ -193,22 +194,29 @@ class MigrationAppHooksImpl(
 
     private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
         if (resetProgress.isPending.value) return
+        val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return
         val generation = walletWriteAccess.token()
-        val key = ownerKey?.takeIf(ACCOUNT_KEY::matches)
+        val notice = launchNavigation.beginMigrationProgress(key)
         scope.launch {
-            val target = key?.let {
-                accountDataSource.getAllAccounts().firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
-            }
-            val selectedKey = key.takeIf { target != null }
-            walletWriteAccess.write(generation) {
-                target?.let { accountDataSource.selectAccount(it) }
-                if (selectedKey != null && runStep) {
-                    MigrationScheduler(context).schedule(selectedKey, kotlin.time.Duration.ZERO)
+            try {
+                val target = accountDataSource.getAllAccounts()
+                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
+                val command = target?.let { account ->
+                    walletWriteAccess.write(generation) {
+                        if (!launchNavigation.isResolvingMigrationProgress(notice)) return@write null
+                        accountDataSource.selectAccount(account)
+                        if (runStep && launchNavigation.isResolvingMigrationProgress(notice)) {
+                            MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
+                        }
+                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
+                    }
                 }
-                launchNavigation.requestMigrationProgress(
-                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)),
-                    selectedKey,
-                )
+                launchNavigation.finishMigrationProgress(notice, command)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                launchNavigation.finishMigrationProgress(notice, null)
+                migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
             }
         }
     }
@@ -275,7 +283,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
             composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
-            composable<MigrationProgressArgs> { MigrationProgressScreen() }
+            composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }
             composable<MigrationRestartArgs> { MigrationRestartScreen() }
         }

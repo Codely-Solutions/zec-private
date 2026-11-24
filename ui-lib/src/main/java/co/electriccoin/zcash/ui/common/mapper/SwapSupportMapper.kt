@@ -137,11 +137,15 @@ class SwapSupportMapper {
     }
 }
 
-internal fun TransactionSwapMetadata.originalQuoteSupportButton(onSupportClicked: (String) -> Unit): ButtonState? =
-    signedQuoteEvidence?.let {
+internal fun TransactionSwapMetadata.savedSwapSupportButton(onSupportClicked: (String) -> Unit): ButtonState? =
+    if (signedQuoteEvidence != null || status in SETTLEMENT_SUPPORT_STATUSES) {
         ButtonState(
             text = stringRes(R.string.errorPage_action_contactSupport),
             style = ButtonStyle.TERTIARY,
             onClick = { onSupportClicked(depositAddress) },
         )
+    } else {
+        null
     }
+
+private val SETTLEMENT_SUPPORT_STATUSES = setOf(SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)

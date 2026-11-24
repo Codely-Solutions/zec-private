@@ -32,9 +32,14 @@ def funding_claim_state(root):
     if not stat.S_ISREG(entry.st_mode) or not 0 < entry.st_size <= 8192:
         return 'unknown'
     try:
-        state = json.loads(ledger.read_bytes())['status']
+        proof = json.loads(ledger.read_bytes())
+        state = proof['status']
     except (OSError, ValueError, KeyError, TypeError):
         return 'unknown'
+    if state == 'closed-before-post':
+        requests = proof.get('claim_requests')
+        if proof.get('provider') == 'argon-testnet' and type(requests) is int and requests == 0:
+            return 'no-POST'
     known = ('request-starting', 'refused-or-unknown', 'pending', 'failed-or-unknown', 'outcome-uncertain', 'broadcast')
     return state if state in known else 'unknown'
 

@@ -107,11 +107,11 @@ private fun StatusChip(state: TransactionDetailSwapStatusRowState) {
                 }
 
                 PENDING -> {
-                    if (state.mode == SWAP_INTO_ZEC) {
-                        stringResource(R.string.swapAndPay_status_pendingDeposit)
-                    } else {
-                        stringResource(R.string.swapAndPay_status_pending)
-                    }
+                    stringResource(when {
+                        state.fundingNotSubmitted -> R.string.private_swap_funding_not_sent
+                        state.mode == SWAP_INTO_ZEC -> R.string.swapAndPay_status_pendingDeposit
+                        else -> R.string.swapAndPay_status_pending
+                    })
                 }
 
                 SUCCESS -> {
@@ -168,6 +168,7 @@ data class TransactionDetailSwapStatusRowState(
     val status: SwapStatus?,
     val mode: Mode = SWAP_FROM_ZEC,
     val isLoading: Boolean = false,
+    val fundingNotSubmitted: Boolean = false,
 ) {
     enum class Mode {
         SWAP_FROM_ZEC,
@@ -187,6 +188,7 @@ internal fun SwapQuoteStatusData.toDetailStatusRow(
         status = value,
         mode = mode,
         isLoading = value == null && isLoading && error == null,
+        fundingNotSubmitted = metadata?.fundingNotSubmitted == true,
     )
 }
 

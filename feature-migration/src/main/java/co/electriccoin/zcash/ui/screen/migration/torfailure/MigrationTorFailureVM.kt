@@ -56,7 +56,7 @@ class MigrationTorFailureVM(
     // the stack) works identically regardless of whether this sheet was reached interactively or
     // via CheckMigrationRecoveryUseCase's background-failure routing.
     private fun onTryAgain() {
-        navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
+        navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs())
     }
 
     private fun onBack() = navigationRouter.back()

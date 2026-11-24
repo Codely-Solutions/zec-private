@@ -289,9 +289,9 @@ class MigrationHomeMessageSourceImpl(
             // Ready-to-send routes to Progress too — everything is pre-signed, there is nothing
             // to review; Progress's foreground broadcast loop executes the step silently while
             // the user watches (TransferReview screen deleted 2026-07-30).
-            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs)
+            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs())
 
-            isRunActive -> navigationRouter.forward(MigrationProgressArgs)
+            isRunActive -> navigationRouter.forward(MigrationProgressArgs())
 
             else -> navigationRouter.forward(MigrationSetupArgs)
         }

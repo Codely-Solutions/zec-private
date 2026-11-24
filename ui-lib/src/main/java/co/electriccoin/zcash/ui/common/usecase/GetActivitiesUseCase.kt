@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.Transaction
@@ -25,21 +26,28 @@ import java.time.ZoneOffset
 class GetActivitiesUseCase(
     private val transactionRepository: TransactionRepository,
     private val metadataRepository: MetadataRepository,
+    private val accountDataSource: AccountDataSource,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe() =
-        combine(observeTransactions(), metadataRepository.observeSwapMetadata()) { transactions, swaps ->
-            if (transactions == null || swaps == null) {
+        combine(
+            accountDataSource.selectedAccount,
+            observeTransactions(),
+            metadataRepository.observeSwapMetadata(),
+        ) { selected, transactions, swaps ->
+            val owner = selected?.sdkAccount?.accountUuid
+            if (owner == null || transactions == null || swaps == null) {
                 null
             } else {
-                val reachedWalletHistory = transactions.mapNotNull { entry ->
-                    entry.metadata.swapMetadata?.depositAddress?.let { entry.transaction.accountUuid to it }
+                val ownedTransactions = transactions.filter { it.transaction.accountUuid == owner }
+                val reachedWalletHistory = ownedTransactions.mapNotNull { entry ->
+                    entry.metadata.swapMetadata?.depositAddress
                 }.toSet()
                 val standalone = swaps.filter { swap ->
-                    val owner = swap.ownerAccount?.sdkAccount?.accountUuid
-                    swap.mode == SwapMode.FLEX_INPUT || (owner to swap.depositAddress) !in reachedWalletHistory
+                    swap.ownerAccount?.sdkAccount?.accountUuid == owner &&
+                        (swap.mode == SwapMode.FLEX_INPUT || swap.depositAddress !in reachedWalletHistory)
                 }
-                transactions
+                ownedTransactions
                     .sortedWith(
                         compareByDescending<ActivityData.ByTransaction> { it.timestamp }
                             .thenByDescending { it.transaction.id.txIdString() }

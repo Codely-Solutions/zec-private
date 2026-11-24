@@ -13,12 +13,14 @@ import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.TransactionMetadata
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionFiltersUseCase
 import co.electriccoin.zcash.ui.common.usecase.UpdateSwapActivityMetadataUseCase
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
@@ -118,6 +120,7 @@ class ActivityHistoryVMTest {
 
     @Test
     fun ordinaryOutgoingTransactionKeepsDebitAmountAndOpensTransactionDetails() = runTest(dispatcher) {
+        val owner = EditAccountFixtures.zodl().sdkAccount.accountUuid
         val overview = mockk<TransactionOverview> {
             every { zip318Kind } returns Zip318Kind.NOT_CLASSIFIED
         }
@@ -129,7 +132,8 @@ class ActivityHistoryVMTest {
             fee = Zatoshi(10_000),
             transactionOutputs = emptyList(),
             overview = overview,
-            recipient = "fixture-recipient"
+            recipient = "fixture-recipient",
+            accountUuid = owner,
         )
         val activity = ActivityData.ByTransaction(transaction, TransactionMetadata(false, true, null, null))
         val row = row(activity)
@@ -142,11 +146,14 @@ class ActivityHistoryVMTest {
         assertEquals(StringResourceColor.PRIMARY, value.style.color)
 
         row.onClick()
-        verify(exactly = 1) { router.forward(TransactionDetailArgs(transaction.id.txIdString())) }
+        verify(exactly = 1) {
+            router.forward(TransactionDetailArgs(transaction.id.txIdString(), owner.toStorageKeyId()))
+        }
         confirmVerified(router)
     }
 
     private suspend fun assertIncoming(status: SwapStatus, title: Int, icon: Int, color: StringResourceColor) {
+        val owner = EditAccountFixtures.zodl()
         val swap = TransactionSwapMetadata(
             depositAddress = "fixture-incoming-deposit",
             provider = "near",
@@ -157,7 +164,8 @@ class ActivityHistoryVMTest {
             destination = SwapAssetTestFixture.zecSimpleAsset(),
             mode = SwapMode.FLEX_INPUT,
             recordedStatus = status,
-            amountOutFormatted = BigDecimal("1.23456789")
+            amountOutFormatted = BigDecimal("1.23456789"),
+            ownerAccount = owner,
         )
         val activity = ActivityData.BySwap(swap)
         val row = row(activity)
@@ -173,7 +181,9 @@ class ActivityHistoryVMTest {
         assertEquals(color, value.style.color)
 
         row.onClick()
-        verify(exactly = 1) { router.forward(SwapDetailArgs(swap.depositAddress)) }
+        verify(exactly = 1) {
+            router.forward(SwapDetailArgs(swap.depositAddress, owner.sdkAccount.accountUuid.toStorageKeyId()))
+        }
         confirmVerified(router)
         row.onDisplayed()
         verify(exactly = 1) { updateMetadata(activity) }

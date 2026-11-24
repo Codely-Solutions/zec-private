@@ -154,11 +154,27 @@ class ClaimTest(unittest.TestCase):
 
     def test_deadline_crossed_during_ledger_write_leaves_it_protected(self):
         with tempfile.TemporaryDirectory() as root, \
-                patch('core_faucet.time.monotonic', side_effect=[100, 100, 250, 599, 600]):
+                patch('core_faucet.time.monotonic', side_effect=[100, 100, 250, 599, 600, 601]):
             with self.assertRaises(core_faucet.FundingWindowExpired):
                 self.run_claim(root, self.replies(), post_by=600)
             self.assertNotIn('POST', [method for method, _, _ in self.calls])
-            self.assertTrue((Path(root) / 'funding-claim-ledger.json').is_file())
+            ledger = Path(root) / 'funding-claim-ledger.json'
+            proof = json.loads(ledger.read_text())
+            self.assertEqual((proof['status'], proof['claim_requests']), ('closed-before-post', 0))
+            with patch('core_faucet.TorHTTPS') as client, self.assertRaisesRegex(RuntimeError, 'already attempted'):
+                core_faucet.claim(self.address, root, 12345, True)
+            client.assert_not_called()
+
+    def test_failed_terminal_ledger_write_leaves_original_proof_protected(self):
+        with tempfile.TemporaryDirectory() as root, \
+                patch('core_faucet.time.monotonic', side_effect=[100, 100, 250, 599, 600]), \
+                patch('core_faucet.os.replace', side_effect=OSError('fixture replace failed')):
+            with self.assertRaises(OSError):
+                self.run_claim(root, self.replies(), post_by=600)
+            self.assertNotIn('POST', [method for method, _, _ in self.calls])
+            ledger = Path(root) / 'funding-claim-ledger.json'
+            self.assertEqual(json.loads(ledger.read_text())['status'], 'request-starting')
+            self.assertEqual(list(Path(root).iterdir()), [ledger])
 
     def test_single_claim_and_broadcast_ledger(self):
         with tempfile.TemporaryDirectory() as root:

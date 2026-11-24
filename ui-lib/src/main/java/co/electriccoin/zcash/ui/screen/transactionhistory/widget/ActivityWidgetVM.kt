@@ -8,7 +8,9 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.WalletRestoringState
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.Transaction
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.common.usecase.GetActivitiesUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletRestoringStateUseCase
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 
 class ActivityWidgetVM(
     getActivities: GetActivitiesUseCase,
@@ -89,16 +92,20 @@ class ActivityWidgetVM(
             }
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
             initialValue = ActivityWidgetState.Loading
         )
 
     private fun onActivityDisplayed(activity: ActivityData) = updateSwapActivityMetadata(activity)
 
-    private fun onSwapClick(depositAddress: String) = navigationRouter.forward(SwapDetailArgs(depositAddress))
+    private fun onSwapClick(swap: TransactionSwapMetadata) {
+        val accountKeyId = swap.ownerAccount?.sdkAccount?.accountUuid?.toStorageKeyId() ?: return
+        navigationRouter.forward(SwapDetailArgs(swap.depositAddress, accountKeyId))
+    }
 
     private fun onTransactionClick(transaction: Transaction) {
-        navigationRouter.forward(TransactionDetailArgs(transaction.id.txIdString()))
+        val accountKeyId = transaction.accountUuid?.toStorageKeyId() ?: return
+        navigationRouter.forward(TransactionDetailArgs(transaction.id.txIdString(), accountKeyId))
     }
 
     private fun onSeeAllTransactionsClick() {

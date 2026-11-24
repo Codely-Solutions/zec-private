@@ -90,11 +90,12 @@ class MainActivity : FragmentActivity() {
         val restoredInNewProcess = launchNavigation.restoreExternalScans(
             savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty(),
         )
-        if (restoredInNewProcess) {
-            savedInstanceState?.getStringArrayList(PENDING_MIGRATION_NOTICE)?.let {
-                migrationAppHooks.restoreNotificationProgress(it.singleOrNull(), lifecycleScope)
-            }
+        val migrationOwner = if (restoredInNewProcess) {
+            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)
+        } else {
+            launchNavigation.pendingMigrationLookup()
         }
+        migrationOwner?.let { migrationAppHooks.restoreNotificationProgress(it, lifecycleScope) }
 
         setAllowedScreenOrientation()
 
@@ -112,7 +113,7 @@ class MainActivity : FragmentActivity() {
         super.onSaveInstanceState(outState)
         outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
-        launchNavigation.saveMigrationNotice()?.let { outState.putStringArrayList(PENDING_MIGRATION_NOTICE, it) }
+        launchNavigation.saveMigrationNotice()?.let { outState.putString(PENDING_MIGRATION_NOTICE, it) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -358,7 +359,7 @@ class MainActivity : FragmentActivity() {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
-        private const val NAVIGATION_STATE_VERSION = 5
+        private const val NAVIGATION_STATE_VERSION = 6
 
         // Forget older navigation stacks when their routes or saved payloads change.
         // Version 3 adds the transaction note's account and wallet session to its typed route.

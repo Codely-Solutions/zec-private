@@ -55,7 +55,7 @@ class MigrationTorFailureVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            verify(exactly = 1) { router.replaceAll(HomeArgs, MigrationProgressArgs) }
+            verify(exactly = 1) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
             verify(exactly = 0) { decisionRepository.set(any(), any()) }
             collectJob.cancel()
         }

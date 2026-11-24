@@ -61,7 +61,9 @@ class ResetZashiUseCase(
         running.value = true
         pendingFailure.value = null
         try {
-            val stage = progressStore.getStage()
+            val stage = runCatchingRecoverable { progressStore.getStage() }
+                .onFailure { reportPendingFailure() }
+                .getOrThrow()
             if (stage == null) requestBiometrics()
 
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
@@ -79,9 +81,7 @@ class ResetZashiUseCase(
                     homeMessageCacheRepository.reset()
                     progressStore.store(null)
                     walletWriteAccess.finishReset()
-                }.onFailure {
-                    if (isPending.value) pendingFailure.value = PendingResetFailure()
-                }.getOrThrow()
+                }.onFailure { reportPendingFailure() }.getOrThrow()
             }
         } catch (_: BiometricsFailureException) {
             // Wait for another confirmation.
@@ -95,6 +95,10 @@ class ResetZashiUseCase(
     }
 
     internal class PendingResetFailure
+
+    private fun reportPendingFailure() {
+        if (isPending.value) pendingFailure.value = PendingResetFailure()
+    }
 
     private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {

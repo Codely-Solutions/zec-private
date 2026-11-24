@@ -30,6 +30,19 @@ class RunEnvironmentTests(unittest.TestCase):
         self.assertEqual(before, dict(os.environ))
         self.assertTrue(sync.run('git', '--version').startswith('git version '))
 
+    def test_source_inventory_tracks_localized_filenames_with_git_quoting_enabled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sync.run('git', 'init', '--quiet', cwd=root)
+            sync.run('git', 'config', 'core.quotePath', 'true', cwd=root)
+            source = root / '\u00e9tablissement.kt'
+            source.write_bytes(b'val title = 1\n')
+            sync.run('git', 'add', '--', source.name, cwd=root)
+            original = sync.source_state(root)
+            self.assertEqual(set(original), {source.name})
+            source.write_bytes(b'val title = 2\n')
+            self.assertNotEqual(original[source.name], sync.source_state(root)[source.name])
+
 
 class RefreshPatchTests(unittest.TestCase):
     def test_index_patch_preserves_crlf_hunks_across_checkout_modes(self):

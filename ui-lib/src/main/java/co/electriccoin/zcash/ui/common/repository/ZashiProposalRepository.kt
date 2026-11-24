@@ -182,27 +182,26 @@ class ZashiProposalRepositoryImpl(
                                 )
                             )
                         }
-                        if (transactionProposal is SwapTransactionProposal) {
-                            processSwapTransaction.reserveFunding(transactionProposal) {
-                                requireCurrentProposal(transactionProposal)
+                        val validateFunding: () -> Unit = {
+                            requireCurrentProposal(transactionProposal)
+                            if (transactionProposal is SwapTransactionProposal) {
                                 transactionProposal.requireFundingApproval(reviewedQuote)
                                 ZecSwapComposition.validate(transactionProposal.quote)
                             }
-                            transactionProposal.requireFundingApproval(reviewedQuote)
                         }
-                        requireCurrentProposal(transactionProposal)
-                        val result =
+                        val submit: suspend (() -> Unit) -> SubmitResult = { beforeSubmission ->
                             proposalDataSource.submitTransaction(
                                 proposal = transactionProposal.proposal,
                                 usk = spendingKey,
-                                beforeFirstSubmission = {
-                                    requireCurrentProposal(transactionProposal)
-                                    if (transactionProposal is SwapTransactionProposal) {
-                                        transactionProposal.requireFundingApproval(reviewedQuote)
-                                        ZecSwapComposition.validate(transactionProposal.quote)
-                                    }
-                                }
+                                beforeFirstSubmission = beforeSubmission,
                             )
+                        }
+                        val result = if (transactionProposal is SwapTransactionProposal) {
+                            processSwapTransaction.submitReservedFunding(transactionProposal, validateFunding, submit)
+                        } else {
+                            validateFunding()
+                            submit(validateFunding)
+                        }
                         submitState.update { SubmitProposalState.Result(result) }
                         result
                     } catch (e: Exception) {

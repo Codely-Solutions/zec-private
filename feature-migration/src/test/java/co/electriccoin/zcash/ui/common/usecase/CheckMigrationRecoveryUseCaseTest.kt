@@ -107,6 +107,34 @@ class CheckMigrationRecoveryUseCaseTest {
     // ── Task 6: auto-navigation removal — only Tor-failure fires on app-open ─────────────
 
     @Test
+    fun sdkOpenFailureLeavesTheNextForegroundRecoveryAvailable() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        var opens = 0
+        val acquire = mockk<GetOrchardMigrationSdkUseCase> {
+            coEvery { this@mockk() } coAnswers {
+                if (++opens == 1) error("fixture wallet disappeared before SDK open")
+                sdk
+            }
+            coEvery { this@mockk(any()) } returns sdk
+        }
+        val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        val recovery = useCase(
+            sdk = sdk,
+            navigationRouter = mockk(relaxed = true),
+            migrationLiveDriver = driver,
+            getOrchardMigrationSdk = acquire,
+        )
+
+        recovery()
+        coVerify(exactly = 0) { driver.startIfNotRunning(any()) }
+        recovery()
+        assertEquals(2, opens)
+        coVerify(exactly = 1) { driver.startIfNotRunning(testSdkAccount.accountUuid.toStorageKeyId()) }
+    }
+
+    @Test
     fun hasOverdueTransfers_doesNotAutoNavigateToMigrationProgress() =
         runTest {
             // After Task 6 the overdue branch no longer auto-navigates — user reaches Progress via
@@ -121,7 +149,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = false).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
         }
 
     @Test
@@ -172,7 +200,7 @@ class CheckMigrationRecoveryUseCaseTest {
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true).invoke()
 
             coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs) }
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
             coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationCompleteArgs()) }
         }
 

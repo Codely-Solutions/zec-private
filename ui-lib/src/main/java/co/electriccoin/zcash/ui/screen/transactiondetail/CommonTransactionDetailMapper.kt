@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
+import co.electriccoin.zcash.ui.common.usecase.ActivityDetailUnavailableException
 import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
@@ -36,6 +37,12 @@ class CommonTransactionDetailMapper {
 
     fun createTransactionDetailErrorFooter(error: Exception?): ErrorFooter? {
         if (error == null) return null
+        if (error is ActivityDetailUnavailableException) {
+            return ErrorFooter(
+                title = stringRes(R.string.private_activity_details_unavailable),
+                subtitle = stringRes(R.string.private_activity_details_return),
+            )
+        }
 
         val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
 
@@ -58,7 +65,7 @@ class CommonTransactionDetailMapper {
     fun createTransactionDetailErrorButtonState(error: Exception?, reloadHandle: ReloadHandle): ButtonState? {
         val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
 
-        return if (isServiceUnavailableError) {
+        return if (isServiceUnavailableError || error is ActivityDetailUnavailableException) {
             null
         } else {
             ButtonState(

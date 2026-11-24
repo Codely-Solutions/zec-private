@@ -6,7 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
-import co.electriccoin.zcash.ui.common.mapper.originalQuoteSupportButton
+import co.electriccoin.zcash.ui.common.mapper.savedSwapSupportButton
 import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
@@ -54,7 +54,7 @@ class SwapDetailVM(
 ) : ViewModel() {
     val state: StateFlow<SwapDetailState?> =
         getReloadableSwapQuote
-            .observe(args.depositAddress)
+            .observe(args.depositAddress, args.accountKeyId)
             .map { swapData ->
                 val hasDetails = swapData.status != null || swapData.savedMetadata != null
                 SwapDetailState(
@@ -100,12 +100,13 @@ class SwapDetailVM(
                     infoFooter = when {
                         hasDetails && swapData.error != null -> stringRes(R.string.private_swap_refresh_unavailable)
                         hasDetails && swapData.isLoading -> stringRes(R.string.private_swap_refreshing)
-                        swapData.status?.status == PENDING -> stringRes(R.string.deposits_info)
+                        swapData.status?.status == PENDING && swapData.savedMetadata?.fundingNotSubmitted != true ->
+                            stringRes(R.string.deposits_info)
                         else -> null
                     },
                     primaryButton = createPrimaryButtonState(swapData, swapData.error),
                     supportButton = if (swapData.error != null) {
-                        swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+                        swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
                     } else {
                         null
                     },
@@ -233,7 +234,7 @@ class SwapDetailVM(
             }
 
             else -> {
-                swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+                swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
             }
         }
     }
@@ -265,8 +266,11 @@ class SwapDetailVM(
         when (swapData.status?.status ?: swapData.savedMetadata?.status) {
             EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
             PENDING -> stringRes(
-                if (swapData.isOutgoing) R.string.private_swap_funding_unconfirmed
-                else R.string.swapAndPay_status_pendingDeposit
+                when {
+                    swapData.savedMetadata?.fundingNotSubmitted == true -> R.string.private_swap_funding_not_sent
+                    swapData.isOutgoing -> R.string.private_swap_funding_unconfirmed
+                    else -> R.string.swapAndPay_status_pendingDeposit
+                }
             )
             INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
             PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)

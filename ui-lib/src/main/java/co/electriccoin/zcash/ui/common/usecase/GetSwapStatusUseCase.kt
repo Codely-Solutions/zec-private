@@ -4,6 +4,7 @@ import android.content.Context
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -36,8 +37,15 @@ class GetSwapStatusUseCase(
 
     fun observe(depositAddress: String): Flow<SwapQuoteStatusData> = observe(depositAddress, null)
 
+    internal fun observeForAccount(depositAddress: String, account: WalletAccount): Flow<SwapQuoteStatusData> =
+        observe(depositAddress, null, account)
+
     @Suppress("TooGenericExceptionCaught", "LoopWithTooManyJumpStatements")
-    private fun observe(depositAddress: String, initial: TransactionSwapMetadata?): Flow<SwapQuoteStatusData> =
+    private fun observe(
+        depositAddress: String,
+        initial: TransactionSwapMetadata?,
+        account: WalletAccount? = null,
+    ): Flow<SwapQuoteStatusData> =
         channelFlow {
             val data = MutableStateFlow(SwapQuoteStatusData())
 
@@ -46,7 +54,7 @@ class GetSwapStatusUseCase(
             }
 
             launch {
-                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress)
+                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
 
                 if (expectedMetadata == null) {
                     data.update {

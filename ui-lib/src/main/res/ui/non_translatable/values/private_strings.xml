@@ -37,6 +37,8 @@
     <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
     <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
     <string name="private_progress_unavailable_title">Payment status unavailable</string>
+    <string name="private_activity_details_unavailable">Details unavailable</string>
+    <string name="private_activity_details_return">Return to Activity to open this item.</string>
     <string name="private_progress_unavailable_message">Check Activity for the payment before trying again.</string>
     <string name="private_recovery_open_activity">Open Activity</string>
     <string name="private_quote_unavailable_message">Go back to request a fresh quote.</string>
@@ -49,4 +51,5 @@
     <string name="private_review_unavailable_title">Payment review expired</string>
     <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
     <string name="private_swap_funding_unconfirmed" translatable="false">Funding unconfirmed</string>
+    <string name="private_swap_funding_not_sent" translatable="false">Funding not sent</string>
 </resources>

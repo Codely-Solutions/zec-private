@@ -52,11 +52,12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.migration.component.MigrationPreparationDetailsBottomSheet
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationProgressScreen() {
-    val vm = koinViewModel<MigrationProgressVM>()
+fun MigrationProgressScreen(args: MigrationProgressArgs) {
+    val vm = koinViewModel<MigrationProgressVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.content?.onBack?.invoke() ?: vm.navigateBack() }
     LceRenderer(

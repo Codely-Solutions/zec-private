@@ -22,5 +22,6 @@ fun SwapDetailScreen(args: SwapDetailArgs) {
 
 @Serializable
 data class SwapDetailArgs(
-    val depositAddress: String
+    val depositAddress: String,
+    val accountKeyId: String? = null,
 )

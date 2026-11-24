@@ -38,11 +38,28 @@ class LaunchNavigationRequests {
         return true
     }
 
-    fun requestMigrationProgress(command: NavigationCommand.ReplaceAll, ownerKey: String? = null) =
-        offer(Kind.MIGRATION_PROGRESS, command, ownerKey)
+    fun beginMigrationProgress(ownerKey: String): MigrationNotice = MigrationNotice(ownerKey).also { notice ->
+        pending.update { queue ->
+            queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS } + Request(Kind.MIGRATION_PROGRESS, null, notice)
+        }
+    }
 
-    internal fun saveMigrationNotice(): ArrayList<String>? =
-        pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS }?.let { ArrayList(listOfNotNull(it.ownerKey)) }
+    fun isResolvingMigrationProgress(notice: MigrationNotice): Boolean =
+        pending.value.any { it.migrationNotice === notice && it.command == null }
+
+    fun finishMigrationProgress(notice: MigrationNotice, command: NavigationCommand.ReplaceAll?) {
+        pending.update { queue ->
+            queue.mapNotNull { request ->
+                if (request.migrationNotice !== notice) request else command?.let { request.copy(command = it) }
+            }
+        }
+    }
+
+    internal fun saveMigrationNotice(): String? = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
+
+    internal fun pendingMigrationLookup(): String? =
+        pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
+            ?.migrationNotice?.ownerKey
 
     fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 
@@ -59,23 +76,30 @@ class LaunchNavigationRequests {
     ) {
         for (request in pending.value) {
             if (!hasAppAccess()) return
+            val command = request.command ?: continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
                 val queue = pending.value
                 if (request in queue && pending.compareAndSet(queue, queue - request)) {
-                    navigate(request.command)
+                    navigate(command)
                 }
             }
         }
     }
 
-    private fun offer(kind: Kind, command: NavigationCommand, ownerKey: String? = null) {
+    private fun offer(kind: Kind, command: NavigationCommand) {
         pending.update { queue ->
-            val request = Request(kind, command, ownerKey)
+            val request = Request(kind, command)
             if (request in queue) queue else queue.filterNot { it.kind == kind } + request
         }
     }
 
-    internal data class Request(val kind: Kind, val command: NavigationCommand, val ownerKey: String? = null)
+    class MigrationNotice internal constructor(val ownerKey: String)
+
+    internal data class Request(
+        val kind: Kind,
+        val command: NavigationCommand?,
+        val migrationNotice: MigrationNotice? = null,
+    )
 
     internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
 }

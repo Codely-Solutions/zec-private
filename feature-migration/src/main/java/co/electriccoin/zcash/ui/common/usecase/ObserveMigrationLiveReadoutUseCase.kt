@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import co.electriccoin.zcash.ui.common.repository.MigrationLiveReadout
 import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 import co.electriccoin.zcash.ui.common.repository.readUnreconciledLiveReadout
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -36,11 +37,13 @@ class ObserveMigrationLiveReadoutUseCase(
 ) {
     operator fun invoke(accountKeyId: String): Flow<MigrationLiveReadout?> =
         combine(migrationTransferStateRepository.observe(accountKeyId), recheckTicker()) { published, _ -> published }
-            .map { published -> published ?: fetchFreshReadout() }
+            .map { published -> published ?: fetchFreshReadout(accountKeyId) }
             .flowOn(Dispatchers.Default)
 
-    private suspend fun fetchFreshReadout(): MigrationLiveReadout? =
-        runCatching { getOrchardMigrationSdk().readUnreconciledLiveReadout() }.getOrNull()
+    private suspend fun fetchFreshReadout(accountKeyId: String): MigrationLiveReadout? =
+        runCatching { getOrchardMigrationSdk(accountKeyId)?.readUnreconciledLiveReadout() }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrNull()
 
     private fun recheckTicker(): Flow<Unit> =
         flow {

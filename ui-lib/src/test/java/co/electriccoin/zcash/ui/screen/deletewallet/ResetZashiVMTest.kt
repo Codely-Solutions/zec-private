@@ -233,6 +233,34 @@ class ResetZashiVMTest {
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
     }
 
+    @Test
+    fun pendingStageReadFailureOffersPrivateSupportAndRetriesTheOriginalStage(): Unit = runBlocking {
+        every { coordinator.deleteSdkDataFlow() } returns flowOf(true)
+        createViewModel()
+        progress.store(ResetStage.ERASE_SDK)
+        val marker = File(directory.root, "wallet-reset-progress")
+        marker.writeText("incomplete stage")
+
+        assertNotNull(awaitState { it.content?.isPending == true }.content).buttonState.onClick()
+        val failure = awaitState { it.error != null && it.content?.buttonState?.isLoading == false }
+        val sheet = assertIs<LceError.BottomSheet>(failure.error).state
+        assertEquals(stringRes(R.string.wallet_reset_failed), sheet.message)
+        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
+        assertNotNull(sheet.secondaryAction).onClick()
+        val chooser = assertNotNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
+        val draft = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+        assertEquals("", draft.getStringExtra(Intent.EXTRA_TEXT))
+        coVerify(exactly = 0) { diagnostics() }
+
+        marker.writeText(ResetStage.ERASE_SDK.name)
+        assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content).buttonState.onClick()
+        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
+        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { biometrics.requestBiometrics(any()) }
+        coVerify(exactly = 0) { contacts.delete() }
+        coVerify(exactly = 0) { metadata.delete() }
+    }
+
     private fun createViewModel() {
         val context = mockk<Context> {
             every { noBackupFilesDir } returns directory.root

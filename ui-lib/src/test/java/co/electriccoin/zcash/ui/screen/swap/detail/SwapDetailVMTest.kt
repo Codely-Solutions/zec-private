@@ -94,6 +94,20 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun savedProblemStatusesOfferGenericSupportWithoutSignedEvidence() = runTest {
+        for (status in listOf(SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)) {
+            val harness = harness(SwapQuoteStatusData(
+                isLoading = false, error = unavailable(), savedMetadata = saved(status),
+            ))
+            val support = assertNotNull(harness.state().supportButton)
+            assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
+            support.onClick()
+            verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT)) }
+            assertNeutralRetry(harness)
+        }
+    }
+
+    @Test
     fun trackedOutgoingSwapShowsUnconfirmedFundingAndOffersStatusRetry() = runTest {
         val saved = saved(
             SwapStatus.PENDING,
@@ -107,6 +121,13 @@ class SwapDetailVMTest {
         assertEquals(TransactionDetailSwapStatusRowState.Mode.SWAP_FROM_ZEC, detail.status.mode)
         assertNull(detail.donationBasisZec)
         assertNeutralRetry(harness)
+
+        harness.emit(SwapQuoteStatusData(
+            isLoading = false, error = unavailable(), savedMetadata = saved.copy(fundingNotSubmitted = true),
+        ))
+        runCurrent()
+        assertEquals(stringRes(R.string.private_swap_funding_not_sent), harness.state().transactionHeader.title)
+        assertEquals(true, harness.state().status.fundingNotSubmitted)
     }
 
     @Test

@@ -255,7 +255,7 @@ private class MultiEndpointTransactionSubmitterImpl(
                 is BroadcastCompletion.Rejected -> {
                     state.cancel()
                     logger.error {
-                        "$logTag $transactionLabel rejected by all $endpointCount endpoint(s)."
+                        "$logTag $transactionLabel had no confirmed acceptance from $endpointCount endpoint(s)."
                     }
                     result.result
                 }
@@ -319,8 +319,9 @@ private class MultiEndpointTransactionSubmitterImpl(
                 submission.result as? TransactionSubmitResult.Failure
             }
 
+        // A completed transport failure may still have delivered the transaction to its endpoint.
         return failures
-            .firstOrNull { !it.grpcError }
+            .firstOrNull { it.grpcError }
             ?: failures.firstOrNull()
             ?: createGrpcFailure(transaction, "All endpoints rejected transaction")
     }

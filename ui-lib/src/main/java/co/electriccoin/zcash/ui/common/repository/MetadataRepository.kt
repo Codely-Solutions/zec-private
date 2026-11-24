@@ -108,6 +108,8 @@ interface MetadataRepository {
     /** Persists a refresh for the same account and saved entry that owned the request. */
     suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata?
 
+    suspend fun markSwapFundingNotSubmitted(expected: TransactionSwapMetadata): Boolean
+
     // fun deleteSwap(depositAddress: String)
 
     /**
@@ -296,6 +298,15 @@ class MetadataRepositoryImpl(
                     expectedReviewedIdentity = expected.reviewedIdentity,
                 )?.toBusinessObject(simpleSwapAssetProvider)?.copy(ownerAccount = account, walletWriteToken = token)
             }
+        }
+    }
+
+    override suspend fun markSwapFundingNotSubmitted(expected: TransactionSwapMetadata): Boolean {
+        val account = expected.ownerAccount ?: return false
+        val token = expected.walletWriteToken ?: return false
+        val identity = expected.reviewedIdentity ?: return false
+        return updateMetadataAndAwait(account, token) { key ->
+            metadataDataSource.markSwapFundingNotSubmitted(expected.depositAddress, expected.lastUpdated, identity, key)
         }
     }
 
@@ -519,6 +530,7 @@ data class TransactionSwapMetadata(
     val quotedAmountOut: BigDecimal? = null,
     val executedAmountOut: BigDecimal? = null,
     internal val statusUpdatedAt: Instant? = null,
+    val fundingNotSubmitted: Boolean = false,
 ) {
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
@@ -541,7 +553,7 @@ data class TransactionSwapMetadata(
     internal fun outgoingStatus(transaction: SendTransaction, liveStatus: SwapStatus? = null): SwapStatus {
         val settlement = liveStatus ?: recordedStatus
         // An explicit settlement can outlive a stale local funding transaction state.
-        return if (transaction is SendTransaction.Failed && settlement != SwapStatus.SUCCESS) {
+        return if (transaction is SendTransaction.Failed && settlement?.isTerminal != true) {
             SwapStatus.FAILED
         } else {
             settlement ?: status
@@ -576,6 +588,7 @@ internal fun SwapMetadataV3.toBusinessObject(
         quotedAmountOut = quotedAmountOut,
         executedAmountOut = executedAmountOut,
         statusUpdatedAt = statusUpdatedAt?.toJavaInstant(),
+        fundingNotSubmitted = fundingNotSubmitted,
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,

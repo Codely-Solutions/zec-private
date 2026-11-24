@@ -670,6 +670,42 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun aRefusedFirstBroadcastPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val address = WalletAddress.Unified.new("deposit")
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val proposal = mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { destination } returns address
+            every { fundingAccount } returns account
+            every { totalFees } returns Zatoshi(0)
+            every { totalFeesUsd } returns BigDecimal.ZERO
+        }
+        val provider = metadataProvider
+        val tracking = ProcessSwapTransactionUseCase(repository(provider), mockk())
+        var approved = true
+        var broadcast = false
+        assertFailsWith<IllegalStateException> {
+            tracking.submitReservedFunding(proposal, { check(approved) }) { firstEntry ->
+                approved = false
+                firstEntry()
+                broadcast = true
+                error("fixture reached broadcaster")
+            }
+        }
+        assertFalse(broadcast)
+
+        val reopened = repository(provider).getSwapMetadata("deposit", account)
+        assertNotNull(reopened)
+        assertEquals(SwapStatus.PENDING, reopened.status)
+        assertTrue(reopened.fundingNotSubmitted)
+        assertEquals(quote.reviewedIdentity(), reopened.reviewedIdentity)
+        assertFailsWith<IllegalStateException> {
+            ProcessSwapTransactionUseCase(repository(provider), mockk()).reserveFunding(proposal) {}
+        }
+    }
+
+    @Test
     fun retentionCapsQuoteBodiesWithoutRemovingSwapHistory() = runTest {
         val source = dataSource()
         val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)

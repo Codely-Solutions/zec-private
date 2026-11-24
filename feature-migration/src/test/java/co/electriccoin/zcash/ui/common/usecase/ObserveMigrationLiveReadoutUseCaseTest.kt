@@ -54,7 +54,7 @@ class ObserveMigrationLiveReadoutUseCaseTest {
             val result = useCase("account-1").first()
 
             assertEquals(cached, result)
-            coVerify(exactly = 0) { getOrchardMigrationSdk() }
+            coVerify(exactly = 0) { getOrchardMigrationSdk(any()) }
         }
 
     @Test
@@ -77,7 +77,7 @@ class ObserveMigrationLiveReadoutUseCaseTest {
                 }
             val getOrchardMigrationSdk =
                 mockk<GetOrchardMigrationSdkUseCase> {
-                    coEvery { this@mockk() } returns sdk
+                    coEvery { this@mockk("account-1") } returns sdk
                 }
 
             val useCase = ObserveMigrationLiveReadoutUseCase(repository, getOrchardMigrationSdk)
@@ -85,6 +85,8 @@ class ObserveMigrationLiveReadoutUseCaseTest {
             val result = useCase("account-1").first()
 
             assertEquals(fallback, result)
+            coVerify(exactly = 0) { getOrchardMigrationSdk() }
+            coVerify(exactly = 1) { getOrchardMigrationSdk("account-1") }
         }
 
     @Test
@@ -100,7 +102,7 @@ class ObserveMigrationLiveReadoutUseCaseTest {
                 }
             val getOrchardMigrationSdk =
                 mockk<GetOrchardMigrationSdkUseCase> {
-                    coEvery { this@mockk() } returns sdk
+                    coEvery { this@mockk("account-1") } returns sdk
                 }
 
             val useCase = ObserveMigrationLiveReadoutUseCase(repository, getOrchardMigrationSdk)
@@ -137,7 +139,7 @@ class ObserveMigrationLiveReadoutUseCaseTest {
                 }
             val getOrchardMigrationSdk =
                 mockk<GetOrchardMigrationSdkUseCase> {
-                    coEvery { this@mockk() } returns sdk
+                    coEvery { this@mockk("account-1") } returns sdk
                 }
 
             val useCase = ObserveMigrationLiveReadoutUseCase(repository, getOrchardMigrationSdk)

@@ -10,7 +10,7 @@ from test_support import patch_environment
 
 from acceptance_policy import POLICY_VERSION
 import hosted_release
-from hosted_core import network_startup_diagnostics
+from hosted_core import funding_claim_state, network_startup_diagnostics
 from hosted_quote_probe import BRIDGE_ARTIFACT, retained_bridge, stage_bridge, stage_quote_apk
 from quote_recovery import (
     ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
@@ -36,6 +36,24 @@ class QuoteRecoveryTests(unittest.TestCase):
     def setUp(self):
         # These fixtures exercise run/job decisions. Archive and receipt validation uses separate fixtures.
         self.verify_receipts = self.enterContext(patch.object(hosted_release, 'verify_recovered_receipts'))
+
+    def test_only_a_durable_zero_request_cutoff_can_prove_no_post_after_ledger_creation(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            ledger = root / 'funding-claim-ledger.json'
+            with patch_environment({'CORE_FAUCET_LEDGER': str(ledger)}):
+                self.assertEqual(funding_claim_state(root), 'no-POST')
+                for status, count, result in (
+                        ('closed-before-post', 0, 'no-POST'),
+                        ('closed-before-post', False, 'unknown'),
+                        ('closed-before-post', 1, 'unknown'),
+                        ('request-starting', 1, 'request-starting'),
+                        ('outcome-uncertain', 1, 'outcome-uncertain')):
+                    with self.subTest(status=status, count=count):
+                        ledger.write_text(json.dumps(dict(provider='argon-testnet', status=status, claim_requests=count)))
+                        self.assertEqual(funding_claim_state(root), result)
+                ledger.write_text('{"status":"closed-before-post"')
+                self.assertEqual(funding_claim_state(root), 'unknown')
 
     def test_market_result_requires_visible_reference_or_warning(self):
         self.assertIsNone(market_reference_state({'quote details', 'market reference'}))

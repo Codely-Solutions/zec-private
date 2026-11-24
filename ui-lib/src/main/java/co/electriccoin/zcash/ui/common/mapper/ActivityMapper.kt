@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.repository.Transaction
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
@@ -39,7 +40,7 @@ class ActivityMapper {
         data: ActivityData,
         restoreTimestamp: Instant,
         onTransactionClick: (Transaction) -> Unit,
-        onSwapClick: (depositAddress: String) -> Unit,
+        onSwapClick: (TransactionSwapMetadata) -> Unit,
         onDisplayed: (ActivityData) -> Unit
     ): ActivityState =
         when (data) {
@@ -52,7 +53,7 @@ class ActivityMapper {
                     subtitle = getSubtitle(data.swap.lastUpdated),
                     isShielded = false,
                     value = getSwapValue(data),
-                    onClick = { onSwapClick(data.swap.depositAddress) },
+                    onClick = { onSwapClick(data.swap) },
                     isUnread = false,
                     onDisplayed = { onDisplayed(data) }
                 )
@@ -416,7 +417,8 @@ private const val MONTH_THRESHOLD = 30
 private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
     val isPayment = data.swap.mode == EXACT_OUTPUT
     return when (data.swap.status) {
-        PENDING -> R.string.private_swap_funding_unconfirmed
+        PENDING -> if (data.swap.fundingNotSubmitted) R.string.private_swap_funding_not_sent
+            else R.string.private_swap_funding_unconfirmed
         INCOMPLETE_DEPOSIT -> {
             if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
         }

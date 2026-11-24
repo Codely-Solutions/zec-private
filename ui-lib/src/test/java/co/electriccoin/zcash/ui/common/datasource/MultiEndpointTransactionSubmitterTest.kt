@@ -206,7 +206,7 @@ class MultiEndpointTransactionSubmitterTest {
         }
 
     @Test
-    fun automaticModeReturnsFirstNonGrpcFailureWhenAllEndpointsFailFast() =
+    fun automaticModeKeepsMixedRejectionAndTransportFailurePending() =
         runTest {
             val transaction = transaction(3)
             val submitter =
@@ -217,7 +217,7 @@ class MultiEndpointTransactionSubmitterTest {
                         when (submittedEndpoint.host) {
                             "first.example.com" -> failure(transaction, code = 1, grpcError = true)
                             "second.example.com" -> failure(transaction, code = 18, grpcError = false)
-                            "third.example.com" -> failure(transaction, code = 19, grpcError = false)
+                            "third.example.com" -> throw java.io.IOException("fixture response lost")
                             else -> error("Unexpected endpoint $submittedEndpoint")
                         }
                     }
@@ -236,10 +236,29 @@ class MultiEndpointTransactionSubmitterTest {
                 )
 
             val result = assertIs<TransactionSubmitResult.Failure>(results.single())
-            assertEquals(false, result.grpcError)
-            assertEquals(18, result.code)
-            assertEquals("failure 18", result.description)
+            assertEquals(true, result.grpcError)
+            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
         }
+
+    @Test
+    fun automaticModeReportsFailureWhenEveryEndpointReturnsARejection() = runTest {
+        val transaction = transaction(3)
+        val submitter = MultiEndpointTransactionSubmitter(
+            closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
+            logger = noOpLogger,
+            submit = { _, _ -> failure(transaction, code = 18, grpcError = false) },
+        )
+
+        val results = submitter.submitTransactions(
+            transactions = listOf(transaction),
+            endpoints = listOf(endpoint("first.example.com"), endpoint("second.example.com")),
+            logTag = LOG_TAG,
+        )
+
+        val failure = assertIs<SubmitResult.Failure>(results.toSubmitResult())
+        assertEquals(18, failure.code)
+        assertEquals(listOf(transaction.txIdString()), failure.txIds)
+    }
 
     @Test
     fun timeoutWithIncompleteEndpointReportsGrpcFailure() =

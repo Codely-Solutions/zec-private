@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -75,40 +76,22 @@ class CheckMigrationRecoveryUseCase(
         requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
     ) {
         if (!startRecovery()) return
-        // No wallet YET — on a cold start this fires before the synchronizer initializes, and
-        // silently consuming the throttle window here left recovery permanently ineffective
-        // (observed live: 1st call = SDK null + throttle stamped, 2nd call 3s later = throttled;
-        // both lanes stayed dead after a reinstall). Un-stamp the throttle so the next trigger
-        // (foreground/unlock/onStart all re-fire) gets a real attempt once the wallet is up.
-        // getOrchardMigrationSdk() itself now throws rather than returning null on a wallet-less
-        // install (it's a precondition for every migration flow proper), so this gate has to run
-        // BEFORE calling it — this is the one genuinely wallet-independent call site the SDK
-        // use case's own kdoc calls out.
-        if (persistableWalletProvider.getPersistableWallet() == null) {
-            throttleMutex.withLock { lastRunMark = null }
-            migrationLog("MigrationRecovery: SDK not ready — will retry on next trigger.")
-            return
-        }
-        val sdk = getOrchardMigrationSdk()
-
-        // The whole engine-reading/routing body below is guarded (2026-08-07): a "database is
-        // locked" throw here used to be unguarded and would crash the app-open/foreground-return
-        // path — this use case drives navigation, not a screen with its own LCE error state to
-        // fall back on. On failure, un-stamp the throttle (mirrors the wallet-not-ready branch
-        // above) so a transient read failure doesn't cost a silent 10s window before the next
-        // trigger gets a real attempt.
-        runCatching {
-            reviveAccountWorkers()
-            recoverBroadcast(sdk, requestSendingScreen)
-            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
-            // the engine's own state is the single, authoritative record (a commit that never happened
-            // simply leaves the engine NotStarted, and every screen renders that live).
-        }.onFailure { e ->
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            migrationLog(
-                "MigrationRecovery: engine read failed (${e.message}) — un-stamping the throttle for a clean retry.",
-                e
-            )
+        try {
+            // Foreground recovery can start before the wallet is ready. SDK acquisition reads it again.
+            if (persistableWalletProvider.getPersistableWallet() == null || resetPending()) {
+                throttleMutex.withLock { lastRunMark = null }
+                migrationLog("MigrationRecovery: wallet unavailable. Retry on next foreground trigger.")
+                return
+            }
+            val sdk = getOrchardMigrationSdk()
+            if (!resetPending()) {
+                reviveAccountWorkers()
+                recoverBroadcast(sdk, requestSendingScreen)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
             throttleMutex.withLock { lastRunMark = null }
         }
     }

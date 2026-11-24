@@ -7,11 +7,14 @@ import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
@@ -26,6 +29,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.mockkConstructor
+import io.mockk.spyk
 import io.mockk.unmockkConstructor
 import io.mockk.unmockkObject
 import io.mockk.verify
@@ -129,7 +133,7 @@ class MigrationAppHooksResetTest {
         val ownerKey = uuid.toStorageKeyId()
         val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
         val accounts = mockk<AccountDataSource>(relaxed = true)
-        val launchNavigation = mockk<LaunchNavigationRequests>(relaxed = true)
+        val launchNavigation = spyk(LaunchNavigationRequests())
         val pending = MutableStateFlow(false)
         val progress = mockk<ResetProgressStore> { every { isPending } returns pending }
         val writeAccess = WalletWriteAccess(progress)
@@ -137,11 +141,19 @@ class MigrationAppHooksResetTest {
             mockk(), mockk(), launchNavigation, accounts, mockk(), mockk(), progress,
             mockk(), mockk(), writeAccess,
         )
+        val command = NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(ownerKey)))
         coEvery { accounts.getAllAccounts() } returns listOf(target)
+        coEvery { accounts.selectAccount(target) } throws IllegalStateException("fixture selection failed")
         hooks.restoreNotificationProgress(ownerKey, this)
         runCurrent()
-        coVerify(exactly = 1) { accounts.selectAccount(target) }
-        verify(exactly = 1) { launchNavigation.requestMigrationProgress(any(), ownerKey) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), null) }
+        verify(exactly = 0) { launchNavigation.finishMigrationProgress(any(), command) }
+
+        coEvery { accounts.selectAccount(target) } returns Unit
+        hooks.restoreNotificationProgress(ownerKey, this)
+        runCurrent()
+        coVerify(exactly = 2) { accounts.selectAccount(target) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
 
         val released = CompletableDeferred<List<WalletAccount>>()
         coEvery { accounts.getAllAccounts() } coAnswers { released.await() }
@@ -151,8 +163,8 @@ class MigrationAppHooksResetTest {
         writeAccess.beginReset()
         released.complete(listOf(target))
         runCurrent()
-        coVerify(exactly = 1) { accounts.selectAccount(target) }
-        verify(exactly = 1) { launchNavigation.requestMigrationProgress(any(), ownerKey) }
+        coVerify(exactly = 2) { accounts.selectAccount(target) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
     }
 
     private fun pendingReset() = mockk<ResetProgressStore> {

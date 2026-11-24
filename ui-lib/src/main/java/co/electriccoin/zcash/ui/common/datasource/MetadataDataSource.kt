@@ -104,6 +104,13 @@ interface MetadataDataSource {
         executedAmountOut: BigDecimal? = null,
     ): SwapMetadataV3?
 
+    suspend fun markSwapFundingNotSubmitted(
+        depositAddress: String,
+        expectedCreatedAt: Instant,
+        expectedReviewedIdentity: String,
+        key: MetadataKey,
+    ): Boolean
+
     // suspend fun deleteSwap(depositAddress: String, key: MetadataKey)
 
     suspend fun addSwapAssetToHistory(
@@ -370,6 +377,25 @@ class MetadataDataSourceImpl(
             )
             savedSwap.takeIf { written }
         }
+
+    override suspend fun markSwapFundingNotSubmitted(
+        depositAddress: String,
+        expectedCreatedAt: Instant,
+        expectedReviewedIdentity: String,
+        key: MetadataKey,
+    ): Boolean = mutex.withLock {
+        updateMetadata(key = key, transform = { metadata ->
+            val current = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
+                ?: return@updateMetadata null
+            if (current.lastUpdated.toEpochMilli() != expectedCreatedAt.toEpochMilli() ||
+                current.reviewedIdentity != expectedReviewedIdentity || current.status != SwapStatus.PENDING
+            ) {
+                return@updateMetadata null
+            }
+            metadata.copy(swaps = metadata.swaps.copy(swapIds = metadata.swaps.swapIds
+                .update(predicate = { it.depositAddress == depositAddress }) { it.copy(fundingNotSubmitted = true) }))
+        })
+    }
 
     // override suspend fun deleteSwap(depositAddress: String, key: MetadataKey) {
     //     updateMetadata(

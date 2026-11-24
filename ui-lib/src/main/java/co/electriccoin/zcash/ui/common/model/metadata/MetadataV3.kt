@@ -141,6 +141,7 @@ data class SwapMetadataV3(
     val quotedAmountOut: BigDecimal? = null,
     @Serializable(BigDecimalSerializer::class)
     val executedAmountOut: BigDecimal? = null,
+    val fundingNotSubmitted: Boolean = false,
 ) {
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)

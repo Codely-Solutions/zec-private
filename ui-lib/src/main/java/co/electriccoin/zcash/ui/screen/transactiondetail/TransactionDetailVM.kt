@@ -10,7 +10,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
-import co.electriccoin.zcash.ui.common.mapper.originalQuoteSupportButton
+import co.electriccoin.zcash.ui.common.mapper.savedSwapSupportButton
 import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.DetailedTransactionData
+import co.electriccoin.zcash.ui.common.usecase.ActivityDetailUnavailableException
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
@@ -67,6 +68,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -86,18 +88,20 @@ class TransactionDetailVM(
     private var bookmarkJob: Job? = null
     private val transaction =
         getTransactionDetailById
-            .observe(transactionDetailArgs.transactionId)
-            .stateIn(
+            .observe(transactionDetailArgs.transactionId, transactionDetailArgs.accountKeyId)
+            .shareIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(),
-                initialValue = null
+                replay = 1,
             )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val state =
         transaction
-            .filterNotNull()
             .mapLatest { snapshot ->
+                if (snapshot == null) return@mapLatest createEmptyState().copy(
+                    errorFooter = mapper.createTransactionDetailErrorFooter(ActivityDetailUnavailableException()),
+                )
                 val recorded = snapshot.metadata.swapMetadata
                 val transaction = if (recorded != null && snapshot.swap?.savedMetadata != null) {
                     snapshot.copy(swap = snapshot.swap.withSavedObservation(recorded))
@@ -440,7 +444,7 @@ class TransactionDetailVM(
             }
 
             data.swap != null -> {
-                data.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+                data.swap.savedMetadata?.savedSwapSupportButton(::onContactSupport)
             }
 
             data.contact == null -> {
@@ -493,7 +497,8 @@ class TransactionDetailVM(
 
         return when {
             transaction.swap?.error != null && transaction.swap.status == null ->
-                transaction.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+                (transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata)
+                    ?.savedSwapSupportButton(::onContactSupport)
 
             transaction.swap != null &&
                 transaction.swap.error == null &&
