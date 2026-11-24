@@ -236,7 +236,7 @@ class MigrationKeystoneScanVMTest {
         advanceUntilIdle()
 
         val nextSign = MigrationKeystoneSignArgs(MigrationMode.IMMEDIATE, testAccountKeyId)
-        assertEquals(listOf(nextSign), router.replacedRoutes)
+        assertEquals(listOf<Any>(nextSign), router.replacedRoutes)
         assertEquals(MigrationKeystoneSignArgs::class, router.replacementOrigin)
         val next = assertNotNull(pendingPczts.peek(testAccountKeyId))
         assertEquals(1, next.roundIndex)

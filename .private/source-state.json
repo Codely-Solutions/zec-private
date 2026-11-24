@@ -687,7 +687,7 @@
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/RestartMigrationUseCaseTest.kt": "d5177ebeeb285d47723b5d9834a532018db4026420017d50c84e39ee80563ed9",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt": "2fbe5a7216967b54274bb217676237788d47123a91ac5264339bb3b5d748e04a",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVMTest.kt": "7d24bf085845cac8f0882a3a8df5362910beae414ef93966fc9898af155d3229",
-  "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt": "846c8eed7c222ece24f2a40cbccb1a1069b6563f06c0bd5238a79bb1559f6f86",
+  "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt": "823da554adde16d059b7c2bd79e235cf44b8cef5922ed2fb287b3c6f8ccb70d4",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/KeystoneBatchChunkingTest.kt": "365339e216cb1a34fbfbde3b16cc45ff7c093b9abe6f90c061dbc0e5b006e09a",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVMTest.kt": "6ddadee62162392feaf97080f673ed9d471139d3da65b7b757150d8837900054",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/privacy/MigrationPrivacyVMTest.kt": "2fe718bc71a8608213d1f96316c75eef84a31c45c2e8257ab9db689d5ceaacf2",

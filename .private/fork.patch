@@ -6777,7 +6777,7 @@ index 60f75827b..3cb0111d6 100644
 -                    coEvery { this@mockk(null) } returns snapshot
 +                    coEvery { this@mockk(any()) } returns snapshot
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
-index 7ec2ab46a..e496ff91b 100644
+index 7ec2ab46a..2f100de0d 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 @@ -21,0 +22 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
@@ -6808,7 +6808,7 @@ index 7ec2ab46a..e496ff91b 100644
 +        advanceUntilIdle()
 +
 +        val nextSign = MigrationKeystoneSignArgs(MigrationMode.IMMEDIATE, testAccountKeyId)
-+        assertEquals(listOf(nextSign), router.replacedRoutes)
++        assertEquals(listOf<Any>(nextSign), router.replacedRoutes)
 +        assertEquals(MigrationKeystoneSignArgs::class, router.replacementOrigin)
 +        val next = assertNotNull(pendingPczts.peek(testAccountKeyId))
 +        assertEquals(1, next.roundIndex)
