@@ -4,11 +4,14 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -47,94 +50,74 @@ fun TransactionDetailInfoRow(
     state: TransactionDetailInfoRowState,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-    wrapMessage: Boolean = false,
-) {
-    TransactionDetailRowSurface(
-        onClick = state.onClick,
-        modifier = modifier,
-        contentPadding = contentPadding
-    ) {
-        Text(
-            maxLines = 1,
-            text = state.title.getValue(),
-            style = ZashiTypography.textSm,
-            color = ZashiColors.Text.textTertiary
-        )
-        if (state.message != null) {
-            Spacer(Modifier.width(16.dp))
-            SelectionContainer(
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
-                    text =
-                        state.message orHiddenString
-                            stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
-                    style = ZashiTypography.textSm,
-                    color = ZashiColors.Text.textPrimary,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.End
-                )
-            }
-        } else {
-            Spacer(Modifier.width(16.dp))
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .shimmer(rememberZashiShimmer()),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                val textSize =
-                    measureTextStyle(
-                        style = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
-                    )
-
-                ShimmerRectangle(
-                    width = 64.dp,
-                    height = textSize.size.heightDp,
-                    color = ZashiColors.Surfaces.bgTertiary
-                )
-            }
-        }
-        if (state.trailingIcon != null && state.message != null) {
-            Spacer(Modifier.width(6.dp))
-            Image(
-                painter = painterResource(state.trailingIcon),
-                contentDescription = null
-            )
-        } else if (state.trailingIcon != null) {
-            val painter = painterResource(state.trailingIcon)
-            val height = with(LocalDensity.current) { painter.intrinsicSize.height.toDp() }
-            Spacer(modifier = Modifier.height(height))
-        }
-    }
-}
-
-@Composable
-fun TransactionDetailRowSurface(
-    onClick: (() -> Unit)?,
-    contentPadding: PaddingValues,
-    modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit,
 ) {
     val clickModifier =
-        if (onClick != null) {
+        if (state.onClick != null) {
             Modifier.clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick,
+                onClick = state.onClick,
                 role = Role.Button,
             )
         } else {
             Modifier
         }
 
-    Row(
-        modifier = modifier then clickModifier then Modifier.padding(contentPadding),
-        verticalAlignment = Alignment.CenterVertically
+    FlowRow(
+        modifier = modifier.fillMaxWidth().then(clickModifier).padding(contentPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        content()
+        Text(
+            modifier = Modifier.padding(end = 16.dp),
+            text = state.title.getValue(),
+            style = ZashiTypography.textSm,
+            color = ZashiColors.Text.textTertiary
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TransactionDetailValue(state)
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TransactionDetailValue(state: TransactionDetailInfoRowState) {
+    if (state.message != null) {
+        SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
+            Text(
+                text =
+                    state.message orHiddenString
+                        stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textPrimary,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.End
+            )
+        }
+    } else {
+        Box(
+            modifier = Modifier.shimmer(rememberZashiShimmer()),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            val textSize = measureTextStyle(style = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium))
+            ShimmerRectangle(
+                width = 64.dp,
+                height = textSize.size.heightDp,
+                color = ZashiColors.Surfaces.bgTertiary
+            )
+        }
+    }
+    if (state.trailingIcon != null && state.message != null) {
+        Spacer(Modifier.width(6.dp))
+        Image(
+            painter = painterResource(state.trailingIcon),
+            contentDescription = null
+        )
+    } else if (state.trailingIcon != null) {
+        val painter = painterResource(state.trailingIcon)
+        val height = with(LocalDensity.current) { painter.intrinsicSize.height.toDp() }
+        Spacer(modifier = Modifier.height(height))
     }
 }
 

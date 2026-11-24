@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
@@ -105,7 +106,8 @@ class TransactionDetailRowLayoutTest {
                 mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
             ),
             depositTo = TransactionDetailInfoRowState(
-                stringRes("Deposit reference"), stringRes("Synthetic").withStyle()
+                stringRes(R.string.private_swap_deposit_reference),
+                stringResByAddress("0123456789abcdefghijklmnopqrstabcdefghij")
             ),
             recipient = TransactionDetailInfoRowState(stringRes("Live recipient")),
             quotedOutput = TransactionDetailInfoRowState(
@@ -130,6 +132,7 @@ class TransactionDetailRowLayoutTest {
         compose.onNodeWithText(app.getString(co.electriccoin.zcash.ui.design.R.string.general_more)).performClick()
         compose.onNodeWithText(app.getString(R.string.private_quoted_output)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("0.075 ZEC").assertIsDisplayed()
+        assertCompleteText("0123456789...abcdefghij")
         compose.onNodeWithText("Live recipient").assertDoesNotExist()
         compose.onNodeWithText("Live slippage").assertDoesNotExist()
         capture("standalone-expanded-saved-refund")
@@ -145,6 +148,7 @@ class TransactionDetailRowLayoutTest {
         val status = mutableStateOf(saved)
         val theme = mutableStateOf("light")
         val fontScale = mutableStateOf(1f)
+        var depositClicks = 0
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale.value)) {
                 ZcashTheme(
@@ -163,7 +167,7 @@ class TransactionDetailRowLayoutTest {
                                 transactionId = stringRes("Synthetic funding transaction"),
                                 refundedAmount = null,
                                 onTransactionIdClick = {},
-                                onDepositAddressClick = {},
+                                onDepositAddressClick = { depositClicks++ },
                                 onRecipientAddressClick = null,
                                 maxSlippage = null,
                                 note = null,
@@ -195,6 +199,17 @@ class TransactionDetailRowLayoutTest {
             compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
             capture("outgoing-unavailable-$appearance-$scale")
         }
+        assertCompleteText("Synthetic deposit")
+        compose.onNodeWithText("Synthetic deposit").performClick()
+        compose.runOnIdle { assertEquals(1, depositClicks) }
+    }
+
+    private fun assertCompleteText(text: String) {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+            action(layouts)
+        }
+        assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete")
     }
 
     private fun capture(name: String) {
@@ -255,17 +270,10 @@ class TransactionDetailRowLayoutTest {
                             stringRes("Last saved update"), stringRes(timestamp).withStyle()
                         ),
                         modifier = Modifier.width(360.dp),
-                        wrapMessage = true,
                     )
                 }
             }
         }
-        val layouts = mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText(timestamp).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
-            action(layouts)
-        }
-        val layout = layouts.single()
-        assertTrue(layout.lineCount > 1)
-        assertFalse(layout.hasVisualOverflow, "The saved update timestamp must remain complete")
+        assertCompleteText(timestamp)
     }
 }

@@ -176,7 +176,7 @@ fun SwapDetailView(
                                 }
                                 if (state.showLiveDetails || state.quotedOutput.message != null) {
                                     ZashiHorizontalDivider()
-                                    TransactionDetailInfoRow(state.quotedOutput, wrapMessage = true)
+                                    TransactionDetailInfoRow(state.quotedOutput)
                                 }
                                 if (state.showLiveDetails) {
                                     ZashiHorizontalDivider()
@@ -187,7 +187,7 @@ fun SwapDetailView(
                             }
                         }
                         ZashiHorizontalDivider()
-                        TransactionDetailInfoRow(state = state.timestamp, wrapMessage = true)
+                        TransactionDetailInfoRow(state = state.timestamp)
                     }
                     state.message?.let {
                         Spacer(8.dp)

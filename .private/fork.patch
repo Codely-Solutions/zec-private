@@ -52316,7 +52316,7 @@ index a874453ef..8bdfd57c0 100644
 +        ?: status?.amountOutFormatted
 +        ?: savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-index 48d3039d5..777a31ef3 100644
+index 48d3039d5..c08082e7e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 @@ -71,0 +72 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionErrorFooter
@@ -52352,16 +52352,13 @@ index 48d3039d5..777a31ef3 100644
 +                                }
 +                                if (state.showLiveDetails || state.quotedOutput.message != null) {
 +                                    ZashiHorizontalDivider()
-+                                    TransactionDetailInfoRow(state.quotedOutput, wrapMessage = true)
++                                    TransactionDetailInfoRow(state.quotedOutput)
 +                                }
 +                                if (state.showLiveDetails) {
 +                                    ZashiHorizontalDivider()
 +                                    CompositionLocalProvider(LocalBalancesAvailable provides true) {
 +                                        TransactionDetailInfoRow(state.maxSlippage)
 +                                    }
-@@ -175 +190 @@ fun SwapDetailView(
--                        TransactionDetailInfoRow(state = state.timestamp)
-+                        TransactionDetailInfoRow(state = state.timestamp, wrapMessage = true)
 @@ -180,0 +196,4 @@ fun SwapDetailView(
 +                    if (state.explorerLinks.isNotEmpty()) {
 +                        Spacer(8.dp)
@@ -54518,14 +54515,148 @@ index 553c98db2..1ff05c81e 100644
 @@ -40,0 +41 @@ data class SendSwapState(
 +    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
-index d9b22b066..3d99d9553 100644
+index d9b22b066..2fd985057 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
-@@ -49,0 +50 @@ fun TransactionDetailInfoRow(
-+    wrapMessage: Boolean = false,
-@@ -68 +69 @@ fun TransactionDetailInfoRow(
+@@ -6,0 +7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.layout.Arrangement
+@@ -7,0 +9 @@ import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.FlowRow
+@@ -11,0 +14 @@ import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
+@@ -51,4 +54,17 @@ fun TransactionDetailInfoRow(
+-    TransactionDetailRowSurface(
+-        onClick = state.onClick,
+-        modifier = modifier,
+-        contentPadding = contentPadding
++    val clickModifier =
++        if (state.onClick != null) {
++            Modifier.clickable(
++                indication = null,
++                interactionSource = remember { MutableInteractionSource() },
++                onClick = state.onClick,
++                role = Role.Button,
++            )
++        } else {
++            Modifier
++        }
++
++    FlowRow(
++        modifier = modifier.fillMaxWidth().then(clickModifier).padding(contentPadding),
++        horizontalArrangement = Arrangement.SpaceBetween,
++        verticalArrangement = Arrangement.spacedBy(6.dp),
++        itemVerticalAlignment = Alignment.CenterVertically,
+@@ -57 +73 @@ fun TransactionDetailInfoRow(
+-            maxLines = 1,
++            modifier = Modifier.padding(end = 16.dp),
+@@ -62,47 +78,2 @@ fun TransactionDetailInfoRow(
+-        if (state.message != null) {
+-            Spacer(Modifier.width(16.dp))
+-            SelectionContainer(
+-                modifier = Modifier.weight(1f),
+-            ) {
+-                Text(
 -                    maxLines = 1,
-+                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
+-                    text =
+-                        state.message orHiddenString
+-                            stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
+-                    style = ZashiTypography.textSm,
+-                    color = ZashiColors.Text.textPrimary,
+-                    fontWeight = FontWeight.Medium,
+-                    textAlign = TextAlign.End
+-                )
+-            }
+-        } else {
+-            Spacer(Modifier.width(16.dp))
+-            Box(
+-                modifier =
+-                    Modifier
+-                        .weight(1f)
+-                        .shimmer(rememberZashiShimmer()),
+-                contentAlignment = Alignment.CenterEnd
+-            ) {
+-                val textSize =
+-                    measureTextStyle(
+-                        style = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
+-                    )
+-
+-                ShimmerRectangle(
+-                    width = 64.dp,
+-                    height = textSize.size.heightDp,
+-                    color = ZashiColors.Surfaces.bgTertiary
+-                )
+-            }
+-        }
+-        if (state.trailingIcon != null && state.message != null) {
+-            Spacer(Modifier.width(6.dp))
+-            Image(
+-                painter = painterResource(state.trailingIcon),
+-                contentDescription = null
+-            )
+-        } else if (state.trailingIcon != null) {
+-            val painter = painterResource(state.trailingIcon)
+-            val height = with(LocalDensity.current) { painter.intrinsicSize.height.toDp() }
+-            Spacer(modifier = Modifier.height(height))
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            TransactionDetailValue(state)
+@@ -114,13 +85,11 @@ fun TransactionDetailInfoRow(
+-fun TransactionDetailRowSurface(
+-    onClick: (() -> Unit)?,
+-    contentPadding: PaddingValues,
+-    modifier: Modifier = Modifier,
+-    content: @Composable RowScope.() -> Unit,
+-) {
+-    val clickModifier =
+-        if (onClick != null) {
+-            Modifier.clickable(
+-                indication = null,
+-                interactionSource = remember { MutableInteractionSource() },
+-                onClick = onClick,
+-                role = Role.Button,
++private fun RowScope.TransactionDetailValue(state: TransactionDetailInfoRowState) {
++    if (state.message != null) {
++        SelectionContainer(modifier = Modifier.weight(1f, fill = false)) {
++            Text(
++                text =
++                    state.message orHiddenString
++                        stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
++                style = ZashiTypography.textSm,
++                color = ZashiColors.Text.textPrimary,
++                fontWeight = FontWeight.Medium,
++                textAlign = TextAlign.End
+@@ -128,2 +96,0 @@ fun TransactionDetailRowSurface(
+-        } else {
+-            Modifier
+@@ -131,6 +98,23 @@ fun TransactionDetailRowSurface(
+-
+-    Row(
+-        modifier = modifier then clickModifier then Modifier.padding(contentPadding),
+-        verticalAlignment = Alignment.CenterVertically
+-    ) {
+-        content()
++    } else {
++        Box(
++            modifier = Modifier.shimmer(rememberZashiShimmer()),
++            contentAlignment = Alignment.CenterEnd
++        ) {
++            val textSize = measureTextStyle(style = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium))
++            ShimmerRectangle(
++                width = 64.dp,
++                height = textSize.size.heightDp,
++                color = ZashiColors.Surfaces.bgTertiary
++            )
++        }
++    }
++    if (state.trailingIcon != null && state.message != null) {
++        Spacer(Modifier.width(6.dp))
++        Image(
++            painter = painterResource(state.trailingIcon),
++            contentDescription = null
++        )
++    } else if (state.trailingIcon != null) {
++        val painter = painterResource(state.trailingIcon)
++        val height = with(LocalDensity.current) { painter.intrinsicSize.height.toDp() }
++        Spacer(modifier = Modifier.height(height))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
 index fa3022a69..5a6b2a204 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailSwapStatusRow.kt
@@ -88149,10 +88280,10 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..a9296c74a
+index 000000000..18410df94
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,279 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import android.graphics.Bitmap
@@ -88181,6 +88312,7 @@ index 000000000..a9296c74a
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 +import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 +import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByAddress
 +import co.electriccoin.zcash.ui.design.util.imageRes
 +import co.electriccoin.zcash.ui.design.util.withStyle
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
@@ -88260,7 +88392,8 @@ index 000000000..a9296c74a
 +                mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
 +            ),
 +            depositTo = TransactionDetailInfoRowState(
-+                stringRes("Deposit reference"), stringRes("Synthetic").withStyle()
++                stringRes(R.string.private_swap_deposit_reference),
++                stringResByAddress("0123456789abcdefghijklmnopqrstabcdefghij")
 +            ),
 +            recipient = TransactionDetailInfoRowState(stringRes("Live recipient")),
 +            quotedOutput = TransactionDetailInfoRowState(
@@ -88285,6 +88418,7 @@ index 000000000..a9296c74a
 +        compose.onNodeWithText(app.getString(co.electriccoin.zcash.ui.design.R.string.general_more)).performClick()
 +        compose.onNodeWithText(app.getString(R.string.private_quoted_output)).performScrollTo().assertIsDisplayed()
 +        compose.onNodeWithText("0.075 ZEC").assertIsDisplayed()
++        assertCompleteText("0123456789...abcdefghij")
 +        compose.onNodeWithText("Live recipient").assertDoesNotExist()
 +        compose.onNodeWithText("Live slippage").assertDoesNotExist()
 +        capture("standalone-expanded-saved-refund")
@@ -88300,6 +88434,7 @@ index 000000000..a9296c74a
 +        val status = mutableStateOf(saved)
 +        val theme = mutableStateOf("light")
 +        val fontScale = mutableStateOf(1f)
++        var depositClicks = 0
 +        compose.setContent {
 +            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale.value)) {
 +                ZcashTheme(
@@ -88318,7 +88453,7 @@ index 000000000..a9296c74a
 +                                transactionId = stringRes("Synthetic funding transaction"),
 +                                refundedAmount = null,
 +                                onTransactionIdClick = {},
-+                                onDepositAddressClick = {},
++                                onDepositAddressClick = { depositClicks++ },
 +                                onRecipientAddressClick = null,
 +                                maxSlippage = null,
 +                                note = null,
@@ -88350,6 +88485,17 @@ index 000000000..a9296c74a
 +            compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
 +            capture("outgoing-unavailable-$appearance-$scale")
 +        }
++        assertCompleteText("Synthetic deposit")
++        compose.onNodeWithText("Synthetic deposit").performClick()
++        compose.runOnIdle { assertEquals(1, depositClicks) }
++    }
++
++    private fun assertCompleteText(text: String) {
++        val layouts = mutableListOf<TextLayoutResult>()
++        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
++            action(layouts)
++        }
++        assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete")
 +    }
 +
 +    private fun capture(name: String) {
@@ -88410,18 +88556,11 @@ index 000000000..a9296c74a
 +                            stringRes("Last saved update"), stringRes(timestamp).withStyle()
 +                        ),
 +                        modifier = Modifier.width(360.dp),
-+                        wrapMessage = true,
 +                    )
 +                }
 +            }
 +        }
-+        val layouts = mutableListOf<TextLayoutResult>()
-+        compose.onNodeWithText(timestamp).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
-+            action(layouts)
-+        }
-+        val layout = layouts.single()
-+        assertTrue(layout.lineCount > 1)
-+        assertFalse(layout.hasVisualOverflow, "The saved update timestamp must remain complete")
++        assertCompleteText(timestamp)
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
