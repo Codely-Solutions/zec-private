@@ -297,7 +297,7 @@ class TransactionDetailVMTest {
     fun advancingSavedStatusUpdatesHeaderAndRowWhenRefreshIsUnavailable() = runTest(dispatcher) {
         val zec = SwapCatalogTestFixture.nativeZec
         val destination = SwapCatalogTestFixture.externalAssets.first()
-        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.fromEpochSeconds(1))
+        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.ofEpochSecond(1))
         val failedRefresh = SwapQuoteStatusData(
             status = status(SwapStatus.PENDING, zec, destination),
             isLoading = false,
@@ -315,7 +315,7 @@ class TransactionDetailVMTest {
             metadata = opened.metadata.copy(
                 swapMetadata = cached.copy(
                     recordedStatus = SwapStatus.SUCCESS,
-                    statusUpdatedAt = Instant.fromEpochSeconds(2),
+                    statusUpdatedAt = Instant.ofEpochSecond(2),
                 )
             )
         )

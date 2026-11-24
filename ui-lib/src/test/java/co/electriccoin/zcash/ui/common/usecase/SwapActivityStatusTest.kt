@@ -5,11 +5,13 @@ import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -27,9 +29,13 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import java.time.Instant
@@ -125,6 +131,47 @@ class SwapActivityStatusTest {
         assertEquals(stringRes(R.string.swapStatus_paymentFailed), paymentFailed.title)
         assertEquals(R.drawable.ic_transaction_pay_failed, paymentFailed.bigIcon)
         assertEquals(StringResourceColor.NEGATIVE, paymentFailed.amountColor())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun activityPollingDeduplicatesRequestsAndDiscardsWorkFromThePreviousAccount() = runTest {
+        val first = EditAccountFixtures.zodl()
+        val second = EditAccountFixtures.keystone()
+        val selection = MutableStateFlow<WalletAccount?>(first)
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selection }
+        val pendingFirst = swap(SwapStatus.PENDING).copy(ownerAccount = first)
+        val pendingSecond = pendingFirst.copy(ownerAccount = second)
+        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.PENDING }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(deposit, first) } returns pendingFirst
+            coEvery { getSwapMetadata(deposit, second) } returns pendingSecond
+            coEvery { updateSwap(pendingSecond, result) } returns pendingSecond
+        }
+        val swaps = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(pendingFirst) } coAnswers { awaitCancellation() }
+            coEvery { checkSwapStatus(pendingSecond) } returns result
+        }
+        val poll = UpdateSwapActivityMetadataUseCase(
+            accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
+        )
+        runCurrent()
+        repeat(3) { poll(ActivityData.BySwap(pendingFirst)) }
+        runCurrent()
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
+
+        selection.value = second
+        runCurrent()
+        poll(ActivityData.BySwap(pendingFirst))
+        repeat(3) { poll(ActivityData.BySwap(pendingSecond)) }
+        runCurrent()
+        advanceTimeBy(14_999)
+        runCurrent()
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingSecond) }
+        advanceTimeBy(1)
+        runCurrent()
+        coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond) }
     }
 
     private fun swap(status: SwapStatus?) =

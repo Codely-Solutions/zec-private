@@ -52,6 +52,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.math.BigDecimal
 import java.time.Instant
+import kotlin.time.toJavaInstant
 
 @Suppress("TooManyFunctions")
 interface MetadataRepository {
@@ -337,14 +338,13 @@ class MetadataRepositoryImpl(
     }
 
     override fun observeSwapMetadata(): Flow<List<TransactionSwapMetadata>?> =
-        selectedMetadata
-            .map { metadata ->
-                metadata
-                    ?.accountMetadata
-                    ?.swaps
-                    ?.swapIds
-                    ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
-            }.distinctUntilChanged()
+        combine(accountDataSource.selectedAccount, metadata, walletWriteAccess.version) { account, all, token ->
+            account?.let { owner ->
+                all[owner.sdkAccount.accountUuid]?.accountMetadata?.swaps?.swapIds?.map {
+                    it.toBusinessObject(simpleSwapAssetProvider).copy(ownerAccount = owner, walletWriteToken = token)
+                }
+            }
+        }.distinctUntilChanged()
 
     override suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount?): TransactionSwapMetadata? {
         val token = walletWriteAccess.token()
@@ -575,7 +575,7 @@ internal fun SwapMetadataV3.toBusinessObject(
         amountOutFormatted = executedAmountOut ?: quotedAmountOut ?: amountOutFormatted ?: BigDecimal.ZERO,
         quotedAmountOut = quotedAmountOut,
         executedAmountOut = executedAmountOut,
-        statusUpdatedAt = statusUpdatedAt,
+        statusUpdatedAt = statusUpdatedAt?.toJavaInstant(),
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,

@@ -24797,7 +24797,7 @@ index 1c2a8787c..9a180202c 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..182c0fe78 100644
+index c9262f680..3005e5a46 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -24852,6 +24852,9 @@ index c9262f680..182c0fe78 100644
 @@ -309 +305 @@ val useCaseModule =
 -        factoryOf(::NavigateToExportPrivateDataUseCase)
 +        singleOf(::ExportPrivateDataUseCase)
+@@ -312 +308 @@ val useCaseModule =
+-        singleOf(::UpdateSwapActivityMetadataUseCase)
++        single { UpdateSwapActivityMetadataUseCase(get(), get(), get()) }
 @@ -320 +316,2 @@ val useCaseModule =
 -        factoryOf(::ResetZashiUseCase)
 +        singleOf(::ResetProgressStore)
@@ -30932,7 +30935,7 @@ index f9a562c53..21f96f3ee 100644
 -    val error: Exception? = null
 -)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-index a4216cc0a..203afecdb 100644
+index a4216cc0a..25385bdae 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 @@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -30942,35 +30945,37 @@ index a4216cc0a..203afecdb 100644
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 @@ -23,0 +27 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -65 +69,3 @@ interface MetadataRepository {
+@@ -50,0 +55 @@ import java.time.Instant
++import kotlin.time.toJavaInstant
+@@ -65 +70,3 @@ interface MetadataRepository {
 -    suspend fun flipTxBookmark(txId: String): Boolean
 +    suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, accountUuid: AccountUuid, token: Long): Boolean
 +
 +    suspend fun readTxNote(txId: String, accountUuid: AccountUuid, token: Long): String?
-@@ -68 +74 @@ interface MetadataRepository {
+@@ -68 +75 @@ interface MetadataRepository {
 -     * Returns whether the note was saved; see [flipTxBookmark].
 +     * Returns whether the note was saved; see [setTxBookmark].
-@@ -70 +76 @@ interface MetadataRepository {
+@@ -70 +77 @@ interface MetadataRepository {
 -    suspend fun createOrUpdateTxNote(txId: String, note: String): Boolean
 +    suspend fun createOrUpdateTxNote(txId: String, note: String, accountUuid: AccountUuid, token: Long): Boolean
-@@ -73 +79 @@ interface MetadataRepository {
+@@ -73 +80 @@ interface MetadataRepository {
 -     * Returns whether the note was deleted; see [flipTxBookmark].
 +     * Returns whether the note was deleted; see [setTxBookmark].
-@@ -75 +81 @@ interface MetadataRepository {
+@@ -75 +82 @@ interface MetadataRepository {
 -    suspend fun deleteTxNote(txId: String): Boolean
 +    suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean
-@@ -80 +86 @@ interface MetadataRepository {
+@@ -80 +87 @@ interface MetadataRepository {
 -    fun markTxMemoAsRead(txId: String)
 +    fun markTxMemoAsRead(txId: String, accountUuid: AccountUuid, token: Long)
-@@ -83 +89 @@ interface MetadataRepository {
+@@ -83 +90 @@ interface MetadataRepository {
 -     * Returns whether the swap was saved; see [flipTxBookmark].
 +     * Returns whether the swap was saved; see [setTxBookmark].
-@@ -94,0 +101,4 @@ interface MetadataRepository {
+@@ -94,0 +102,4 @@ interface MetadataRepository {
 +        reviewedIdentity: String? = null,
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        account: WalletAccount? = null,
 +        walletWriteToken: Long? = null,
-@@ -97,11 +107,2 @@ interface MetadataRepository {
+@@ -97,11 +108,2 @@ interface MetadataRepository {
 -    /**
 -     * A background write from swap status polling: a failure is only logged.
 -     */
@@ -30984,35 +30989,35 @@ index a4216cc0a..203afecdb 100644
 -    )
 +    /** Persists a refresh for the same account and saved entry that owned the request. */
 +    suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata?
-@@ -114 +115 @@ interface MetadataRepository {
+@@ -114 +116 @@ interface MetadataRepository {
 -    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String)
 +    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount? = null)
-@@ -120 +121,4 @@ interface MetadataRepository {
+@@ -120 +122,4 @@ interface MetadataRepository {
 -    suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata?
 +    suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount? = null): TransactionSwapMetadata?
 +
 +    /** Reloads only the original wallet generation, account and saved route that owned a refresh. */
 +    suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata?
-@@ -127 +131 @@ interface MetadataRepository {
+@@ -127 +132 @@ interface MetadataRepository {
 -    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [flipTxBookmark]. */
 +    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [setTxBookmark]. */
-@@ -130 +134 @@ interface MetadataRepository {
+@@ -130 +135 @@ interface MetadataRepository {
 -    fun delete()
 +    suspend fun delete()
-@@ -139 +143,2 @@ class MetadataRepositoryImpl(
+@@ -139 +144,2 @@ class MetadataRepositoryImpl(
 -    private val simpleSwapAssetProvider: SimpleSwapAssetProvider
 +    private val simpleSwapAssetProvider: SimpleSwapAssetProvider,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -145,0 +151 @@ class MetadataRepositoryImpl(
+@@ -145,0 +152 @@ class MetadataRepositoryImpl(
 +    private var observedGeneration: Long? = null
-@@ -152,2 +158,4 @@ class MetadataRepositoryImpl(
+@@ -152,2 +159,4 @@ class MetadataRepositoryImpl(
 -            .flatMapLatest { accounts ->
 -                val previous = metadata.value
 +            .combine(walletWriteAccess.version) { accounts, generation -> accounts to generation }
 +            .flatMapLatest { (accounts, generation) ->
 +                val previous = metadata.value.takeIf { observedGeneration == generation }.orEmpty()
 +                observedGeneration = generation
-@@ -173,3 +181,9 @@ class MetadataRepositoryImpl(
+@@ -173,3 +182,19 @@ class MetadataRepositoryImpl(
 -    override suspend fun flipTxBookmark(txId: String) =
 -        updateMetadataAndAwait {
 -            metadataDataSource.flipTxAsBookmarked(txId = txId, key = it)
@@ -31025,7 +31030,7 @@ index a4216cc0a..203afecdb 100644
 +        val account = findWritableAccount(accountUuid, token) ?: return false
 +        return updateMetadataAndAwait(account, token) { key ->
 +            metadataDataSource.setTxBookmark(txId, isBookmarked, key)
-@@ -176,0 +191,11 @@ class MetadataRepositoryImpl(
++        }
 +    }
 +
 +    override suspend fun readTxNote(txId: String, accountUuid: AccountUuid, token: Long): String? {
@@ -31035,9 +31040,9 @@ index a4216cc0a..203afecdb 100644
 +        return mutex.withLock {
 +            val result = walletWriteAccess.write(token) { NoteRead(metadataDataSource.readTxNote(txId, key)) }
 +            checkNotNull(result) { "Wallet changed before the note could be read" }.note
-+        }
+@@ -176,0 +202 @@ class MetadataRepositoryImpl(
 +    }
-@@ -178,2 +203,8 @@ class MetadataRepositoryImpl(
+@@ -178,2 +204,8 @@ class MetadataRepositoryImpl(
 -    override suspend fun createOrUpdateTxNote(txId: String, note: String) =
 -        updateMetadataAndAwait {
 +    override suspend fun createOrUpdateTxNote(
@@ -31048,17 +31053,17 @@ index a4216cc0a..203afecdb 100644
 +    ): Boolean {
 +        val account = findWritableAccount(accountUuid, token) ?: return false
 +        return updateMetadataAndAwait(account, token) {
-@@ -181,0 +213 @@ class MetadataRepositoryImpl(
+@@ -181,0 +214 @@ class MetadataRepositoryImpl(
 +    }
-@@ -183,2 +215,3 @@ class MetadataRepositoryImpl(
+@@ -183,2 +216,3 @@ class MetadataRepositoryImpl(
 -    override suspend fun deleteTxNote(txId: String) =
 -        updateMetadataAndAwait {
 +    override suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean {
 +        val account = findWritableAccount(accountUuid, token) ?: return false
 +        return updateMetadataAndAwait(account, token) {
-@@ -186,0 +220 @@ class MetadataRepositoryImpl(
+@@ -186,0 +221 @@ class MetadataRepositoryImpl(
 +    }
-@@ -188,3 +222,4 @@ class MetadataRepositoryImpl(
+@@ -188,3 +223,4 @@ class MetadataRepositoryImpl(
 -    override fun markTxMemoAsRead(txId: String) =
 -        updateMetadata {
 -            metadataDataSource.markTxMemoAsRead(txId = txId, key = it)
@@ -31066,7 +31071,7 @@ index a4216cc0a..203afecdb 100644
 +        val account = findWritableAccount(accountUuid, token) ?: return
 +        scope.launch {
 +            updateMetadataLocked(account, token = token) { metadataDataSource.markTxMemoAsRead(txId, it) }
-@@ -191,0 +227,9 @@ class MetadataRepositoryImpl(
+@@ -191,0 +228,9 @@ class MetadataRepositoryImpl(
 +    }
 +
 +    private fun findWritableAccount(accountUuid: AccountUuid, token: Long): WalletAccount? =
@@ -31076,17 +31081,17 @@ index a4216cc0a..203afecdb 100644
 +        accountDataSource.allAccounts.value?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
 +
 +    private data class NoteRead(val note: String?)
-@@ -203 +247,5 @@ class MetadataRepositoryImpl(
+@@ -203 +248,5 @@ class MetadataRepositoryImpl(
 -    ) = updateMetadataAndAwait {
 +        reviewedIdentity: String?,
 +        signedQuoteEvidence: NearSignedQuoteEvidence?,
 +        account: WalletAccount?,
 +        walletWriteToken: Long?,
 +    ) = updateMetadataAndAwait(account, walletWriteToken ?: walletWriteAccess.token()) {
-@@ -218,0 +267,2 @@ class MetadataRepositoryImpl(
+@@ -218,0 +268,2 @@ class MetadataRepositoryImpl(
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -222,21 +272,27 @@ class MetadataRepositoryImpl(
+@@ -222,21 +273,27 @@ class MetadataRepositoryImpl(
 -    override fun updateSwap(
 -        depositAddress: String,
 -        amountOutFormatted: BigDecimal,
@@ -31135,23 +31140,23 @@ index a4216cc0a..203afecdb 100644
 +                )?.toBusinessObject(simpleSwapAssetProvider)?.copy(ownerAccount = account, walletWriteToken = token)
 +            }
 +        }
-@@ -250,2 +306,2 @@ class MetadataRepositoryImpl(
+@@ -250,2 +307,2 @@ class MetadataRepositoryImpl(
 -    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String) =
 -        updateMetadata {
 +    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount?) =
 +        updateMetadata(account) {
-@@ -259 +315,5 @@ class MetadataRepositoryImpl(
+@@ -259 +316,5 @@ class MetadataRepositoryImpl(
 -        return selectedMetadata
 +        val accountUuid = transaction.accountUuid
 +        val generation = walletWriteAccess.token()
 +        val accountMetadataFlow =
 +            if (accountUuid == null) selectedMetadata else metadata.map { it[accountUuid] }
 +        return accountMetadataFlow
-@@ -273 +333,2 @@ class MetadataRepositoryImpl(
+@@ -273 +334,2 @@ class MetadataRepositoryImpl(
 -                    swapMetadata = swapMetadata?.toBusinessObject()
 +                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider),
 +                    bookmarkWriteToken = generation
-@@ -278,28 +338,0 @@ class MetadataRepositoryImpl(
+@@ -278,28 +339,0 @@ class MetadataRepositoryImpl(
 -    private fun SwapMetadataV3.toBusinessObject(): TransactionSwapMetadata {
 -        val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
 -        return TransactionSwapMetadata(
@@ -31180,19 +31185,23 @@ index a4216cc0a..203afecdb 100644
 -        )
 -    }
 -
-@@ -313 +346 @@ class MetadataRepositoryImpl(
--                    ?.map { it.toBusinessObject() }
-+                    ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
-@@ -316,9 +349,32 @@ class MetadataRepositoryImpl(
--    override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? =
+@@ -307,8 +341,24 @@ class MetadataRepositoryImpl(
 -        selectedMetadata
--            .filterNotNull()
--            .first()
--            .accountMetadata
--            .swaps
--            .swapIds
--            .firstOrNull { it.depositAddress == depositAddress }
--            ?.toBusinessObject()
+-            .map { metadata ->
+-                metadata
+-                    ?.accountMetadata
+-                    ?.swaps
+-                    ?.swapIds
+-                    ?.map { it.toBusinessObject() }
+-            }.distinctUntilChanged()
++        combine(accountDataSource.selectedAccount, metadata, walletWriteAccess.version) { account, all, token ->
++            account?.let { owner ->
++                all[owner.sdkAccount.accountUuid]?.accountMetadata?.swaps?.swapIds?.map {
++                    it.toBusinessObject(simpleSwapAssetProvider).copy(ownerAccount = owner, walletWriteToken = token)
++                }
++            }
++        }.distinctUntilChanged()
++
 +    override suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount?): TransactionSwapMetadata? {
 +        val token = walletWriteAccess.token()
 +        val (owner, content) = if (account != null) {
@@ -31209,7 +31218,16 @@ index a4216cc0a..203afecdb 100644
 +            ?.toBusinessObject(simpleSwapAssetProvider)
 +            ?.copy(ownerAccount = owner, walletWriteToken = token)
 +    }
-+
+@@ -316,9 +366,15 @@ class MetadataRepositoryImpl(
+-    override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? =
+-        selectedMetadata
+-            .filterNotNull()
+-            .first()
+-            .accountMetadata
+-            .swaps
+-            .swapIds
+-            .firstOrNull { it.depositAddress == depositAddress }
+-            ?.toBusinessObject()
 +    override suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata? {
 +        val owner = expected.ownerAccount
 +        val token = expected.walletWriteToken
@@ -31362,7 +31380,7 @@ index a4216cc0a..203afecdb 100644
 +        amountOutFormatted = executedAmountOut ?: quotedAmountOut ?: amountOutFormatted ?: BigDecimal.ZERO,
 +        quotedAmountOut = quotedAmountOut,
 +        executedAmountOut = executedAmountOut,
-+        statusUpdatedAt = statusUpdatedAt,
++        statusUpdatedAt = statusUpdatedAt?.toJavaInstant(),
 +        provider = provider,
 +        totalFees = totalFees,
 +        totalFeesUsd = totalFeesUsd,
@@ -33667,7 +33685,7 @@ index 9174c2293..1c2415bd7 100644
 @@ -58,0 +59 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..488a377a0 100644
+index a33c847ad..da57f546b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -33687,10 +33705,22 @@ index a33c847ad..488a377a0 100644
 +    private val donationPreferences = context?.let(::DonationPreferences)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -43,0 +55,2 @@ class GetSwapStatusUseCase(
+@@ -21,0 +33,5 @@ class GetSwapStatusUseCase(
++    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
++        observe(expected.depositAddress, expected).first { !it.isLoading }
++
++    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> = observe(depositAddress, null)
++
+@@ -23 +39 @@ class GetSwapStatusUseCase(
+-    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
++    private fun observe(depositAddress: String, initial: TransactionSwapMetadata?): Flow<SwapQuoteStatusData> =
+@@ -32 +48 @@ class GetSwapStatusUseCase(
+-                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
++                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress)
+@@ -43,0 +60,2 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
-@@ -46,9 +59,4 @@ class GetSwapStatusUseCase(
+@@ -46,9 +64,4 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -33704,12 +33734,12 @@ index a33c847ad..488a377a0 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
-@@ -57,0 +66 @@ class GetSwapStatusUseCase(
+@@ -57,0 +71 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -64,0 +74,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +79,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +77,11 @@ class GetSwapStatusUseCase(
+@@ -66,2 +82,11 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
@@ -33723,7 +33753,7 @@ index a33c847ad..488a377a0 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +95,34 @@ class GetSwapStatusUseCase(
+@@ -74,0 +100,34 @@ class GetSwapStatusUseCase(
 +
 +    private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
 +        status == saved.status &&
@@ -33758,9 +33788,9 @@ index a33c847ad..488a377a0 100644
 +
 +    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
 +        IllegalStateException("Swap status refresh was not saved")
-@@ -80,0 +135 @@ data class SwapQuoteStatusData(
+@@ -80,0 +140 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
-@@ -83,0 +139,16 @@ data class SwapQuoteStatusData(
+@@ -83,0 +144,16 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)
@@ -35526,6 +35556,220 @@ index 4003797c4..15c2d5df6 100644
 +                chain = chain
 +            )
 +        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateSwapActivityMetadataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateSwapActivityMetadataUseCase.kt
+index 3b8538391..247883a67 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateSwapActivityMetadataUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateSwapActivityMetadataUseCase.kt
+@@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
+@@ -8 +9,0 @@ import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.Job
+@@ -10 +11 @@ import kotlinx.coroutines.SupervisorJob
+-import kotlinx.coroutines.channels.Channel
++import kotlinx.coroutines.awaitCancellation
+@@ -12,4 +13,2 @@ import kotlinx.coroutines.delay
+-import kotlinx.coroutines.flow.distinctUntilChanged
+-import kotlinx.coroutines.flow.launchIn
+-import kotlinx.coroutines.flow.map
+-import kotlinx.coroutines.flow.onEach
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.distinctUntilChangedBy
+@@ -16,0 +16 @@ import kotlinx.coroutines.launch
++import kotlinx.coroutines.supervisorScope
+@@ -19,3 +19 @@ import kotlinx.coroutines.sync.withLock
+-import kotlinx.coroutines.yield
+-import kotlin.time.Clock
+-import kotlin.time.Duration.Companion.milliseconds
++import java.util.concurrent.atomic.AtomicReference
+@@ -23 +21 @@ import kotlin.time.Duration.Companion.seconds
+-import kotlin.time.Instant
++import kotlin.time.TimeSource
+@@ -28 +26,3 @@ class UpdateSwapActivityMetadataUseCase(
+-    private val getSwapStatus: GetSwapStatusUseCase
++    private val getSwapStatus: GetSwapStatusUseCase,
++    scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
++    private val timeSource: TimeSource = TimeSource.Monotonic,
+@@ -30,11 +30 @@ class UpdateSwapActivityMetadataUseCase(
+-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+-
+-    private val pipeline = Channel<Request>()
+-
+-    private val pipelineCache = linkedSetOf<Request>()
+-
+-    private val pipelineSemaphore = Mutex()
+-
+-    private val pipelineCacheSemaphore = Mutex()
+-
+-    private var pipelineJob: Job? = null
++    private val active = AtomicReference<PollingSession?>()
+@@ -43,10 +32,0 @@ class UpdateSwapActivityMetadataUseCase(
+-        accountDataSource.selectedAccount
+-            .map { it?.sdkAccount?.accountUuid }
+-            .distinctUntilChanged()
+-            .onEach {
+-                killPipeline()
+-                if (it != null) startPipeline()
+-            }.launchIn(scope)
+-    }
+-
+-    operator fun invoke(activity: ActivityData) {
+@@ -54,11 +34,13 @@ class UpdateSwapActivityMetadataUseCase(
+-            val depositAddress =
+-                when (activity) {
+-                    is ActivityData.BySwap -> {
+-                        activity.swap.depositAddress
+-                            .takeIf { !activity.swap.status.isTerminal }
+-                    }
+-
+-                    is ActivityData.ByTransaction -> {
+-                        activity.metadata.swapMetadata
+-                            ?.depositAddress
+-                            ?.takeIf { !activity.metadata.swapMetadata.status.isTerminal }
++            accountDataSource.selectedAccount
++                .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
++                .collectLatest { owner ->
++                    if (owner != null) {
++                        supervisorScope {
++                            val session = PollingSession(owner, this)
++                            active.set(session)
++                            try {
++                                awaitCancellation()
++                            } finally {
++                                active.compareAndSet(session, null)
++                            }
++                        }
+@@ -67,13 +48,0 @@ class UpdateSwapActivityMetadataUseCase(
+-
+-            if (depositAddress != null) {
+-                val request =
+-                    pipelineCacheSemaphore.withLock {
+-                        val found = pipelineCache.find { it.depositAddress == depositAddress }?.also { it.close() }
+-                        Request(
+-                            depositAddress = depositAddress,
+-                            timestamp = found?.timestamp,
+-                        )
+-                    }
+-                Twig.debug { "Activities: queue $depositAddress" }
+-                pipeline.send(request)
+-            }
+@@ -83,4 +52,9 @@ class UpdateSwapActivityMetadataUseCase(
+-    private fun killPipeline() {
+-        pipelineJob?.cancel()
+-        pipelineJob = null
+-        pipelineCache.clear()
++    operator fun invoke(activity: ActivityData) {
++        val session = active.get() ?: return
++        val (metadata, owner) = when (activity) {
++            is ActivityData.BySwap -> activity.swap to activity.swap.ownerAccount?.sdkAccount?.accountUuid
++            is ActivityData.ByTransaction -> activity.metadata.swapMetadata to activity.transaction.accountUuid
++        }
++        if (metadata != null && !metadata.status.isTerminal && owner == session.account.sdkAccount.accountUuid) {
++            session.enqueue(metadata.depositAddress)
++        }
+@@ -89,14 +63,3 @@ class UpdateSwapActivityMetadataUseCase(
+-    @Suppress("MagicNumber")
+-    private fun startPipeline() {
+-        pipelineJob =
+-            scope.launch {
+-                for (item in pipeline) {
+-                    pipelineSemaphore.withLock {
+-                        val depositAddress = item.depositAddress
+-                        if (item.timestamp != null) {
+-                            val timeSinceLastAttempt = Clock.System.now() - item.timestamp
+-                            if (timeSinceLastAttempt < 15.seconds) {
+-                                Twig.debug { "Activities: delaying for ${15.seconds - timeSinceLastAttempt}" }
+-                                delay(15.seconds - timeSinceLastAttempt)
+-                            }
+-                        }
++    private inner class PollingSession(val account: WalletAccount, private val scope: CoroutineScope) {
++        private val pending = mutableSetOf<String>()
++        private val requests = Mutex()
+@@ -104,14 +67,8 @@ class UpdateSwapActivityMetadataUseCase(
+-                        val swapMetadata = metadataRepository.getSwapMetadata(depositAddress)
+-                        if (swapMetadata != null && !swapMetadata.status.isTerminal) {
+-                            Twig.debug { "Activities: consuming $depositAddress" }
+-                            val apiRequestTimestamp = Clock.System.now()
+-                            val quoteStatus = getSwapStatus(depositAddress)
+-                            pipelineCacheSemaphore.withLock { item.close() }
+-                            if (quoteStatus.status?.status?.isTerminal != true) {
+-                                when (pipelineCache.lastOrNull()?.depositAddress) {
+-                                    null,
+-                                    depositAddress -> {
+-                                        requeue(depositAddress, apiRequestTimestamp)
+-                                        Twig.debug { "Activities: delaying 5..15 seconds" }
+-                                        delay((5..15).random().seconds)
+-                                    }
++        @Synchronized
++        fun enqueue(depositAddress: String) {
++            if (pending.add(depositAddress)) {
++                scope.launch { poll(depositAddress) }.invokeOnCompletion {
++                    synchronized(this) { pending.remove(depositAddress) }
++                }
++            }
++        }
+@@ -119,7 +76,13 @@ class UpdateSwapActivityMetadataUseCase(
+-                                    else -> {
+-                                        requeue(depositAddress, apiRequestTimestamp)
+-                                        Twig.debug { "Activities: delaying 0.5..1.5 seconds" }
+-                                        delay((500..1500).random().milliseconds)
+-                                    }
+-                                }
+-                            }
++        private suspend fun poll(depositAddress: String) {
++            while (true) {
++                val (pendingStatus, started) = requests.withLock {
++                    val started = timeSource.markNow()
++                    val keepPolling = runCatchingRecoverable {
++                        val saved = metadataRepository.getSwapMetadata(depositAddress, account)
++                        if (saved == null || saved.status.isTerminal) {
++                            false
++                        } else {
++                            val status = getSwapStatus.refreshOnce(saved)
++                            delay(SHARED_POLL_SPACING)
++                            status.savedMetadata?.status?.isTerminal != true &&
++                                status.status?.status?.isTerminal != true
+@@ -126,0 +90,3 @@ class UpdateSwapActivityMetadataUseCase(
++                    }.getOrElse {
++                        Twig.warn { "Activity status refresh failed: ${it::class.simpleName}" }
++                        true
+@@ -128 +94 @@ class UpdateSwapActivityMetadataUseCase(
+-                    yield()
++                    keepPolling to started
+@@ -129,0 +96,2 @@ class UpdateSwapActivityMetadataUseCase(
++                if (!pendingStatus) return
++                delay(maxOf(SHARED_POLL_SPACING, POLL_INTERVAL - started.elapsedNow()))
+@@ -131,13 +98,0 @@ class UpdateSwapActivityMetadataUseCase(
+-    }
+-
+-    private fun requeue(depositAddress: String, timestamp: Instant) {
+-        scope.launch {
+-            Twig.debug { "Activities: requeue $depositAddress" }
+-            pipeline.send(
+-                pipelineCacheSemaphore.withLock {
+-                    Request(
+-                        depositAddress = depositAddress,
+-                        timestamp = timestamp
+-                    )
+-                }
+-            )
+@@ -147,13 +102,3 @@ class UpdateSwapActivityMetadataUseCase(
+-    private inner class Request(
+-        val depositAddress: String,
+-        val timestamp: Instant?
+-    ) : AutoCloseable {
+-        init {
+-            val found = pipelineCache.find { it.depositAddress == depositAddress }
+-            if (found != null) pipelineCache.remove(found)
+-            pipelineCache.add(this)
+-        }
+-
+-        override fun close() {
+-            pipelineCache.remove(this)
+-        }
++    private companion object {
++        val POLL_INTERVAL = 15.seconds
++        val SHARED_POLL_SPACING = 1.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 index 7bda1f0f5..f9ef271e3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
@@ -65037,10 +65281,10 @@ index 2c3089d4f..991ba4920 100644
 +                navigateToError = navigateToError,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
 new file mode 100644
-index 000000000..093c5efaa
+index 000000000..435b8104d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,204 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.TransactionId
@@ -65048,11 +65292,13 @@ index 000000000..093c5efaa
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.Zip318Kind
 +import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -65070,9 +65316,13 @@ index 000000000..093c5efaa
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
 +import java.math.BigDecimal
 +import java.time.Instant
@@ -65168,6 +65418,47 @@ index 000000000..093c5efaa
 +        assertEquals(stringRes(R.string.swapStatus_paymentFailed), paymentFailed.title)
 +        assertEquals(R.drawable.ic_transaction_pay_failed, paymentFailed.bigIcon)
 +        assertEquals(StringResourceColor.NEGATIVE, paymentFailed.amountColor())
++    }
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun activityPollingDeduplicatesRequestsAndDiscardsWorkFromThePreviousAccount() = runTest {
++        val first = EditAccountFixtures.zodl()
++        val second = EditAccountFixtures.keystone()
++        val selection = MutableStateFlow<WalletAccount?>(first)
++        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selection }
++        val pendingFirst = swap(SwapStatus.PENDING).copy(ownerAccount = first)
++        val pendingSecond = pendingFirst.copy(ownerAccount = second)
++        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.PENDING }
++        val metadata = mockk<MetadataRepository> {
++            coEvery { getSwapMetadata(deposit, first) } returns pendingFirst
++            coEvery { getSwapMetadata(deposit, second) } returns pendingSecond
++            coEvery { updateSwap(pendingSecond, result) } returns pendingSecond
++        }
++        val swaps = mockk<SwapRepository> {
++            coEvery { checkSwapStatus(pendingFirst) } coAnswers { awaitCancellation() }
++            coEvery { checkSwapStatus(pendingSecond) } returns result
++        }
++        val poll = UpdateSwapActivityMetadataUseCase(
++            accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
++        )
++        runCurrent()
++        repeat(3) { poll(ActivityData.BySwap(pendingFirst)) }
++        runCurrent()
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
++
++        selection.value = second
++        runCurrent()
++        poll(ActivityData.BySwap(pendingFirst))
++        repeat(3) { poll(ActivityData.BySwap(pendingSecond)) }
++        runCurrent()
++        advanceTimeBy(14_999)
++        runCurrent()
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingSecond) }
++        advanceTimeBy(1)
++        runCurrent()
++        coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond) }
 +    }
 +
 +    private fun swap(status: SwapStatus?) =
@@ -77597,7 +77888,7 @@ index 000000000..3b7070542
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..9ece65ddb
+index 000000000..62b903d99
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 @@ -0,0 +1,512 @@
@@ -77900,7 +78191,7 @@ index 000000000..9ece65ddb
 +    fun advancingSavedStatusUpdatesHeaderAndRowWhenRefreshIsUnavailable() = runTest(dispatcher) {
 +        val zec = SwapCatalogTestFixture.nativeZec
 +        val destination = SwapCatalogTestFixture.externalAssets.first()
-+        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.fromEpochSeconds(1))
++        val cached = swapMetadata(SwapStatus.PENDING).copy(statusUpdatedAt = Instant.ofEpochSecond(1))
 +        val failedRefresh = SwapQuoteStatusData(
 +            status = status(SwapStatus.PENDING, zec, destination),
 +            isLoading = false,
@@ -77918,7 +78209,7 @@ index 000000000..9ece65ddb
 +            metadata = opened.metadata.copy(
 +                swapMetadata = cached.copy(
 +                    recordedStatus = SwapStatus.SUCCESS,
-+                    statusUpdatedAt = Instant.fromEpochSeconds(2),
++                    statusUpdatedAt = Instant.ofEpochSecond(2),
 +                )
 +            )
 +        )

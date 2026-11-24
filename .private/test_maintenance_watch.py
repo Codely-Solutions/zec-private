@@ -461,6 +461,32 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertTrue(job_activates(signing, dict(reconcile_input='success', draft_readiness='success'), **values))
         self.assertIn('Verify production signing is enabled', failed['block'])
 
+    def test_explicit_publication_admits_to_credential_free_readiness_before_preflight(self):
+        workflow = 'build-release.yml'
+        admit = workflow_blocks(workflow)[1]['admit']
+        readiness = re.search(r'Require signing readiness for publication requests\n        if: (.+)', admit)[1]
+        self.assertNotIn('secrets.', admit)
+        self.assertNotIn('environment:', admit)
+        inputs = {'steps.ref.outputs.main': 'true', 'inputs.validation_only': False, 'inputs.preflight_only': False,
+                  'inputs.reconciliation_run': '', 'inputs.reconciliation_attempt': '',
+                  'inputs.reconciliation_artifact': '', 'inputs.resume_draft': False,
+                  'vars.PRODUCTION_SIGNING_READY': ''}
+        # Bind the step output explicitly; the job-expression helper only substitutes job contexts.
+        readiness = readiness.replace('steps.ref.outputs.main', repr(inputs['steps.ref.outputs.main']))
+        self.assertTrue(evaluate_expression(readiness, inputs))
+        for name, value in (('validation_only', True), ('preflight_only', True), ('reconciliation_run', '7')):
+            self.assertFalse(evaluate_expression(readiness, dict(inputs, **{f'inputs.{name}': value})))
+        self.assertFalse(evaluate_expression(readiness, dict(inputs, **{'vars.PRODUCTION_SIGNING_READY': 'true'})))
+        preflight = workflow_job(workflow, 'preflight')
+        self.assertFalse(job_activates(preflight, dict(admit='failure'), **{'inputs.hosted': False}))
+        self.assertTrue(job_activates(preflight, dict(admit='success'), **{'inputs.hosted': False}))
+        custom = workflow_job('custom-release.yml', 'build')
+        for operation in ('publish', 'recover', 'preflight'):
+            self.assertTrue(job_activates(custom, dict(admit='success'), **{
+                'inputs.operation': operation, 'vars.PRODUCTION_SIGNING_READY': '',
+                'github.repository': 'Codely-Solutions/zec-private',
+            }))
+
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
         recovery = workflow_job('sync-upstream-main.yml', 'discovery_recovered')
         passed = dict(maintenance='success', prepare='success')

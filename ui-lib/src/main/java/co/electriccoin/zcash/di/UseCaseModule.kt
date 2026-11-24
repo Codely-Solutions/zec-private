@@ -305,7 +305,7 @@ val useCaseModule =
         singleOf(::ExportPrivateDataUseCase)
         factoryOf(::NavigateToResetWalletUseCase)
         factoryOf(::IsScreenTimeoutDisabledDuringRestoreUseCase)
-        singleOf(::UpdateSwapActivityMetadataUseCase)
+        single { UpdateSwapActivityMetadataUseCase(get(), get(), get()) }
         factoryOf(::WalletBackupMessageUseCaseImpl) bind WalletBackupMessageUseCase::class
         factoryOf(::ValidateAddressUseCase)
         singleOf(::FixEphemeralAddressUseCase)

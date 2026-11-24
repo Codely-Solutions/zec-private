@@ -30,8 +30,13 @@ class GetSwapStatusUseCase(
 
     suspend operator fun invoke(depositAddress: String) = observe(depositAddress).first { !it.isLoading }
 
+    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
+        observe(expected.depositAddress, expected).first { !it.isLoading }
+
+    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> = observe(depositAddress, null)
+
     @Suppress("TooGenericExceptionCaught", "LoopWithTooManyJumpStatements")
-    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
+    private fun observe(depositAddress: String, initial: TransactionSwapMetadata?): Flow<SwapQuoteStatusData> =
         channelFlow {
             val data = MutableStateFlow(SwapQuoteStatusData())
 
@@ -40,7 +45,7 @@ class GetSwapStatusUseCase(
             }
 
             launch {
-                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
+                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress)
 
                 if (expectedMetadata == null) {
                     data.update {

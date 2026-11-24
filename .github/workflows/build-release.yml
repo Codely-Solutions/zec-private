@@ -92,6 +92,11 @@ jobs:
           if os.environ["GITHUB_REF"] == "refs/heads/main":
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
                   output.write("main=true\n")
+      - name: Require signing readiness for publication requests
+        if: steps.ref.outputs.main == 'true' && !inputs.validation_only && !inputs.preflight_only && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && vars.PRODUCTION_SIGNING_READY != 'true'
+        run: |
+          echo '::error::Publication requires enabled production signing. Use validation-only for a build without publication.'
+          exit 1
   reconcile_input:
     needs: admit
     if: needs.admit.outputs.main == 'true' && (inputs.reconciliation_run || inputs.reconciliation_attempt || inputs.reconciliation_artifact || inputs.resume_draft)
@@ -197,7 +202,7 @@ jobs:
       reuse_run_id: ${{ needs.admit_hosted.outputs.original_controller == github.sha && inputs.recover_run || '' }}
   preflight:
     needs: [admit_hosted, admit]
-    if: ${{ always() && !cancelled() && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
+    if: ${{ always() && !cancelled() && needs.admit.result == 'success' && !inputs.reconciliation_run && !inputs.reconciliation_attempt && !inputs.reconciliation_artifact && !inputs.resume_draft && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -861,14 +866,17 @@ jobs:
           PUBLICATION: ${{ needs.publish.result }}
           RECONCILIATION: ${{ needs.reconcile.result }}
           RECONCILIATION_ADMISSION: ${{ needs.reconcile_input.result }}
+          RELEASE_ADMISSION: ${{ needs.admit.result }}
           DRAFT_READINESS: ${{ needs.draft_readiness.result }}
           PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
           INTEGRATION: ${{ needs.record_integration.result }}
           HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
           QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}
-          BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; draft-readiness=${{ needs.draft_readiness.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
+          BLOCKER_DIAGNOSIS: ref-admission=${{ needs.admit.result }}; candidate-admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; draft-readiness=${{ needs.draft_readiness.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
         run: |
-          if [[ "$RECONCILIATION_ADMISSION" == failure || "$RECONCILIATION_ADMISSION" == cancelled ]]; then
+          if [[ "$RELEASE_ADMISSION" == failure || "$RELEASE_ADMISSION" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private publication stopped during admission. Check production signing readiness before retrying."
+          elif [[ "$RECONCILIATION_ADMISSION" == failure || "$RECONCILIATION_ADMISSION" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private reconciliation admission result is $RECONCILIATION_ADMISSION. Check the workflow and retry the dispatch."
           elif [[ "$DRAFT_READINESS" == failure || "$DRAFT_READINESS" == cancelled ]]; then
             python3 .private/notify.py "ZEC Private draft recovery stopped at the readiness check. Verify production signing is enabled before retrying the same exact publisher."

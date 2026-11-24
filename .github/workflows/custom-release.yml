@@ -77,7 +77,7 @@ jobs:
           PY
   build:
     needs: admit
-    if: github.repository == 'Codely-Solutions/zec-private' && needs.admit.outputs.main == 'true' && (inputs.operation == 'preflight' || ((inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'))
+    if: github.repository == 'Codely-Solutions/zec-private' && needs.admit.outputs.main == 'true' && (inputs.operation == 'preflight' || inputs.operation == 'publish' || inputs.operation == 'recover')
     permissions:
       actions: read
       contents: write
