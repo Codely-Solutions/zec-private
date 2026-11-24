@@ -159,7 +159,8 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
                 return SimpleNamespace(returncode=0, communicate=lambda **_: (output, b''))
 
             @contextmanager
-            def ready(_root):
+            def ready(_root, *, post_by):
+                self.assertEqual(post_by, 700)
                 events.append('faucet-readiness')
 
                 def fund(address):
@@ -176,6 +177,7 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
                     patch.object(driver, 'faucet_ready_session', ready), \
                     patch.object(driver, 'installed_apk_hash', return_value=app_hash), \
                     patch.object(driver, 'verify_instrumentation_pair') as verify, \
+                    patch.object(driver.time, 'monotonic', return_value=100), \
                     patch.object(driver.subprocess, 'Popen', side_effect=start_stage), \
                     patch.object(driver.subprocess, 'run'):
                 run(adb, root, [test, app], manifest, use_tor=False, candidate_only=True)

@@ -35,7 +35,7 @@ def funding_claim_state(root):
         state = json.loads(ledger.read_bytes())['status']
     except (OSError, ValueError, KeyError, TypeError):
         return 'unknown'
-    known = ('request-starting', 'refused-or-unknown', 'pending', 'failed-or-unknown', 'broadcast')
+    known = ('request-starting', 'refused-or-unknown', 'pending', 'failed-or-unknown', 'outcome-uncertain', 'broadcast')
     return state if state in known else 'unknown'
 
 
