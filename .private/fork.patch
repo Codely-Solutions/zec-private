@@ -63005,10 +63005,10 @@ index 6cb0997ff..5cc74da4e 100644
 +            SubmitResult.GrpcFailure(txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString())),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
 new file mode 100644
-index 000000000..b18a58f08
+index 000000000..9a93d3e2a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
-@@ -0,0 +1,493 @@
+@@ -0,0 +1,497 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -63319,15 +63319,19 @@ index 000000000..b18a58f08
 +            val bridgedBitcoin = externalAssets.single { it.assetId == "nep141:nbtc.bridge.near" }
 +            val incoming = Route(bitcoin, zec, SwapType.FLEX_INPUT)
 +            val outgoing = Route(zec, bitcoin, SwapType.EXACT_OUTPUT)
-+            coEvery { nearApiProvider.requestQuote(any()) } returns
-+                Json.decodeFromString<QuoteResponseDto>(quoteJson(incoming.copy(origin = bridgedBitcoin)))
++            val incomingResponse = Json.decodeFromString<QuoteResponseDto>(quoteJson(incoming))
++            coEvery { nearApiProvider.requestQuote(any()) } returns incomingResponse.copy(
++                quoteRequest = incomingResponse.quoteRequest.copy(originAsset = bridgedBitcoin.assetId),
++            )
 +            val rejectedOrigin = assertFailsWith<SwapQuoteMismatchException.Rejected>(incoming.label) {
 +                requestQuote(incoming, SwapMode.FLEX_INPUT)
 +            }
 +            assertEquals(SwapQuoteMismatchType.ORIGIN_ASSET, rejectedOrigin.type, incoming.label)
 +
-+            coEvery { nearApiProvider.requestQuote(any()) } returns
-+                Json.decodeFromString<QuoteResponseDto>(quoteJson(outgoing.copy(destination = bridgedBitcoin)))
++            val outgoingResponse = Json.decodeFromString<QuoteResponseDto>(quoteJson(outgoing))
++            coEvery { nearApiProvider.requestQuote(any()) } returns outgoingResponse.copy(
++                quoteRequest = outgoingResponse.quoteRequest.copy(destinationAsset = bridgedBitcoin.assetId),
++            )
 +            val rejectedDestination = assertFailsWith<SwapQuoteMismatchException.Rejected>(outgoing.label) {
 +                requestQuote(outgoing, SwapMode.EXACT_OUTPUT)
 +            }

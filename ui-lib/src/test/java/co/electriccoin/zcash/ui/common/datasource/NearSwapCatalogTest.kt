@@ -308,15 +308,19 @@ class NearSwapCatalogTest {
             val bridgedBitcoin = externalAssets.single { it.assetId == "nep141:nbtc.bridge.near" }
             val incoming = Route(bitcoin, zec, SwapType.FLEX_INPUT)
             val outgoing = Route(zec, bitcoin, SwapType.EXACT_OUTPUT)
-            coEvery { nearApiProvider.requestQuote(any()) } returns
-                Json.decodeFromString<QuoteResponseDto>(quoteJson(incoming.copy(origin = bridgedBitcoin)))
+            val incomingResponse = Json.decodeFromString<QuoteResponseDto>(quoteJson(incoming))
+            coEvery { nearApiProvider.requestQuote(any()) } returns incomingResponse.copy(
+                quoteRequest = incomingResponse.quoteRequest.copy(originAsset = bridgedBitcoin.assetId),
+            )
             val rejectedOrigin = assertFailsWith<SwapQuoteMismatchException.Rejected>(incoming.label) {
                 requestQuote(incoming, SwapMode.FLEX_INPUT)
             }
             assertEquals(SwapQuoteMismatchType.ORIGIN_ASSET, rejectedOrigin.type, incoming.label)
 
-            coEvery { nearApiProvider.requestQuote(any()) } returns
-                Json.decodeFromString<QuoteResponseDto>(quoteJson(outgoing.copy(destination = bridgedBitcoin)))
+            val outgoingResponse = Json.decodeFromString<QuoteResponseDto>(quoteJson(outgoing))
+            coEvery { nearApiProvider.requestQuote(any()) } returns outgoingResponse.copy(
+                quoteRequest = outgoingResponse.quoteRequest.copy(destinationAsset = bridgedBitcoin.assetId),
+            )
             val rejectedDestination = assertFailsWith<SwapQuoteMismatchException.Rejected>(outgoing.label) {
                 requestQuote(outgoing, SwapMode.EXACT_OUTPUT)
             }
