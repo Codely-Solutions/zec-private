@@ -132,7 +132,7 @@ private fun ZashiQrInternal(
 
     var reload by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.qrData, qrSizePx, colors) {
+    LaunchedEffect(state.qrData, qrSizePx, colors, enableBitmapReload) {
         if (enableBitmapReload && reload) {
             bitmap = getQrCode(state.qrData, qrSizePx, colors)
         }

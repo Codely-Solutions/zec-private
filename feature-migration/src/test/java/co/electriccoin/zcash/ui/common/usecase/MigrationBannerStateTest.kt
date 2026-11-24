@@ -320,20 +320,9 @@ class MigrationBannerStateTest {
         assertNull(result?.attentionRangeText)
     }
 
-    // ─── §4 SIGNATURE-blocked committed schedule routes through "Migration required" ──
-
-    /**
-     * Found live 2026-08-02: a committed-but-never-signed Keystone schedule (every transaction
-     * stuck in [MigrationTransferBlocker.SIGNATURE] — the one blocker that can never self-resolve,
-     * unlike SCHEDULE/ANCHOR_BOUNDARY/DEPENDENCIES which clear as blocks mine) was classified as
-     * plain InProgress, routing to the read-only Progress screen with no way to re-trigger signing.
-     * [migrationMessageFor] must instead report isRunActive = false, exactly like a fresh
-     * "Migrate now" case, so the click-routing (`onMigrationMessageClick`) sends the user through
-     * the ordinary Setup/Review/Keystone-sign flow — which the engine's own `commit_or_reuse`
-     * safely re-enters (it returns the SAME already-committed PCZTs rather than re-committing).
-     */
+    // An unsigned committed schedule remains active and exposes signing recovery for its owner.
     @Test
-    fun inProgressWithSignatureBlockedTransferShowsMigrationRequired() {
+    fun inProgressWithSignatureBlockedTransferOffersRecovery() {
         val progress = MigrationProgress(completedTransfers = 0, totalTransfers = 2, nextTransferReadyAtHeight = null)
         val signatureBlockedSnapshot =
             snapshot().copy(
@@ -349,10 +338,12 @@ class MigrationBannerStateTest {
                 hasSeenComplete = false,
                 orchardBalanceZatoshi = MIGRATION_RESIDUAL_MIN_ZATOSHI + 1_000_000L,
             )
-        // Still the InProgress branch (isRunActive flips false, but completedCount/totalCount are
-        // still populated from the snapshot) — NOT the bare "Migrate now" no-run branches further
-        // down, which never fire because `when` returns on the first match.
-        assertEquals(MigrationHomeMessageData(isRunActive = false, completedCount = 1, totalCount = 2), result)
+        assertEquals(
+            MigrationHomeMessageData(
+                isRunActive = true, completedCount = 1, totalCount = 2, isAwaitingSignatures = true,
+            ),
+            result,
+        )
     }
 
     /**
@@ -389,7 +380,12 @@ class MigrationBannerStateTest {
             )
         // Full equality also asserts isReadyToSend == false (the data class default) — the
         // ready-to-send branch must not have fired despite its other preconditions being met.
-        assertEquals(MigrationHomeMessageData(isRunActive = false, completedCount = 1, totalCount = 2), result)
+        assertEquals(
+            MigrationHomeMessageData(
+                isRunActive = true, completedCount = 1, totalCount = 2, isAwaitingSignatures = true,
+            ),
+            result,
+        )
     }
 
     // ─── §5 Per-note dust gate (Kris Nuttycombe's formula) ────────────────────

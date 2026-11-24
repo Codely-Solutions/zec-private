@@ -21,27 +21,27 @@ class GetHomeMessageUseCaseMigrationTest {
         id: Long,
         index: Int,
         scheduledAt: Instant,
-        isSent: Boolean = false,
+        minedHeight: Long? = null,
     ) = LiveMigrationTransfer(
         id = id,
         index = index,
         amountZatoshi = 100_000L,
         scheduledHeight = 1_000L + index,
         scheduledAt = scheduledAt,
-        isSent = isSent,
+        isSent = minedHeight != null,
         isProved = true,
         action = null,
         blocker = null,
         expiryAt = null,
-        minedHeight = null,
+        minedHeight = minedHeight,
     )
 
-    /** A live snapshot with one sent and two pending transfers — counts (1, 3). */
+    /** A live snapshot with one mined transfer and two pending transfers. */
     private fun snapshot(nextScheduledAt: Instant = Instant.fromEpochSeconds(0)) =
         LiveMigrationSnapshot(
             transfers =
                 listOf(
-                    transfer(id = 10, index = 0, scheduledAt = Instant.fromEpochSeconds(0), isSent = true),
+                    transfer(id = 10, index = 0, scheduledAt = Instant.fromEpochSeconds(0), minedHeight = 1_000L),
                     transfer(id = 11, index = 1, scheduledAt = nextScheduledAt),
                     transfer(id = 12, index = 2, scheduledAt = nextScheduledAt),
                 ),
@@ -286,7 +286,13 @@ class GetHomeMessageUseCaseMigrationTest {
             )
 
         assertEquals(
-            MigrationHomeMessageData(isRunActive = true, completedCount = 1, totalCount = 3, isReadyToSend = true),
+            MigrationHomeMessageData(
+                isRunActive = true,
+                completedCount = 1,
+                totalCount = 3,
+                isReadyToSend = true,
+                nextTransferIndex = 1,
+            ),
             result,
         )
     }

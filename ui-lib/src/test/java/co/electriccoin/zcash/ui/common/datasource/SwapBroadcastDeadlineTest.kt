@@ -31,6 +31,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -117,7 +118,7 @@ class SwapBroadcastDeadlineTest {
             coVerify(exactly = 1) {
                 fixture.metadata.markTxAsSwap(
                     any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    account = any(), walletWriteToken = 0L,
+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
                 )
             }
         }
@@ -164,7 +165,7 @@ class SwapBroadcastDeadlineTest {
             coEvery {
                 metadata.markTxAsSwap(
                     any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    account = any(), walletWriteToken = 0L,
+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
                 )
             } returns true
             coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
@@ -221,7 +222,12 @@ class SwapBroadcastDeadlineTest {
         suspend fun whileSuspended(change: () -> Unit): Result<SubmitResult> = coroutineScope {
             withTimeout(5.seconds) {
                 val result = async { runCatching { submit() } }
-                entered.await()
+                select<Unit> {
+                    entered.onAwait { }
+                    result.onAwait {
+                        throw AssertionError("Submission ended before the fixture pause", it.exceptionOrNull())
+                    }
+                }
                 assertFalse(result.isCompleted)
                 try {
                     change()

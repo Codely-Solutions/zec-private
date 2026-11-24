@@ -8438,6 +8438,74 @@ index 860a02aa2..6a978b8f1 100644
 @@ -56 +54 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            verify(exactly = 1) { scheduler.schedule(any(), any()) }
 +            verify(exactly = 1) { scheduler.schedule("fixture-owner", any()) }
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseMigrationTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseMigrationTest.kt
+index 0e2160878..85eb609dc 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseMigrationTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseMigrationTest.kt
+@@ -24 +24 @@ class GetHomeMessageUseCaseMigrationTest {
+-        isSent: Boolean = false,
++        minedHeight: Long? = null,
+@@ -31 +31 @@ class GetHomeMessageUseCaseMigrationTest {
+-        isSent = isSent,
++        isSent = minedHeight != null,
+@@ -36 +36 @@ class GetHomeMessageUseCaseMigrationTest {
+-        minedHeight = null,
++        minedHeight = minedHeight,
+@@ -39 +39 @@ class GetHomeMessageUseCaseMigrationTest {
+-    /** A live snapshot with one sent and two pending transfers — counts (1, 3). */
++    /** A live snapshot with one mined transfer and two pending transfers. */
+@@ -44 +44 @@ class GetHomeMessageUseCaseMigrationTest {
+-                    transfer(id = 10, index = 0, scheduledAt = Instant.fromEpochSeconds(0), isSent = true),
++                    transfer(id = 10, index = 0, scheduledAt = Instant.fromEpochSeconds(0), minedHeight = 1_000L),
+@@ -289 +289,7 @@ class GetHomeMessageUseCaseMigrationTest {
+-            MigrationHomeMessageData(isRunActive = true, completedCount = 1, totalCount = 3, isReadyToSend = true),
++            MigrationHomeMessageData(
++                isRunActive = true,
++                completedCount = 1,
++                totalCount = 3,
++                isReadyToSend = true,
++                nextTransferIndex = 1,
++            ),
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
+index 85531a7b8..ce68f7683 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
+@@ -323,12 +323 @@ class MigrationBannerStateTest {
+-    // ─── §4 SIGNATURE-blocked committed schedule routes through "Migration required" ──
+-
+-    /**
+-     * Found live 2026-08-02: a committed-but-never-signed Keystone schedule (every transaction
+-     * stuck in [MigrationTransferBlocker.SIGNATURE] — the one blocker that can never self-resolve,
+-     * unlike SCHEDULE/ANCHOR_BOUNDARY/DEPENDENCIES which clear as blocks mine) was classified as
+-     * plain InProgress, routing to the read-only Progress screen with no way to re-trigger signing.
+-     * [migrationMessageFor] must instead report isRunActive = false, exactly like a fresh
+-     * "Migrate now" case, so the click-routing (`onMigrationMessageClick`) sends the user through
+-     * the ordinary Setup/Review/Keystone-sign flow — which the engine's own `commit_or_reuse`
+-     * safely re-enters (it returns the SAME already-committed PCZTs rather than re-committing).
+-     */
++    // An unsigned committed schedule remains active and exposes signing recovery for its owner.
+@@ -336 +325 @@ class MigrationBannerStateTest {
+-    fun inProgressWithSignatureBlockedTransferShowsMigrationRequired() {
++    fun inProgressWithSignatureBlockedTransferOffersRecovery() {
+@@ -352,4 +341,6 @@ class MigrationBannerStateTest {
+-        // Still the InProgress branch (isRunActive flips false, but completedCount/totalCount are
+-        // still populated from the snapshot) — NOT the bare "Migrate now" no-run branches further
+-        // down, which never fire because `when` returns on the first match.
+-        assertEquals(MigrationHomeMessageData(isRunActive = false, completedCount = 1, totalCount = 2), result)
++        assertEquals(
++            MigrationHomeMessageData(
++                isRunActive = true, completedCount = 1, totalCount = 2, isAwaitingSignatures = true,
++            ),
++            result,
++        )
+@@ -392 +383,6 @@ class MigrationBannerStateTest {
+-        assertEquals(MigrationHomeMessageData(isRunActive = false, completedCount = 1, totalCount = 2), result)
++        assertEquals(
++            MigrationHomeMessageData(
++                isRunActive = true, completedCount = 1, totalCount = 2, isAwaitingSignatures = true,
++            ),
++            result,
++        )
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
 index 72c0afaaa..73c1e9f5f 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
@@ -25287,6 +25355,13 @@ index f3f682346..1b326c55b 100644
 @@ -174,0 +177,2 @@ data class NumberTextFieldInnerState(
 +    /** Set on value-change callbacks when only the caret or selection moved. */
 +    val isSelectionOnlyChange: Boolean = false,
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
+index 016405668..701f4f35c 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
+@@ -135 +135 @@ private fun ZashiQrInternal(
+-    LaunchedEffect(state.qrData, qrSizePx, colors) {
++    LaunchedEffect(state.qrData, qrSizePx, colors, enableBitmapReload) {
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
 index 2d38073f4..3dea5aa4d 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
@@ -32195,7 +32270,7 @@ index 000000000..1367217d0
 +    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..53186f3f5 100644
+index 048340e48..f900afd34 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
@@ -32226,7 +32301,7 @@ index 048340e48..53186f3f5 100644
 +
 +    override fun onSaveInstanceState(outState: Bundle) {
 +        super.onSaveInstanceState(outState)
-+        outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
++        stampNavigationState(outState)
 +        outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
 +        launchNavigation.migrationNoticeToSave?.let {
 +            outState.putString(PENDING_MIGRATION_NOTICE, it.ownerKey)
@@ -32279,15 +32354,18 @@ index 048340e48..53186f3f5 100644
 @@ -298 +328 @@ class MainActivity : FragmentActivity() {
 -        RootNavGraph(secretState, walletViewModel, storageCheckViewModel)
 +        RootNavGraph(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
-@@ -335,0 +366,11 @@ class MainActivity : FragmentActivity() {
+@@ -335,0 +366,14 @@ class MainActivity : FragmentActivity() {
 +        private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
 +        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
 +        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
 +        private const val NAVIGATION_STATE_VERSION = 11
 +
-+        // Forget older navigation stacks when their routes or saved payloads change.
-+        // Version 3 adds the transaction note's account and wallet session to its typed route.
++        internal fun stampNavigationState(state: Bundle) {
++            state.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
++        }
++
++        // Discard saved stacks when their typed routes or saved payloads use an older format.
 +        internal fun restorableNavigationState(state: Bundle?): Bundle? =
 +            state?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
 +
@@ -61750,10 +61828,10 @@ index 000000000..f1395b275
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt
 new file mode 100644
-index 000000000..46044cb16
+index 000000000..2ae836acd
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,263 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.os.Bundle
@@ -61968,11 +62046,17 @@ index 000000000..46044cb16
 +        }
 +    }
 +
-+    private fun roundTrip(first: NavHostController, version: Int = 5): NavHostController {
++    private fun roundTrip(first: NavHostController, version: Int? = null): NavHostController {
 +        val restored = newController()
 +        val parcel = Parcel.obtain()
 +        try {
-+            parcel.writeBundle(assertNotNull(first.saveState()).apply { putInt(NAVIGATION_VERSION_KEY, version) })
++            val state = assertNotNull(first.saveState())
++            if (version == null) {
++                MainActivity.stampNavigationState(state)
++            } else {
++                state.putInt(NAVIGATION_VERSION_KEY, version)
++            }
++            parcel.writeBundle(state)
 +            val serialized = parcel.marshall()
 +            assertFalse(serialized.toString(Charsets.UTF_8).contains(SYNTHETIC_UFVK))
 +            assertFalse(serialized.toString(Charsets.UTF_16LE).contains(SYNTHETIC_UFVK))
@@ -62061,6 +62145,89 @@ index b983bc0a2..b48e095d6 100644
 @@ -84,0 +124,2 @@ class NavigationRouterImplTest {
 +
 +    private data object TestMigrationProgress
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt
+new file mode 100644
+index 000000000..e8b63d191
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt
+@@ -0,0 +1,77 @@
++package co.electriccoin.zcash.ui
++
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.asAndroidBitmap
++import androidx.compose.ui.platform.testTag
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.test.captureToImage
++import androidx.compose.ui.test.isDialog
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onNodeWithTag
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.design.component.QrCodeDefaults
++import co.electriccoin.zcash.ui.design.component.QrState
++import co.electriccoin.zcash.ui.design.component.ZashiQr
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import com.google.zxing.BinaryBitmap
++import com.google.zxing.RGBLuminanceSource
++import com.google.zxing.common.HybridBinarizer
++import com.google.zxing.qrcode.QRCodeReader
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import org.robolectric.shadows.ShadowDialog
++import kotlin.test.assertEquals
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], qualifiers = "w360dp-h780dp")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class QrCodeFullscreenLayoutTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    @Suppress("DEPRECATION")
++    fun dismissingFullscreenShowsTheLatestInlineQrData() {
++        val firstReceiver = "synthetic-receive-first"
++        val rotatedReceiver = "synthetic-receive-rotated"
++        val data = mutableStateOf(firstReceiver)
++        compose.setContent {
++            ZcashTheme {
++                ZashiQr(
++                    state = QrState(data.value),
++                    modifier = Modifier.testTag(INLINE_QR),
++                    qrSize = 180.dp,
++                    colors = QrCodeDefaults.colors(Color.White, Color.Black),
++                )
++            }
++        }
++        assertEquals(firstReceiver, inlineContents())
++        compose.onNodeWithTag(INLINE_QR).performSemanticsAction(SemanticsActions.OnClick) { it() }
++        compose.onNode(isDialog()).assertExists()
++
++        compose.runOnIdle { data.value = rotatedReceiver }
++        compose.runOnIdle { requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed() }
++
++        compose.onNode(isDialog()).assertDoesNotExist()
++        assertEquals(rotatedReceiver, inlineContents())
++    }
++
++    private fun inlineContents(): String {
++        val bitmap = compose.onNodeWithTag(INLINE_QR).captureToImage().asAndroidBitmap()
++        val pixels = IntArray(bitmap.width * bitmap.height)
++        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
++        val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
++        return QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source))).text
++    }
++
++    private companion object {
++        const val INLINE_QR = "inline-qr"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoreSavedStateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoreSavedStateTest.kt
 new file mode 100644
 index 000000000..4777cf6e0
@@ -66091,10 +66258,10 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..826ab4150
+index 000000000..b4c240201
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,252 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -66128,6 +66295,7 @@ index 000000000..826ab4150
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.selects.select
 +import kotlinx.coroutines.withTimeout
 +import org.junit.runner.RunWith
 +import org.robolectric.RobolectricTestRunner
@@ -66214,7 +66382,7 @@ index 000000000..826ab4150
 +            coVerify(exactly = 1) {
 +                fixture.metadata.markTxAsSwap(
 +                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                    account = any(), walletWriteToken = 0L,
++                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
 +                )
 +            }
 +        }
@@ -66261,7 +66429,7 @@ index 000000000..826ab4150
 +            coEvery {
 +                metadata.markTxAsSwap(
 +                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                    account = any(), walletWriteToken = 0L,
++                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
 +                )
 +            } returns true
 +            coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
@@ -66318,7 +66486,12 @@ index 000000000..826ab4150
 +        suspend fun whileSuspended(change: () -> Unit): Result<SubmitResult> = coroutineScope {
 +            withTimeout(5.seconds) {
 +                val result = async { runCatching { submit() } }
-+                entered.await()
++                select<Unit> {
++                    entered.onAwait { }
++                    result.onAwait {
++                        throw AssertionError("Submission ended before the fixture pause", it.exceptionOrNull())
++                    }
++                }
 +                assertFalse(result.isCompleted)
 +                try {
 +                    change()
@@ -72685,10 +72858,10 @@ index 0bc7a1124..0d0ca40b4 100644
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..e34494ec3
+index 000000000..abf2ab0db
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,195 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -72811,7 +72984,8 @@ index 000000000..e34494ec3
 +        coEvery { metadata.getSwapMetadata(any(), any()) } returns null
 +        coEvery {
 +            metadata.markTxAsSwap(
-+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
++                any(), any(), any(), any(), any(), any(), any(), any(), any(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
 +            )
 +        } returns true
 +        coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
@@ -72820,7 +72994,8 @@ index 000000000..e34494ec3
 +
 +        coVerifyOrder {
 +            metadata.markTxAsSwap(
-+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
++                any(), any(), any(), any(), any(), any(), any(), any(), any(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
 +            )
 +            proposals.submitTransaction(reviewed.proposal, key, any())
 +        }
@@ -72836,7 +73011,8 @@ index 000000000..e34494ec3
 +        val finishTracking = CompletableDeferred<Unit>()
 +        coEvery {
 +            metadata.markTxAsSwap(
-+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
++                any(), any(), any(), any(), any(), any(), any(), any(), any(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
 +            )
 +        } coAnswers {
 +            trackingStarted.complete(Unit)
@@ -73639,13 +73815,14 @@ index 8d1810539..c5db5d7e8 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt
 new file mode 100644
-index 000000000..a21e89296
+index 000000000..06fc4ad67
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,74 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 +import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -73674,6 +73851,7 @@ index 000000000..a21e89296
 +            mockk<TransactionSwapMetadata> {
 +                every { lastUpdated } returns Instant.EPOCH
 +                every { depositAddress } returns "synthetic-deposit"
++                every { destination } returns SwapAssetTestFixture.zecSimpleAsset()
 +                every { amountOutFormatted } returns BigDecimal("1.23456789")
 +                every { totalFeesUsd } returns BigDecimal.ZERO
 +            }
@@ -88511,10 +88689,37 @@ index 000000000..91b204fd8
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
-index 881e28b09..74f1857a7 100644
+index 881e28b09..801a0a941 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
-@@ -79,0 +80 @@ class SwapQuoteVMGiftCardLinkTest {
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.swap.quote
++import androidx.lifecycle.viewModelScope
+@@ -6 +6,0 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
+-import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -16,0 +17 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
+@@ -18,0 +20,2 @@ import kotlinx.coroutines.flow.emptyFlow
++import kotlinx.coroutines.flow.filterNotNull
++import kotlinx.coroutines.flow.first
+@@ -20 +22,0 @@ import kotlinx.coroutines.flow.flowOf
+-import kotlinx.coroutines.launch
+@@ -52 +53,0 @@ class SwapQuoteVMGiftCardLinkTest {
+-                val job = launch { vm.state.collect {} }
+@@ -54,4 +55,6 @@ class SwapQuoteVMGiftCardLinkTest {
+-                val state = assertIs<SwapQuoteState.Error>(vm.state.value)
+-                assertEquals(stringRes(R.string.swap_error_giftCardLink), state.subtitle)
+-
+-                job.cancel()
++                try {
++                    val state = assertIs<SwapQuoteState.Error>(vm.state.filterNotNull().first())
++                    assertEquals(stringRes(R.string.swap_error_giftCardLink), state.subtitle)
++                } finally {
++                    vm.viewModelScope.cancel()
++                }
+@@ -70 +73 @@ class SwapQuoteVMGiftCardLinkTest {
+-                    every { require() } returns flowOf(mockk<WalletAccount>(relaxed = true))
++                    every { this@mockk.invoke() } returns flowOf(null)
+@@ -79,0 +83 @@ class SwapQuoteVMGiftCardLinkTest {
 +            independentPrices = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 index 38427672d..a710dba93 100644

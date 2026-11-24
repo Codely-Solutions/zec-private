@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
+import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -29,6 +30,7 @@ class GetFilteredActivitiesUseCaseTest {
             mockk<TransactionSwapMetadata> {
                 every { lastUpdated } returns Instant.EPOCH
                 every { depositAddress } returns "synthetic-deposit"
+                every { destination } returns SwapAssetTestFixture.zecSimpleAsset()
                 every { amountOutFormatted } returns BigDecimal("1.23456789")
                 every { totalFeesUsd } returns BigDecimal.ZERO
             }

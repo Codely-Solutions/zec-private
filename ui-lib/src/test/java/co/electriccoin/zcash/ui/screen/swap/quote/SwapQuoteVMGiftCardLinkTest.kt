@@ -1,9 +1,9 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
+import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.GiftCardAddressNotAllowedException
 import co.electriccoin.zcash.ui.common.model.SwapMode
-import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -14,10 +14,12 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -49,12 +51,13 @@ class SwapQuoteVMGiftCardLinkTest {
         runTest(UnconfinedTestDispatcher()) {
             SwapMode.entries.forEach { mode ->
                 val vm = createVM(SwapQuoteData.Error(mode, GiftCardAddressNotAllowedException()))
-                val job = launch { vm.state.collect {} }
 
-                val state = assertIs<SwapQuoteState.Error>(vm.state.value)
-                assertEquals(stringRes(R.string.swap_error_giftCardLink), state.subtitle)
-
-                job.cancel()
+                try {
+                    val state = assertIs<SwapQuoteState.Error>(vm.state.filterNotNull().first())
+                    assertEquals(stringRes(R.string.swap_error_giftCardLink), state.subtitle)
+                } finally {
+                    vm.viewModelScope.cancel()
+                }
             }
         }
 
@@ -67,7 +70,7 @@ class SwapQuoteVMGiftCardLinkTest {
             observeProposal = mockk<ObserveProposalUseCase> { every { observeNullable() } returns flowOf(null) },
             observeSelectedWalletAccount =
                 mockk<ObserveSelectedWalletAccountUseCase> {
-                    every { require() } returns flowOf(mockk<WalletAccount>(relaxed = true))
+                    every { this@mockk.invoke() } returns flowOf(null)
                 },
             applicationStateProvider =
                 mockk<ApplicationStateProvider> { every { observeOnForeground() } returns emptyFlow() },

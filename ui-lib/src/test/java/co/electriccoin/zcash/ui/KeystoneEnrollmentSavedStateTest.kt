@@ -212,11 +212,17 @@ class KeystoneEnrollmentSavedStateTest {
         }
     }
 
-    private fun roundTrip(first: NavHostController, version: Int = 5): NavHostController {
+    private fun roundTrip(first: NavHostController, version: Int? = null): NavHostController {
         val restored = newController()
         val parcel = Parcel.obtain()
         try {
-            parcel.writeBundle(assertNotNull(first.saveState()).apply { putInt(NAVIGATION_VERSION_KEY, version) })
+            val state = assertNotNull(first.saveState())
+            if (version == null) {
+                MainActivity.stampNavigationState(state)
+            } else {
+                state.putInt(NAVIGATION_VERSION_KEY, version)
+            }
+            parcel.writeBundle(state)
             val serialized = parcel.marshall()
             assertFalse(serialized.toString(Charsets.UTF_8).contains(SYNTHETIC_UFVK))
             assertFalse(serialized.toString(Charsets.UTF_16LE).contains(SYNTHETIC_UFVK))

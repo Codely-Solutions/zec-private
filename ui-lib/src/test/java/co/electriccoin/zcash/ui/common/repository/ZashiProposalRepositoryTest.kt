@@ -120,7 +120,8 @@ class ZashiProposalRepositoryTest {
         coEvery { metadata.getSwapMetadata(any(), any()) } returns null
         coEvery {
             metadata.markTxAsSwap(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
+                any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
             )
         } returns true
         coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
@@ -129,7 +130,8 @@ class ZashiProposalRepositoryTest {
 
         coVerifyOrder {
             metadata.markTxAsSwap(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
+                any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
             )
             proposals.submitTransaction(reviewed.proposal, key, any())
         }
@@ -145,7 +147,8 @@ class ZashiProposalRepositoryTest {
         val finishTracking = CompletableDeferred<Unit>()
         coEvery {
             metadata.markTxAsSwap(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(), walletWriteToken = 0L,
+                any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
             )
         } coAnswers {
             trackingStarted.complete(Unit)

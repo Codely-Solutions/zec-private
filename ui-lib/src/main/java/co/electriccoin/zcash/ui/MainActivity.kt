@@ -115,7 +115,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
+        stampNavigationState(outState)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
         launchNavigation.migrationNoticeToSave?.let {
             outState.putString(PENDING_MIGRATION_NOTICE, it.ownerKey)
@@ -369,8 +369,11 @@ class MainActivity : FragmentActivity() {
         private const val PENDING_MIGRATION_STEP = "pending_migration_step"
         private const val NAVIGATION_STATE_VERSION = 11
 
-        // Forget older navigation stacks when their routes or saved payloads change.
-        // Version 3 adds the transaction note's account and wallet session to its typed route.
+        internal fun stampNavigationState(state: Bundle) {
+            state.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
+        }
+
+        // Discard saved stacks when their typed routes or saved payloads use an older format.
         internal fun restorableNavigationState(state: Bundle?): Bundle? =
             state?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
 
