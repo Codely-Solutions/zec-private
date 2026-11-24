@@ -4363,24 +4363,28 @@ index 5a7def039..b8ec6cf2a 100644
 +        }.toSet()
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
-index 698a60fbd..8cf1aeab2 100644
+index 698a60fbd..296444dbe 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
-@@ -79,0 +80 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
+@@ -64,0 +65 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccess
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -79,0 +81 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
 +import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
-@@ -83,0 +85 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
+@@ -83,0 +86 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
 +import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
-@@ -87,0 +90 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
+@@ -87,0 +91 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
 +import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
-@@ -96,0 +100 @@ import org.koin.core.KoinApplication
+@@ -96,0 +101 @@ import org.koin.core.KoinApplication
 +import org.koin.core.parameter.parametersOf
-@@ -227 +231 @@ class MigrationKoinGraphSmokeTest {
+@@ -133,0 +139 @@ class MigrationKoinGraphSmokeTest {
++                single<ResetProgressStore> { mockk(relaxed = true) }
+@@ -227 +233 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationProgressVM>()
 +        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner")) }
-@@ -247 +251 @@ class MigrationKoinGraphSmokeTest {
+@@ -247 +253 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationSendingVM>()
 +        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner")) }
-@@ -292 +296 @@ class MigrationKoinGraphSmokeTest {
+@@ -292 +298 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationTorFailureVM>()
 +        koin.koin.get<MigrationTorFailureVM> { parametersOf(MigrationTorFailureArgs("fixture-owner")) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt

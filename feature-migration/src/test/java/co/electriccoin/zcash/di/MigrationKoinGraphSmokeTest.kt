@@ -62,6 +62,7 @@ import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.ScheduleNextMigrationWindowUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccessfulProposalUseCase
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryVM
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteVM
@@ -135,6 +136,7 @@ class MigrationKoinGraphSmokeTest {
             module {
                 // Framework
                 single<Context> { mockk(relaxed = true) }
+                single<ResetProgressStore> { mockk(relaxed = true) }
 
                 // NavigationRouter
                 single<NavigationRouter> { mockk(relaxed = true) }
