@@ -97,6 +97,7 @@ class CrossPayCatalogDriftReviewTest {
             assertFalse(automaticSelection.isCompleted)
 
             val router = mockk<NavigationRouter>(relaxed = true)
+            val account = mockk<WalletAccount> { every { canSpend(any()) } returns true }
             val request = RequestSwapQuoteUseCase(
                 navigationRouter = router,
                 navigateToErrorUseCase = mockk(relaxed = true),
@@ -105,11 +106,12 @@ class CrossPayCatalogDriftReviewTest {
                 keystoneProposalRepository = mockk(),
                 ledgerProposalPipeline = mockk(),
                 accountDataSource = mockk<AccountDataSource> {
-                    coEvery { requestNextShieldedAddress(requireFresh = true) } returns "synthetic-refund-address"
+                    coEvery { getSelectedAccount() } returns account
+                    coEvery { requestNextShieldedAddress(requireFresh = true, account = account) } returns
+                        "synthetic-refund-address"
                 },
                 synchronizerProvider = mockk(),
             )
-            val account = mockk<WalletAccount> { every { canSpend(any()) } returns true }
             val vm = PayVM(
                 getCuratedSwapAssetsUseCase = curated,
                 getSelectedWalletAccount = mockk<GetSelectedWalletAccountUseCase> {

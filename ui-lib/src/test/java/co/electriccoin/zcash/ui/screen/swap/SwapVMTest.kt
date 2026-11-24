@@ -478,9 +478,11 @@ class SwapVMTest {
             harness.onBack() // requesting -> show cancel confirmation
             gate.complete(Unit) // request finishes -> no longer requesting, sheet still visible
 
-            harness.onBack() // now resolves the cancel confirmation
+            assertNotNull(harness.vm.cancelState.value).onBack()
 
             assertNull(harness.vm.cancelState.value)
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            harness.vm.onCancelSheetHidden()
             coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
         }
 
@@ -499,7 +501,7 @@ class SwapVMTest {
                 ?.negativeButton
                 ?.onClick
                 ?.invoke()
-            mainDispatcher.scheduler.advanceUntilIdle() // let the 350ms dismiss delay elapse
+            harness.vm.onCancelSheetHidden()
 
             assertNull(harness.vm.cancelState.value)
             coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any(), any()) }
@@ -521,6 +523,8 @@ class SwapVMTest {
                 ?.invoke()
 
             assertNull(harness.vm.cancelState.value)
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            harness.vm.onCancelSheetHidden()
             coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
         }
 
