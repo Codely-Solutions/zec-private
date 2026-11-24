@@ -49311,7 +49311,7 @@ index 55f3c15dd..3a5b64397 100644
 -        val onBack: () -> Unit,
 +        override val onBack: () -> Unit,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt
-index 43d1fbbc0..61f2729e1 100644
+index 43d1fbbc0..6f3acf07e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt
 @@ -6 +5,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -49334,7 +49334,7 @@ index 43d1fbbc0..61f2729e1 100644
 +    private val selectedAccount =
 +        observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 +
-@@ -40,4 +48,3 @@ class QrCodeVM(
+@@ -40,4 +48,4 @@ class QrCodeVM(
 -        observeSelectedWalletAccount
 -            .require()
 -            .map { account ->
@@ -49342,38 +49342,37 @@ index 43d1fbbc0..61f2729e1 100644
 +        combine(selectedAccount, appAccessSession.grant, walletWriteAccess.version) { account, grant, token ->
 +                val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
 +                val walletAddress = account?.fromReceiveAddressType(addressType)
-@@ -45,2 +52,4 @@ class QrCodeVM(
++                val hasAccess = appAccessSession.permits(grant) && walletWriteAccess.permits(token)
+@@ -45,2 +53,2 @@ class QrCodeVM(
 -                if (walletAddress == null) {
 -                    QrCodeState.Loading
-+                if (account == null || walletAddress == null ||
-+                    !appAccessSession.permits(grant) || !walletWriteAccess.permits(token)
-+                ) {
++                if (account == null || walletAddress == null || !hasAccess) {
 +                    loading
-@@ -47,0 +57,6 @@ class QrCodeVM(
+@@ -47,0 +56,6 @@ class QrCodeVM(
 +                    val permitted = { address: String ->
 +                        val current = selectedAccount.value
 +                        appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
 +                            current?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid &&
 +                            current.receiveAddress(addressType) == address && address == walletAddress.address
 +                    }
-@@ -55,2 +70,2 @@ class QrCodeVM(
+@@ -55,2 +69,2 @@ class QrCodeVM(
 -                        onAddressCopy = { address -> onAddressCopyClick(address) },
 -                        onQrCodeShare = {
 +                        onAddressCopy = { address -> if (permitted(address)) copyToClipboard(address) },
 +                        onQrCodeShare = { address ->
-@@ -57,0 +73 @@ class QrCodeVM(
+@@ -57,0 +72 @@ class QrCodeVM(
 +                                if (!permitted(address)) return@launch
-@@ -59 +75 @@ class QrCodeVM(
+@@ -59 +74 @@ class QrCodeVM(
 -                                    qrData = it,
 +                                    qrData = address,
-@@ -68,0 +85 @@ class QrCodeVM(
+@@ -68,0 +84 @@ class QrCodeVM(
 +                                    isAllowed = { permitted(address) },
-@@ -78,2 +95,2 @@ class QrCodeVM(
+@@ -78,2 +94,2 @@ class QrCodeVM(
 -                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
 -                initialValue = QrCodeState.Loading
 +                started = SharingStarted.Eagerly,
 +                initialValue = loading
-@@ -120 +136,0 @@ class QrCodeVM(
+@@ -120 +135,0 @@ class QrCodeVM(
 -    private fun onAddressCopyClick(address: String) = copyToClipboard(address)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeView.kt
 index cc8d96654..aac7580b4 100644

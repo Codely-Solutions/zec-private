@@ -48,10 +48,9 @@ class QrCodeVM(
         combine(selectedAccount, appAccessSession.grant, walletWriteAccess.version) { account, grant, token ->
                 val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
                 val walletAddress = account?.fromReceiveAddressType(addressType)
+                val hasAccess = appAccessSession.permits(grant) && walletWriteAccess.permits(token)
 
-                if (account == null || walletAddress == null ||
-                    !appAccessSession.permits(grant) || !walletWriteAccess.permits(token)
-                ) {
+                if (account == null || walletAddress == null || !hasAccess) {
                     loading
                 } else {
                     val permitted = { address: String ->

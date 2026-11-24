@@ -2058,7 +2058,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoView.kt": "cd221673ae6fade3fb986ce86b4db06b0987b3b1ae8035634384d9fcf410501c",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeScreen.kt": "879c1e57f098e9f7f3f67c6a8542657c46fea4f6db2856306fe7febaeb61968f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeState.kt": "ef848e065803ee4957c1a727068a0a8a0e9abe1ccb641a1b85ca73f80ece01e9",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt": "cc88908f16296481bf41997d3252cf73d741da215057e8dd2d032540d43e5e05",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVM.kt": "417629cd6a589fc123838124b5b032f77174088fc3b16d17a13d11d86d3772e9",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeView.kt": "49b1852b0c2565b42c10a5137ee8f54b3757ab43a4dc7a1c6bace7ca29eed0ce",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/qrcode/ext/WalletAddressesExt.kt": "5f621efefc4c4ee79c86490baef19b485641f8da32c580da6631831bc12b7a70",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveAddressType.kt": "f30a576a8d21a7a83781cba24af3ce98347a5d6e35c8c65e40e965447d99fb39",
