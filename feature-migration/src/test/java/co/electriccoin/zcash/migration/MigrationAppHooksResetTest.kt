@@ -61,7 +61,7 @@ class MigrationAppHooksResetTest {
         }
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), mockk(), reset, driver, drive,
+            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), mockk(), reset, driver, drive,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkConstructor(MigrationScheduler::class)
