@@ -1038,6 +1038,7 @@
     <string name="swap_mismatch_swapType_format">%1$s - %2$s &gt; %3$s</string>
     <string name="swap_mismatch_asset_format">%1$s (%2$s)</string>
     <string name="deposits_info">Deposits may take several minutes to confirm.</string>
+    <string name="private_swap_incomplete_check_support">Check with support before sending more.</string>
     <string name="swapAndPay_status_incompleteDeposit">Incomplete deposit</string>
     <string name="swapAndPay_status_pending">Pending</string>
     <string name="swapAndPay_status_success">Completed</string>
@@ -1426,6 +1427,8 @@
     <string name="migrationScheduled_durationLabel">Duration</string>
     <string name="migrationScheduled_doneTitle">Migration Scheduled</string>
     <string name="migrationScheduled_doneSubtitle">Your ZEC will be migrated to the Ironwood pool based on the schedule you approved.</string>
+    <string name="migrationHome_finishScheduling">Finish scheduling migration</string>
+    <string name="migrationScheduled_signatureRequired">Return to Home to finish signing with Keystone.</string>
     <string name="migrationScheduled_finalizeErrorMessage">Something went wrong finalizing your migration schedule. Please try again.</string>
     <string name="migrationScheduled_backgroundActivityHint">Transfers run when you open the app — enable background activity in Settings for automatic sending.</string>
     <string name="migrationScheduled_transfersProgressPending">0 of %1$d</string>

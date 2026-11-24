@@ -69,6 +69,8 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessScreen
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureScreen
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
+import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
@@ -153,6 +155,8 @@ class MigrationAppHooksImpl(
     private val resetProgress: ResetProgressStore,
     private val migrationLiveDriver: MigrationLiveDriver,
     private val migrationDriveOnce: MigrationDriveOnce,
+    private val pendingMigrationSchedule: PendingMigrationScheduleRepository,
+    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
 ) : MigrationAppHooks {
     override fun handleIntent(
@@ -238,11 +242,15 @@ class MigrationAppHooksImpl(
             migrationLiveDriver.stopAll()
             cancellation.result.await()
             migrationDriveOnce.awaitIdle()
+            pendingMigrationSchedule.clear()
+            pendingKeystone.clear()
             // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
             val accounts = accountDataSource.allAccounts.value.orEmpty()
             (accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() } +
                 MigrationWorkerHeartbeat.accountKeyIds(context)).distinct()
         } else {
+            pendingMigrationSchedule.peek(accountKeyId)?.let { pendingMigrationSchedule.clear(accountKeyId, it) }
+            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
             listOf(accountKeyId)
         }
         keys.forEach { key ->

@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.migration.scheduled
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +63,8 @@ fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
     val isFinalizing by vm.isFinalizing.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()
     val finalizationError by vm.finalizationError.collectAsStateWithLifecycle()
+    val needsKeystoneSignatures by vm.needsKeystoneSignatures.collectAsStateWithLifecycle()
+    BackHandler { vm.navigateBack() }
     when {
         finalizationError != null -> MigrationUnavailable(
             message = checkNotNull(finalizationError),
@@ -70,6 +73,13 @@ fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
         )
 
         isFinalizing -> MigrationSchedulingView()
+
+        needsKeystoneSignatures -> MigrationUnavailable(
+            message = stringRes(DesignR.string.migrationScheduled_signatureRequired),
+            onBack = vm::navigateBack,
+            onRetry = vm::navigateBack,
+            retryLabel = stringRes(R.string.general_back),
+        )
 
         !state.isLoading && state.content == null -> MigrationUnavailable(
             message = stringRes(DesignR.string.migrationProgress_unavailable),

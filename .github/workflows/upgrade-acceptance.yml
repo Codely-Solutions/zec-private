@@ -163,6 +163,7 @@ jobs:
           if-no-files-found: error
           retention-days: 10
       - name: Notify simulated upgrade acceptance
+        continue-on-error: true
         env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
         run: |
@@ -179,10 +180,13 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Report disposable simulation recovery
+        run: |
+          echo 'Dispatch a new upgrade rehearsal after diagnosing the failed step. This run removes its temporary inputs.' >> "$GITHUB_STEP_SUMMARY"
       - env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
         run: |
-          python3 .private/notify.py "TEST: simulated ZEC Private upgrade failed. No production release or state was changed."
+          python3 .private/notify.py "TEST: simulated ZEC Private upgrade failed. Diagnose the failed step and dispatch a new rehearsal."
   cleanup:
     if: always()
     needs: [prepare, unsigned, sign]

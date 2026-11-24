@@ -18,12 +18,14 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
 import co.electriccoin.zcash.ui.common.model.migration.affectedTransferIndices
 import co.electriccoin.zcash.ui.common.model.migration.toMigrationRangeText
 import co.electriccoin.zcash.ui.common.model.migration.toUiKind
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStorageProvider
 import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessage
 import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.home.HomeMessageState
@@ -32,6 +34,7 @@ import co.electriccoin.zcash.ui.screen.home.migration.MigrationMessageState
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
+import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.migration.setup.MigrationSetupArgs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -69,101 +72,116 @@ class MigrationHomeMessageSourceImpl(
     private val isBackgroundExecutionAvailableProvider: IsBackgroundExecutionAvailableProvider,
     private val navigationRouter: NavigationRouter,
     private val migrationUpgradeNoticeStorageProvider: MigrationUpgradeNoticeStorageProvider,
+    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
 ) : MigrationHomeMessageSource {
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observe(): Flow<MigrationHomeMessage?> =
         accountDataSource.selectedAccount.flatMapLatest { account ->
             if (account == null || !account.isSpendable) return@flatMapLatest flowOf(null)
             val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
-            combine(
-                hasSeenMigrationCompleteStorageProvider.observe(accountKeyId),
-                // Published by MigrationLiveDriverImpl's own loop (2026-08-07) instead of this
-                // source independently calling getMigrationState()/getMigrationTransferStates()/
-                // hasOverdueTransfers() on its own 15s poll — those three are on the SDK's
-                // mutex-gated `logged` lane or otherwise share its single-threaded DB I/O executor
-                // with the live driver's own prove/broadcast work, which produced a live-reproduced
-                // ~10-16s Home-banner load delay (2026-08-06/07 investigation). See the
-                // repository's own kdoc.
-                observeMigrationLiveReadout(accountKeyId),
-                // Observed, not one-shot: after an IMMEDIATE migration (a plain send-max sweep that
-                // never touches the engine) the balance is the only input that can hide the
-                // "Migrate required" banner once the Orchard funds are spent.
-                getOrchardBalance.observe(account.sdkAccount.accountUuid),
-                // Mirrors HomeVM's isSyncComplete (iOS: SmartBannerStore.isSyncComplete) — the
-                // RESIDUE branch below reads a live balance/migratable-total pair that can
-                // disagree with each other mid-sync (two different queries against the same,
-                // still-changing DB), so it must not fire until the wallet has caught up with
-                // the chain tip. See MOB-1750 mid-sync race investigation.
-                walletSnapshotDataSource.observe(),
-                migrationUpgradeNoticeStorageProvider.observePendingForSelected(),
-            ) { hasSeenComplete, readout, orchardBalance, walletSnapshot, isUpgradeNoticePending ->
-                val isFullySynced = walletSnapshot?.status == Synchronizer.Status.SYNCED
-                val sdkState = readout?.migrationState
-                val states = readout?.states
-                val snapshot =
-                    states?.let {
-                        migrationSnapshotFrom(
-                            states = it,
-                            estimatedTip = if (readout.estimatedTip >= 0) readout.estimatedTip else it.tipHeight,
-                            secondsPerBlock = readout.estimatedSecondsPerBlock,
-                            nu7ActivationHeight = readout.nu7ActivationHeight,
+            pendingKeystone.observeReadyToFinalize(accountKeyId).flatMapLatest { ready ->
+                if (ready) {
+                    flowOf(
+                        MigrationHomeMessageData(
+                            isRunActive = true, accountKeyId = accountKeyId, isAwaitingFinalization = true,
                         )
-                    }
-                // UNPROVABLE ANCHOR → immediate, deterministic "Update migration plan" attention
-                // banner (decision 2026-07-30: user-driven — the user must SEE the bad state as
-                // soon as it is known). The SDK synthesizes MigrationBlocker.UNPROVABLE_ANCHOR
-                // from the engine's late-dependency guard.
-                // TODO [#0]: remove this once the engine's UnprovableAnchor synthesis is retired.
-                val hasUnprovable = states?.transfers?.any { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } == true
-                if (snapshot != null && hasUnprovable) {
-                    return@combine MigrationHomeMessageData(
-                        isRunActive = true,
-                        completedCount = snapshot.completedCount,
-                        totalCount = snapshot.totalCount,
-                        attentionKind = MigrationAttentionKind.PLAN_UPDATE,
-                        accountKeyId = accountKeyId,
+                    )
+                } else {
+                    observeAccountMigration(account, accountKeyId)
+                }
+            }
+        }
+
+    private fun observeAccountMigration(account: WalletAccount, accountKeyId: String): Flow<MigrationHomeMessage?> =
+        combine(
+            hasSeenMigrationCompleteStorageProvider.observe(accountKeyId),
+            // Published by MigrationLiveDriverImpl's own loop (2026-08-07) instead of this
+            // source independently calling getMigrationState()/getMigrationTransferStates()/
+            // hasOverdueTransfers() on its own 15s poll — those three are on the SDK's
+            // mutex-gated `logged` lane or otherwise share its single-threaded DB I/O executor
+            // with the live driver's own prove/broadcast work, which produced a live-reproduced
+            // ~10-16s Home-banner load delay (2026-08-06/07 investigation). See the
+            // repository's own kdoc.
+            observeMigrationLiveReadout(accountKeyId),
+            // Observed, not one-shot: after an IMMEDIATE migration (a plain send-max sweep that
+            // never touches the engine) the balance is the only input that can hide the
+            // "Migrate required" banner once the Orchard funds are spent.
+            getOrchardBalance.observe(account.sdkAccount.accountUuid),
+            // Mirrors HomeVM's isSyncComplete (iOS: SmartBannerStore.isSyncComplete) — the
+            // RESIDUE branch below reads a live balance/migratable-total pair that can
+            // disagree with each other mid-sync (two different queries against the same,
+            // still-changing DB), so it must not fire until the wallet has caught up with
+            // the chain tip. See MOB-1750 mid-sync race investigation.
+            walletSnapshotDataSource.observe(),
+            migrationUpgradeNoticeStorageProvider.observePendingForSelected(),
+        ) { hasSeenComplete, readout, orchardBalance, walletSnapshot, isUpgradeNoticePending ->
+            val isFullySynced = walletSnapshot?.status == Synchronizer.Status.SYNCED
+            val sdkState = readout?.migrationState
+            val states = readout?.states
+            val snapshot =
+                states?.let {
+                    migrationSnapshotFrom(
+                        states = it,
+                        estimatedTip = if (readout.estimatedTip >= 0) readout.estimatedTip else it.tipHeight,
+                        secondsPerBlock = readout.estimatedSecondsPerBlock,
+                        nu7ActivationHeight = readout.nu7ActivationHeight,
                     )
                 }
-                // Only computed when actually needed (RequiresAttention) — an extra snapshot
-                // read on every other state would be wasted work.
-                val (attentionKind, attentionRangeText) =
-                    (sdkState as? MigrationState.RequiresAttention)?.let { requiresAttention ->
-                        attentionInfoFor(requiresAttention.reason, snapshot)
-                    } ?: (null to null)
-                // Effectively constant for a plan's lifetime — not worth coupling to the hot
-                // readout above (MigrationTransferStateRepository's own kdoc) — but still a real
-                // SDK call, guarded the same way as everything else here.
-                val dustThreshold =
-                    runCatching { getOrchardMigrationSdk(accountKeyId)?.migrationDustThresholdZatoshi() }
-                        .getOrNull() ?: MIGRATION_DUST_THRESHOLD_ZATOSHI
-                // Kris Nuttycombe's per-note dust total (Slack, MOB-1750 follow-up): sum of each
-                // spendable Orchard note's value net of MARGINAL_FEE, not the raw aggregate
-                // balance — a wallet can hold a raw balance above dustThreshold made up entirely
-                // of notes too small individually to be worth spending. Falls back to the raw
-                // balance (old behavior) if the SDK call fails, same guard shape as dustThreshold.
-                val orchardBalanceZatoshi = orchardBalance?.value
-                val migratableOrchardTotal =
-                    runCatching { getOrchardMigrationSdk(accountKeyId)?.migratableOrchardTotal() }
-                        .getOrNull() ?: (orchardBalanceZatoshi ?: 0L)
-                migrationMessageFor(
-                    sdkState = sdkState,
-                    snapshot = snapshot,
-                    hasSeenComplete = hasSeenComplete,
-                    orchardBalanceZatoshi = orchardBalanceZatoshi,
-                    migratableOrchardTotalZatoshi = migratableOrchardTotal,
-                    dustThresholdZatoshi = dustThreshold,
-                    isFullySynced = isFullySynced,
-                    isBackgroundExecutionAvailable = isBackgroundExecutionAvailableProvider.isAvailable(),
-                    hasOverdueTransfers = readout?.hasOverdueTransfers ?: false,
-                    attentionKind = attentionKind,
-                    attentionRangeText = attentionRangeText,
-                    isUpgradeNoticePending = isUpgradeNoticePending,
-                )?.copy(accountKeyId = accountKeyId)
+            // UNPROVABLE ANCHOR → immediate, deterministic "Update migration plan" attention
+            // banner (decision 2026-07-30: user-driven — the user must SEE the bad state as
+            // soon as it is known). The SDK synthesizes MigrationBlocker.UNPROVABLE_ANCHOR
+            // from the engine's late-dependency guard.
+            // TODO [#0]: remove this once the engine's UnprovableAnchor synthesis is retired.
+            val hasUnprovable = states?.transfers?.any { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } == true
+            if (snapshot != null && hasUnprovable) {
+                return@combine MigrationHomeMessageData(
+                    isRunActive = true,
+                    completedCount = snapshot.completedCount,
+                    totalCount = snapshot.totalCount,
+                    attentionKind = MigrationAttentionKind.PLAN_UPDATE,
+                    accountKeyId = accountKeyId,
+                )
             }
+            // Only computed when actually needed (RequiresAttention) — an extra snapshot
+            // read on every other state would be wasted work.
+            val (attentionKind, attentionRangeText) =
+                (sdkState as? MigrationState.RequiresAttention)?.let { requiresAttention ->
+                    attentionInfoFor(requiresAttention.reason, snapshot)
+                } ?: (null to null)
+            // Effectively constant for a plan's lifetime — not worth coupling to the hot
+            // readout above (MigrationTransferStateRepository's own kdoc) — but still a real
+            // SDK call, guarded the same way as everything else here.
+            val dustThreshold =
+                runCatching { getOrchardMigrationSdk(accountKeyId)?.migrationDustThresholdZatoshi() }
+                    .getOrNull() ?: MIGRATION_DUST_THRESHOLD_ZATOSHI
+            // Kris Nuttycombe's per-note dust total (Slack, MOB-1750 follow-up): sum of each
+            // spendable Orchard note's value net of MARGINAL_FEE, not the raw aggregate
+            // balance — a wallet can hold a raw balance above dustThreshold made up entirely
+            // of notes too small individually to be worth spending. Falls back to the raw
+            // balance (old behavior) if the SDK call fails, same guard shape as dustThreshold.
+            val orchardBalanceZatoshi = orchardBalance?.value
+            val migratableOrchardTotal =
+                runCatching { getOrchardMigrationSdk(accountKeyId)?.migratableOrchardTotal() }
+                    .getOrNull() ?: (orchardBalanceZatoshi ?: 0L)
+            migrationMessageFor(
+                sdkState = sdkState,
+                snapshot = snapshot,
+                hasSeenComplete = hasSeenComplete,
+                orchardBalanceZatoshi = orchardBalanceZatoshi,
+                migratableOrchardTotalZatoshi = migratableOrchardTotal,
+                dustThresholdZatoshi = dustThreshold,
+                isFullySynced = isFullySynced,
+                isBackgroundExecutionAvailable = isBackgroundExecutionAvailableProvider.isAvailable(),
+                hasOverdueTransfers = readout?.hasOverdueTransfers ?: false,
+                attentionKind = attentionKind,
+                attentionRangeText = attentionRangeText,
+                isUpgradeNoticePending = isUpgradeNoticePending,
+            )?.copy(accountKeyId = accountKeyId)
         }
 
     override fun createMessageState(data: MigrationHomeMessage): HomeMessageState {
         data as MigrationHomeMessageData
+        if (data.isAwaitingFinalization) return finalizationMessage(checkNotNull(data.accountKeyId))
         val percent =
             if (data.totalCount > 0) {
                 (data.completedCount * PERCENT_MULTIPLIER) / data.totalCount
@@ -269,6 +287,18 @@ class MigrationHomeMessageSourceImpl(
                     accountKeyId = data.accountKeyId,
                 )
             },
+        )
+    }
+
+    private fun finalizationMessage(accountKeyId: String): HomeMessageState {
+        val resume = { navigationRouter.forward(MigrationScheduledArgs(accountKeyId)) }
+        return MigrationMessageState(
+            phase = MigrationBannerPhase.ATTENTION,
+            title = stringRes(DesignR.string.migrationHome_finishScheduling).getString(context),
+            progressLabel = null,
+            progressPercent = 0f,
+            onClick = resume,
+            onButtonClick = resume,
         )
     }
 

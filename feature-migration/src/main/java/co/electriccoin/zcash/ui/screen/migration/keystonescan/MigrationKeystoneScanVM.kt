@@ -63,6 +63,9 @@ class MigrationKeystoneScanVM(
         viewModelScope.launch {
             try {
                 val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+                check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
+                    "The scan belongs to a different account"
+                }
                 val sched = pendingSchedule.get(accountKeyId)
                 val pending = pendingKeystonePczts.get(accountKeyId)
                 if (sched == null || pending == null) {
@@ -71,7 +74,11 @@ class MigrationKeystoneScanVM(
                     navigationRouter.back()
                     return@launch
                 }
-                val sdk = getOrchardMigrationSdk()
+                if (pending.isFullySigned) {
+                    navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
+                    return@launch
+                }
+                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
                 if (!hasResetDecoder) {
                     sdk.resetKeystoneSignBatchDecoder()
                     hasResetDecoder = true
@@ -194,7 +201,7 @@ class MigrationKeystoneScanVM(
                         "KeystoneScan: round ${pending.roundIndex} done — handing off to round " +
                             "${pending.roundIndex + 1} of $totalRounds"
                     )
-                    navigationRouter.replace(MigrationKeystoneSignArgs(args.mode))
+                    navigationRouter.replace(MigrationKeystoneSignArgs(args.mode, accountKeyId))
                     return@launch
                 }
 
@@ -213,12 +220,13 @@ class MigrationKeystoneScanVM(
                         accumulatedSplitSigned = accumulatedSplitSigned,
                         accumulatedPrepSigned = accumulatedPrepSigned,
                         accumulatedTransferSigned = accumulatedTransferSigned,
+                        isFullySigned = true,
                     )
                 )
                 migrationLog(
                     "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
                 )
-                navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+                navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

@@ -118,7 +118,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             assertNull(vm.failureSheet.value)
-            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
             // The final accumulated batch stays in the repositories — MigrationScheduledVM (the
             // navigation target) is what applies/stores/finalizes and clears them.
             assertNotNull(pendingSchedule.get(testAccountKeyId))
@@ -154,7 +154,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             assertNull(vm.failureSheet.value)
-            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
         }
 
     @Test
@@ -182,7 +182,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             coVerify(exactly = 1) { sdk.applyKeystoneBatchSignatures(any(), any(), any()) }
-            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
         }
 
     @Test
@@ -226,7 +226,9 @@ class MigrationKeystoneScanVMTest {
         router: FakeNavigationRouter,
     ) = MigrationKeystoneScanVM(
         args = MigrationKeystoneScanArgs(mode = MigrationMode.IMMEDIATE),
-        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> { coEvery { this@mockk() } returns sdk },
+        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
+            coEvery { this@mockk(testAccountKeyId) } returns sdk
+        },
         getSelectedWalletAccount = testGetSelectedWalletAccount,
         pendingSchedule = pendingSchedule,
         pendingKeystonePczts = pendingPczts,
@@ -277,12 +279,13 @@ class MigrationKeystoneScanVMTest {
         var backCount = 0
             private set
         val forwardedRoutes = mutableListOf<Any>()
+        val replacedRoutes = mutableListOf<Any>()
 
         override fun forward(vararg routes: Any) {
             forwardedRoutes.addAll(routes)
         }
 
-        override fun replace(vararg routes: Any) = Unit
+        override fun replace(vararg routes: Any) { replacedRoutes.addAll(routes) }
 
         override fun replaceAll(vararg routes: Any) = Unit
 

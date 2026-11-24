@@ -355,6 +355,34 @@ class MigrationReviewVMTest {
     }
 
     @Test
+    fun approvedTorReplacesTheDirectPreferenceForAReusedUnsignedKeystonePlan() = runTest {
+        val account = spendable<KeystoneAccount>()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true) {
+            coEvery { this@mockk.get(any<String>()) } returns false
+        }
+        val vm = vm(
+            router = FakeNavigationRouter(),
+            getSelectedWalletAccount = mockk {
+                coEvery { this@mockk() } returns account
+                every { observe() } returns flowOf(account)
+            },
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            migrationTorEnabled = tor,
+            mode = MigrationMode.AUTOMATIC,
+            draftTor = true,
+        )
+
+        invokeOnConfirmAutomatic(vm, mockk(relaxed = true))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { tor.store(any<String>(), true) }
+        coVerify(exactly = 0) { tor.store(any<String>(), false) }
+    }
+
+    @Test
     fun immediateConfirmOnAViewOnlyAccountIsRefusedWithoutSigningOrAdopting() =
         runTest {
             val proposal = mockk<Proposal> { coEvery { totalFeeRequired() } returns Zatoshi(1_000L) }
@@ -494,6 +522,7 @@ class MigrationReviewVMTest {
         args = MigrationReviewArgs(mode = mode, useTor = draftTor),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
+        pendingKeystone = mockk { every { peek(any()) } returns null },
         restartMigrationScheduleRepository = restartMigrationScheduleRepository,
         finalizeMigrationSchedule = finalizeMigrationSchedule,
         migrationTorEnabled = migrationTorEnabled,

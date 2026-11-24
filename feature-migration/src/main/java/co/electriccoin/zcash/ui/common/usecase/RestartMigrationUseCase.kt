@@ -6,7 +6,9 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
+import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
 
@@ -28,6 +30,8 @@ class RestartMigrationUseCase(
     private val migrationNotifier: MigrationNotifier,
     private val migrationLiveDriver: MigrationLiveDriver,
     private val migrationTransferStateRepository: MigrationTransferStateRepository,
+    private val drive: MigrationDriveOnce,
+    private val pendingSchedule: PendingMigrationScheduleRepository,
 ) {
     suspend operator fun invoke() {
         val accountKeyId =
@@ -39,6 +43,12 @@ class RestartMigrationUseCase(
     }
 
     suspend operator fun invoke(accountKeyId: String) {
+        checkNotNull(drive.withExclusiveAccess { clearAndStop(accountKeyId) }) {
+            "A migration step is still in progress. Try restarting again when it finishes."
+        }
+    }
+
+    private suspend fun clearAndStop(accountKeyId: String) {
         // clearMigration() (SDK, 2026-08-07) now delegates to zcash_client_sqlite's real
         // cancel_migration primitive (PR #2926) instead of the old manual status-only swap to
         // Failed — the account genuinely reads back NotStarted afterward, not RequiresAttention.
@@ -71,11 +81,13 @@ class RestartMigrationUseCase(
         pendingMigrationTorFailureStorageProvider.store(accountKeyId, false)
         // An unconsumed restart schedule would otherwise be reused in place of a fresh proposal.
         restartMigrationScheduleRepository.consume(accountKeyId)
-        // A pending Keystone sign/scan hand-off points at the deleted run.
+        // Both handoffs belong to the deleted run and may still hold a signed batch.
+        pendingSchedule.peek(accountKeyId)?.let { pendingSchedule.clear(accountKeyId, it) }
         pendingKeystoneMigrationPcztsRepository.peek(accountKeyId)?.let {
             pendingKeystoneMigrationPcztsRepository.clear(accountKeyId, it)
         }
         // Dismiss any migration notification whose tap routes into the deleted run.
         migrationNotifier.cancel(accountKeyId)
+        migrationNotifier.cancelStepDue(accountKeyId)
     }
 }

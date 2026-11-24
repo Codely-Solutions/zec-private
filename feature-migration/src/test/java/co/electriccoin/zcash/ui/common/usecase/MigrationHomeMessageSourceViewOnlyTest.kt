@@ -1,5 +1,15 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
+import co.electriccoin.zcash.ui.screen.home.migration.MigrationMessageState
+import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
+import kotlinx.coroutines.flow.first
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -48,6 +58,30 @@ class MigrationHomeMessageSourceViewOnlyTest {
             verify(exactly = 1) { observeMigrationLiveReadout(any()) }
         }
 
+    @Test
+    fun homeResumesASignedHandoffForItsOwnerWithoutReopeningAScanner() = runTest {
+        val owner = zodl()
+        val ownerKey = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val pending = PendingKeystoneMigrationPcztsRepositoryImpl()
+        val batch = PendingKeystoneMigrationPczts(
+            requestId = byteArrayOf(1),
+            splitUnsignedPczt = null,
+            transferUnsignedPczts = emptyList(),
+            isFullySigned = true,
+        )
+        pending.set(ownerKey, batch)
+        pending.set("different-owner", batch.copy(requestId = byteArrayOf(2)))
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val home = source(owner, pending, router)
+
+        val message = assertIs<MigrationHomeMessageData>(home.observe().first())
+        assertEquals(ownerKey, message.accountKeyId)
+        assertTrue(message.isAwaitingFinalization)
+        assertIs<MigrationMessageState>(home.createMessageState(message)).onClick()
+        verify { router.forward(MigrationScheduledArgs(ownerKey)) }
+        verify(exactly = 0) { observeMigrationLiveReadout(any()) }
+    }
+
     private fun TestScope.collectEmissions(source: MigrationHomeMessageSourceImpl): List<MigrationHomeMessage?> {
         val emissions = mutableListOf<MigrationHomeMessage?>()
         backgroundScope.launch { source.observe().toList(emissions) }
@@ -55,7 +89,11 @@ class MigrationHomeMessageSourceViewOnlyTest {
         return emissions
     }
 
-    private fun source(account: WalletAccount) =
+    private fun source(
+        account: WalletAccount,
+        pending: PendingKeystoneMigrationPcztsRepositoryImpl = PendingKeystoneMigrationPcztsRepositoryImpl(),
+        router: NavigationRouter = mockk(relaxed = true),
+    ) =
         MigrationHomeMessageSourceImpl(
             context = mockk(relaxed = true),
             accountDataSource =
@@ -68,8 +106,9 @@ class MigrationHomeMessageSourceViewOnlyTest {
             walletSnapshotDataSource = mockk(relaxed = true),
             hasSeenMigrationCompleteStorageProvider = mockk(relaxed = true),
             isBackgroundExecutionAvailableProvider = mockk(relaxed = true),
-            navigationRouter = mockk(relaxed = true),
+            navigationRouter = router,
             migrationUpgradeNoticeStorageProvider = mockk(relaxed = true),
+            pendingKeystone = pending,
         )
 
     private fun zodl() =

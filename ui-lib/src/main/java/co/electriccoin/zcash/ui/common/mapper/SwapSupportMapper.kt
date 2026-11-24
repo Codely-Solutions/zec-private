@@ -4,6 +4,7 @@ import androidx.compose.ui.text.font.FontWeight
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.bindsReviewedFundingTerms
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
@@ -15,14 +16,17 @@ import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
 import co.electriccoin.zcash.ui.design.util.styledStringResource
 import co.electriccoin.zcash.ui.design.util.withStyle
-import java.math.BigDecimal
+import kotlin.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.toJavaInstant
 
 class SwapSupportMapper {
-    fun getMessage(quoteStatus: SwapQuoteStatus?): ZashiMessageState? =
+    fun getMessage(
+        quoteStatus: SwapQuoteStatus?,
+        savedMetadata: TransactionSwapMetadata? = null,
+    ): ZashiMessageState? =
         when (quoteStatus?.status) {
             SwapStatus.REFUNDED -> {
                 ZashiMessageState(
@@ -49,7 +53,7 @@ class SwapSupportMapper {
             }
 
             SwapStatus.INCOMPLETE_DEPOSIT -> {
-                createIncompleteDepositMessage(quoteStatus)
+                createIncompleteDepositMessage(quoteStatus, savedMetadata?.reviewedIdentity)
             }
 
             SwapStatus.PROCESSING -> {
@@ -75,11 +79,11 @@ class SwapSupportMapper {
         if (when (quoteStatus?.status) {
                 SwapStatus.REFUNDED,
                 SwapStatus.FAILED,
-                SwapStatus.EXPIRED -> true
+                SwapStatus.EXPIRED,
+                SwapStatus.INCOMPLETE_DEPOSIT -> true
 
                 SwapStatus.PROCESSING -> isProcessingLongEnough(quoteStatus)
 
-                SwapStatus.INCOMPLETE_DEPOSIT,
                 SwapStatus.PENDING,
                 SwapStatus.SUCCESS,
                 null -> false
@@ -98,10 +102,21 @@ class SwapSupportMapper {
             null
         }
 
-    private fun createIncompleteDepositMessage(quoteStatus: SwapQuoteStatus): ZashiMessageState {
-        val missingAmount =
-            (quoteStatus.quotedAmountIn - (quoteStatus.depositedAmountFormatted ?: BigDecimal.ZERO))
-                .coerceAtLeast(BigDecimal.ZERO)
+    private fun createIncompleteDepositMessage(
+        quoteStatus: SwapQuoteStatus,
+        reviewedIdentity: String?,
+    ): ZashiMessageState {
+        val missingAmount = quoteStatus.depositedAmountFormatted?.takeIf { it.signum() > 0 }
+            ?.let { quoteStatus.quotedAmountIn - it }
+        if (!reviewedIdentity.bindsReviewedFundingTerms() || missingAmount == null ||
+            missingAmount.signum() <= 0 || quoteStatus.deadline <= Clock.System.now()
+        ) {
+            return ZashiMessageState(
+                title = stringRes(R.string.swapAndPay_status_incompleteDeposit),
+                text = styledStringResource(R.string.private_swap_incomplete_check_support),
+                type = ZashiMessageState.Type.WARNING,
+            )
+        }
 
         val deadline =
             quoteStatus.deadline

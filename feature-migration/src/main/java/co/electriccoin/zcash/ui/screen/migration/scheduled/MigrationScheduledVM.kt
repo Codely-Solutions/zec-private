@@ -2,7 +2,11 @@ package co.electriccoin.zcash.ui.screen.migration.scheduled
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.MigrationBlocker
+import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.MigrationTransferState
 import cash.z.ecc.android.sdk.NetworkPrivacyOptions
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -11,23 +15,28 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
 import co.electriccoin.zcash.ui.common.model.migration.migrationFailureMessage
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +58,8 @@ class MigrationScheduledVM(
     private val finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase,
     private val isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider,
     private val synchronizerProvider: SynchronizerProvider,
+    private val selectedAccount: GetSelectedWalletAccountUseCase,
+    private val drive: MigrationDriveOnce,
 ) : ViewModel() {
     private val loadLce = mutableLce<LiveMigrationSnapshot?>()
 
@@ -59,6 +70,7 @@ class MigrationScheduledVM(
     val isFinalizing = MutableStateFlow(true)
     val failureSheet = MutableStateFlow<MigrationTransferFailureState?>(null)
     val finalizationError = MutableStateFlow<StringResource?>(null)
+    val needsKeystoneSignatures = MutableStateFlow(false)
 
     init {
         viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
@@ -80,48 +92,9 @@ class MigrationScheduledVM(
                 isFinalizing.value = false
                 return
             }
-            val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-            val splitSignedPczt = pending.accumulatedSplitSigned
-            if (splitSignedPczt != null) {
-                val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-                val splitResult =
-                    sdk.storeSignedNoteSplitPczt(
-                        Pczt(splitSignedPczt),
-                        NetworkPrivacyOptions(useTor = useTor),
-                    )
-                if (splitResult !is TransferResult.Success) {
-                    showFinalizationError(migrationFailureMessage(splitResult))
-                    return
-                }
-                // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
-                // already stored locally, so without this the normal enhancement queue would skip
-                // it forever and the Activity row would stay "Sent" instead of "Note
-                // split"/"Migrated". See MigrationDriveOnce.handleExecuted's identical call for
-                // transfers.
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(splitResult.txId)
+            checkNotNull(drive.withExclusiveAccess { finalizeSignedBatch(accountKeyId, sched, pending) }) {
+                "Another migration step is in progress"
             }
-            // Kind-agnostic per-id signature application — extra PREPARATIONS of the note-split
-            // tree go through the same call as the transfers.
-            sdk.storeSignedSchedulePczts(
-                (pending.accumulatedPrepSigned + pending.accumulatedTransferSigned)
-                    .map { (id, bytes) -> id to Pczt(bytes) }
-            )
-            migrationLog(
-                "MigrationScheduled: stored ${pending.accumulatedPrepSigned.size} signed prep + " +
-                    "${pending.accumulatedTransferSigned.size} signed transfer PCZT(s) " +
-                    "(split=${splitSignedPczt != null}) — finalizing the schedule"
-            )
-            // Mode doesn't affect this use case's behavior (only routes IMMEDIATE vs AUTOMATIC
-            // before it), and MigrationScheduledArgs is only ever reached on the AUTOMATIC path.
-            // startLiveDriverImmediately=false (MOB-1669): a large Keystone batch's whole
-            // prove-ready note-split set would otherwise run through one blocking
-            // finalizeReadyTransfers call in the live driver's very first iteration, right as
-            // this Keystone ceremony finishes. The already-armed migrationScheduler job still
-            // drives this plan forward — just not synchronously forced open here.
-            finalizeMigrationSchedule(sched, MigrationMode.AUTOMATIC, accountKeyId, startLiveDriverImmediately = false)
-            pendingSchedule.clear(accountKeyId, sched)
-            pendingKeystonePczts.clear(accountKeyId, pending)
-            isFinalizing.value = false
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -129,6 +102,86 @@ class MigrationScheduledVM(
             showFinalizationError(stringRes(DesignR.string.migrationScheduled_finalizeErrorMessage))
         }
     }
+
+    private suspend fun finalizeSignedBatch(
+        accountKeyId: String,
+        schedule: MigrationSchedule,
+        pending: PendingKeystoneMigrationPczts,
+    ) {
+        check(pending.isFullySigned) { "Keystone signatures are incomplete" }
+        check(selectedAccount().sdkAccount.accountUuid.toStorageKeyId() == accountKeyId) {
+            "The migration schedule belongs to a different account"
+        }
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        val states = checkNotNull(sdk.getMigrationTransferStates()) { "Migration state is unavailable" }.transfers
+        val remaining = pending.remainingScheduleSignatures(states)
+        if (!submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) return
+        if (remaining.isNotEmpty()) sdk.storeSignedSchedulePczts(remaining)
+        // Mode doesn't affect this use case's behavior (only routes IMMEDIATE vs AUTOMATIC
+        // before it), and MigrationScheduledArgs is only ever reached on the AUTOMATIC path.
+        // startLiveDriverImmediately=false (MOB-1669): a large Keystone batch's whole
+        // prove-ready note-split set would otherwise run through one blocking
+        // finalizeReadyTransfers call in the live driver's very first iteration, right as
+        // this Keystone ceremony finishes. The already-armed migrationScheduler job still
+        // drives this plan forward — just not synchronously forced open here.
+        finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, startLiveDriverImmediately = false)
+        pendingSchedule.clear(accountKeyId, schedule)
+        pendingKeystonePczts.clear(accountKeyId, pending)
+        isFinalizing.value = false
+    }
+
+    private suspend fun submitSplitIfAwaitingSignature(
+        sdk: OrchardMigrationSdk,
+        pending: PendingKeystoneMigrationPczts,
+        states: List<MigrationTransferState>,
+        accountKeyId: String,
+    ): Boolean {
+        val signedSplit = pending.accumulatedSplitSigned ?: return true
+        val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
+            "The reviewed note split is unavailable"
+        }
+        if (!split.needsSignature()) return true
+
+        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
+        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
+        return when (result) {
+            is TransferResult.Success -> {
+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
+                true
+            }
+
+            else -> {
+                showFinalizationError(migrationFailureMessage(result))
+                false
+            }
+        }
+    }
+
+    private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
+        states: List<MigrationTransferState>,
+    ): List<Pair<Long, Pczt>> {
+        val statesById = states.associateBy { it.id }
+        fun awaiting(items: List<Pair<Long, ByteArray>>, isTransfer: Boolean): List<Pair<Long, Pczt>> =
+            items.mapNotNull { (id, bytes) ->
+                val state = checkNotNull(statesById[id]?.takeIf { it.isTransfer == isTransfer }) {
+                    "A reviewed migration step is unavailable"
+                }
+                if (state.needsSignature()) id to Pczt(bytes) else null
+            }
+        return awaiting(accumulatedPrepSigned, isTransfer = false) +
+            awaiting(accumulatedTransferSigned, isTransfer = true)
+    }
+
+    private fun MigrationTransferState.needsSignature(): Boolean =
+        when (blocker) {
+            MigrationBlocker.SIGNATURE -> true
+            MigrationBlocker.DEPENDENCIES, MigrationBlocker.SCHEDULE, MigrationBlocker.ANCHOR_BOUNDARY -> false
+            null -> {
+                check(isSent || isProved || ready) { "The reviewed migration step cannot be reconciled" }
+                false
+            }
+            else -> error("The reviewed migration step cannot be reconciled")
+        }
 
     private fun showFinalizationError(message: StringResource) {
         finalizationError.value = message
@@ -146,9 +199,17 @@ class MigrationScheduledVM(
         viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
     }
 
-    fun retrySnapshot() = loadLce.execute { getMigrationSnapshot(args.accountKeyId) }
+    fun retrySnapshot() = loadLce.execute {
+        val snapshot = getMigrationSnapshot(args.accountKeyId)
+        val needsSignatures = snapshot?.let {
+            it.transfers.any { step -> step.blocker == MigrationTransferBlocker.SIGNATURE } ||
+                it.preparations.any { step -> step.blocker == MigrationTransferBlocker.SIGNATURE }
+        } ?: false
+        needsKeystoneSignatures.value = needsSignatures
+        snapshot.takeUnless { needsSignatures }
+    }
 
-    fun navigateBack() = navigationRouter.back()
+    fun navigateBack() = navigationRouter.backToRoot()
 
     val state: StateFlow<LceState<MigrationScheduledState>> =
         loadLce.state

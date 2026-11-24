@@ -1,6 +1,10 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 
 /**
  * The unsigned PCZT bytes built for a Keystone batch-signing attempt (the note-split, if needed,
@@ -32,6 +36,7 @@ data class PendingKeystoneMigrationPczts(
     val accumulatedSplitSigned: ByteArray? = null,
     val accumulatedPrepSigned: List<Pair<Long, ByteArray>> = emptyList(),
     val accumulatedTransferSigned: List<Pair<Long, ByteArray>> = emptyList(),
+    val isFullySigned: Boolean = false,
 )
 
 /**
@@ -40,10 +45,7 @@ data class PendingKeystoneMigrationPczts(
  * signatures back to them) — sibling to [PendingMigrationScheduleRepository], same "not persisted,
  * re-enter from Confirm Transfer Plan on process death" contract.
  *
- * The PCZTs are stored together with the [accountKeyId] of the account that set them. [get]
- * returns `null` and clears the stored value when the caller's key id does not match the stored
- * one, preventing an account switch mid-flow from feeding one account's unsigned PCZTs (which
- * carry that account's private key material) into another account's scan path.
+ * Each account retains its own batch through all signing rounds and finalization.
  */
 interface PendingKeystoneMigrationPcztsRepository {
     fun set(accountKeyId: String, pczts: PendingKeystoneMigrationPczts)
@@ -52,34 +54,32 @@ interface PendingKeystoneMigrationPcztsRepository {
 
     fun peek(accountKeyId: String): PendingKeystoneMigrationPczts?
 
+    fun observeReadyToFinalize(accountKeyId: String): Flow<Boolean>
+
     fun clear()
 
     fun clear(accountKeyId: String, expected: PendingKeystoneMigrationPczts)
 }
 
 class PendingKeystoneMigrationPcztsRepositoryImpl : PendingKeystoneMigrationPcztsRepository {
-    private val pending = MutableStateFlow<Pair<String, PendingKeystoneMigrationPczts>?>(null)
+    private val pending = MutableStateFlow<Map<String, PendingKeystoneMigrationPczts>>(emptyMap())
 
     override fun set(accountKeyId: String, pczts: PendingKeystoneMigrationPczts) {
-        pending.value = accountKeyId to pczts
+        pending.update { it + (accountKeyId to pczts) }
     }
 
-    override fun get(accountKeyId: String): PendingKeystoneMigrationPczts? {
-        val current = pending.value ?: return null
-        return if (current.first == accountKeyId) current.second else null
-    }
+    override fun get(accountKeyId: String): PendingKeystoneMigrationPczts? = peek(accountKeyId)
 
     override fun clear(accountKeyId: String, expected: PendingKeystoneMigrationPczts) {
-        val current = pending.value
-        if (current?.first == accountKeyId && current.second === expected) {
-            pending.compareAndSet(current, null)
-        }
+        pending.update { if (it[accountKeyId] === expected) it - accountKeyId else it }
     }
 
-    override fun peek(accountKeyId: String): PendingKeystoneMigrationPczts? =
-        pending.value?.takeIf { it.first == accountKeyId }?.second
+    override fun peek(accountKeyId: String): PendingKeystoneMigrationPczts? = pending.value[accountKeyId]
+
+    override fun observeReadyToFinalize(accountKeyId: String): Flow<Boolean> =
+        pending.map { it[accountKeyId]?.isFullySigned == true }.distinctUntilChanged()
 
     override fun clear() {
-        pending.value = null
+        pending.value = emptyMap()
     }
 }

@@ -366,6 +366,7 @@ class MigrationReviewPlanShapeTest {
         return MigrationReviewVM(
             args = MigrationReviewArgs(mode = MigrationMode.AUTOMATIC),
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            pendingKeystone = mockk { every { peek(any()) } returns null },
             pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
             restartMigrationScheduleRepository =
                 mockk<RestartMigrationScheduleRepository>(relaxed = true) {

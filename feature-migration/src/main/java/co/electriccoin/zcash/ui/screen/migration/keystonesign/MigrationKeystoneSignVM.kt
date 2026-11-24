@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanArgs
+import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
 import kotlinx.coroutines.flow.Flow
@@ -67,9 +68,16 @@ class MigrationKeystoneSignVM(
         viewModelScope.launch {
             runCatching {
                 val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+                check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
+                    "The signing request belongs to a different account"
+                }
                 val sched = pendingSchedule.get(accountKeyId) ?: return@runCatching null
-                val sdk = getOrchardMigrationSdk()
                 val existing = pendingKeystonePczts.get(accountKeyId)
+                if (existing?.isFullySigned == true) {
+                    navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
+                    return@runCatching null
+                }
+                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
                 val splitUnsignedPczt: ByteArray?
                 val prepUnsignedPczts: List<Pair<Long, ByteArray>>
                 val transferUnsignedPczts: List<Pair<Long, ByteArray>>
@@ -270,11 +278,17 @@ class MigrationKeystoneSignVM(
             initialValue = null,
         )
 
-    private fun onGetSignature() = navigationRouter.forward(MigrationKeystoneScanArgs(mode = args.mode))
+    private fun onGetSignature() = navigationRouter.forward(MigrationKeystoneScanArgs(args.mode, args.accountKeyId))
 
     private fun onReject() {
-        pendingSchedule.clear()
-        pendingKeystonePczts.clear()
+        val owner = args.accountKeyId
+        if (owner != null) {
+            val batch = pendingKeystonePczts.peek(owner)
+            if (batch?.isFullySigned != true) {
+                batch?.let { pendingKeystonePczts.clear(owner, it) }
+                pendingSchedule.peek(owner)?.let { pendingSchedule.clear(owner, it) }
+            }
+        }
         navigationRouter.back()
     }
 

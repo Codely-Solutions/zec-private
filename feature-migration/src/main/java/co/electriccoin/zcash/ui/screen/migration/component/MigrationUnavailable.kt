@@ -25,7 +25,12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-internal fun MigrationUnavailable(message: StringResource, onBack: () -> Unit, onRetry: () -> Unit) {
+internal fun MigrationUnavailable(
+    message: StringResource,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    retryLabel: StringResource = stringRes(DesignR.string.migration_common_tryAgain),
+) {
     BlankBgScaffold(
         topBar = {
             ZashiSmallTopAppBar(navigationAction = { ZashiTopAppBarCloseNavigation(onBack = onBack) })
@@ -42,7 +47,7 @@ internal fun MigrationUnavailable(message: StringResource, onBack: () -> Unit, o
             Spacer(Modifier.height(16.dp))
             ZashiButton(
                 modifier = Modifier.fillMaxWidth(),
-                state = ButtonState(text = stringRes(DesignR.string.migration_common_tryAgain), onClick = onRetry),
+                state = ButtonState(text = retryLabel, onClick = onRetry),
             )
         }
     }

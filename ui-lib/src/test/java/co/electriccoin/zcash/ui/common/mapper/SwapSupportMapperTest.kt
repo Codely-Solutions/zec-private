@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.mapper
 
+import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -29,10 +31,13 @@ class SwapSupportMapperTest {
             SwapCatalogTestFixture.nativeZec, SwapCatalogTestFixture.externalAssets.first(), "synthetic-deposit",
             SwapType.FLEX_INPUT, """{"amountIn":"80000000","depositedAmount":"10000000"}"""
         )
+        val response = live.response.quoteResponse
         val status = live.copy(response = live.response.copy(
-            status = co.electriccoin.zcash.ui.common.model.near.SwapStatus.INCOMPLETE_DEPOSIT
+            status = co.electriccoin.zcash.ui.common.model.near.SwapStatus.INCOMPLETE_DEPOSIT,
+            quoteResponse = response.copy(quote = response.quote.copy(deadline = futureDeadline)),
         ))
-        val text = assertNotNull(SwapSupportMapper().getMessage(status)).text as StyledStringResource.ByResource
+        val message = assertNotNull(SwapSupportMapper().getMessage(status, approvedMetadata))
+        val text = message.text as StyledStringResource.ByResource
         val required = text.args.first() as StyledStringResource.ByStringResource
         val amount = required.resource as StringResource.ByCurrencyNumber
         assertEquals(0, BigDecimal("0.9").compareTo(amount.amount as BigDecimal))
@@ -47,9 +52,9 @@ class SwapSupportMapperTest {
             every { amountInFormatted } returns BigDecimal("0.2")
             every { depositedAmountFormatted } returns BigDecimal("0.1")
             every { originAsset } returns SwapAssetTestFixture.zecAsset()
-            every { deadline } returns Instant.fromEpochSeconds(0)
+            every { deadline } returns futureDeadline
         }
-        val message = assertNotNull(SwapSupportMapper().getMessage(quoteStatus))
+        val message = assertNotNull(SwapSupportMapper().getMessage(quoteStatus, approvedMetadata))
         val text = message.text as StyledStringResource.ByResource
         val required = text.args.first() as StyledStringResource.ByStringResource
         assertEquals(
@@ -57,4 +62,37 @@ class SwapSupportMapperTest {
             required.resource
         )
     }
+    @Test
+    fun incompleteDepositWithoutAnApprovedPositiveShortfallOffersSupportWithoutAnAmount() {
+        val mapper = SwapSupportMapper()
+        val demo = mockk<SwapQuoteStatus> {
+            every { status } returns SwapStatus.INCOMPLETE_DEPOSIT
+            every { quotedAmountIn } returns BigDecimal.ONE
+            every { deadline } returns futureDeadline
+        }
+        for (observed in listOf(null, BigDecimal.ZERO, BigDecimal.ONE, BigDecimal.TEN)) {
+            every { demo.depositedAmountFormatted } returns observed
+            val message = assertNotNull(mapper.getMessage(demo, approvedMetadata))
+            val text = message.text as StyledStringResource.ByResource
+            assertEquals(R.string.private_swap_incomplete_check_support, text.resource)
+            assertEquals(emptyList(), text.args)
+        }
+        every { demo.depositedAmountFormatted } returns BigDecimal("0.5")
+        val legacy = assertNotNull(mapper.getMessage(demo))
+        assertEquals(
+            R.string.private_swap_incomplete_check_support, (legacy.text as StyledStringResource.ByResource).resource
+        )
+        every { demo.deadline } returns Instant.fromEpochSeconds(0)
+        val expired = assertNotNull(mapper.getMessage(demo, approvedMetadata))
+        assertEquals(
+            R.string.private_swap_incomplete_check_support, (expired.text as StyledStringResource.ByResource).resource
+        )
+        assertNotNull(mapper.getButton(demo) {})
+    }
+
+    private val futureDeadline = Instant.parse("2099-01-01T00:00:00Z")
+    private val approvedMetadata = mockk<TransactionSwapMetadata> {
+        every { reviewedIdentity } returns "v2:fixture"
+    }
+
 }

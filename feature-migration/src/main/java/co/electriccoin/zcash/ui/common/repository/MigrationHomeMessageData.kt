@@ -41,4 +41,5 @@ data class MigrationHomeMessageData(
      */
     val isInterruptedByNetworkUpgrade: Boolean = false,
     val accountKeyId: String? = null,
+    val isAwaitingFinalization: Boolean = false,
 ) : MigrationHomeMessage()

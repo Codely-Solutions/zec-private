@@ -93,6 +93,7 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureVM
 import co.electriccoin.zcash.work.MigrationScheduler
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -159,6 +160,7 @@ class MigrationKoinGraphSmokeTest {
 
                 // Repositories
                 single<ExchangeRateRepository> { mockk(relaxed = true) }
+                factory { mockk<MigrationDriveOnce>(relaxed = true) }
                 single<PendingMigrationScheduleRepository> { mockk(relaxed = true) }
                 single<RestartMigrationScheduleRepository> { mockk(relaxed = true) }
                 single<PendingKeystoneMigrationPcztsRepository> { mockk(relaxed = true) }

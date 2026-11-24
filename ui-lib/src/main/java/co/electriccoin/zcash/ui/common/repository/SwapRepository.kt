@@ -24,7 +24,7 @@ import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
 import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
 import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
-import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
+import co.electriccoin.zcash.ui.common.model.near.matchesReviewedIdentity
 import co.electriccoin.zcash.ui.common.model.swapQuoteMismatchSignal
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import co.electriccoin.zcash.wallet.foundation.RequestGeneration
@@ -554,7 +554,7 @@ class SwapRepositoryImpl(
         swapMetadata.reviewedIdentity?.let { expectedIdentity ->
             val response = requireNotNull((result as? NearSwapQuoteStatus)?.response?.quoteResponse)
             response.requireSimpleChainRouting()
-            require(response.reviewedIdentity() == expectedIdentity) { "Swap status reviewed identity mismatch" }
+            require(response.matchesReviewedIdentity(expectedIdentity)) { "Swap status reviewed identity mismatch" }
             swapMetadata.quotedAmountOut?.let { approved ->
                 require(result.quotedAmountOut.compareTo(approved) == 0) { "Swap status quoted output mismatch" }
             }

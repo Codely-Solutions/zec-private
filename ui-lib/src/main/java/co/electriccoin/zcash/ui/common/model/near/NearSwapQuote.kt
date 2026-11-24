@@ -139,12 +139,30 @@ data class NearSwapQuote(
 internal fun SwapQuote.reviewedIdentity(): String? =
     (this as? NearSwapQuote)?.response?.reviewedIdentity()
 
-/** Keep the route verifiable without storing another copy of the recipient and refund addresses. */
+/** Bind the funding terms without storing a second copy of the route or quote. */
 internal fun QuoteResponseDto.reviewedIdentity(): String {
-    val fields = listOf(
-        "near-swap-v1", quote.depositAddress, quoteRequest.originAsset, quoteRequest.destinationAsset,
-        requireNotNull(quoteRequest.swapType).apiValue, quoteRequest.recipient, quoteRequest.refundTo
-    )
+    val approvedAmounts = listOf(
+        quote.amountIn, quote.amountInFormatted, quote.minAmountIn,
+        quote.amountOut, quote.amountOutFormatted, quote.minAmountOut, quoteRequest.amount
+    ).map { it.stripTrailingZeros().toPlainString() }
+    val approvedTerms = approvedAmounts + listOf(quote.deadline.toString(), quoteRequest.slippageTolerance.toString())
+    return REVIEWED_FUNDING_TERMS_PREFIX + hashReviewedFields(reviewedRouteFields() + approvedTerms)
+}
+
+private const val REVIEWED_FUNDING_TERMS_PREFIX = "v2:"
+
+internal fun String?.bindsReviewedFundingTerms(): Boolean = this?.startsWith(REVIEWED_FUNDING_TERMS_PREFIX) == true
+
+internal fun QuoteResponseDto.matchesReviewedIdentity(expected: String): Boolean =
+    if (expected.bindsReviewedFundingTerms()) reviewedIdentity() == expected
+    else hashReviewedFields(reviewedRouteFields()) == expected
+
+private fun QuoteResponseDto.reviewedRouteFields() = listOf(
+    "near-swap-v1", quote.depositAddress, quoteRequest.originAsset, quoteRequest.destinationAsset,
+    requireNotNull(quoteRequest.swapType).apiValue, quoteRequest.recipient, quoteRequest.refundTo
+)
+
+private fun hashReviewedFields(fields: List<String>): String {
     val framed = fields.joinToString("") { "${it.length}:$it" }
     return MessageDigest.getInstance("SHA-256").digest(framed.encodeToByteArray()).toHexString()
 }

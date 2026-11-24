@@ -35,16 +35,7 @@ class MigrationTransferDueReceiver :
 
         val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
         val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
-        if (expectedRunAt == null) {
-            migrationLog("MigrationStepDueReceiver: no expected run recorded — no-op.")
-            return
-        }
-        if (lastRunAt != null && lastRunAt >= expectedRunAt - RUN_TOLERANCE_MILLIS) {
-            migrationLog(
-                "MigrationStepDueReceiver: worker ran on time (lastRunAt=$lastRunAt, expected=$expectedRunAt) — no-op."
-            )
-            return
-        }
+        if (!migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) return
         migrationLog(
             "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
                 "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
@@ -52,12 +43,11 @@ class MigrationTransferDueReceiver :
         migrationNotifier.notifyMigrationStepDue(accountKeyId)
     }
 
-    private companion object {
-        /**
-         * A run that started slightly BEFORE the recorded expected time (WorkManager dispatching
-         * early, or the re-arm overwriting nextWakeAt just before this alarm fired) still counts
-         * as "the worker is alive".
-         */
-        const val RUN_TOLERANCE_MILLIS = 30_000L
-    }
 }
+
+private const val EARLY_WORKER_TOLERANCE_MILLIS = 30_000L
+
+internal fun migrationWorkerIsLate(now: Long, expectedRunAt: Long?, lastRunAt: Long?): Boolean =
+    expectedRunAt != null &&
+        expectedRunAt <= now - MigrationScheduler.WORKER_LATE_MARGIN.inWholeMilliseconds &&
+        (lastRunAt == null || lastRunAt < expectedRunAt - EARLY_WORKER_TOLERANCE_MILLIS)

@@ -65,6 +65,7 @@ class MigrationAppHooksResetTest {
         val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(relaxed = true), accounts, mockk(), context, pendingReset(), driver, driveOnce,
+            mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkObject(WorkManager.Companion)
         try {
@@ -107,7 +108,7 @@ class MigrationAppHooksResetTest {
         val notifier = mockk<MigrationNotifier>(relaxed = true)
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context,
-            pendingReset(), mockk(relaxed = true), mockk(relaxed = true),
+            pendingReset(), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkObject(WorkManager.Companion)
         mockkConstructor(MigrationScheduler::class)
@@ -140,7 +141,7 @@ class MigrationAppHooksResetTest {
         val writeAccess = WalletWriteAccess(progress)
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), launchNavigation, accounts, mockk(), mockk(), progress,
-            mockk(), mockk(), writeAccess,
+            mockk(), mockk(), mockk(), mockk(), writeAccess,
         )
         val command = NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(ownerKey)))
         coEvery { accounts.getAllAccounts() } returns listOf(target)
@@ -180,7 +181,7 @@ class MigrationAppHooksResetTest {
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
-            mockk(), mockk(), WalletWriteAccess(reset),
+            mockk(), mockk(), mockk(), mockk(), WalletWriteAccess(reset),
         )
         val acknowledged = CompletableDeferred<Unit>()
         mockkConstructor(MigrationScheduler::class)

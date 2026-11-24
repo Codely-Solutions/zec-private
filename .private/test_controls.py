@@ -91,6 +91,14 @@ for clear in (False, True):
                 self.assertTrue(uri.startswith(prefix))
                 self.assertEqual(config,json.loads(unquote(uri[len(prefix):])))
 
+    def test_unfunded_near_probe_rejects_non_atomic_output(self):
+        from live_near import read_positive_atomic
+
+        self.assertEqual(read_positive_atomic("100"), read_positive_atomic(100))
+        for malformed in (0, "0", True, False, 100.9, "100.1", "-7", "9" * 129, None):
+            with self.subTest(malformed=malformed), self.assertRaisesRegex(RuntimeError, 'base units|positive'):
+                read_positive_atomic(malformed)
+
     def test_current_source(self):
         self.assertEqual([],checks.check())
 

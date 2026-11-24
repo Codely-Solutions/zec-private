@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorag
 import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
 import io.mockk.coEvery
@@ -76,6 +77,12 @@ class RestartMigrationUseCaseTest {
                     migrationNotifier = notifier,
                     migrationLiveDriver = liveDriver,
                     migrationTransferStateRepository = transferStateRepository,
+                    drive = mockk<MigrationDriveOnce> {
+                        coEvery { withExclusiveAccess<Unit>(any()) } coAnswers {
+                            firstArg<suspend () -> Unit>().invoke()
+                        }
+                    },
+                    pendingSchedule = mockk(relaxed = true),
                 )
 
             useCase()
@@ -86,6 +93,7 @@ class RestartMigrationUseCaseTest {
             verify { restartSchedule.consume(accountKeyId) }
             verify(exactly = 0) { keystonePczt.clear() }
             verify { notifier.cancel(accountKeyId) }
+            verify { notifier.cancelStepDue(accountKeyId) }
             verify { liveDriver.stop(accountKeyId) }
             verify { transferStateRepository.clear(accountKeyId) }
         }
@@ -110,6 +118,7 @@ class RestartMigrationUseCaseTest {
             val liveDriver = mockk<MigrationLiveDriver>(relaxed = true)
             val transferStateRepository = mockk<MigrationTransferStateRepository>(relaxed = true)
             val callOrder = mutableListOf<String>()
+            var busy = true
             every { liveDriver.stop(accountKeyId) } answers { callOrder.add("stop") }
             every { transferStateRepository.clear(accountKeyId) } answers { callOrder.add("clear") }
 
@@ -127,8 +136,19 @@ class RestartMigrationUseCaseTest {
                     migrationNotifier = mockk(relaxed = true),
                     migrationLiveDriver = liveDriver,
                     migrationTransferStateRepository = transferStateRepository,
+                    drive = mockk<MigrationDriveOnce> {
+                        coEvery { withExclusiveAccess<Unit>(any()) } coAnswers {
+                            if (busy) null else firstArg<suspend () -> Unit>().invoke()
+                        }
+                    },
+                    pendingSchedule = mockk(relaxed = true),
                 )
 
+            kotlin.test.assertFailsWith<IllegalStateException> { useCase(accountKeyId) }
+            kotlin.test.assertFalse(fakeSdk.clearMigrationCalled)
+            kotlin.test.assertEquals(emptyList(), callOrder)
+
+            busy = false
             useCase()
 
             kotlin.test.assertEquals(listOf("stop", "clear"), callOrder)

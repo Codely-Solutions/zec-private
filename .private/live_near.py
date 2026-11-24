@@ -68,6 +68,15 @@ def quote(mode,incoming,dry=True):
             raise RuntimeError('NEAR production quote response is incomplete')
     return result
 
+def read_positive_atomic(value):
+    if type(value) not in (int, str) or not re.fullmatch(r'[0-9]{1,128}', str(value)):
+        raise RuntimeError('NEAR quote or status output is not a bounded whole number of base units')
+    amount = int(value)
+    if amount <= 0:
+        raise RuntimeError('NEAR quote or status output must be positive')
+    return amount
+
+
 def main():
     for mode,incoming in [('FLEX_INPUT',True),('EXACT_INPUT',False),('EXACT_OUTPUT',False)]:
         quote(mode,incoming)
@@ -86,7 +95,7 @@ def main():
             or echoed_quote['quoteRequest']['refundTo'] != FIXTURE['unified']
             or echoed_quote['quoteRequest']['recipient'] != FIXTURE['bitcoin']
             or echoed_quote['quote']['depositAddress'] != address
-            or int(echoed_quote['quote']['amountOut']) != int(result['quote']['amountOut'])):
+            or read_positive_atomic(echoed_quote['quote']['amountOut']) != read_positive_atomic(result['quote']['amountOut'])):
         raise RuntimeError('NEAR status changed the reviewed funding quote')
     status,_=request('/v0/deposit/submit',{})
     if status not in (400,422):

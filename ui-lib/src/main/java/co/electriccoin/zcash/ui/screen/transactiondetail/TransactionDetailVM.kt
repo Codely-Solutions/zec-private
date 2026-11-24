@@ -238,7 +238,7 @@ class TransactionDetailVM(
                                 metadata = saved,
                                 outgoingStatus = statusOverride,
                             ),
-                            message = getSwapMessage.getMessage(transaction.swap.status),
+                            message = getSwapMessage.getMessage(transaction.swap.status, saved),
                             quoteHeader =
                                 mapper.createTransactionDetailQuoteHeaderState(
                                     swap = transaction.swap.status,

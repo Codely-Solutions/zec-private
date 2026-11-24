@@ -14,6 +14,7 @@ import org.koin.core.parameter.parametersOf
 @Serializable
 data class MigrationKeystoneSignArgs(
     val mode: MigrationMode,
+    val accountKeyId: String? = null,
 )
 
 @Composable

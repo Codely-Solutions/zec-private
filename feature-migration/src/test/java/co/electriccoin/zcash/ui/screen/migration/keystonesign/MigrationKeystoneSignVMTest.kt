@@ -634,11 +634,11 @@ class MigrationKeystoneSignVMTest {
             val router = FakeNavigationRouter()
             val vm =
                 MigrationKeystoneSignVM(
-                    args = MigrationKeystoneSignArgs(mode = MigrationMode.AUTOMATIC),
+                    args = MigrationKeystoneSignArgs(MigrationMode.AUTOMATIC, testAccountKeyId),
                     getSelectedWalletAccount = testGetSelectedWalletAccount,
                     getOrchardMigrationSdk =
                         mockk {
-                            coEvery { this@mockk() } throws IllegalStateException("no wallet available")
+                            coEvery { this@mockk(testAccountKeyId) } throws IllegalStateException("no wallet available")
                         },
                     pendingSchedule = pendingSchedule,
                     pendingKeystonePczts = pendingPczts,
@@ -688,11 +688,11 @@ class MigrationKeystoneSignVMTest {
         router: FakeNavigationRouter,
         mode: MigrationMode = MigrationMode.AUTOMATIC,
     ) = MigrationKeystoneSignVM(
-        args = MigrationKeystoneSignArgs(mode = mode),
+        args = MigrationKeystoneSignArgs(mode, testAccountKeyId),
         getSelectedWalletAccount = testGetSelectedWalletAccount,
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk() } returns sdk
+                coEvery { this@mockk(any()) } returns sdk
             },
         pendingSchedule = pendingSchedule,
         pendingKeystonePczts = pendingPczts,

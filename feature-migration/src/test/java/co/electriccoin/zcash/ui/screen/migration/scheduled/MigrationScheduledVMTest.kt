@@ -1,7 +1,10 @@
 package co.electriccoin.zcash.ui.screen.migration.scheduled
 
 import androidx.navigation.NavBackStackEntry
+import cash.z.ecc.android.sdk.MigrationBlocker
 import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.MigrationTransferState
+import cash.z.ecc.android.sdk.MigrationTransferStates
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.TransferResult
@@ -20,6 +23,8 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -123,11 +128,14 @@ class MigrationScheduledVMTest {
                                 splitUnsignedPczt = null,
                                 transferUnsignedPczts = listOf(11L to byteArrayOf(9, 9)),
                                 roundIndex = 1,
+                                isFullySigned = true,
                                 accumulatedTransferSigned = listOf(11L to byteArrayOf(1)),
                             )
                         )
                     }
-            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+                coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
+            }
             val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
             val vm =
                 vm(
@@ -164,12 +172,14 @@ class MigrationScheduledVMTest {
                                 splitUnsignedPczt = byteArrayOf(5),
                                 transferUnsignedPczts = emptyList(),
                                 roundIndex = 1,
+                                isFullySigned = true,
                                 accumulatedSplitSigned = byteArrayOf(6),
                             )
                         )
                     }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
+                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(10L, isTransfer = false))
                     coEvery { storeSignedNoteSplitPczt(any(), any()) } returns
                         TransferResult.NetworkError(retryable = true)
                 }
@@ -217,12 +227,14 @@ class MigrationScheduledVMTest {
                                 splitUnsignedPczt = null,
                                 transferUnsignedPczts = listOf(11L to byteArrayOf(9, 9)),
                                 roundIndex = 1,
+                                isFullySigned = true,
                                 accumulatedTransferSigned = listOf(11L to byteArrayOf(1)),
                             )
                         )
                     }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
+                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
                     coEvery { storeSignedSchedulePczts(any()) } throws
                         RuntimeException("database is locked") andThen Unit
                 }
@@ -277,12 +289,108 @@ class MigrationScheduledVMTest {
         observer.cancel()
     }
 
+    @Test
+    fun retryContinuesAfterSplitOrScheduleSignatureHasAlreadyBeenStored() = runTest {
+        val prepared = schedule()
+        val schedules = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, prepared) }
+        val batch = PendingKeystoneMigrationPczts(
+            requestId = byteArrayOf(1),
+            splitUnsignedPczt = byteArrayOf(2),
+            transferUnsignedPczts = listOf(11L to byteArrayOf(3)),
+            accumulatedSplitSigned = byteArrayOf(4),
+            accumulatedTransferSigned = listOf(11L to byteArrayOf(5)),
+            isFullySigned = true,
+        )
+        val pczt = PendingKeystoneMigrationPcztsRepositoryImpl().apply { set(testAccountKeyId, batch) }
+        var splitStored = false
+        var scheduleStored = false
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationTransferStates() } answers {
+                sdkStates(sdkStep(10L, isTransfer = false, hasSignature = splitStored),
+                    sdkStep(11L, hasSignature = scheduleStored))
+            }
+            coEvery { storeSignedNoteSplitPczt(any(), any()) } answers {
+                check(!splitStored)
+                splitStored = true
+                TransferResult.NetworkError(retryable = true)
+            }
+            coEvery { storeSignedSchedulePczts(any()) } answers {
+                check(!scheduleStored)
+                scheduleStored = true
+            }
+        }
+        val finalize = mockk<FinalizeMigrationScheduleUseCase> {
+            coEvery { this@mockk(prepared, MigrationMode.AUTOMATIC, testAccountKeyId, false) } throws
+                IllegalStateException("Synthetic scheduler failure") andThen Unit
+        }
+        val vm = vm(
+            pendingSchedule = schedules, pendingKeystonePczts = pczt,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
+            finalizeMigrationSchedule = finalize,
+            isMigrationTorEnabledStorageProvider = mockk { coEvery { this@mockk.get(testAccountKeyId) } returns true },
+        )
+
+        advanceUntilIdle()
+        assertNotNull(vm.finalizationError.value)
+        assertTrue(pczt.observeReadyToFinalize(testAccountKeyId).first())
+        assertFalse(pczt.observeReadyToFinalize("different-owner").first())
+        vm.retryFinalization()
+        advanceUntilIdle()
+        assertNotNull(vm.finalizationError.value)
+        vm.retryFinalization()
+        advanceUntilIdle()
+        assertNull(pczt.peek(testAccountKeyId))
+        assertNull(schedules.peek(testAccountKeyId))
+        coVerify(exactly = 1) { sdk.storeSignedNoteSplitPczt(any(), any()) }
+        coVerify(exactly = 1) { sdk.storeSignedSchedulePczts(any()) }
+        coVerify(exactly = 2) { finalize(prepared, MigrationMode.AUTOMATIC, testAccountKeyId, false) }
+    }
+
+    @Test
+    fun restoredScheduledShowsKeystoneRecoveryWhenTheSdkStillNeedsSignatures() = runTest {
+        val snapshot = co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot(
+            transfers = listOf(
+                co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer(
+                    id = 11L, index = 0, amountZatoshi = 20_000L, scheduledHeight = 1L,
+                    scheduledAt = kotlin.time.Instant.fromEpochSeconds(0), isSent = false, isProved = false,
+                    action = null,
+                    blocker = co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker.SIGNATURE,
+                    expiryAt = null, minedHeight = null,
+                )
+            ),
+            preparations = emptyList(), tipHeight = 1L,
+        )
+        val vm = vm(
+            getMigrationSnapshot = mockk { coEvery { this@mockk(testAccountKeyId) } returns snapshot }
+        )
+        val observer = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertTrue(vm.needsKeystoneSignatures.value)
+        assertNull(vm.state.value.content)
+        observer.cancel()
+    }
+
+    private fun sdkStates(vararg steps: MigrationTransferState) =
+        MigrationTransferStates(transfers = steps.toList(), tipHeight = 100L)
+
+    private fun sdkStep(id: Long, isTransfer: Boolean = true, hasSignature: Boolean = false) =
+        MigrationTransferState(
+            id = id,
+            isTransfer = isTransfer,
+            isSent = false,
+            isProved = false,
+            scheduledHeight = 200L,
+            anchorBoundaryHeight = null,
+            blocker = if (hasSignature) MigrationBlocker.SCHEDULE else MigrationBlocker.SIGNATURE,
+            prepLayer = if (isTransfer) null else 0,
+            prepIndex = if (isTransfer) null else 0,
+        )
+
     @Suppress("LongParameterList")
     private fun vm(
         getMigrationSnapshot: GetMigrationSnapshotUseCase =
             mockk {
-                // A REAL (empty) snapshot: a null return now means "SDK not ready yet" and keeps
-                // the LCE loading (review L3) — these tests assert on the rendered state.
                 coEvery { this@mockk(testAccountKeyId) } returns
                     co.electriccoin.zcash.ui.common.model.migration
                         .LiveMigrationSnapshot(transfers = emptyList(), preparations = emptyList(), tipHeight = 0L)
@@ -309,6 +417,12 @@ class MigrationScheduledVMTest {
         finalizeMigrationSchedule = finalizeMigrationSchedule,
         isMigrationTorEnabledStorageProvider = isMigrationTorEnabledStorageProvider,
         synchronizerProvider = synchronizerProvider,
+        selectedAccount = mockk<GetSelectedWalletAccountUseCase> {
+            coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
+        },
+        drive = mockk<MigrationDriveOnce> {
+            coEvery { withExclusiveAccess<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+        },
     )
 
     private fun schedule() =

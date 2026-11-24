@@ -221,7 +221,13 @@ class SwapRecoveryBoundaryTest {
         val requoted = original.copy(quoteResponse = echo.copy(quote = echo.quote.copy(
             amountOut = BigDecimal("210000000"), amountOutFormatted = BigDecimal("2.1"),
         )))
-        for (response in listOf(dry, requoted)) {
+        val changedInput = original.copy(quoteResponse = echo.copy(quote = echo.quote.copy(
+            amountIn = BigDecimal("1100000000000000000"), amountInFormatted = BigDecimal("1.1"),
+        )))
+        val changedDeadline = original.copy(quoteResponse = echo.copy(quote = echo.quote.copy(
+            deadline = kotlin.time.Instant.parse("2026-11-22T00:00:00Z"),
+        )))
+        for (response in listOf(dry, requoted, changedInput, changedDeadline)) {
             coEvery { api.checkSwapStatus("tracked-deposit") } returns response
             val refused = useCase("tracked-deposit")
             assertIs<IllegalArgumentException>(refused.error)

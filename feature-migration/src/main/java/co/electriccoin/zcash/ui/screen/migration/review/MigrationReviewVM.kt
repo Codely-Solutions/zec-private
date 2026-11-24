@@ -44,6 +44,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
@@ -76,6 +77,7 @@ class MigrationReviewVM(
     private val args: MigrationReviewArgs,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val pendingMigrationScheduleRepository: PendingMigrationScheduleRepository,
+    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
     private val restartMigrationScheduleRepository: RestartMigrationScheduleRepository,
     private val finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase,
     private val navigationRouter: NavigationRouter,
@@ -406,16 +408,22 @@ class MigrationReviewVM(
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        val newTorPreference = args.useTor?.takeUnless {
-            sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
+        val newTorPreference = args.useTor?.takeUnless { requestedTor ->
+            !requestedTor && sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         }
         if (account is KeystoneAccount) {
             newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
             // Keystone can't sign in-process — hand the unsigned schedule off to the QR
             // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
             // instead (MigrationKeystoneScanVM), not here.
-            pendingMigrationScheduleRepository.set(accountKeyId, sched)
-            navigationRouter.forward(MigrationKeystoneSignArgs(mode = args.mode))
+            if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
+                pendingMigrationScheduleRepository.peek(accountKeyId) != null
+            ) {
+                navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+            } else {
+                pendingMigrationScheduleRepository.set(accountKeyId, sched)
+                navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
+            }
             return
         }
         // Note-split is the first step of this confirm action (design spec §7) — a schedule with
