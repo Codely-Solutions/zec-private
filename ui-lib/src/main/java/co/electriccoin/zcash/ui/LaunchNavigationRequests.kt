@@ -41,6 +41,12 @@ class LaunchNavigationRequests {
 
     fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 
+    fun clearMigrationRequests() {
+        pending.update { queue ->
+            queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS || it.kind == Kind.MIGRATION_RECOVERY }
+        }
+    }
+
     internal suspend fun deliver(
         walletReady: Boolean,
         hasAppAccess: () -> Boolean,

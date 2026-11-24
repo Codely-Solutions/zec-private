@@ -5,12 +5,16 @@ import android.content.SharedPreferences
 import androidx.work.Operation
 import androidx.work.WorkManager
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.work.MigrationDriveOnce
+import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.SettableFuture
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -45,7 +49,11 @@ class MigrationAppHooksResetTest {
                 every { result } returns cancellation
             }
         }
-        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, mockk(), context)
+        val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), mockk(relaxed = true), accounts, mockk(), context, pendingReset(), driver, driveOnce,
+        )
         mockkObject(WorkManager.Companion)
         try {
             every { WorkManager.getInstance(context) } returns workManager
@@ -53,6 +61,11 @@ class MigrationAppHooksResetTest {
             runCurrent()
 
             coVerify(exactly = 0) { accounts.getAllAccounts() }
+            coVerifyOrder {
+                driver.stopAll()
+                driveOnce.awaitIdle()
+                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
+            }
             verify(exactly = 1) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
             assertFalse(reset.isCompleted)
 
@@ -80,7 +93,10 @@ class MigrationAppHooksResetTest {
             }
         }
         val notifier = mockk<MigrationNotifier>(relaxed = true)
-        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, notifier, context)
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context,
+            pendingReset(), mockk(relaxed = true), mockk(relaxed = true),
+        )
         mockkObject(WorkManager.Companion)
         mockkConstructor(MigrationScheduler::class)
         try {
@@ -97,5 +113,9 @@ class MigrationAppHooksResetTest {
             unmockkConstructor(MigrationScheduler::class)
             unmockkObject(WorkManager.Companion)
         }
+    }
+
+    private fun pendingReset() = mockk<ResetProgressStore> {
+        every { isPending } returns MutableStateFlow(true)
     }
 }

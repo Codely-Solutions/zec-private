@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -34,8 +35,10 @@ class MigrationWorker(
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase by inject()
     private val migrationNotifier: MigrationNotifier by inject()
     private val migrationDriveOnce: MigrationDriveOnce by inject()
+    private val resetProgress: ResetProgressStore by inject()
 
     override suspend fun doWork(): Result {
+        if (resetProgress.isPending.value) return Result.success()
         val accountKeyId =
             inputData.getString(MigrationScheduler.KEY_ACCOUNT_KEY_ID)
                 ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId().also {
@@ -82,7 +85,9 @@ class MigrationWorker(
             is DriveOnceResult.LockBusy -> {
                 // No step ran, so nothing re-armed the chain — this call must, or a lost lock
                 // race silently kills the durable background path.
-                MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
+                if (!resetProgress.isPending.value) {
+                    MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
+                }
             }
 
             DriveOnceResult.Terminal -> {

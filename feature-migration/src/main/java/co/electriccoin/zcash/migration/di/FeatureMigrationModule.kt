@@ -70,6 +70,7 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureV
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationLiveDriverImpl
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.work.MigrationScheduler
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
@@ -108,10 +109,12 @@ val featureMigrationModule =
         factoryOf(::MigrationScheduler)
         singleOf(::MigrationDriveOnce)
         single<MigrationLiveDriver> {
+            val resetProgress = get<ResetProgressStore>()
             MigrationLiveDriverImpl(
                 migrationDriveOnce = get(),
                 getOrchardMigrationSdk = { accountKeyId -> get<GetOrchardMigrationSdkUseCase>().invoke(accountKeyId) },
                 migrationTransferStateRepository = get(),
+                resetPending = { resetProgress.isPending.value },
             )
         }
 
@@ -134,6 +137,7 @@ val featureMigrationModule =
         // factoryOf resolves ALL constructor params via Koin and dies on the Function1
         // (NoDefinitionFoundException at startup, caught on-emulator 2026-07-28).
         factory {
+            val resetProgress = get<ResetProgressStore>()
             CheckMigrationRecoveryUseCase(
                 getOrchardMigrationSdk = get(),
                 persistableWalletProvider = get(),
@@ -142,6 +146,7 @@ val featureMigrationModule =
                 accountDataSource = get(),
                 context = get(),
                 migrationLiveDriver = get(),
+                resetPending = { resetProgress.isPending.value },
             )
         }
         factoryOf(::FinalizeMigrationScheduleUseCase)

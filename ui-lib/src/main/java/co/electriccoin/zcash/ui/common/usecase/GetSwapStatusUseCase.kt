@@ -4,6 +4,7 @@ import android.content.Context
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -79,7 +80,7 @@ class GetSwapStatusUseCase(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
+                        val latest = savedAfterFailure(expectedMetadata, e)
                         data.update { current ->
                             current.copy(
                                 isLoading = false,
@@ -96,6 +97,16 @@ class GetSwapStatusUseCase(
             }
 
             awaitClose()
+        }
+
+    private suspend fun savedAfterFailure(
+        expected: TransactionSwapMetadata,
+        error: Exception,
+    ): TransactionSwapMetadata? =
+        if (error is SwapRefreshNotSavedException) {
+            error.savedMetadata
+        } else {
+            runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
         }
 
     private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =

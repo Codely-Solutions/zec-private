@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.migration
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import androidx.navigation.NavGraphBuilder
@@ -8,6 +9,7 @@ import androidx.navigation.toRoute
 import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.InternalTestingApi
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
+import co.electriccoin.zcash.ui.MainActivity
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -28,6 +30,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.OnMigrationSyncCompletedUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestartMigrationUseCase
 import co.electriccoin.zcash.ui.dialogComposable
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryScreen
@@ -66,6 +69,8 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessScreen
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureScreen
 import co.electriccoin.zcash.work.MigrationScheduler
+import co.electriccoin.zcash.work.MigrationDriveOnce
+import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
@@ -121,15 +126,17 @@ class MigrationSyncedHookImpl(
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val onMigrationSyncCompleted: OnMigrationSyncCompletedUseCase,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
+    private val resetProgress: ResetProgressStore,
 ) : MigrationSyncedHook {
     override suspend fun onSynced() {
+        if (resetProgress.isPending.value) return
         // Engine state is the only "migration active" signal — no plan cache exists anymore.
         // getMigrationStateUnreconciled(): this gate never mutates (2026-08-07 read/write-
         // separation design) — onMigrationSyncCompleted below still runs the real reconcile pass
         // via the drive loop's own cadence regardless of this gate's staleness.
         val isInProgress =
             getOrchardMigrationSdk().getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress
-        if (!isInProgress) return
+        if (!isInProgress || resetProgress.isPending.value) return
         val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
         onMigrationSyncCompleted(accountKeyId)
     }
@@ -142,18 +149,25 @@ class MigrationAppHooksImpl(
     private val accountDataSource: AccountDataSource,
     private val migrationNotifier: MigrationNotifier,
     private val context: Context,
+    private val resetProgress: ResetProgressStore,
+    private val migrationLiveDriver: MigrationLiveDriver,
+    private val migrationDriveOnce: MigrationDriveOnce,
 ) : MigrationAppHooks {
     override fun handleIntent(
         intent: Intent,
         scope: CoroutineScope
     ): Boolean =
         when {
+            resetProgress.isPending.value -> false
+
             BuildConfig.DEBUG &&
                 intent.getBooleanExtra(DebugStartMigrationE2EUseCase.EXTRA_START_MIGRATION, false) -> {
                 // Debug-only E2E driver: reset + commit a fresh AUTOMATIC plan from adb, no UI taps.
                 scope.launch { debugStartMigrationE2E() }
                 true
             }
+
+            intent.component != ComponentName(context, MainActivity::class.java) -> false
 
             intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
                 // replaceAll ensures Home is always on the back stack regardless of how the app
@@ -174,7 +188,9 @@ class MigrationAppHooksImpl(
                 // notification.
                 scope.launch {
                     selectNotificationAccount(intent)
-                    intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)?.let { key ->
+                    intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)?.takeUnless {
+                        resetProgress.isPending.value
+                    }?.let { key ->
                         migrationLog("AppHooks: step-due tap — kicking the worker for $key")
                         MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
                     }
@@ -188,8 +204,13 @@ class MigrationAppHooksImpl(
             }
         }
 
-    private fun requestProgressScreen() =
-        launchNavigation.requestMigrationProgress(NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)))
+    private fun requestProgressScreen() {
+        if (!resetProgress.isPending.value) {
+            launchNavigation.requestMigrationProgress(
+                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs))
+            )
+        }
+    }
 
     /**
      * Selects the account the tapped notification belongs to (its storage-key id travels in
@@ -222,15 +243,21 @@ class MigrationAppHooksImpl(
         }
     }
 
-    override suspend fun checkRecovery() =
-        checkMigrationRecovery {
-            launchNavigation.requestMigrationRecovery(
-                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
-            )
+    override suspend fun checkRecovery() {
+        if (!resetProgress.isPending.value) {
+            checkMigrationRecovery {
+                launchNavigation.requestMigrationRecovery(
+                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
+                )
+            }
         }
+    }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
         val keys = if (accountKeyId == null) {
+            launchNavigation.clearMigrationRequests()
+            migrationLiveDriver.stopAll()
+            migrationDriveOnce.awaitIdle()
             // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
             val accounts = accountDataSource.allAccounts.value.orEmpty()
             WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name).result.await()

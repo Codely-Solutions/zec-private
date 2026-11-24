@@ -68,10 +68,12 @@ class CheckMigrationRecoveryUseCase(
      * (`Duration.ZERO`), replacing whatever delay the worker last armed for itself.
      */
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
+    private val resetPending: () -> Boolean = { false },
 ) {
     suspend operator fun invoke(
         requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
     ) {
+        if (resetPending()) return
         // Three independent triggers exist (MainActivity.onStart, RootNavGraph unlock, and any
         // future caller); without a throttle they cascade — each replaceAll builds a fresh Home
         // entry whose composition can re-trigger recovery, observed live as 7 redirects (and 3
@@ -129,7 +131,7 @@ class CheckMigrationRecoveryUseCase(
                 val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
                 val accountSdk = getOrchardMigrationSdk(accountKeyId) ?: return@forEach
                 val engineInProgress = accountSdk.getMigrationStateUnreconciled() is MigrationState.InProgress
-                if (engineInProgress) {
+                if (engineInProgress && !resetPending()) {
                     // The live driver is the fast path while the app is alive — starting it here
                     // covers both cold start (process was killed mid-migration) and every subsequent
                     // foreground return; it is a no-op if already running for this account. It
@@ -155,13 +157,13 @@ class CheckMigrationRecoveryUseCase(
                             migrationLog(
                                 "MigrationRecovery: migration worker absent for $accountKeyId — scheduling now."
                             )
-                            scheduleNow(accountKeyId)
+                            if (!resetPending()) scheduleNow(accountKeyId)
                         }
                     }
                 }
             }
 
-            if (pendingMigrationTorFailureStorageProvider.get()) {
+            if (!resetPending() && pendingMigrationTorFailureStorageProvider.get()) {
                 // The flag only records THAT a background attempt once failed on Tor, not what the
                 // engine's next due transfer needs NOW — the plan moves on (proving, dependency
                 // mining, rescheduling) between when it was set and the next app open, and the flag
@@ -189,13 +191,13 @@ class CheckMigrationRecoveryUseCase(
                     // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
                     // that routing here.
                     migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
-                    requestSendingScreen()
+                    if (!resetPending()) requestSendingScreen()
                 } else {
                     migrationLog(
                         "MigrationRecovery: pending background Tor failure flag is stale " +
                             "(next transfer action=${nextTransfer?.action}) — clearing."
                     )
-                    pendingMigrationTorFailureStorageProvider.store(false)
+                    if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(false)
                 }
             }
             // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —

@@ -95,7 +95,8 @@ class ExternalGiftCardLinkTest {
         restored.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
         assertTrue(delivered.isEmpty())
         restored.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
-        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
+        val expected = NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))
+        assertEquals(listOf<NavigationCommand>(expected), delivered)
         restored.restoreExternalScans(saved)
         assertTrue(restored.changes.value.isEmpty())
     }

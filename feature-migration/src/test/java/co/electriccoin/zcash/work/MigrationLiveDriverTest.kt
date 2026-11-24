@@ -7,15 +7,54 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationLiveDriverTest {
+    @Test
+    fun resetWaitsForEnteredWorkAndRefusesNewDriverStarts() = runTest {
+        val finish = CompletableDeferred<Unit>()
+        var pendingReset = false
+        var starts = 0
+        val driveOnce = mockk<MigrationDriveOnce> {
+            coEvery { run(any(), any(), any(), any()) } coAnswers {
+                starts++
+                withContext(NonCancellable) { finish.await() }
+                DriveOnceResult.Terminal
+            }
+        }
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val driver = MigrationLiveDriverImpl(driveOnce, { sdk }, mockk(relaxed = true), this) { pendingReset }
+
+        driver.startIfNotRunning("account-1")
+        runCurrent()
+        assertEquals(1, starts)
+        pendingReset = true
+        val stopped = launch { driver.stopAll() }
+        try {
+            driver.startIfNotRunning("account-2")
+            runCurrent()
+            assertFalse(stopped.isCompleted)
+            assertEquals(1, starts)
+        } finally {
+            finish.complete(Unit)
+        }
+        runCurrent()
+        assertTrue(stopped.isCompleted)
+    }
+
     @Test
     fun `starting twice for the same account only ever runs one loop`() =
         runTest {

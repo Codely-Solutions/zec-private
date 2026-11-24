@@ -4,6 +4,7 @@ import android.content.Context
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.work.MigrationScheduler
 import kotlin.time.Duration.Companion.seconds
 
@@ -20,8 +21,13 @@ class OnMigrationSyncCompletedUseCase(
     private val migrationNotifier: MigrationNotifier,
     private val migrationScheduler: MigrationScheduler,
     private val context: Context,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     suspend operator fun invoke(accountKeyId: String) {
+        walletWriteAccess.write(walletWriteAccess.token()) { reconcileAfterSync(accountKeyId) }
+    }
+
+    private suspend fun reconcileAfterSync(accountKeyId: String) {
         val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
         val proved = sdk.finalizeReadyTransfers()
         val invalidated = sdk.reconcileInvalidations()

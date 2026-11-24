@@ -3380,46 +3380,87 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..37a211896 100644
+index 294506ed1..ee47b6c33 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-@@ -7,0 +8 @@ import androidx.navigation.toRoute
+@@ -2,0 +3 @@ package co.electriccoin.zcash.migration
++import android.content.ComponentName
+@@ -7,0 +9 @@ import androidx.navigation.toRoute
 +import androidx.work.WorkManager
-@@ -8,0 +10,2 @@ import cash.z.ecc.android.sdk.InternalTestingApi
+@@ -8,0 +11,3 @@ import cash.z.ecc.android.sdk.InternalTestingApi
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
++import co.electriccoin.zcash.ui.MainActivity
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -66,0 +70 @@ import co.electriccoin.zcash.work.MigrationWorker
+@@ -27,0 +33 @@ import co.electriccoin.zcash.ui.dialogComposable
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -65,0 +72,2 @@ import co.electriccoin.zcash.work.MigrationScheduler
++import co.electriccoin.zcash.work.MigrationDriveOnce
++import co.electriccoin.zcash.work.MigrationLiveDriver
+@@ -66,0 +75 @@ import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
-@@ -67,0 +72 @@ import kotlinx.coroutines.CoroutineScope
+@@ -67,0 +77 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.guava.await
-@@ -136 +141 @@ class MigrationAppHooksImpl(
+@@ -118,0 +129 @@ class MigrationSyncedHookImpl(
++    private val resetProgress: ResetProgressStore,
+@@ -120,0 +132 @@ class MigrationSyncedHookImpl(
++        if (resetProgress.isPending.value) return
+@@ -127 +139 @@ class MigrationSyncedHookImpl(
+-        if (!isInProgress) return
++        if (!isInProgress || resetProgress.isPending.value) return
+@@ -136 +148 @@ class MigrationAppHooksImpl(
 -    private val navigationRouter: NavigationRouter,
 +    private val launchNavigation: LaunchNavigationRequests,
-@@ -159 +164 @@ class MigrationAppHooksImpl(
--                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-+                    requestProgressScreen()
-@@ -176 +181 @@ class MigrationAppHooksImpl(
--                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-+                    requestProgressScreen()
-@@ -185,0 +191,3 @@ class MigrationAppHooksImpl(
-+    private fun requestProgressScreen() =
-+        launchNavigation.requestMigrationProgress(NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)))
+@@ -139,0 +152,3 @@ class MigrationAppHooksImpl(
++    private val resetProgress: ResetProgressStore,
++    private val migrationLiveDriver: MigrationLiveDriver,
++    private val migrationDriveOnce: MigrationDriveOnce,
+@@ -145,0 +161,2 @@ class MigrationAppHooksImpl(
++            resetProgress.isPending.value -> false
 +
-@@ -217 +225,6 @@ class MigrationAppHooksImpl(
--    override suspend fun checkRecovery() = checkMigrationRecovery()
-+    override suspend fun checkRecovery() =
-+        checkMigrationRecovery {
-+            launchNavigation.requestMigrationRecovery(
-+                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
+@@ -152,0 +170,2 @@ class MigrationAppHooksImpl(
++            intent.component != ComponentName(context, MainActivity::class.java) -> false
++
+@@ -159 +178 @@ class MigrationAppHooksImpl(
+-                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
++                    requestProgressScreen()
+@@ -172 +191,3 @@ class MigrationAppHooksImpl(
+-                    intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)?.let { key ->
++                    intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)?.takeUnless {
++                        resetProgress.isPending.value
++                    }?.let { key ->
+@@ -176 +197 @@ class MigrationAppHooksImpl(
+-                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
++                    requestProgressScreen()
+@@ -185,0 +207,8 @@ class MigrationAppHooksImpl(
++    private fun requestProgressScreen() {
++        if (!resetProgress.isPending.value) {
++            launchNavigation.requestMigrationProgress(
++                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs))
 +            )
 +        }
-@@ -220,5 +233,9 @@ class MigrationAppHooksImpl(
++    }
++
+@@ -217 +246,9 @@ class MigrationAppHooksImpl(
+-    override suspend fun checkRecovery() = checkMigrationRecovery()
++    override suspend fun checkRecovery() {
++        if (!resetProgress.isPending.value) {
++            checkMigrationRecovery {
++                launchNavigation.requestMigrationRecovery(
++                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
++                )
++            }
++        }
++    }
+@@ -220,5 +257,12 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
 -                    accountDataSource.getAllAccounts().map { it.sdkAccount.accountUuid.toStorageKeyId() }
 -                }.getOrDefault(emptyList())
 +        val keys = if (accountKeyId == null) {
++            launchNavigation.clearMigrationRequests()
++            migrationLiveDriver.stopAll()
++            migrationDriveOnce.awaitIdle()
 +            // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
 +            val accounts = accountDataSource.allAccounts.value.orEmpty()
 +            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name).result.await()
@@ -3428,25 +3469,67 @@ index 294506ed1..37a211896 100644
 +        } else {
 +            listOf(accountKeyId)
 +        }
-@@ -229,6 +245,0 @@ class MigrationAppHooksImpl(
+@@ -229,6 +272,0 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
 -            val wm = androidx.work.WorkManager.getInstance(context)
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
+diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt
+index a842c2763..7e537f8a7 100644
+--- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt
++++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt
+@@ -72,0 +73 @@ import co.electriccoin.zcash.work.MigrationLiveDriverImpl
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -110,0 +112 @@ val featureMigrationModule =
++            val resetProgress = get<ResetProgressStore>()
+@@ -114,0 +117 @@ val featureMigrationModule =
++                resetPending = { resetProgress.isPending.value },
+@@ -136,0 +140 @@ val featureMigrationModule =
++            val resetProgress = get<ResetProgressStore>()
+@@ -144,0 +149 @@ val featureMigrationModule =
++                resetPending = { resetProgress.isPending.value },
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..1a7783b3d 100644
+index 9451c3bae..d5db914af 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-@@ -72 +72,3 @@ class CheckMigrationRecoveryUseCase(
+@@ -70,0 +71 @@ class CheckMigrationRecoveryUseCase(
++    private val resetPending: () -> Boolean = { false },
+@@ -72 +73,4 @@ class CheckMigrationRecoveryUseCase(
 -    suspend operator fun invoke() {
 +    suspend operator fun invoke(
 +        requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
 +    ) {
-@@ -190 +192 @@ class CheckMigrationRecoveryUseCase(
++        if (resetPending()) return
+@@ -130 +134 @@ class CheckMigrationRecoveryUseCase(
+-                if (engineInProgress) {
++                if (engineInProgress && !resetPending()) {
+@@ -156 +160 @@ class CheckMigrationRecoveryUseCase(
+-                            scheduleNow(accountKeyId)
++                            if (!resetPending()) scheduleNow(accountKeyId)
+@@ -162 +166 @@ class CheckMigrationRecoveryUseCase(
+-            if (pendingMigrationTorFailureStorageProvider.get()) {
++            if (!resetPending() && pendingMigrationTorFailureStorageProvider.get()) {
+@@ -190 +194 @@ class CheckMigrationRecoveryUseCase(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs)
-+                    requestSendingScreen()
++                    if (!resetPending()) requestSendingScreen()
+@@ -196 +200 @@ class CheckMigrationRecoveryUseCase(
+-                    pendingMigrationTorFailureStorageProvider.store(false)
++                    if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(false)
+diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
+index c91da0f38..4a7b17d5d 100644
+--- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
++++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -22,0 +24 @@ class OnMigrationSyncCompletedUseCase(
++    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+@@ -24,0 +27,4 @@ class OnMigrationSyncCompletedUseCase(
++        walletWriteAccess.write(walletWriteAccess.token()) { reconcileAfterSync(accountKeyId) }
++    }
++
++    private suspend fun reconcileAfterSync(accountKeyId: String) {
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
 index ca5f70e55..b65f58a35 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
@@ -3484,6 +3567,102 @@ index e84eff32e..dfed08306 100644
 +                    "docs/WALLET-GUIDE.md#ironwood-migration"
 +            )
 +        )
+diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
+index 79bb58513..a828a3a1a 100644
+--- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
++++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
+@@ -26,0 +27 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -29,0 +31 @@ import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
+@@ -87,0 +90 @@ class MigrationDriveOnce(
++    private val resetProgress: ResetProgressStore,
+@@ -88,0 +92,2 @@ class MigrationDriveOnce(
++    suspend fun awaitIdle() = DRIVE_LOCK.withLock { Unit }
++
+@@ -108,0 +114 @@ class MigrationDriveOnce(
++            if (resetProgress.isPending.value) return DriveOnceResult.Terminal
+@@ -181 +187 @@ class MigrationDriveOnce(
+-            return block()
++            return if (resetProgress.isPending.value) null else block()
+diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
+index 41f7bb347..12155abc6 100644
+--- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
++++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
+@@ -13,0 +14 @@ import kotlinx.coroutines.delay
++import kotlinx.coroutines.joinAll
+@@ -48,0 +50,3 @@ interface MigrationLiveDriver {
++
++    /** Cancel and drain process-owned work before wallet erasure. */
++    suspend fun stopAll()
+@@ -55,0 +60 @@ class MigrationLiveDriverImpl(
++    private val resetPending: () -> Boolean = { false },
+@@ -57,13 +61,0 @@ class MigrationLiveDriverImpl(
+-    /**
+-     * Atomic per-account start-if-absent, race-free by construction: [ConcurrentHashMap] gives
+-     * an atomic `putIfAbsent`, and each job's own [Job.invokeOnCompletion] removes exactly the
+-     * entry it installed (compare-and-remove via the two-arg overload) — no separate suspend-
+-     * based lock needed. The job is LAZY and `putIfAbsent` happens BEFORE `.start()` (an earlier
+-     * draft called `.start()` first and only attached its own removal hook afterward, leaving a
+-     * window where a second, concurrent call could see the map still empty and start a genuinely
+-     * duplicate, concurrently-running loop for the same account). If we lose the `putIfAbsent`
+-     * race and the winner is already [Job.isCompleted] by the time we check, we retry
+-     * immediately (it is safe: the winner is gone, or about to be removed by its own hook); if
+-     * the winner is still active, this call is a no-op — see [startIfNotRunning] for why no
+-     * completion hook is attached in that case.
+-     */
+@@ -71,0 +64 @@ class MigrationLiveDriverImpl(
++    @Synchronized
+@@ -72,0 +66 @@ class MigrationLiveDriverImpl(
++        if (resetPending() || runningJobs[accountKeyId]?.isCompleted == false) return
+@@ -74,22 +68,3 @@ class MigrationLiveDriverImpl(
+-        val existing = runningJobs.putIfAbsent(accountKeyId, candidate)
+-        if (existing == null) {
+-            candidate.invokeOnCompletion { runningJobs.remove(accountKeyId, candidate) }
+-            candidate.start()
+-        } else {
+-            candidate.cancel()
+-            if (existing.isCompleted) {
+-                // Already gone by the time we looked — safe to retry immediately.
+-                startIfNotRunning(accountKeyId)
+-            } else {
+-                // A loop for this account is genuinely still active — this call is fully
+-                // satisfied by it: the running loop re-evaluates the engine's own state on every
+-                // iteration, so it will itself pick up whatever prompted this call. No completion
+-                // hook is attached here (a prior draft attached one unconditionally, which forced
+-                // one extra full loop run after every merely-coincident double call, even when the
+-                // active loop was going to reach a legitimate Terminal on its own) — if the active
+-                // loop stops before the account is actually done, the next natural trigger point
+-                // (app-open, post-commit) or the durable WorkManager chain calls
+-                // startIfNotRunning again.
+-                migrationLog("MigrationLiveDriver: already driving $accountKeyId — no-op.")
+-            }
+-        }
++        runningJobs[accountKeyId] = candidate
++        candidate.invokeOnCompletion { runningJobs.remove(accountKeyId, candidate) }
++        candidate.start()
+@@ -101,0 +77,6 @@ class MigrationLiveDriverImpl(
++    override suspend fun stopAll() {
++        val jobs = synchronized(this) { runningJobs.values.toList() }
++        jobs.forEach { it.cancel() }
++        jobs.joinAll()
++    }
++
+diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
+index d7cac7de3..2686726b7 100644
+--- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
++++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -36,0 +38 @@ class MigrationWorker(
++    private val resetProgress: ResetProgressStore by inject()
+@@ -38,0 +41 @@ class MigrationWorker(
++        if (resetProgress.isPending.value) return Result.success()
+@@ -85 +88,3 @@ class MigrationWorker(
+-                MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
++                if (!resetProgress.isPending.value) {
++                    MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
++                }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
 index 5a7def039..b8ec6cf2a 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
@@ -3501,10 +3680,10 @@ index 5a7def039..b8ec6cf2a 100644
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..cafc6932d
+index 000000000..224431cf1
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,121 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -3512,12 +3691,16 @@ index 000000000..cafc6932d
 +import androidx.work.Operation
 +import androidx.work.WorkManager
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import co.electriccoin.zcash.work.MigrationDriveOnce
++import co.electriccoin.zcash.work.MigrationLiveDriver
 +import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 +import com.google.common.util.concurrent.Futures
 +import com.google.common.util.concurrent.SettableFuture
 +import io.mockk.coVerify
++import io.mockk.coVerifyOrder
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.mockkObject
@@ -3552,7 +3735,11 @@ index 000000000..cafc6932d
 +                every { result } returns cancellation
 +            }
 +        }
-+        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, mockk(), context)
++        val driver = mockk<MigrationLiveDriver>(relaxed = true)
++        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
++        val hooks = MigrationAppHooksImpl(
++            mockk(), mockk(), mockk(relaxed = true), accounts, mockk(), context, pendingReset(), driver, driveOnce,
++        )
 +        mockkObject(WorkManager.Companion)
 +        try {
 +            every { WorkManager.getInstance(context) } returns workManager
@@ -3560,6 +3747,11 @@ index 000000000..cafc6932d
 +            runCurrent()
 +
 +            coVerify(exactly = 0) { accounts.getAllAccounts() }
++            coVerifyOrder {
++                driver.stopAll()
++                driveOnce.awaitIdle()
++                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
++            }
 +            verify(exactly = 1) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
 +            assertFalse(reset.isCompleted)
 +
@@ -3587,7 +3779,10 @@ index 000000000..cafc6932d
 +            }
 +        }
 +        val notifier = mockk<MigrationNotifier>(relaxed = true)
-+        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, notifier, context)
++        val hooks = MigrationAppHooksImpl(
++            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context,
++            pendingReset(), mockk(relaxed = true), mockk(relaxed = true),
++        )
 +        mockkObject(WorkManager.Companion)
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
@@ -3604,6 +3799,10 @@ index 000000000..cafc6932d
 +            unmockkConstructor(MigrationScheduler::class)
 +            unmockkObject(WorkManager.Companion)
 +        }
++    }
++
++    private fun pendingReset() = mockk<ResetProgressStore> {
++        every { isPending } returns MutableStateFlow(true)
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
@@ -3661,6 +3860,54 @@ index 69d513f3e..d3c5248af 100644
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVMViewOnlyTest.kt
 @@ -82,0 +83 @@ class MigrationSetupVMViewOnlyTest {
 +                            reportAccess = mockk(relaxed = true),
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
+index 4a5eda3b1..9caeb9e10 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
+@@ -9,0 +10,3 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.launch
+@@ -11,0 +15 @@ import kotlinx.coroutines.test.advanceUntilIdle
++import kotlinx.coroutines.test.runCurrent
+@@ -12,0 +17 @@ import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.withContext
+@@ -14,0 +20,2 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
+@@ -18,0 +26,32 @@ class MigrationLiveDriverTest {
++    @Test
++    fun resetWaitsForEnteredWorkAndRefusesNewDriverStarts() = runTest {
++        val finish = CompletableDeferred<Unit>()
++        var pendingReset = false
++        var starts = 0
++        val driveOnce = mockk<MigrationDriveOnce> {
++            coEvery { run(any(), any(), any(), any()) } coAnswers {
++                starts++
++                withContext(NonCancellable) { finish.await() }
++                DriveOnceResult.Terminal
++            }
++        }
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
++        val driver = MigrationLiveDriverImpl(driveOnce, { sdk }, mockk(relaxed = true), this) { pendingReset }
++
++        driver.startIfNotRunning("account-1")
++        runCurrent()
++        assertEquals(1, starts)
++        pendingReset = true
++        val stopped = launch { driver.stopAll() }
++        try {
++            driver.startIfNotRunning("account-2")
++            runCurrent()
++            assertFalse(stopped.isCompleted)
++            assertEquals(1, starts)
++        } finally {
++            finish.complete(Unit)
++        }
++        runCurrent()
++        assertTrue(stopped.isCompleted)
++    }
++
 diff --git a/feature-viewing-key/build.gradle.kts b/feature-viewing-key/build.gradle.kts
 index 334eef98c..795262fae 100644
 --- a/feature-viewing-key/build.gradle.kts
@@ -25003,10 +25250,10 @@ index 000000000..ed0e92273
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..c7ff687d7
+index 000000000..b47a6517e
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,76 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
@@ -25050,6 +25297,12 @@ index 000000000..c7ff687d7
 +
 +    fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 +
++    fun clearMigrationRequests() {
++        pending.update { queue ->
++            queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS || it.kind == Kind.MIGRATION_RECOVERY }
++        }
++    }
++
 +    internal suspend fun deliver(
 +        walletReady: Boolean,
 +        hasAppAccess: () -> Boolean,
@@ -25078,7 +25331,7 @@ index 000000000..c7ff687d7
 +    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..09faf525b 100644
+index 048340e48..2a02afde5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
@@ -25090,21 +25343,30 @@ index 048340e48..09faf525b 100644
 +        super.onCreate(restorableNavigationState(savedInstanceState))
 @@ -87,0 +90 @@ class MainActivity : FragmentActivity() {
 +        launchNavigation.restoreExternalScans(savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty())
-@@ -100,0 +104,6 @@ class MainActivity : FragmentActivity() {
+@@ -98 +101,7 @@ class MainActivity : FragmentActivity() {
+-        handleMigrationIntent(intent)
++        if (savedInstanceState == null) handleMigrationIntent(intent)
++    }
++
 +    override fun onSaveInstanceState(outState: Bundle) {
 +        super.onSaveInstanceState(outState)
 +        outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
 +        outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
-+    }
-+
 @@ -117,0 +127 @@ class MainActivity : FragmentActivity() {
 +        if (intent.action != Intent.ACTION_VIEW) return
 @@ -120 +130 @@ class MainActivity : FragmentActivity() {
 -        val isGiftCardLink = handleExternalLink(host = data.host, isRedelivery = isRecreated || isFromHistory)
 +        val isGiftCardLink = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
-@@ -189,0 +200 @@ class MainActivity : FragmentActivity() {
+@@ -126 +136,5 @@ class MainActivity : FragmentActivity() {
+-    private fun handleMigrationIntent(intent: Intent): Boolean = migrationAppHooks.handleIntent(intent, lifecycleScope)
++    private fun handleMigrationIntent(intent: Intent) {
++        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
++            migrationAppHooks.handleIntent(intent, lifecycleScope)
++        }
++    }
+@@ -189,0 +204 @@ class MainActivity : FragmentActivity() {
 +        val appAccessSession = authenticationViewModel.appAccessSession
-@@ -215,2 +226,6 @@ class MainActivity : FragmentActivity() {
+@@ -215,2 +230,6 @@ class MainActivity : FragmentActivity() {
 -                            MainContent()
 -                            AuthenticationForAppAccess()
 +                            AppAccessBoundary(
@@ -25113,23 +25375,23 @@ index 048340e48..09faf525b 100644
 +                            ) { grant ->
 +                                MainContent { appAccessSession.permits(grant) }
 +                            }
-@@ -240 +255 @@ class MainActivity : FragmentActivity() {
+@@ -240 +259 @@ class MainActivity : FragmentActivity() {
 -                    authenticationViewModel.resetAuthenticationResult()
 +                    authenticationViewModel.resetAppAccessResult()
-@@ -272,5 +287 @@ class MainActivity : FragmentActivity() {
+@@ -272,5 +291 @@ class MainActivity : FragmentActivity() {
 -                        lifecycleScope.launch {
 -                            // Wait until the welcome animation finishes, then mark it as presented to the user
 -                            delay((AnimationConstants.durationOnly()).milliseconds)
 -                            authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
 -                        }
 +                        authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
-@@ -296 +307 @@ class MainActivity : FragmentActivity() {
+@@ -296 +311 @@ class MainActivity : FragmentActivity() {
 -    private fun MainContent() {
 +    private fun MainContent(hasAppAccess: () -> Boolean) {
-@@ -298 +309 @@ class MainActivity : FragmentActivity() {
+@@ -298 +313 @@ class MainActivity : FragmentActivity() {
 -        RootNavGraph(secretState, walletViewModel, storageCheckViewModel)
 +        RootNavGraph(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
-@@ -335,0 +347,9 @@ class MainActivity : FragmentActivity() {
+@@ -335,0 +351,9 @@ class MainActivity : FragmentActivity() {
 +        private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
 +        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val NAVIGATION_STATE_VERSION = 5
@@ -33685,42 +33947,44 @@ index 9174c2293..1c2415bd7 100644
 @@ -58,0 +59 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..da57f546b 100644
+index a33c847ad..0e64d5c7e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import android.content.Context
 +import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
-@@ -5,0 +9 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -3,0 +7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
+@@ -5,0 +10 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -6,0 +11 @@ import kotlinx.coroutines.channels.awaitClose
+@@ -6,0 +12 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.CancellationException
-@@ -13,0 +19,2 @@ import kotlinx.coroutines.launch
+@@ -13,0 +20,2 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
-@@ -18,0 +26 @@ class GetSwapStatusUseCase(
+@@ -18,0 +27 @@ class GetSwapStatusUseCase(
 +    context: Context? = null,
-@@ -19,0 +28,3 @@ class GetSwapStatusUseCase(
+@@ -19,0 +29,3 @@ class GetSwapStatusUseCase(
 +    private val donationPreferences = context?.let(::DonationPreferences)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -21,0 +33,5 @@ class GetSwapStatusUseCase(
+@@ -21,0 +34,5 @@ class GetSwapStatusUseCase(
 +    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
 +        observe(expected.depositAddress, expected).first { !it.isLoading }
 +
 +    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> = observe(depositAddress, null)
 +
-@@ -23 +39 @@ class GetSwapStatusUseCase(
+@@ -23 +40 @@ class GetSwapStatusUseCase(
 -    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
 +    private fun observe(depositAddress: String, initial: TransactionSwapMetadata?): Flow<SwapQuoteStatusData> =
-@@ -32 +48 @@ class GetSwapStatusUseCase(
+@@ -32 +49 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
 +                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress)
-@@ -43,0 +60,2 @@ class GetSwapStatusUseCase(
+@@ -43,0 +61,2 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
-@@ -46,9 +64,4 @@ class GetSwapStatusUseCase(
+@@ -46,9 +65,4 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -33734,15 +33998,15 @@ index a33c847ad..da57f546b 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
-@@ -57,0 +71 @@ class GetSwapStatusUseCase(
+@@ -57,0 +72 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -64,0 +79,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +80,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +82,11 @@ class GetSwapStatusUseCase(
+@@ -66,2 +83,11 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
-+                        val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
++                        val latest = savedAfterFailure(expectedMetadata, e)
 +                        data.update { current ->
 +                            current.copy(
 +                                isLoading = false,
@@ -33753,7 +34017,17 @@ index a33c847ad..da57f546b 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +100,34 @@ class GetSwapStatusUseCase(
+@@ -74,0 +101,44 @@ class GetSwapStatusUseCase(
++
++    private suspend fun savedAfterFailure(
++        expected: TransactionSwapMetadata,
++        error: Exception,
++    ): TransactionSwapMetadata? =
++        if (error is SwapRefreshNotSavedException) {
++            error.savedMetadata
++        } else {
++            runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
++        }
 +
 +    private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
 +        status == saved.status &&
@@ -33788,9 +34062,9 @@ index a33c847ad..da57f546b 100644
 +
 +    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
 +        IllegalStateException("Swap status refresh was not saved")
-@@ -80,0 +140 @@ data class SwapQuoteStatusData(
+@@ -80,0 +151 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
-@@ -83,0 +144,16 @@ data class SwapQuoteStatusData(
+@@ -83,0 +155,16 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)
@@ -63130,7 +63404,7 @@ index 1e55b67e9..733aca71f 100644
 -            val address = GetGiftCardDestinationAddressUseCase(accountDataSource, synchronizerProvider)()
 +            val address = GetGiftCardDestinationAddressUseCase(synchronizerProvider)(walletAccount)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
-index 40bfe60a6..550d95562 100644
+index 40bfe60a6..ceae8ad65 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -63177,7 +63451,7 @@ index 40bfe60a6..550d95562 100644
 +
 @@ -42,0 +79 @@ class GetSwapStatusUseCaseTest {
 +                    coEvery { updateSwap(any(), any()) } coAnswers { firstArg() }
-@@ -55,9 +92,2 @@ class GetSwapStatusUseCaseTest {
+@@ -55,9 +92,11 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 1) {
 -                metadataRepository.updateSwap(
 -                    depositAddress = "deposit",
@@ -63189,14 +63463,16 @@ index 40bfe60a6..550d95562 100644
 -                )
 +            coVerify(exactly = 1) {
 +                metadataRepository.updateSwap(any(), status)
-@@ -66,0 +97,40 @@ class GetSwapStatusUseCaseTest {
++            }
++        }
++
 +    @Test
 +    fun firstRefreshFailureRetainsSavedMetadataForPendingAndCompletedSwaps() = runTest {
 +        for (status in listOf(SwapStatus.PENDING, SwapStatus.SUCCESS)) {
 +            val saved = mockk<TransactionSwapMetadata> { every { this@mockk.status } returns status }
 +            val metadata = mockk<MetadataRepository>(relaxed = true) {
 +                coEvery { getSwapMetadata("deposit") } returns saved
-+            }
+@@ -64,0 +104,42 @@ class GetSwapStatusUseCaseTest {
 +            val failure = AssetNotFoundException("nep141:btc.omft.near")
 +            val repository = mockk<SwapRepository> {
 +                coEvery { checkSwapStatus(saved) } throws failure
@@ -63210,6 +63486,25 @@ index 40bfe60a6..550d95562 100644
 +        }
 +    }
 +
++    @Test
++    fun providerFailureReloadsSettlementAcceptedByAnotherObserver() = runTest {
++        val earlier = mockk<TransactionSwapMetadata>()
++        val accepted = mockk<TransactionSwapMetadata> { every { status } returns SwapStatus.SUCCESS }
++        val metadata = mockk<MetadataRepository> {
++            coEvery { getSwapMetadata("deposit") } returns earlier
++            coEvery { reloadSwapMetadata(earlier) } returns accepted
++        }
++        val failure = SwapAssetsUnavailableException()
++        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(earlier) } throws failure }
++
++        val result = GetSwapStatusUseCase(metadata, provider)("deposit")
++
++        assertSame(accepted, result.savedMetadata)
++        assertSame(failure, result.error)
++        assertNull(result.status)
++        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
++    }
++
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun savedDetailsAreAvailableBeforeTheProviderFinishesAndCancellationStopsPolling() = runTest {
@@ -63220,7 +63515,7 @@ index 40bfe60a6..550d95562 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        val observer = backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-+        }
+@@ -65,0 +147,8 @@ class GetSwapStatusUseCaseTest {
 +        runCurrent()
 +        assertSame(saved, states.last().savedMetadata)
 +        assertEquals(true, states.last().isLoading)
@@ -63229,11 +63524,10 @@ index 40bfe60a6..550d95562 100644
 +        runCurrent()
 +        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
 +    }
-+
-@@ -85 +155 @@ class GetSwapStatusUseCaseTest {
+@@ -85 +174 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
-@@ -103 +173,69 @@ class GetSwapStatusUseCaseTest {
+@@ -103 +192,69 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
 +        }
@@ -63304,7 +63598,7 @@ index 40bfe60a6..550d95562 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-@@ -104,0 +243,13 @@ class GetSwapStatusUseCaseTest {
+@@ -104,0 +262,13 @@ class GetSwapStatusUseCaseTest {
 +        runCurrent()
 +        advanceTimeBy(30_000)
 +        runCurrent()
@@ -70994,7 +71288,7 @@ index 39f9284c9..f2c95284d 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
-index 461fb8fbb..bdb4946e2 100644
+index 461fb8fbb..657c0ce7c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ExternalGiftCardLinkTest.kt
 @@ -3,3 +3,3 @@ package co.electriccoin.zcash.ui.screen.redeemgift
@@ -71112,7 +71406,7 @@ index 461fb8fbb..bdb4946e2 100644
 +        assertFalse(handleExternalLink("https", "gift.zodl.com.evil.example", isRedelivery = false))
 +        assertFalse(handleExternalLink("http", "gift.zodl.com", isRedelivery = false))
 +        assertTrue(launchNavigation.changes.value.isEmpty())
-@@ -88,6 +80,21 @@ class ExternalGiftCardLinkTest {
+@@ -88,6 +80,22 @@ class ExternalGiftCardLinkTest {
 -    fun noScannerIsOpenedWithoutARequest() {
 -        val router = RecordingNavigationRouter()
 -
@@ -71137,7 +71431,8 @@ index 461fb8fbb..bdb4946e2 100644
 +        restored.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
 +        assertTrue(delivered.isEmpty())
 +        restored.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
-+        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
++        val expected = NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))
++        assertEquals(listOf<NavigationCommand>(expected), delivered)
 +        restored.restoreExternalScans(saved)
 +        assertTrue(restored.changes.value.isEmpty())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt

@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
@@ -46,6 +47,9 @@ interface MigrationLiveDriver {
      * time — not a hard guarantee for every call site.
      */
     fun stop(accountKeyId: String)
+
+    /** Cancel and drain process-owned work before wallet erasure. */
+    suspend fun stopAll()
 }
 
 class MigrationLiveDriverImpl(
@@ -53,50 +57,27 @@ class MigrationLiveDriverImpl(
     private val getOrchardMigrationSdk: suspend (String) -> OrchardMigrationSdk?,
     private val migrationTransferStateRepository: MigrationTransferStateRepository,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+    private val resetPending: () -> Boolean = { false },
 ) : MigrationLiveDriver {
-    /**
-     * Atomic per-account start-if-absent, race-free by construction: [ConcurrentHashMap] gives
-     * an atomic `putIfAbsent`, and each job's own [Job.invokeOnCompletion] removes exactly the
-     * entry it installed (compare-and-remove via the two-arg overload) — no separate suspend-
-     * based lock needed. The job is LAZY and `putIfAbsent` happens BEFORE `.start()` (an earlier
-     * draft called `.start()` first and only attached its own removal hook afterward, leaving a
-     * window where a second, concurrent call could see the map still empty and start a genuinely
-     * duplicate, concurrently-running loop for the same account). If we lose the `putIfAbsent`
-     * race and the winner is already [Job.isCompleted] by the time we check, we retry
-     * immediately (it is safe: the winner is gone, or about to be removed by its own hook); if
-     * the winner is still active, this call is a no-op — see [startIfNotRunning] for why no
-     * completion hook is attached in that case.
-     */
     private val runningJobs = ConcurrentHashMap<String, Job>()
 
+    @Synchronized
     override fun startIfNotRunning(accountKeyId: String) {
+        if (resetPending() || runningJobs[accountKeyId]?.isCompleted == false) return
         val candidate = scope.launch(start = CoroutineStart.LAZY) { loop(accountKeyId) }
-        val existing = runningJobs.putIfAbsent(accountKeyId, candidate)
-        if (existing == null) {
-            candidate.invokeOnCompletion { runningJobs.remove(accountKeyId, candidate) }
-            candidate.start()
-        } else {
-            candidate.cancel()
-            if (existing.isCompleted) {
-                // Already gone by the time we looked — safe to retry immediately.
-                startIfNotRunning(accountKeyId)
-            } else {
-                // A loop for this account is genuinely still active — this call is fully
-                // satisfied by it: the running loop re-evaluates the engine's own state on every
-                // iteration, so it will itself pick up whatever prompted this call. No completion
-                // hook is attached here (a prior draft attached one unconditionally, which forced
-                // one extra full loop run after every merely-coincident double call, even when the
-                // active loop was going to reach a legitimate Terminal on its own) — if the active
-                // loop stops before the account is actually done, the next natural trigger point
-                // (app-open, post-commit) or the durable WorkManager chain calls
-                // startIfNotRunning again.
-                migrationLog("MigrationLiveDriver: already driving $accountKeyId — no-op.")
-            }
-        }
+        runningJobs[accountKeyId] = candidate
+        candidate.invokeOnCompletion { runningJobs.remove(accountKeyId, candidate) }
+        candidate.start()
     }
 
     override fun stop(accountKeyId: String) {
         runningJobs[accountKeyId]?.cancel()
+    }
+
+    override suspend fun stopAll() {
+        val jobs = synchronized(this) { runningJobs.values.toList() }
+        jobs.forEach { it.cancel() }
+        jobs.joinAll()
     }
 
     private suspend fun loop(accountKeyId: String) {

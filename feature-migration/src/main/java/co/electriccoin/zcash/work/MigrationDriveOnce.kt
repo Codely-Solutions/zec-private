@@ -24,9 +24,11 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -85,7 +87,10 @@ class MigrationDriveOnce(
     private val lastNetworkActivity: LastNetworkActivityStorageProvider,
     private val applicationStateProvider: ApplicationStateProvider,
     private val migrationUpgradeNotice: MigrationUpgradeNoticeStorageProvider,
+    private val resetProgress: ResetProgressStore,
 ) {
+    suspend fun awaitIdle() = DRIVE_LOCK.withLock { Unit }
+
     /**
      * @param allowForcedBroadcastWindow Only `true` for [MigrationLiveDriver] — the worker (via
      * [MigrationWorker.doWork]) must NEVER pass `true`: forcing a broadcast window can wait
@@ -106,6 +111,7 @@ class MigrationDriveOnce(
         }
         liveLoopActive = driveByLiveLoop
         try {
+            if (resetProgress.isPending.value) return DriveOnceResult.Terminal
             // This IS a run — stamp the heartbeat regardless of which caller drove it, so the
             // dead-man's-switch alarm (MigrationTransferDueReceiver) never fires a spurious
             // "step due" notification just because the WORKER specifically didn't fire (the live
@@ -178,7 +184,7 @@ class MigrationDriveOnce(
             return null
         }
         try {
-            return block()
+            return if (resetProgress.isPending.value) null else block()
         } finally {
             DRIVE_LOCK.unlock()
         }

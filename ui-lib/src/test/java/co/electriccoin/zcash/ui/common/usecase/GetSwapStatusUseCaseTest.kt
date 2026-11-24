@@ -114,6 +114,25 @@ class GetSwapStatusUseCaseTest {
         }
     }
 
+    @Test
+    fun providerFailureReloadsSettlementAcceptedByAnotherObserver() = runTest {
+        val earlier = mockk<TransactionSwapMetadata>()
+        val accepted = mockk<TransactionSwapMetadata> { every { status } returns SwapStatus.SUCCESS }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit") } returns earlier
+            coEvery { reloadSwapMetadata(earlier) } returns accepted
+        }
+        val failure = SwapAssetsUnavailableException()
+        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(earlier) } throws failure }
+
+        val result = GetSwapStatusUseCase(metadata, provider)("deposit")
+
+        assertSame(accepted, result.savedMetadata)
+        assertSame(failure, result.error)
+        assertNull(result.status)
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun savedDetailsAreAvailableBeforeTheProviderFinishesAndCancellationStopsPolling() = runTest {

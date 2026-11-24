@@ -168,7 +168,8 @@ class MaintenanceWatchTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp, 'ref-output')
             for workflow, jobs in consumers:
-                gate = re.search(r'(?ms)^        run: \|\n(.*)', workflow_blocks(workflow)[1]['admit'])[1]
+                gate = re.search(r'(?m)^        run: \|\n((?:^ {10}[^\n]*\n|^\n)*)',
+                                 workflow_blocks(workflow)[1]['admit'])[1]
                 gate = '\n'.join(line[10:] for line in gate.splitlines())
                 for ref in ('refs/heads/main', 'refs/heads/Main', 'REFS/HEADS/MAIN', 'refs/tags/main'):
                     with self.subTest(workflow=workflow, ref=ref):

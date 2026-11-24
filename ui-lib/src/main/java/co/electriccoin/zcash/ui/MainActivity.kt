@@ -98,7 +98,7 @@ class MainActivity : FragmentActivity() {
         monitorForBackgroundSync()
 
         handleViewIntent(intent, isRecreated = savedInstanceState != null)
-        handleMigrationIntent(intent)
+        if (savedInstanceState == null) handleMigrationIntent(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -133,7 +133,11 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun handleMigrationIntent(intent: Intent): Boolean = migrationAppHooks.handleIntent(intent, lifecycleScope)
+    private fun handleMigrationIntent(intent: Intent) {
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
+            migrationAppHooks.handleIntent(intent, lifecycleScope)
+        }
+    }
 
     override fun onStart() {
         Twig.debug { "Activity state: Start" }
