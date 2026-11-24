@@ -2293,7 +2293,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailScreen.kt": "b1b6fbdaa677673ea089383f51c8e08de8cf6a242aa182c5b3cfc64060147e0b",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailState.kt": "4b787e69622c9e7559de0bb19e8db22d6e77a9ba693145ae033a3f45924b8ee6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt": "f6f5f33deffa650bbdc6a3858c0be2b95a4cdb97b796f7623450c6189b45a361",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt": "0170c97b4b61b5919c0e5ddd369018ab438ae732804eebc1c360070cd4be5b7c",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt": "663ecc0f9966663dcb88e61bbb71a04a42ec0e7d17884816be1af02f57e14159",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLink.kt": "8b61d6fd1b4a241efb0fd1acfbb41246f823736b0140559245c472a4a1d63851",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveShielded.kt": "d2a2118355f5c9f8e8de1824e78323f7346056d7765233a403feea0e48da60c5",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveTransparent.kt": "c7614514f9080f7daa2cd5cfdd7cf26744baa1de9a23392871cc1b48bbdaca62",

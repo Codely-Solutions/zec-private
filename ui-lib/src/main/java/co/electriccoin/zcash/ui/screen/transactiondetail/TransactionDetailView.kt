@@ -220,35 +220,28 @@ private fun BottomBar(
             Spacer(4.dp)
         }
 
-        DetailActions(state.primaryButton, state.secondaryButton)
-    }
-}
-
-@Composable
-private fun DetailActions(primary: ButtonState?, secondary: ButtonState?) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val textAdjustedWidth = maxWidth / LocalDensity.current.fontScale
-        if (primary != null && secondary != null && textAdjustedWidth < 250.dp) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DetailSecondaryButton(secondary, Modifier.fillMaxWidth())
-                ZashiButton(state = primary, modifier = Modifier.fillMaxWidth())
-            }
-        } else {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                secondary?.let { DetailSecondaryButton(it, Modifier.weight(1f)) }
-                primary?.let { ZashiButton(state = it, modifier = Modifier.weight(1f)) }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val primary = state.primaryButton
+            val secondary = state.secondaryButton
+            val secondaryColors = ZashiButtonDefaults.tertiaryColors()
+            val textAdjustedWidth = maxWidth / LocalDensity.current.fontScale
+            if (primary != null && secondary != null && textAdjustedWidth < 250.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ZashiButton(
+                        state = secondary, modifier = Modifier.fillMaxWidth(), defaultPrimaryColors = secondaryColors,
+                    )
+                    ZashiButton(state = primary, modifier = Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    secondary?.let {
+                        ZashiButton(state = it, modifier = Modifier.weight(1f), defaultPrimaryColors = secondaryColors)
+                    }
+                    primary?.let { ZashiButton(state = it, modifier = Modifier.weight(1f)) }
+                }
             }
         }
     }
-}
-
-@Composable
-private fun DetailSecondaryButton(state: ButtonState, modifier: Modifier) {
-    ZashiButton(
-        modifier = modifier,
-        state = state,
-        defaultPrimaryColors = ZashiButtonDefaults.tertiaryColors(),
-    )
 }
 
 @Composable
