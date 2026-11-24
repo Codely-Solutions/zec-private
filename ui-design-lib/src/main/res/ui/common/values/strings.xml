@@ -1237,6 +1237,7 @@
     <string name="migration_common_dismiss">Dismiss</string>
     <string name="migration_common_continueWithoutTor">Continue without Tor</string>
     <string name="migration_common_tryAgain">Try again</string>
+    <string name="migrationProgress_unavailable">Migration progress unavailable</string>
     <string name="migration_common_whatAreTheRisks">What are the risks?</string>
     <string name="migration_common_splitBalanceTitle">Split Balance</string>
     <string name="migration_common_splitBalanceNumbered">Split balance %1$d</string>

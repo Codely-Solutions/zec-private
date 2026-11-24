@@ -25,6 +25,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import java.util.UUID
 import kotlin.test.Test
@@ -43,6 +44,8 @@ class CheckMigrationRecoveryUseCaseTest {
             every { sdkAccount } returns testSdkAccount
             every { isSpendable } returns true
         }
+
+    private val ownerKey = testSdkAccount.accountUuid.toStorageKeyId()
 
     @kotlin.test.BeforeTest
     fun resetThrottle() {
@@ -68,7 +71,7 @@ class CheckMigrationRecoveryUseCaseTest {
         pendingMigrationTorFailure: Boolean = false,
         pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider =
             mockk(relaxed = true) {
-                coEvery { get() } returns pendingMigrationTorFailure
+                coEvery { get(ownerKey) } returns pendingMigrationTorFailure
             },
         // Default: the worker is already RUNNING in tests so the reconciliation branch is a no-op,
         // keeping existing test behaviour unchanged. Override to test reconciliation explicitly.
@@ -76,10 +79,10 @@ class CheckMigrationRecoveryUseCaseTest {
         scheduleNow: suspend (String) -> Unit = {},
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
+        selectedAccountState: MutableStateFlow<WalletAccount?> = MutableStateFlow(testWalletAccount),
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk<GetOrchardMigrationSdkUseCase> {
                 if (sdk != null) {
-                    coEvery { this@mockk() } returns sdk
                     // Explicit-account overload — used by the driver-start/worker-revival loop,
                     // which now enumerates accountDataSource.getAllAccounts() instead of only the
                     // selected account.
@@ -97,6 +100,7 @@ class CheckMigrationRecoveryUseCaseTest {
         accountDataSource =
             mockk<AccountDataSource>(relaxed = true) {
                 coEvery { getAllAccounts() } returns accounts
+                every { selectedAccount } returns selectedAccountState
             },
         context = mockk<Context>(relaxed = true),
         getWorkerRunState = getWorkerRunState,
@@ -113,11 +117,10 @@ class CheckMigrationRecoveryUseCaseTest {
         }
         var opens = 0
         val acquire = mockk<GetOrchardMigrationSdkUseCase> {
-            coEvery { this@mockk() } coAnswers {
+            coEvery { this@mockk(ownerKey) } coAnswers {
                 if (++opens == 1) error("fixture wallet disappeared before SDK open")
                 sdk
             }
-            coEvery { this@mockk(any()) } returns sdk
         }
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         val recovery = useCase(
@@ -130,7 +133,7 @@ class CheckMigrationRecoveryUseCaseTest {
         recovery()
         coVerify(exactly = 0) { driver.startIfNotRunning(any()) }
         recovery()
-        assertEquals(2, opens)
+        assertEquals(3, opens)
         coVerify(exactly = 1) { driver.startIfNotRunning(testSdkAccount.accountUuid.toStorageKeyId()) }
     }
 
@@ -171,14 +174,31 @@ class CheckMigrationRecoveryUseCaseTest {
                 }
             val router = mockk<NavigationRouter>(relaxed = true)
 
-            val recovery = useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true)
+            val otherAccount = mockk<WalletAccount> {
+                every { sdkAccount } returns
+                    AccountFixture.new(accountUuid = UUID.fromString("00000000-0000-0000-0000-000000000002"))
+            }
+            val selected = MutableStateFlow<WalletAccount?>(testWalletAccount)
+            val recovery = useCase(
+                sdk = sdk,
+                navigationRouter = router,
+                pendingMigrationTorFailure = true,
+                selectedAccountState = selected,
+                getWorkerRunState = {
+                    selected.value = otherAccount
+                    MigrationWorkerRunState.RUNNING
+                },
+            )
             recovery()
-            CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
-            var deferredRequests = 0
-            recovery { deferredRequests++ }
+            assertEquals(otherAccount, selected.value)
+            coVerify(exactly = 1) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
 
-            coVerify(exactly = 1) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
-            assertEquals(1, deferredRequests)
+            selected.value = testWalletAccount
+            CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
+            val deferredOwners = mutableListOf<String>()
+            recovery { deferredOwners += it }
+
+            assertEquals(listOf(ownerKey), deferredOwners)
         }
 
     @Test
@@ -214,7 +234,7 @@ class CheckMigrationRecoveryUseCaseTest {
             // guaranteed AwaitingProof and shows a "Couldn't Send" sheet on every app open.
             val storageProvider =
                 mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true) {
-                    coEvery { get() } returns true
+                    coEvery { get(ownerKey) } returns true
                 }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
@@ -235,8 +255,8 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
-            coVerify(exactly = 1) { storageProvider.store(false) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 
     @Test
@@ -244,7 +264,7 @@ class CheckMigrationRecoveryUseCaseTest {
         runTest {
             val storageProvider =
                 mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true) {
-                    coEvery { get() } returns true
+                    coEvery { get(ownerKey) } returns true
                 }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
@@ -262,8 +282,8 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
-            coVerify(exactly = 1) { storageProvider.store(false) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 
     @Test
@@ -464,7 +484,6 @@ class CheckMigrationRecoveryUseCaseTest {
                 }
             val getOrchardMigrationSdk =
                 mockk<GetOrchardMigrationSdkUseCase> {
-                    coEvery { this@mockk() } returns sdk
                     coEvery { this@mockk(any()) } returns sdk
                 }
             val startedAccountKeyIds = mutableListOf<String>()

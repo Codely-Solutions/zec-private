@@ -1,27 +1,24 @@
 package co.electriccoin.zcash.ui.screen.migration.torfailure
 
-import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import java.util.UUID
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -55,7 +52,7 @@ class MigrationTorFailureVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            verify(exactly = 1) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
+            verify(exactly = 1) { router.replaceAll(HomeArgs, MigrationProgressArgs("fixture-owner")) }
             verify(exactly = 0) { decisionRepository.set(any(), any()) }
             collectJob.cancel()
         }
@@ -66,6 +63,8 @@ class MigrationTorFailureVMTest {
             val router = mockk<NavigationRouter>(relaxed = true)
             val decisionRepository = mockk<PendingMigrationTorFailureDecisionRepository>(relaxed = true)
             val torProvider = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
+            val written = CompletableDeferred<Unit>()
+            coEvery { torProvider.store("fixture-owner", false) } coAnswers { written.await() }
             val vm = vm(router = router, decisionRepository = decisionRepository, torProvider = torProvider)
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -75,8 +74,15 @@ class MigrationTorFailureVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { torProvider.store(false) }
-            verify(exactly = 1) { decisionRepository.set(any(), useTor = false) }
+            verify(exactly = 0) { decisionRepository.set(any(), any()) }
+            verify(exactly = 0) { router.back() }
+            vm.state.value?.onContinueWithoutTor?.invoke()
+            runCurrent()
+            written.complete(Unit)
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { torProvider.store("fixture-owner", false) }
+            verify(exactly = 1) { decisionRepository.set("fixture-owner", useTor = false) }
             verify(exactly = 1) { router.back() }
             collectJob.cancel()
         }
@@ -85,24 +91,10 @@ class MigrationTorFailureVMTest {
         router: NavigationRouter,
         decisionRepository: PendingMigrationTorFailureDecisionRepository,
         torProvider: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-    ): MigrationTorFailureVM {
-        val fakeAccount =
-            AccountFixture.new(
-                accountUuid = UUID.fromString("00000000-0000-0000-0000-000000000001")
-            )
-        val walletAccount: WalletAccount =
-            mockk(relaxed = true) {
-                every { sdkAccount } returns fakeAccount
-            }
-        val getSelectedWalletAccount =
-            mockk<GetSelectedWalletAccountUseCase> {
-                coEvery { this@mockk() } returns walletAccount
-            }
-        return MigrationTorFailureVM(
-            navigationRouter = router,
-            getSelectedWalletAccount = getSelectedWalletAccount,
-            pendingMigrationTorFailureDecisionRepository = decisionRepository,
-            isMigrationTorEnabledStorageProvider = torProvider,
-        )
-    }
+    ) = MigrationTorFailureVM(
+        navigationRouter = router,
+        args = MigrationTorFailureArgs("fixture-owner"),
+        pendingMigrationTorFailureDecisionRepository = decisionRepository,
+        isMigrationTorEnabledStorageProvider = torProvider,
+    )
 }

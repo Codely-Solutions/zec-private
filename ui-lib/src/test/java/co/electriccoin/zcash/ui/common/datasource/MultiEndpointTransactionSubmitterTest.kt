@@ -241,23 +241,26 @@ class MultiEndpointTransactionSubmitterTest {
         }
 
     @Test
-    fun automaticModeReportsFailureWhenEveryEndpointReturnsARejection() = runTest {
+    fun directAndAutomaticRejectionsRemainPendingWhileTheSdkCanRetry() = runTest {
         val transaction = transaction(3)
-        val submitter = MultiEndpointTransactionSubmitter(
-            closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
-            logger = noOpLogger,
-            submit = { _, _ -> failure(transaction, code = 18, grpcError = false) },
-        )
+        val endpoints = listOf(endpoint("first.example.com"), endpoint("second.example.com"))
+        for (servers in listOf(endpoints.take(1), endpoints)) {
+            val submitted = Collections.synchronizedList(mutableListOf<LightWalletEndpoint>())
+            val submitter = MultiEndpointTransactionSubmitter(
+                closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
+                logger = noOpLogger,
+                submit = { _, server ->
+                    submitted += server
+                    failure(transaction, code = 18, grpcError = false)
+                },
+            )
 
-        val results = submitter.submitTransactions(
-            transactions = listOf(transaction),
-            endpoints = listOf(endpoint("first.example.com"), endpoint("second.example.com")),
-            logTag = LOG_TAG,
-        )
+            val results = submitter.submitTransactions(listOf(transaction), servers, LOG_TAG)
 
-        val failure = assertIs<SubmitResult.Failure>(results.toSubmitResult())
-        assertEquals(18, failure.code)
-        assertEquals(listOf(transaction.txIdString()), failure.txIds)
+            assertEquals(servers.toSet(), submitted.toSet())
+            assertEquals(18, assertIs<TransactionSubmitResult.Failure>(results.single()).code)
+            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
+        }
     }
 
     @Test
@@ -480,7 +483,7 @@ class MultiEndpointTransactionSubmitterTest {
     }
 
     @Test
-    fun nonGrpcFailuresMapToFirstFailureDetail() {
+    fun allRejectedLegsKeepTheOriginalAttemptPending() {
         val firstTransaction = transaction(13)
         val secondTransaction = transaction(14)
 
@@ -491,11 +494,7 @@ class MultiEndpointTransactionSubmitterTest {
             ).toSubmitResult()
 
         assertEquals(
-            SubmitResult.Failure(
-                txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString()),
-                code = 18,
-                description = "failure 18"
-            ),
+            SubmitResult.GrpcFailure(txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString())),
             result
         )
     }

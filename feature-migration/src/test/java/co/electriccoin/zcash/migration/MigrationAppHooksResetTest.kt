@@ -119,6 +119,7 @@ class MigrationAppHooksResetTest {
 
             verify(exactly = 1) { anyConstructed<MigrationScheduler>().cancel("fixture") }
             verify(exactly = 1) { notifier.cancel("fixture") }
+            verify(exactly = 1) { notifier.cancelStepDue("fixture") }
             verify(exactly = 0) { anyConstructed<MigrationScheduler>().cancel("other") }
             coVerify(exactly = 0) { accounts.getAllAccounts() }
         } finally {
@@ -165,6 +166,48 @@ class MigrationAppHooksResetTest {
         runCurrent()
         coVerify(exactly = 2) { accounts.selectAccount(target) }
         verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
+    }
+
+    @Test
+    fun dueNoticeResumesItsKickAndWaitsForSchedulerAcknowledgement() = runTest {
+        val uuid = AccountUuid.new(ByteArray(16))
+        val ownerKey = uuid.toStorageKeyId()
+        val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
+        val accounts = mockk<AccountDataSource>(relaxed = true)
+        val releaseLookup = CompletableDeferred<List<WalletAccount>>()
+        coEvery { accounts.getAllAccounts() } coAnswers { releaseLookup.await() }
+        val navigation = spyk(LaunchNavigationRequests())
+        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
+            mockk(), mockk(), WalletWriteAccess(reset),
+        )
+        val acknowledged = CompletableDeferred<Unit>()
+        mockkConstructor(MigrationScheduler::class)
+        try {
+            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) } coAnswers {
+                acknowledged.await()
+            }
+            val oldActivity = launch { hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true) }
+            runCurrent()
+            val saved = checkNotNull(navigation.resolvingMigrationNotice)
+            assertTrue(saved.runStepPending)
+            oldActivity.cancel()
+
+            hooks.restoreNotificationProgress(saved.ownerKey, this, saved.runStepPending)
+            releaseLookup.complete(listOf(target))
+            runCurrent()
+            verify(exactly = 0) { navigation.finishMigrationProgress(any(), any()) }
+            acknowledged.complete(Unit)
+            runCurrent()
+
+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) }
+            val progress = NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(ownerKey)))
+            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
+        } finally {
+            acknowledged.complete(Unit)
+            unmockkConstructor(MigrationScheduler::class)
+        }
     }
 
     private fun pendingReset() = mockk<ResetProgressStore> {

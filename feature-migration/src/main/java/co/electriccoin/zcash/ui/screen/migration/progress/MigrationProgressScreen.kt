@@ -60,12 +60,38 @@ fun MigrationProgressScreen(args: MigrationProgressArgs) {
     val vm = koinViewModel<MigrationProgressVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.content?.onBack?.invoke() ?: vm.navigateBack() }
-    LceRenderer(
-        state = state,
-        // Guarded on content == null (MOB-1623) so a later isLoading=true (e.g. a retry/refresh)
-        // doesn't flash the full-screen spinner back over content that's already on screen.
-        loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
-    ) { MigrationProgressView(it) }
+    if (state.content == null && !state.isLoading && state.error == null) {
+        MigrationProgressUnavailable(onBack = vm::navigateBack, onRetry = vm::retryReadout)
+    } else {
+        LceRenderer(
+            state = state,
+            loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
+        ) { MigrationProgressView(it) }
+    }
+}
+
+@Composable
+private fun MigrationProgressUnavailable(onBack: () -> Unit, onRetry: () -> Unit) {
+    BlankBgScaffold(
+        topBar = {
+            ZashiSmallTopAppBar(navigationAction = { ZashiTopAppBarCloseNavigation(onBack = onBack) })
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxWidth().scaffoldPadding(padding, top = 24.dp),
+        ) {
+            Text(
+                text = stringRes(DesignR.string.migrationProgress_unavailable).getValue(),
+                style = ZashiTypography.textLg,
+                color = ZashiColors.Text.textPrimary,
+            )
+            Spacer(Modifier.height(16.dp))
+            ZashiButton(
+                modifier = Modifier.fillMaxWidth(),
+                state = ButtonState(text = stringRes(DesignR.string.migration_common_tryAgain), onClick = onRetry),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

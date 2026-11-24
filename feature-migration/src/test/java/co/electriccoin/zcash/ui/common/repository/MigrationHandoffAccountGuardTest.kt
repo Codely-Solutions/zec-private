@@ -73,16 +73,19 @@ class MigrationHandoffAccountGuardTest {
         assertSame(schedule, repo.get("accountA"))
     }
 
-    // ---- TorFailure partial-guard documentation test ----
-
     @Test
-    fun torFailureDecisionIsNotAccountFilteredYet_knownPartialGuard() {
+    fun consumingAnOldTorDecisionPreservesTheReplacement() {
         val repo = PendingMigrationTorFailureDecisionRepositoryImpl()
         repo.set("accountA", false)
-        assertEquals(false, repo.decision.value)
-        // Known limitation (see repo KDoc): `decision` is NOT account-filtered — a different
-        // account's set overwrites the observable value. Documented here so the gap is tracked.
+        val first = checkNotNull(repo.decision.value)
+        assertEquals("accountA", first.accountKeyId)
+        assertEquals(false, first.useTor)
         repo.set("accountB", true)
-        assertEquals(true, repo.decision.value)
+        val second = checkNotNull(repo.decision.value)
+        assertEquals(false, repo.consume(first))
+        assertEquals("accountB", second.accountKeyId)
+        assertEquals(true, second.useTor)
+        assertEquals(true, repo.consume(second))
+        assertNull(repo.decision.value)
     }
 }

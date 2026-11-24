@@ -189,15 +189,15 @@ class MigrationAppHooksImpl(
         intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
             intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 
-    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope) =
-        openNotificationProgress(ownerKey, scope, runStep = false)
+    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean) =
+        openNotificationProgress(ownerKey, scope, runStepPending)
 
     @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
     private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
         if (resetProgress.isPending.value) return
         val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return
         val generation = walletWriteAccess.token()
-        val notice = launchNavigation.beginMigrationProgress(key)
+        val notice = launchNavigation.beginMigrationProgress(key, runStep)
         scope.launch {
             try {
                 val target = accountDataSource.getAllAccounts()
@@ -207,7 +207,7 @@ class MigrationAppHooksImpl(
                         if (launchNavigation.resolvingMigrationNotice !== notice) return@write null
                         accountDataSource.selectAccount(account)
                         if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
-                            MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
+                            MigrationScheduler(context).runNotificationStep(key)
                         }
                         NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
                     }
@@ -224,9 +224,9 @@ class MigrationAppHooksImpl(
 
     override suspend fun checkRecovery() {
         if (!resetProgress.isPending.value) {
-            checkMigrationRecovery {
+            checkMigrationRecovery { ownerKey ->
                 launchNavigation.requestMigrationRecovery(
-                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
+                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
                 )
             }
         }
@@ -249,6 +249,7 @@ class MigrationAppHooksImpl(
         keys.forEach { key ->
             MigrationScheduler(context).cancel(key)
             migrationNotifier.cancel(key)
+            migrationNotifier.cancelStepDue(key)
         }
         migrationLog("AppHooks: cancelled migration work (accounts=${keys.size}, sweep=${accountKeyId == null})")
     }
@@ -278,9 +279,9 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationNotificationArgs> { MigrationNotificationScreen() }
             dialogComposable<MigrationPrivacyArgs> { MigrationPrivacyScreen(it.toRoute()) }
             dialogComposable<MigrationCustomServerTorArgs> { MigrationCustomServerTorScreen(it.toRoute()) }
-            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
+            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
             dialogComposable<MigrationLockExplainerArgs> { MigrationLockExplainerScreen() }
-            composable<MigrationSendingArgs> { MigrationSendingScreen() }
+            composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
             composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }

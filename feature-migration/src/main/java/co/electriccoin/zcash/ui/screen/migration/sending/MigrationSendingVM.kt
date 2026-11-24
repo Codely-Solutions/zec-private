@@ -31,6 +31,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -38,6 +39,7 @@ import kotlinx.coroutines.withContext
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 class MigrationSendingVM(
+    private val args: MigrationSendingArgs,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val getMigrationSnapshot: co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase,
     private val scheduleNextMigrationWindow: ScheduleNextMigrationWindowUseCase,
@@ -66,19 +68,17 @@ class MigrationSendingVM(
         }
 
     init {
+        val hasPendingDecision =
+            pendingMigrationTorFailureDecisionRepository.decision.value?.accountKeyId == args.accountKeyId
         pendingMigrationTorFailureDecisionRepository.decision
             .filterNotNull()
-            .onEach { useTor ->
-                pendingMigrationTorFailureDecisionRepository.clear()
-                sendLce.execute { sendOnce(useTor) }
+            .filter { it.accountKeyId == args.accountKeyId }
+            .onEach { decision ->
+                if (pendingMigrationTorFailureDecisionRepository.consume(decision)) {
+                    sendLce.execute { sendOnce(decision.useTor) }
+                }
             }.launchIn(viewModelScope)
-        // If a Tor-failure decision is already sitting here at construction time (e.g. this VM was
-        // recreated while one was pending), the collector above fires on its very first emission
-        // and is the more specific, more recent user decision — calling send() here too would race
-        // it via sendLce.execute()'s cancel-previous-job semantics (MutableLce.execute), silently
-        // cancelling one of two legitimate send attempts. Only kick off the default send when there
-        // is nothing pending for the collector to react to.
-        if (pendingMigrationTorFailureDecisionRepository.decision.value == null) {
+        if (!hasPendingDecision) {
             send()
         }
     }
@@ -114,12 +114,18 @@ class MigrationSendingVM(
         }.withLce(sendLce, errorStateMapper::mapToState)
             .stateIn(this)
 
-    private fun send() = sendLce.execute { sendOnce(useTor = isMigrationTorEnabledStorageProvider.get()) }
+    private fun send() = sendLce.execute {
+        sendOnce(useTor = isMigrationTorEnabledStorageProvider.get(args.accountKeyId))
+    }
 
     fun onBack() = navigationRouter.back()
 
     private suspend fun sendOnce(useTor: Boolean) {
-        val sdk = getOrchardMigrationSdk()
+        val sdk = getOrchardMigrationSdk(args.accountKeyId)
+        if (sdk == null) {
+            failure.value = SendFailure.NotReady
+            return
+        }
         // The engine-mutating send lives entirely under DRIVE_LOCK (via withExclusiveAccess) so it
         // can never race MigrationWorker/MigrationLiveDriver's own executeNextPendingTransfer call
         // for the same transfer (2026-08-06 DRIVE_LOCK bypass fix). Lock acquisition itself retries
@@ -143,7 +149,7 @@ class MigrationSendingVM(
             // Never got exclusive access — a background step held the lock for the whole retry
             // budget. Same handling as the pre-existing "not ready yet" path below: no send was
             // attempted, so this can't be a Tor failure.
-            pendingMigrationTorFailureStorageProvider.store(false)
+            pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
             failure.value = SendFailure.NotReady
             return
         }
@@ -159,13 +165,13 @@ class MigrationSendingVM(
                         // stops re-routing through this screen. Left `true` on every other outcome
                         // (including a renewed Tor failure below), so it keeps re-surfacing until an actual
                         // successful send happens. A no-op if nothing was pending.
-                        pendingMigrationTorFailureStorageProvider.store(false)
+                        pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
                         // Re-arms the next window for a resumed/manually-confirmed transfer in a
                         // multi-transfer AUTOMATIC plan; no-ops once the plan is already complete.
-                        scheduleNextMigrationWindow()
+                        scheduleNextMigrationWindow(args.accountKeyId)
                         // Completion straight from the engine — no cache write-through needed, the
                         // banner reads the same live states.
-                        val snapshot = getMigrationSnapshot()
+                        val snapshot = getMigrationSnapshot(args.accountKeyId)
                         if (snapshot?.isComplete == true) {
                             // This was the plan's last transfer — one Migration Complete screen covers
                             // both this (foreground, just confirmed) and the background-completion case
@@ -181,7 +187,7 @@ class MigrationSendingVM(
                     // since the fix (drop Tor) differs from a real network outage.
                     is TransferResult.NetworkError -> {
                         if (r.isTorFailure) {
-                            navigationRouter.forward(MigrationTorFailureArgs)
+                            navigationRouter.forward(MigrationTorFailureArgs(args.accountKeyId))
                         } else {
                             failure.value = SendFailure.Engine(r)
                         }
@@ -201,7 +207,7 @@ class MigrationSendingVM(
             // that was never going to attempt a network send in the first place.
             // The foreground sync + Lane A hook will prove it; the user can retry later.
             else -> {
-                pendingMigrationTorFailureStorageProvider.store(false)
+                pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
                 failure.value = SendFailure.NotReady
             }
         }

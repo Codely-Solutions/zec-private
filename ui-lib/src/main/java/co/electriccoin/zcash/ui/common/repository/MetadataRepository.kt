@@ -553,11 +553,11 @@ data class TransactionSwapMetadata(
 
     internal fun outgoingStatus(transaction: SendTransaction, liveStatus: SwapStatus? = null): SwapStatus {
         val settlement = liveStatus ?: recordedStatus
-        // An explicit settlement can outlive a stale local funding transaction state.
-        return if (transaction is SendTransaction.Failed && settlement?.isTerminal != true) {
-            SwapStatus.FAILED
-        } else {
-            settlement ?: status
+        return when {
+            fundingNotSubmitted && (settlement == null || settlement == SwapStatus.PENDING) -> SwapStatus.PENDING
+            transaction is SendTransaction.Failed && (settlement == null || settlement == SwapStatus.PENDING) ->
+                SwapStatus.FAILED
+            else -> settlement ?: status
         }
     }
 }

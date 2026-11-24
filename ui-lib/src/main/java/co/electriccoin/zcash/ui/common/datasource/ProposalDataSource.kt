@@ -447,14 +447,6 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
             SubmitResult.Partial(txIds = txIds, statuses = map { it.statusDescription() })
         }
 
-        firstNonGrpcFailure != null && successCount == 0 && failures.all { !it.grpcError } -> {
-            SubmitResult.Failure(
-                txIds = txIds,
-                code = firstNonGrpcFailure.code,
-                description = firstNonGrpcFailure.description
-            )
-        }
-
         else -> {
             // Every non-accepted transaction was attempted, so its SDK retry plan remains active.
             // This includes server rejections: reporting a terminal partial failure would invite a

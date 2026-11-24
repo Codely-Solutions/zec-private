@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
+import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
@@ -230,20 +231,33 @@ class MigrationSendingVMTest {
             coEvery { sdk.executeNextPendingTransfer(any(), any()) } returns
                 TransferAttemptOutcome.Executed(TransferResult.Success(TransactionId.new("txid".toByteArray())))
             val router = FakeNavigationRouter()
-            val decisionFlow = MutableStateFlow<Boolean?>(false)
-            val torDecisionRepository =
-                mockk<PendingMigrationTorFailureDecisionRepository> {
-                    every { decision } returns decisionFlow
-                    every { clear() } answers { decisionFlow.value = null }
-                }
+            val torDecisionRepository = PendingMigrationTorFailureDecisionRepositoryImpl()
+            torDecisionRepository.set("fixture-owner", useTor = true)
 
             vm(sdk = sdk, router = router, torDecisionRepository = torDecisionRepository)
             advanceUntilIdle()
 
             coVerify(exactly = 1) {
-                sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), useEstimatedTip = true)
+                sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), useEstimatedTip = true)
             }
         }
+
+    @Test
+    fun otherAccountDecisionDoesNotOverrideTorOrConsumeTheChoice() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        coEvery { sdk.executeNextPendingTransfer(any(), any()) } returns
+            TransferAttemptOutcome.Executed(TransferResult.Success(TransactionId.new("txid".toByteArray())))
+        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
+        decisions.set("other-owner", useTor = false)
+
+        vm(sdk = sdk, router = FakeNavigationRouter(), torDecisionRepository = decisions, useTor = true)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), useEstimatedTip = true)
+        }
+        assertEquals("other-owner", decisions.decision.value?.accountKeyId)
+    }
 
     @Test
     fun successfulSendClearsPendingTorFailureFlag() =
@@ -257,7 +271,7 @@ class MigrationSendingVMTest {
             vm(sdk = sdk, router = router, pendingMigrationTorFailureStorageProvider = pendingTorFailure)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { pendingTorFailure.store(false) }
+            coVerify(exactly = 1) { pendingTorFailure.store("fixture-owner", false) }
         }
 
     @Test
@@ -275,7 +289,7 @@ class MigrationSendingVMTest {
             vm(sdk = sdk, router = router, pendingMigrationTorFailureStorageProvider = pendingTorFailure)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { pendingTorFailure.store(false) }
+            coVerify(exactly = 1) { pendingTorFailure.store("fixture-owner", false) }
         }
 
     @Test
@@ -290,7 +304,7 @@ class MigrationSendingVMTest {
             vm(sdk = sdk, router = router, pendingMigrationTorFailureStorageProvider = pendingTorFailure)
             advanceUntilIdle()
 
-            coVerify(exactly = 0) { pendingTorFailure.store(any()) }
+            coVerify(exactly = 0) { pendingTorFailure.store(any<String>(), any()) }
         }
 
     @Test
@@ -307,7 +321,7 @@ class MigrationSendingVMTest {
             vm(sdk = sdk, router = router)
             advanceUntilIdle()
 
-            assertTrue(router.forwardedRoutes.any { it is MigrationTorFailureArgs })
+            assertTrue(router.forwardedRoutes.any { it == MigrationTorFailureArgs("fixture-owner") })
         }
 
     private fun vm(
@@ -315,13 +329,14 @@ class MigrationSendingVMTest {
         router: FakeNavigationRouter,
         getMigrationSnapshot: GetMigrationSnapshotUseCase =
             mockk {
-                coEvery { this@mockk(null) } returns null
+                coEvery { this@mockk("fixture-owner") } returns null
             },
         torDecisionRepository: PendingMigrationTorFailureDecisionRepository =
             mockk {
                 every { decision } returns MutableStateFlow(null)
             },
         pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider = mockk(relaxed = true),
+        useTor: Boolean = false,
         migrationDriveOnce: MigrationDriveOnce =
             mockk {
                 coEvery { withExclusiveAccess<Any?>(any()) } coAnswers {
@@ -329,9 +344,10 @@ class MigrationSendingVMTest {
                 }
             },
     ) = MigrationSendingVM(
+        args = MigrationSendingArgs("fixture-owner"),
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk() } returns sdk
+                coEvery { this@mockk("fixture-owner") } returns sdk
             },
         getMigrationSnapshot = getMigrationSnapshot,
         scheduleNextMigrationWindow = mockk<ScheduleNextMigrationWindowUseCase>(relaxed = true),
@@ -339,7 +355,7 @@ class MigrationSendingVMTest {
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         isMigrationTorEnabledStorageProvider =
             mockk<IsMigrationTorEnabledStorageProvider> {
-                coEvery { get() } returns false
+                coEvery { get("fixture-owner") } returns useTor
             },
         pendingMigrationTorFailureDecisionRepository = torDecisionRepository,
         pendingMigrationTorFailureStorageProvider = pendingMigrationTorFailureStorageProvider,

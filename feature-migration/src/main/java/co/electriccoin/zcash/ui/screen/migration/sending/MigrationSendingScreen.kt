@@ -37,11 +37,12 @@ import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationSendingScreen() {
-    val vm = koinViewModel<MigrationSendingVM>()
+fun MigrationSendingScreen(args: MigrationSendingArgs) {
+    val vm = koinViewModel<MigrationSendingVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { vm.onBack() }
     LceRenderer(

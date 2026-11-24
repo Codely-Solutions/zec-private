@@ -3,13 +3,14 @@ package co.electriccoin.zcash.ui.screen.migration.torfailure
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -19,10 +20,12 @@ import kotlinx.coroutines.launch
 
 class MigrationTorFailureVM(
     private val navigationRouter: NavigationRouter,
-    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
+    private val args: MigrationTorFailureArgs,
     private val pendingMigrationTorFailureDecisionRepository: PendingMigrationTorFailureDecisionRepository,
     private val isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider,
 ) : ViewModel() {
+    private var continuing: Job? = null
+
     val state: StateFlow<MigrationTorFailureState?> =
         flowOf(
             MigrationTorFailureState(
@@ -36,16 +39,20 @@ class MigrationTorFailureVM(
             initialValue = null,
         )
 
+    @Suppress("TooGenericExceptionCaught") // Keep the choice available after an unsuccessful preference write.
     private fun onContinueWithoutTor() {
-        // Persists the migration-scoped Tor setting itself (distinct from the app's global Tor
-        // setting) so future migration broadcasts — background or foreground — also skip Tor,
-        // not just this one retry.
-        viewModelScope.launch { isMigrationTorEnabledStorageProvider.store(false) }
-        viewModelScope.launch {
-            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-            pendingMigrationTorFailureDecisionRepository.set(accountKeyId, useTor = false)
+        if (continuing?.isActive == true) return
+        continuing = viewModelScope.launch {
+            try {
+                isMigrationTorEnabledStorageProvider.store(args.accountKeyId, false)
+                pendingMigrationTorFailureDecisionRepository.set(args.accountKeyId, useTor = false)
+                navigationRouter.back()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                migrationLog("Migration Tor choice unavailable (${e.javaClass.simpleName}).")
+            }
         }
-        navigationRouter.back()
     }
 
     // "Try again" is NOT an in-place Tor retry (that would loop forever on a persistent Tor
@@ -56,8 +63,12 @@ class MigrationTorFailureVM(
     // the stack) works identically regardless of whether this sheet was reached interactively or
     // via CheckMigrationRecoveryUseCase's background-failure routing.
     private fun onTryAgain() {
-        navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs())
+        if (continuing?.isActive != true) {
+            navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs(args.accountKeyId))
+        }
     }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (continuing?.isActive != true) navigationRouter.back()
+    }
 }

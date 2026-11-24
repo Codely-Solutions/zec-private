@@ -13,7 +13,7 @@ data class SwapDetailState(
     val transactionHeader: TransactionDetailHeaderState,
     val quoteHeader: SwapQuoteHeaderState,
     val status: TransactionDetailSwapStatusRowState,
-    val depositTo: TransactionDetailInfoRowState,
+    val depositTo: TransactionDetailInfoRowState?,
     val recipient: TransactionDetailInfoRowState,
     val totalFees: TransactionDetailInfoRowState,
     val maxSlippage: TransactionDetailInfoRowState,

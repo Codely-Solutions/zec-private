@@ -179,10 +179,11 @@ data class TransactionDetailSwapStatusRowState(
 internal fun SwapQuoteStatusData.toDetailStatusRow(
     mode: TransactionDetailSwapStatusRowState.Mode = SWAP_FROM_ZEC,
     metadata: TransactionSwapMetadata? = savedMetadata,
+    outgoingStatus: SwapStatus? = null,
 ): TransactionDetailSwapStatusRowState {
     val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
-    val value = status?.status ?: savedStatus
-    val isSaved = value != null && (status == null || error != null)
+    val value = outgoingStatus ?: status?.status ?: savedStatus
+    val isSaved = value != null && (status?.status != value || error != null)
     return TransactionDetailSwapStatusRowState(
         title = stringRes(if (isSaved) R.string.private_swap_saved_status else R.string.swapAndPay_status),
         status = value,

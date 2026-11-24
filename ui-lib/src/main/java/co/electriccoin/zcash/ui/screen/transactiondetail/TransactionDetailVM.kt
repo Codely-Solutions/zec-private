@@ -108,7 +108,7 @@ class TransactionDetailVM(
                 } else {
                     snapshot
                 }
-                var info = createTransactionInfoState(transaction)
+                val info = createTransactionInfoState(transaction)
                 TransactionDetailState(
                     explorerLinks = createExplorerLinks(transaction),
                     onBack = ::onBack,
@@ -138,7 +138,11 @@ class TransactionDetailVM(
                     errorFooter = createErrorFooter(transaction),
                     infoFooter =
                         stringRes(R.string.deposits_info)
-                            .takeIf { transaction.swap?.status?.status == PENDING }
+                            .takeIf {
+                                val sendSwap = info as? SendSwapState
+                                transaction.swap?.status?.status == PENDING &&
+                                    sendSwap?.statusRow?.status == PENDING && !sendSwap.statusRow.fundingNotSubmitted
+                            }
                 )
             }.stateIn(
                 scope = viewModelScope,
@@ -223,9 +227,16 @@ class TransactionDetailVM(
                             transaction.swap.status
                                 ?.destinationAddress
                                 ?.address
+                        val saved = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata
+                        val statusOverride = saved?.outgoingStatus(
+                            transaction.transaction, transaction.swap.status?.status
+                        ).takeIf {
+                            transaction.transaction is SendTransaction.Failed || saved?.fundingNotSubmitted == true
+                        }
                         SendSwapState(
                             statusRow = transaction.swap.toDetailStatusRow(
-                                metadata = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata,
+                                metadata = saved,
+                                outgoingStatus = statusOverride,
                             ),
                             message = getSwapMessage.getMessage(transaction.swap.status),
                             quoteHeader =
@@ -593,8 +604,15 @@ class TransactionDetailVM(
                             when (saved.mode) {
                                 EXACT_INPUT -> {
                                     when (swapStatus) {
-                                        PROCESSING,
-                                        PENDING -> stringRes(R.string.swapStatus_swapping)
+                                        PROCESSING -> stringRes(R.string.swapStatus_swapping)
+
+                                        PENDING -> stringRes(
+                                            if (saved.fundingNotSubmitted) {
+                                                R.string.private_swap_funding_not_sent
+                                            } else {
+                                                R.string.swapStatus_swapping
+                                            }
+                                        )
 
                                         INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
 
@@ -610,8 +628,15 @@ class TransactionDetailVM(
 
                                 EXACT_OUTPUT -> {
                                     when (swapStatus) {
-                                        PROCESSING,
-                                        PENDING -> stringRes(R.string.swapStatus_paying)
+                                        PROCESSING -> stringRes(R.string.swapStatus_paying)
+
+                                        PENDING -> stringRes(
+                                            if (saved.fundingNotSubmitted) {
+                                                R.string.private_swap_funding_not_sent
+                                            } else {
+                                                R.string.swapStatus_paying
+                                            }
+                                        )
 
                                         INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 

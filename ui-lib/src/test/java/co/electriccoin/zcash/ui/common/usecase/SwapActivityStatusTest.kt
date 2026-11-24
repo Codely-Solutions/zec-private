@@ -141,6 +141,21 @@ class SwapActivityStatusTest {
     }
 
     @Test
+    fun attachedHistoryKeepsTheProvedNoSubmissionOutcome() {
+        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
+            val metadata = swap(SwapStatus.PENDING).copy(fundingNotSubmitted = true, mode = mode)
+            assertEquals(stringRes(R.string.private_swap_funding_not_sent), activity(failed, metadata).title)
+            val refundTitle = if (mode == SwapMode.EXACT_OUTPUT) {
+                R.string.swapStatus_paymentRefunded
+            } else {
+                R.string.swapStatus_swapRefunded
+            }
+            val refunded = metadata.copy(recordedStatus = SwapStatus.REFUNDED)
+            assertEquals(stringRes(refundTitle), activity(failed, refunded).title)
+        }
+    }
+
+    @Test
     fun legacyMetadataWithoutARecordedStatusCannotOverrideALocalFailure() {
         assertFailed(activity(failed, swap(null)), stringRes(R.string.swapStatus_swapFailed))
         assertFailed(activity(failed, null), stringRes(R.string.transaction_history_sending_failed))

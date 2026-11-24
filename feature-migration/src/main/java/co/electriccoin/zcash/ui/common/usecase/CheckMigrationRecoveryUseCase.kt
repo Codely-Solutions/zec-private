@@ -18,6 +18,7 @@ import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -74,20 +75,22 @@ class CheckMigrationRecoveryUseCase(
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
-        requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
+        requestSendingScreen: (String) -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs(it)) },
     ) {
         if (!startRecovery()) return
         try {
-            // Foreground recovery can start before the wallet is ready. SDK acquisition reads it again.
             if (persistableWalletProvider.getPersistableWallet() == null || resetPending()) {
                 throttleMutex.withLock { lastRunMark = null }
                 migrationLog("MigrationRecovery: wallet unavailable. Retry on next foreground trigger.")
-                return
-            }
-            val sdk = getOrchardMigrationSdk()
-            if (!resetPending()) {
-                reviveAccountWorkers()
-                recoverBroadcast(sdk, requestSendingScreen)
+            } else {
+                val ownerKey = accountDataSource.selectedAccount.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
+                val sdk = ownerKey?.let { getOrchardMigrationSdk(it) }
+                if (ownerKey != null && sdk != null && !resetPending()) {
+                    reviveAccountWorkers()
+                    recoverBroadcast(sdk, ownerKey, requestSendingScreen)
+                } else {
+                    throttleMutex.withLock { lastRunMark = null }
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -127,8 +130,12 @@ class CheckMigrationRecoveryUseCase(
         }
     }
 
-    private suspend fun recoverBroadcast(sdk: OrchardMigrationSdk, requestSendingScreen: () -> Unit) {
-        if (!resetPending() && pendingMigrationTorFailureStorageProvider.get()) {
+    private suspend fun recoverBroadcast(
+        sdk: OrchardMigrationSdk,
+        ownerKey: String,
+        requestSendingScreen: (String) -> Unit,
+    ) {
+        if (!resetPending() && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
             // The flag only records THAT a background attempt once failed on Tor, not what the
             // engine's next due transfer needs NOW — the plan moves on (proving, dependency
             // mining, rescheduling) between when it was set and the next app open, and the flag
@@ -156,13 +163,13 @@ class CheckMigrationRecoveryUseCase(
                 // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
                 // that routing here.
                 migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
-                if (!resetPending()) requestSendingScreen()
+                if (!resetPending()) requestSendingScreen(ownerKey)
             } else {
                 migrationLog(
                     "MigrationRecovery: pending background Tor failure flag is stale " +
                         "(next transfer action=${nextTransfer?.action}) — clearing."
                 )
-                if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(false)
+                if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
             }
         }
     }

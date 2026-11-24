@@ -157,6 +157,25 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun outgoingPendingProviderStatusRespectsLocalNoSubmissionAndExpiry() = runTest(dispatcher) {
+        val failed = SendTransaction.Failed(
+            sent.id, sent.amount, null, 0, sent.fee, emptyList(), overview, sent.recipient
+        )
+        val status = status(SwapStatus.PENDING, SwapAssetTestFixture.zecAsset(), SwapAssetTestFixture.asset())
+        val local = swapMetadata(SwapStatus.PENDING)
+        for (unsubmitted in listOf(true, false)) {
+            val saved = local.copy(fundingNotSubmitted = unsubmitted)
+            val detail = state(data(failed, saved, SwapQuoteStatusData(status, isLoading = false)))
+            val info = assertIs<SendSwapState>(detail.info)
+            val title = if (unsubmitted) R.string.private_swap_funding_not_sent else R.string.swapStatus_swapFailed
+            assertEquals(stringRes(title), detail.header.title)
+            assertEquals(if (unsubmitted) SwapStatus.PENDING else SwapStatus.FAILED, info.statusRow.status)
+            assertEquals(unsubmitted, info.statusRow.fundingNotSubmitted)
+            assertNull(detail.infoFooter)
+        }
+    }
+
+    @Test
     fun unavailableOutgoingProviderKeepsLocalFundingDetailsAndRetriesLookup() = runTest(dispatcher) {
         val state = state(
             data(

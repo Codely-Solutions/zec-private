@@ -269,8 +269,15 @@ class ActivityMapper {
                         EXACT_INPUT, FLEX_INPUT -> {
                             when (status) {
                                 INCOMPLETE_DEPOSIT,
-                                PROCESSING,
-                                PENDING -> stringRes(R.string.transaction_history_swapping)
+                                PROCESSING -> stringRes(R.string.transaction_history_swapping)
+
+                                PENDING -> stringRes(
+                                    if (data.metadata.swapMetadata.fundingNotSubmitted) {
+                                        R.string.private_swap_funding_not_sent
+                                    } else {
+                                        R.string.transaction_history_swapping
+                                    }
+                                )
 
                                 SUCCESS -> stringRes(R.string.swapStatus_swapped)
 
@@ -285,8 +292,15 @@ class ActivityMapper {
                         EXACT_OUTPUT -> {
                             when (status) {
                                 INCOMPLETE_DEPOSIT,
-                                PROCESSING,
-                                PENDING -> stringRes(R.string.transaction_history_paying)
+                                PROCESSING -> stringRes(R.string.transaction_history_paying)
+
+                                PENDING -> stringRes(
+                                    if (data.metadata.swapMetadata.fundingNotSubmitted) {
+                                        R.string.private_swap_funding_not_sent
+                                    } else {
+                                        R.string.transaction_history_paying
+                                    }
+                                )
 
                                 SUCCESS -> stringRes(R.string.swapStatus_paid)
 

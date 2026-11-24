@@ -6,10 +6,14 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import co.electriccoin.zcash.migration.BuildConfig
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
+import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
+import kotlinx.coroutines.guava.await
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
@@ -36,8 +40,18 @@ class MigrationScheduler(
     private val migrationDueAlarmScheduler = MigrationDueAlarmScheduler(context)
 
     fun schedule(accountKeyId: String, delay: Duration) {
+        enqueue(accountKeyId, delay)
+    }
+
+    internal suspend fun runNotificationStep(accountKeyId: String) {
+        if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
+            enqueue(accountKeyId, Duration.ZERO).result.await()
+        }
+    }
+
+    private fun enqueue(accountKeyId: String, delay: Duration): Operation {
         migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
-        WorkManager.getInstance(context).enqueueUniqueWork(
+        val operation = WorkManager.getInstance(context).enqueueUniqueWork(
             workId(accountKeyId),
             ExistingWorkPolicy.REPLACE,
             newWorkRequest(accountKeyId, delay)
@@ -52,6 +66,7 @@ class MigrationScheduler(
             System.currentTimeMillis() + delay.inWholeMilliseconds,
         )
         migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
+        return operation
     }
 
     fun cancel(accountKeyId: String) {

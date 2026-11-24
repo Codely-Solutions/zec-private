@@ -18,11 +18,11 @@ class ScheduleNextMigrationWindowUseCase(
     private val migrationScheduler: MigrationScheduler,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
 ) {
-    suspend operator fun invoke() {
-        val next = getMigrationSnapshot()?.nextPending ?: return
-        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+    suspend operator fun invoke(accountKeyId: String? = null) {
+        val owner = accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+        val next = getMigrationSnapshot(owner)?.nextPending ?: return
         val delay = delayUntil(next.scheduledAt.epochSeconds)
-        migrationScheduler.schedule(accountKeyId, delay)
+        migrationScheduler.schedule(owner, delay)
     }
 
     private fun delayUntil(epochSeconds: Long): Duration {

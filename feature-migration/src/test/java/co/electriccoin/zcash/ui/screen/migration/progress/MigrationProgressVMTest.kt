@@ -1,14 +1,37 @@
 package co.electriccoin.zcash.ui.screen.migration.progress
 
+import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.MigrationTransferStates
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationPreparation
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
+import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+import co.electriccoin.zcash.ui.common.repository.MigrationLiveReadout
+import co.electriccoin.zcash.ui.common.usecase.ObserveMigrationLiveReadoutUseCase
+import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.StringResource
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -29,6 +52,49 @@ import kotlin.time.Instant
  */
 class MigrationProgressVMTest {
     private val now: Instant = Instant.fromEpochSeconds(1_000_000L)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun unavailableOwnerReadoutOffersRecoveryAndRetriesTheSameAccount() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val owner = "fixture-owner"
+            val readout = MigrationLiveReadout(
+                states = MigrationTransferStates(transfers = emptyList(), tipHeight = 100L),
+                estimatedTip = 100L,
+                estimatedSecondsPerBlock = 75L,
+                migrationState = null,
+                hasOverdueTransfers = false,
+            )
+            val observe = mockk<ObserveMigrationLiveReadoutUseCase> {
+                every { this@mockk(owner) } returnsMany listOf(flowOf(null), flowOf(readout))
+            }
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val rates = mockk<ExchangeRateRepository> {
+                every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
+            }
+            val vm = MigrationProgressVM(MigrationProgressArgs(owner), mockk(), observe, router, rates, mockk())
+            val observer = backgroundScope.launch { vm.state.collect {} }
+            try {
+                runCurrent()
+                assertFalse(vm.state.value.isLoading)
+                assertNull(vm.state.value.content)
+                vm.navigateBack()
+                verify(exactly = 1) { router.back() }
+
+                vm.retryReadout()
+                runCurrent()
+
+                assertNotNull(vm.state.value.content)
+                verify(exactly = 2) { observe(owner) }
+            } finally {
+                observer.cancel()
+                vm.viewModelScope.cancel()
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 
     private fun transfer(
         index: Int = 0,

@@ -40,15 +40,16 @@ import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data object MigrationTorFailureArgs
+data class MigrationTorFailureArgs(val accountKeyId: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MigrationTorFailureScreen() {
-    val vm = koinViewModel<MigrationTorFailureVM>()
+fun MigrationTorFailureScreen(args: MigrationTorFailureArgs) {
+    val vm = koinViewModel<MigrationTorFailureVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     MigrationTorFailureView(state)
 }

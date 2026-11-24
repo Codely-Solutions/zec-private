@@ -31,10 +31,13 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import java.math.BigDecimal
 import java.math.MathContext
@@ -51,7 +54,9 @@ class MigrationProgressVM(
     private val errorStateMapper: ErrorMapperUseCase,
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
+    private val retry = MutableStateFlow(0)
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<LceState<MigrationProgressState>> =
         combine(
             exchangeRateRepository.state,
@@ -61,7 +66,7 @@ class MigrationProgressVM(
             // Home's equivalent fallback does), so wall-clock-dependent display (the "in ~X minutes"
             // row labels, migrationProgressSubtitle) keeps refreshing without a separate ticker
             // element here.
-            liveReadoutFlow(),
+            retry.flatMapLatest { liveReadoutFlow() },
         ) { rate, readout ->
             // Everything on this screen derives LIVE from the engine's persisted states — no plan
             // cache to diverge, and no app-side "overdue"/countdown: each row renders purely from
@@ -100,6 +105,10 @@ class MigrationProgressVM(
         }
 
     fun navigateBack() = navigationRouter.back()
+
+    fun retryReadout() {
+        retry.value++
+    }
 
     private fun createState(
         snapshot: LiveMigrationSnapshot,

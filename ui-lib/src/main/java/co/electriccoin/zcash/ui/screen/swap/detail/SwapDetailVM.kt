@@ -69,10 +69,14 @@ class SwapDetailVM(
                             ),
                     status = swapData.data.toDetailStatusRow(mode = swapData.statusRowMode),
                     depositTo =
-                        TransactionDetailInfoRowState(
-                            title = stringRes(R.string.private_swap_deposit_reference),
-                            message = stringResByAddress(args.depositAddress),
-                        ),
+                        if (hasDetails) {
+                            TransactionDetailInfoRowState(
+                                title = stringRes(R.string.private_swap_deposit_reference),
+                                message = stringResByAddress(args.depositAddress),
+                            )
+                        } else {
+                            null
+                        },
                     recipient = createRecipientState(swapData),
                     totalFees = createQuotedOutputState(swapData),
                     maxSlippage = createSlippageState(swapData),

@@ -32,6 +32,8 @@ For CrossPay, choose the recipient asset/network, destination and target amount.
 
 **Funding not sent** means the wallet stopped before broadcasting the transaction. The swap reference stays in Activity.
 
+**Pending** after Send, Swap or Pay means the wallet can still submit the original transaction. Check Activity for its final status before sending again.
+
 Contacts are filtered by the selected network. Changing networks keeps your recipient visible; correct any inline mismatch before requesting a quote.
 
 ZEC Private adds no app or affiliate fee. Provider costs are included in the quote; the NEAR platform percentage is only part of those costs. See [NEAR's fee schedule](https://docs.near-intents.org/resources/fees) for its current terms.

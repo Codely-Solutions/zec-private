@@ -90,12 +90,16 @@ class MainActivity : FragmentActivity() {
         val restoredInNewProcess = launchNavigation.restoreExternalScans(
             savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty(),
         )
-        val migrationOwner = if (restoredInNewProcess) {
-            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)
+        val migrationNotice = if (restoredInNewProcess) {
+            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)?.let {
+                LaunchNavigationRequests.SavedMigrationNotice(it, savedInstanceState.getBoolean(PENDING_MIGRATION_STEP))
+            }
         } else {
             launchNavigation.pendingMigrationLookup
         }
-        migrationOwner?.let { migrationAppHooks.restoreNotificationProgress(it, lifecycleScope) }
+        migrationNotice?.let {
+            migrationAppHooks.restoreNotificationProgress(it.ownerKey, lifecycleScope, it.runStepPending)
+        }
 
         setAllowedScreenOrientation()
 
@@ -113,7 +117,10 @@ class MainActivity : FragmentActivity() {
         super.onSaveInstanceState(outState)
         outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
-        launchNavigation.migrationNoticeToSave?.let { outState.putString(PENDING_MIGRATION_NOTICE, it) }
+        launchNavigation.migrationNoticeToSave?.let {
+            outState.putString(PENDING_MIGRATION_NOTICE, it.ownerKey)
+            outState.putBoolean(PENDING_MIGRATION_STEP, it.runStepPending)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -359,7 +366,8 @@ class MainActivity : FragmentActivity() {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
-        private const val NAVIGATION_STATE_VERSION = 6
+        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
+        private const val NAVIGATION_STATE_VERSION = 7
 
         // Forget older navigation stacks when their routes or saved payloads change.
         // Version 3 adds the transaction note's account and wallet session to its typed route.

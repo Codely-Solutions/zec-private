@@ -162,8 +162,10 @@ fun SwapDetailView(
                             exit = shrinkVertically(shrinkTowards = Alignment.Top)
                         ) {
                             Column {
-                                ZashiHorizontalDivider()
-                                TransactionDetailInfoRow(state.depositTo)
+                                state.depositTo?.let { reference ->
+                                    ZashiHorizontalDivider()
+                                    TransactionDetailInfoRow(reference)
+                                }
                                 if (state.showLiveDetails) {
                                     ZashiHorizontalDivider()
                                     TransactionDetailInfoRow(state.recipient)

@@ -77,14 +77,17 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
 import co.electriccoin.zcash.ui.screen.migration.notification.MigrationNotificationVM
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyArgs
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
+import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressVM
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
+import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingVM
 import co.electriccoin.zcash.ui.screen.migration.setup.MigrationSetupVM
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
+import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureVM
 import co.electriccoin.zcash.work.MigrationScheduler
 import io.mockk.mockk
@@ -94,6 +97,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.koin.core.KoinApplication
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import kotlin.test.AfterTest
@@ -224,7 +228,7 @@ class MigrationKoinGraphSmokeTest {
      */
     @Test
     fun migrationProgressVM_resolvesFromKoin() {
-        koin.koin.get<MigrationProgressVM>()
+        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner")) }
     }
 
     @Test
@@ -244,7 +248,7 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationSendingVM_resolvesFromKoin() {
-        koin.koin.get<MigrationSendingVM>()
+        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner")) }
     }
 
     @Test
@@ -289,7 +293,7 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationTorFailureVM_resolvesFromKoin() {
-        koin.koin.get<MigrationTorFailureVM>()
+        koin.koin.get<MigrationTorFailureVM> { parametersOf(MigrationTorFailureArgs("fixture-owner")) }
     }
 
     @Test
