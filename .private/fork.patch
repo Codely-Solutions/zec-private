@@ -50617,7 +50617,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..9f79b35ea 100644
+index 00fe60557..68881a434 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -50736,7 +50736,7 @@ index 00fe60557..9f79b35ea 100644
 +                                outgoingStatus = statusOverride,
 +                            ),
 +                            message = getSwapMessage.getMessage(
-+                                transaction.swap.status, saved, transaction.swap.data.isFundingWindowOpen
++                                transaction.swap.status, saved, transaction.swap.isFundingWindowOpen
 +                            ),
 @@ -184 +248,2 @@ class TransactionDetailVM(
 -                                    destinationAsset = transaction.swap.destinationAsset

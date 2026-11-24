@@ -239,7 +239,7 @@ class TransactionDetailVM(
                                 outgoingStatus = statusOverride,
                             ),
                             message = getSwapMessage.getMessage(
-                                transaction.swap.status, saved, transaction.swap.data.isFundingWindowOpen
+                                transaction.swap.status, saved, transaction.swap.isFundingWindowOpen
                             ),
                             quoteHeader =
                                 mapper.createTransactionDetailQuoteHeaderState(
