@@ -4639,7 +4639,7 @@ index e2be5482b..7544e3d4f 100644
 +        assertEquals(true, repo.consume(second))
 +        assertNull(repo.decision.value)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
-index 05231840e..dab7f42bf 100644
+index 05231840e..e8dff8c7d 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 @@ -27,0 +28 @@ import io.mockk.mockk
@@ -4651,7 +4651,7 @@ index 05231840e..dab7f42bf 100644
 +
 @@ -70 +74 @@ class CheckMigrationRecoveryUseCaseTest {
 -                coEvery { get() } returns pendingMigrationTorFailure
-+                coEvery { get(ownerKey) } returns pendingMigrationTorFailure
++                coEvery { this@mockk.get(ownerKey) } returns pendingMigrationTorFailure
 @@ -77,0 +82 @@ class CheckMigrationRecoveryUseCaseTest {
 +        selectedAccountState: MutableStateFlow<WalletAccount?> = MutableStateFlow(testWalletAccount),
 @@ -81 +85,0 @@ class CheckMigrationRecoveryUseCaseTest {
@@ -4722,7 +4722,7 @@ index 05231840e..dab7f42bf 100644
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
 @@ -183 +237 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { get() } returns true
-+                    coEvery { get(ownerKey) } returns true
++                    coEvery { this@mockk.get(ownerKey) } returns true
 @@ -204,2 +258,2 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
 -            coVerify(exactly = 1) { storageProvider.store(false) }
@@ -4730,7 +4730,7 @@ index 05231840e..dab7f42bf 100644
 +            coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
 @@ -213 +267 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { get() } returns true
-+                    coEvery { get(ownerKey) } returns true
++                    coEvery { this@mockk.get(ownerKey) } returns true
 @@ -231,2 +285,2 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
 -            coVerify(exactly = 1) { storageProvider.store(false) }
@@ -4849,7 +4849,7 @@ index d0838db0c..2fd0629df 100644
 -            coVerify(exactly = 0) { submitProposal() }
 +            coVerify(exactly = 0) { submitProposal(any()) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
-index 1918e57fa..104bb868f 100644
+index 1918e57fa..76321d8a8 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 @@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDeci
@@ -4908,7 +4908,7 @@ index 1918e57fa..104bb868f 100644
 +                coEvery { this@mockk("fixture-owner") } returns sdk
 @@ -342 +358 @@ class MigrationSendingVMTest {
 -                coEvery { get() } returns false
-+                coEvery { get("fixture-owner") } returns useTor
++                coEvery { this@mockk.get("fixture-owner") } returns useTor
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVMGateTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVMGateTest.kt
 index 2d92f403b..32dcb4af4 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVMGateTest.kt

@@ -71,7 +71,7 @@ class CheckMigrationRecoveryUseCaseTest {
         pendingMigrationTorFailure: Boolean = false,
         pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider =
             mockk(relaxed = true) {
-                coEvery { get(ownerKey) } returns pendingMigrationTorFailure
+                coEvery { this@mockk.get(ownerKey) } returns pendingMigrationTorFailure
             },
         // Default: the worker is already RUNNING in tests so the reconciliation branch is a no-op,
         // keeping existing test behaviour unchanged. Override to test reconciliation explicitly.
@@ -234,7 +234,7 @@ class CheckMigrationRecoveryUseCaseTest {
             // guaranteed AwaitingProof and shows a "Couldn't Send" sheet on every app open.
             val storageProvider =
                 mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true) {
-                    coEvery { get(ownerKey) } returns true
+                    coEvery { this@mockk.get(ownerKey) } returns true
                 }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
@@ -264,7 +264,7 @@ class CheckMigrationRecoveryUseCaseTest {
         runTest {
             val storageProvider =
                 mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true) {
-                    coEvery { get(ownerKey) } returns true
+                    coEvery { this@mockk.get(ownerKey) } returns true
                 }
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {

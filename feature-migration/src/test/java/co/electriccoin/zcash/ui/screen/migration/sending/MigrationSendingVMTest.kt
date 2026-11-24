@@ -355,7 +355,7 @@ class MigrationSendingVMTest {
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         isMigrationTorEnabledStorageProvider =
             mockk<IsMigrationTorEnabledStorageProvider> {
-                coEvery { get("fixture-owner") } returns useTor
+                coEvery { this@mockk.get("fixture-owner") } returns useTor
             },
         pendingMigrationTorFailureDecisionRepository = torDecisionRepository,
         pendingMigrationTorFailureStorageProvider = pendingMigrationTorFailureStorageProvider,
