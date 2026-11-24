@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.screen.home.migration.MigrationMessageState
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import kotlinx.coroutines.flow.first
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
@@ -77,7 +78,8 @@ class MigrationHomeMessageSourceViewOnlyTest {
         val message = assertIs<MigrationHomeMessageData>(home.observe().first())
         assertEquals(ownerKey, message.accountKeyId)
         assertTrue(message.isAwaitingFinalization)
-        assertIs<MigrationMessageState>(home.createMessageState(message)).onClick()
+        val banner = assertIs<MigrationMessageState>(home.createMessageState(message))
+        assertNotNull(banner.onClick).invoke()
         verify { router.forward(MigrationScheduledArgs(ownerKey)) }
         verify(exactly = 0) { observeMigrationLiveReadout(any()) }
     }

@@ -12,6 +12,7 @@ import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider

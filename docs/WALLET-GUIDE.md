@@ -52,7 +52,7 @@ When app lock is enabled, canceling Android authentication keeps the wallet lock
 
 Reset is complete when the app returns to onboarding. If it asks you to finish resetting the wallet, tap **Try again** to complete the pending reset.
 
-For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access; reopen the app to check pending work. If a migration stalls, inspect its status before resetting anything.
+For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access. Reopen the app to check pending work. Home offers to finish scheduling if Keystone signatures are still available in the app. If the app closed before storing them, return to the migration to finish signing.
 
 Hardware firmware may call its companion app “Zodl”; that label is used in pairing instructions.
 

@@ -1869,7 +1869,7 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..d5c82c406
+index 000000000..6bf43f62d
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
 @@ -0,0 +1,67 @@
@@ -1927,7 +1927,7 @@ index 000000000..d5c82c406
 +
 +Reset is complete when the app returns to onboarding. If it asks you to finish resetting the wallet, tap **Try again** to complete the pending reset.
 +
-+For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access; reopen the app to check pending work. If a migration stalls, inspect its status before resetting anything.
++For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access. Reopen the app to check pending work. Home offers to finish scheduling if Keystone signatures are still available in the app. If the app closed before storing them, return to the migration to finish signing.
 +
 +Hardware firmware may call its companion app “Zodl”; that label is used in pairing instructions.
 +
@@ -6499,10 +6499,10 @@ index 860a02aa2..6a978b8f1 100644
 -            verify(exactly = 1) { scheduler.schedule(any(), any()) }
 +            verify(exactly = 1) { scheduler.schedule("fixture-owner", any()) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
-index 72c0afaaa..fde2ce8c7 100644
+index 72c0afaaa..53dd39961 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
-@@ -2,0 +3,10 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,11 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 +import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
@@ -6512,8 +6512,9 @@ index 72c0afaaa..fde2ce8c7 100644
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 +import kotlinx.coroutines.flow.first
 +import kotlin.test.assertIs
++import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -50,0 +61,24 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -50,0 +62,25 @@ class MigrationHomeMessageSourceViewOnlyTest {
 +    @Test
 +    fun homeResumesASignedHandoffForItsOwnerWithoutReopeningAScanner() = runTest {
 +        val owner = zodl()
@@ -6533,22 +6534,23 @@ index 72c0afaaa..fde2ce8c7 100644
 +        val message = assertIs<MigrationHomeMessageData>(home.observe().first())
 +        assertEquals(ownerKey, message.accountKeyId)
 +        assertTrue(message.isAwaitingFinalization)
-+        assertIs<MigrationMessageState>(home.createMessageState(message)).onClick()
++        val banner = assertIs<MigrationMessageState>(home.createMessageState(message))
++        assertNotNull(banner.onClick).invoke()
 +        verify { router.forward(MigrationScheduledArgs(ownerKey)) }
 +        verify(exactly = 0) { observeMigrationLiveReadout(any()) }
 +    }
 +
-@@ -58 +92,5 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -58 +94,5 @@ class MigrationHomeMessageSourceViewOnlyTest {
 -    private fun source(account: WalletAccount) =
 +    private fun source(
 +        account: WalletAccount,
 +        pending: PendingKeystoneMigrationPcztsRepositoryImpl = PendingKeystoneMigrationPcztsRepositoryImpl(),
 +        router: NavigationRouter = mockk(relaxed = true),
 +    ) =
-@@ -71 +109 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -71 +111 @@ class MigrationHomeMessageSourceViewOnlyTest {
 -            navigationRouter = mockk(relaxed = true),
 +            navigationRouter = router,
-@@ -72,0 +111 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -72,0 +113 @@ class MigrationHomeMessageSourceViewOnlyTest {
 +            pendingKeystone = pending,
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCaseTest.kt
 index 420a39203..ce19709b1 100644
@@ -7136,7 +7138,7 @@ index d0838db0c..ee72ddcbe 100644
 -        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
 +        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk(any()) } returns Zatoshi(500_000L) },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
-index a914d8998..20747713c 100644
+index a914d8998..e364c6053 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 @@ -3,0 +4 @@ import androidx.navigation.NavBackStackEntry
@@ -7144,13 +7146,14 @@ index a914d8998..20747713c 100644
 @@ -4,0 +6,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
 +import cash.z.ecc.android.sdk.MigrationTransferState
 +import cash.z.ecc.android.sdk.MigrationTransferStates
-@@ -12 +14,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -12 +15 @@ import co.electriccoin.zcash.ui.NavigationRouter
 -import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -24,0 +27 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
++import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+@@ -24,0 +28 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -30,0 +34 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -30,0 +35 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.launch
-@@ -57,10 +60,0 @@ class MigrationScheduledVMTest {
+@@ -57,10 +61,0 @@ class MigrationScheduledVMTest {
 -    private val testWalletAccount: WalletAccount =
 -        mockk(relaxed = true) {
 -            every { sdkAccount } returns testSdkAccount
@@ -7161,49 +7164,49 @@ index a914d8998..20747713c 100644
 -            every { observe() } returns flowOf(testWalletAccount)
 -        }
 -
-@@ -136,0 +131 @@ class MigrationScheduledVMTest {
+@@ -136,0 +132 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -141 +136,3 @@ class MigrationScheduledVMTest {
+@@ -141 +137,3 @@ class MigrationScheduledVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
 +            }
-@@ -147 +144 @@ class MigrationScheduledVMTest {
+@@ -147 +145 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -157 +154 @@ class MigrationScheduledVMTest {
+@@ -157 +155 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 1) { finalize(any(), any(), startLiveDriverImmediately = false) }
 +            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, startLiveDriverImmediately = false) }
-@@ -177,0 +175 @@ class MigrationScheduledVMTest {
+@@ -177,0 +176 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -183,0 +182 @@ class MigrationScheduledVMTest {
+@@ -183,0 +183 @@ class MigrationScheduledVMTest {
 +                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(10L, isTransfer = false))
-@@ -192 +191 @@ class MigrationScheduledVMTest {
+@@ -192 +192 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -197 +196 @@ class MigrationScheduledVMTest {
+@@ -197 +197 @@ class MigrationScheduledVMTest {
 -                        mockk { coEvery { get() } returns false },
 +                        mockk { coEvery { this@mockk.get(testAccountKeyId) } returns false },
-@@ -203 +202 @@ class MigrationScheduledVMTest {
+@@ -203 +203 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 0) { finalize(any(), any()) }
 +            coVerify(exactly = 0) { finalize(any(), any(), any()) }
-@@ -230,0 +230 @@ class MigrationScheduledVMTest {
+@@ -230,0 +231 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -237 +237,3 @@ class MigrationScheduledVMTest {
+@@ -237 +238,3 @@ class MigrationScheduledVMTest {
 -                    coEvery { storeSignedSchedulePczts(any()) } throws RuntimeException("database is locked")
 +                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
 +                    coEvery { storeSignedSchedulePczts(any()) } throws
 +                        RuntimeException("database is locked") andThen Unit
-@@ -244 +246 @@ class MigrationScheduledVMTest {
+@@ -244 +247 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -250 +252 @@ class MigrationScheduledVMTest {
+@@ -250 +253 @@ class MigrationScheduledVMTest {
 -            assertNotNull(vm.failureSheet.value)
 +            val sheet = assertNotNull(vm.failureSheet.value)
-@@ -252 +254 @@ class MigrationScheduledVMTest {
+@@ -252 +255 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 0) { finalize(any(), any()) }
 +            coVerify(exactly = 0) { finalize(any(), any(), any()) }
-@@ -255,0 +258,10 @@ class MigrationScheduledVMTest {
+@@ -255,0 +259,10 @@ class MigrationScheduledVMTest {
 +            sheet.onDismiss()
 +            assertNull(vm.failureSheet.value)
 +            assertNotNull(vm.finalizationError.value)
@@ -7214,7 +7217,7 @@ index a914d8998..20747713c 100644
 +            assertNull(vm.finalizationError.value)
 +            assertNull(pendingPczts.peek(testAccountKeyId))
 +            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, false) }
-@@ -257,0 +270,120 @@ class MigrationScheduledVMTest {
+@@ -257,0 +271,120 @@ class MigrationScheduledVMTest {
 +
 +    @Test
 +    fun missingSnapshotCanBeReadAgainWithoutFinalizingThePlan() = runTest {
@@ -7335,18 +7338,18 @@ index a914d8998..20747713c 100644
 +            prepIndex = if (isTransfer) null else 0,
 +        )
 +
-@@ -262,3 +394 @@ class MigrationScheduledVMTest {
+@@ -262,3 +395 @@ class MigrationScheduledVMTest {
 -                // A REAL (empty) snapshot: a null return now means "SDK not ready yet" and keeps
 -                // the LCE loading (review L3) — these tests assert on the rendered state.
 -                coEvery { this@mockk(null) } returns
 +                coEvery { this@mockk(testAccountKeyId) } returns
-@@ -271 +400,0 @@ class MigrationScheduledVMTest {
+@@ -271 +401,0 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = testGetSelectedWalletAccount,
-@@ -279,0 +409 @@ class MigrationScheduledVMTest {
+@@ -279,0 +410 @@ class MigrationScheduledVMTest {
 +        args = MigrationScheduledArgs(testAccountKeyId),
-@@ -284 +413,0 @@ class MigrationScheduledVMTest {
+@@ -284 +414,0 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount = getSelectedWalletAccount,
-@@ -290,0 +420,6 @@ class MigrationScheduledVMTest {
+@@ -290,0 +421,6 @@ class MigrationScheduledVMTest {
 +        selectedAccount = mockk<GetSelectedWalletAccountUseCase> {
 +            coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
 +        },
