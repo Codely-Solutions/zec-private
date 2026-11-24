@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from test_support import patch_environment
 
 import custom_release
+import hosted_release
 from maintenance_cadence import admit_cadence
 
 
@@ -37,8 +38,8 @@ class CustomReleaseTests(unittest.TestCase):
         with patch('maintenance_cadence.changed_marker', return_value={}) as marker:
             metadata = Mock()
             with self.assertRaisesRegex(ValueError, 'requires a prepared custom candidate'):
-                admit_cadence(Path('.'), SOURCE, MAIN, metadata, Mock(), custom_caller=True)
-            marker.assert_called_once_with(Path('.'), SOURCE, MAIN, custom_release.MARKER)
+                hosted_release.admit(SOURCE, MAIN, metadata, custom_caller=True)
+            marker.assert_called_once_with(hosted_release.ROOT, SOURCE, MAIN, custom_release.MARKER)
             metadata.api.assert_not_called()
 
     def test_dispatch_binds_actor_workflow_operation_source_and_current_main(self):

@@ -268,12 +268,14 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
 
 def admit(source, controller, metadata, *, preflight_only=False, custom_caller=False):
     require(source != controller, 'Hosted automatic releases require a prepared child candidate')
+    from custom_release import MARKER as CUSTOM_MARKER
+    from maintenance_cadence import admit_cadence, changed_marker
+    require(not custom_caller or changed_marker(ROOT, source, controller, CUSTOM_MARKER),
+            'A fresh custom release requires a prepared custom candidate')
     verify_promotion_revision(source, controller)
-    from maintenance_cadence import admit_cadence
     from maintenance_watch import api
     from release_changelog import hosted_changes
-    admit_cadence(ROOT, source, controller, metadata, api,
-                  preflight_only=preflight_only, custom_caller=custom_caller)
+    admit_cadence(ROOT, source, controller, metadata, api, preflight_only=preflight_only)
     hosted_changes(ROOT, source, controller)
     version = version_code(ROOT, source)
     baseline = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']

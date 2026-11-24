@@ -265,14 +265,7 @@ class SwapDetailVM(
         }
         return TransactionDetailHeaderState(
             title = createHeaderTitle(swapData),
-            amount =
-                (swapData.status?.executedAmountOut
-                    ?: swapData.savedMetadata?.executedAmountOut
-                    ?: swapData.savedMetadata?.legacySuccessfulOutput
-                    ?: swapData.status?.amountOutFormatted
-                    ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
-                    ?.takeIf { showAmount }
-                    ?.let { stringResByNumber(it) },
+            amount = swapData.headlineOutput?.takeIf { showAmount }?.let { stringResByNumber(it) },
             icons =
                 listOf(
                     swapData.status
@@ -324,3 +317,10 @@ class SwapDetailVM(
 
     private fun onCopyRecipientAddressClick(recipient: String) = copyToClipboard(recipient)
 }
+
+private val SwapData.headlineOutput
+    get() = status?.executedAmountOut
+        ?: savedMetadata?.executedAmountOut
+        ?: savedMetadata?.legacySuccessfulOutput
+        ?: status?.amountOutFormatted
+        ?: savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }

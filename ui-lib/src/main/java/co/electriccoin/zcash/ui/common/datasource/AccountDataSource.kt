@@ -371,8 +371,9 @@ class AccountDataSourceImpl(
                         log("received a shielded address")
                     }
                     result = address
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    if (e is CancellationException) throw e
                     log("failed to receive a shielded address (${e.javaClass.simpleName})")
                 }
             }.join()

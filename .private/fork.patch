@@ -32561,7 +32561,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..a8d6be3fd 100644
+index 4d388e80f..58f9769fb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -32588,43 +32588,45 @@ index 4d388e80f..a8d6be3fd 100644
 @@ -369 +371 @@ class AccountDataSourceImpl(
 -                        log("received address $address for $accountUuid")
 +                        log("received a shielded address")
-@@ -373 +375,2 @@ class AccountDataSourceImpl(
+@@ -371,0 +374,2 @@ class AccountDataSourceImpl(
++                } catch (e: CancellationException) {
++                    throw e
+@@ -373 +377 @@ class AccountDataSourceImpl(
 -                    log("failed to receive address for $accountUuid", e)
-+                    if (e is CancellationException) throw e
 +                    log("failed to receive a shielded address (${e.javaClass.simpleName})")
-@@ -376,2 +379,4 @@ class AccountDataSourceImpl(
+@@ -376,2 +380,4 @@ class AccountDataSourceImpl(
 -        return (result ?: getSelectedAccount().unifiedAddress).also {
 -            log("returning address $it")
 +        return result ?: if (requireFresh) {
 +            throw FreshShieldedAddressUnavailableException()
 +        } else {
 +            (account ?: getSelectedAccount()).unifiedAddress
-@@ -446 +451 @@ class AccountDataSourceImpl(
+@@ -446 +452 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +488 @@ class AccountDataSourceImpl(
+@@ -483 +489 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -497 +502 @@ class AccountDataSourceImpl(
+@@ -497 +503 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -526 +531 @@ class AccountDataSourceImpl(
+@@ -526 +532 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -565 +570 @@ class AccountDataSourceImpl(
+@@ -565 +571 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +581 @@ class AccountDataSourceImpl(
+@@ -576 +582 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -610,2 +615 @@ class AccountDataSourceImpl(
+@@ -610,2 +616 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +630 @@ class AccountDataSourceImpl(
+@@ -626 +631 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +632,12 @@ class AccountDataSourceImpl(
+@@ -628 +633,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -32638,10 +32640,10 @@ index 4d388e80f..a8d6be3fd 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -659 +674 @@ private data class AccountSnapshot(
+@@ -659 +675 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -665,0 +681,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +682,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -32657,7 +32659,7 @@ index 4d388e80f..a8d6be3fd 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -720,0 +751,3 @@ class AccountDeletionException(
+@@ -720,0 +752,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -51963,7 +51965,7 @@ index 22fac8c3b..f21365b16 100644
 +    val showLiveDetails: Boolean = true,
 +    val supportButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..b2442f877 100644
+index a874453ef..5734dd7bc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9,3 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -52150,7 +52152,7 @@ index a874453ef..b2442f877 100644
 @@ -186 +254 @@ class SwapDetailVM(
 -                null
 +                swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
-@@ -191,13 +259,9 @@ class SwapDetailVM(
+@@ -191,17 +259,10 @@ class SwapDetailVM(
 -    private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState =
 -        TransactionDetailHeaderState(
 -            title =
@@ -52164,6 +52166,10 @@ index a874453ef..b2442f877 100644
 -                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
 -                    null -> null
 -                },
+-            amount =
+-                swapData.status
+-                    ?.amountOutFormatted
+-                    ?.let { stringResByNumber(it) },
 +    private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState {
 +        val settlement = swapData.status?.status ?: swapData.savedMetadata?.status
 +        val showAmount = when (settlement) {
@@ -52173,16 +52179,8 @@ index a874453ef..b2442f877 100644
 +        }
 +        return TransactionDetailHeaderState(
 +            title = createHeaderTitle(swapData),
-@@ -205,2 +269,6 @@ class SwapDetailVM(
--                swapData.status
--                    ?.amountOutFormatted
-+                (swapData.status?.executedAmountOut
-+                    ?: swapData.savedMetadata?.executedAmountOut
-+                    ?: swapData.savedMetadata?.legacySuccessfulOutput
-+                    ?: swapData.status?.amountOutFormatted
-+                    ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
-+                    ?.takeIf { showAmount }
-@@ -212,3 +280,6 @@ class SwapDetailVM(
++            amount = swapData.headlineOutput?.takeIf { showAmount }?.let { stringResByNumber(it) },
+@@ -212,3 +273,6 @@ class SwapDetailVM(
 -                        ?.tokenIcon ?: loadingImageRes(),
 -                    imageRes(R.drawable.ic_transaction_received),
 -                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
@@ -52192,13 +52190,13 @@ index a874453ef..b2442f877 100644
 +                    ),
 +                    swapData.status?.destinationAsset?.tokenIcon ?: swapData.savedMetadata?.destination?.tokenIcon
 +                        ?: imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
-@@ -215,0 +287,3 @@ class SwapDetailVM(
+@@ -215,0 +280,3 @@ class SwapDetailVM(
 +            amountTicker = (swapData.status?.destinationAsset?.tokenTicker
 +                ?: swapData.savedMetadata?.destination?.tokenTicker)?.uppercase() ?: CURRENCY_TICKER,
 +            showAmount = showAmount,
-@@ -216,0 +291 @@ class SwapDetailVM(
+@@ -216,0 +284 @@ class SwapDetailVM(
 +    }
-@@ -218 +293,17 @@ class SwapDetailVM(
+@@ -218 +286,29 @@ class SwapDetailVM(
 -    private fun onBack() = navigationRouter.back()
 +    private fun createHeaderTitle(swapData: SwapData): StringResource? =
 +        when (swapData.status?.status ?: swapData.savedMetadata?.status) {
@@ -52217,8 +52215,7 @@ index a874453ef..b2442f877 100644
 +            FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +            null -> null
 +        }
-@@ -220 +311,13 @@ class SwapDetailVM(
--    private fun onCopyDepositAddressClick() = copyToClipboard(args.depositAddress)
++
 +    private fun createSuccessfulOutputTitle(swapData: SwapData): StringResource =
 +        stringRes(
 +            when {
@@ -52230,8 +52227,17 @@ index a874453ef..b2442f877 100644
 +                else -> R.string.private_swap_saved_output
 +            }
 +        )
-+
+@@ -220 +316 @@ class SwapDetailVM(
+-    private fun onCopyDepositAddressClick() = copyToClipboard(args.depositAddress)
 +    private fun onBack() = navigationRouter.back()
+@@ -223,0 +320,7 @@ class SwapDetailVM(
++
++private val SwapData.headlineOutput
++    get() = status?.executedAmountOut
++        ?: savedMetadata?.executedAmountOut
++        ?: savedMetadata?.legacySuccessfulOutput
++        ?: status?.amountOutFormatted
++        ?: savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 index 48d3039d5..32eee4cf2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
