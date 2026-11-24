@@ -169,10 +169,9 @@ class MigrationSendingVM(
                         // Re-arms the next window for a resumed/manually-confirmed transfer in a
                         // multi-transfer AUTOMATIC plan; no-ops once the plan is already complete.
                         scheduleNextMigrationWindow(args.accountKeyId)
-                        // Completion straight from the engine — no cache write-through needed, the
-                        // banner reads the same live states.
+                        // Acknowledging broadcast does not establish that every transfer mined.
                         val snapshot = getMigrationSnapshot(args.accountKeyId)
-                        if (snapshot?.isComplete == true) {
+                        if (snapshot?.areAllMined == true) {
                             // This was the plan's last transfer — one Migration Complete screen covers
                             // both this (foreground, just confirmed) and the background-completion case
                             // (CheckMigrationRecoveryUseCase, on next app open), rather than two.

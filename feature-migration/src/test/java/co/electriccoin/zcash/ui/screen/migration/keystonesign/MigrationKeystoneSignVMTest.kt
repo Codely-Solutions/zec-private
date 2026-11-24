@@ -15,11 +15,13 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanArgs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -556,25 +558,18 @@ class MigrationKeystoneSignVMTest {
     @Test
     fun whenNoteSplitNeededSdkBuildPathIsFollowed() =
         runTest {
-            // When isNoteSplitNeeded() = true, buildBatch calls:
-            //   prepareNoteSplit() → proposeMigrationTransfersFromSplit(proposal) →
-            //   createUnsignedNoteSplitPczt(proposal) → createUnsignedTransferPczts(scheduleFromSplit)
-            // Stub all four so the happy path completes; assert failureSheet == null.
             val fakeProposal =
                 cash.z.ecc.android.sdk.NoteSplitProposal(
                     outputNotes = listOf(50_000L, 50_000L),
                     fee = 1_000L,
                     proposalHandle = 42L,
                 )
-            val fakeScheduleFromSplit = schedule()
+            val fakeScheduleFromSplit = schedule().copy(proposalHandle = 42L)
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
                     coEvery { keystoneSigningRoundBudget() } returns
                         cash.z.ecc.android.sdk
                             .KeystoneSigningRoundBudget(96, 16, 3)
-                    coEvery { isNoteSplitNeeded() } returns true
-                    coEvery { prepareNoteSplit() } returns fakeProposal
-                    coEvery { proposeMigrationTransfersFromSplit(fakeProposal) } returns fakeScheduleFromSplit
                     coEvery { createUnsignedNoteSplitPczt(fakeProposal) } returns Pczt(byteArrayOf(0x02))
                     coEvery { createUnsignedTransferPczts(fakeScheduleFromSplit) } returns
                         listOf(1L to Pczt(byteArrayOf(0x01)))
@@ -582,7 +577,7 @@ class MigrationKeystoneSignVMTest {
                 }
             val pendingSchedule =
                 PendingMigrationScheduleRepositoryImpl()
-                    .apply { set(testAccountKeyId, schedule()) }
+                    .apply { set(testAccountKeyId, ReviewedMigrationSchedule(fakeScheduleFromSplit, fakeProposal)) }
             val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
             val router = FakeNavigationRouter()
             val vm = vm(sdk, pendingSchedule, pendingPczts, router)
@@ -592,6 +587,9 @@ class MigrationKeystoneSignVMTest {
 
             // No failure sheet → the split path completed without error.
             assertNull(vm.failureSheet.value)
+            coVerify(exactly = 1) { sdk.createUnsignedNoteSplitPczt(fakeProposal) }
+            coVerify(exactly = 1) { sdk.createUnsignedTransferPczts(fakeScheduleFromSplit) }
+            coVerify(exactly = 0) { sdk.prepareNoteSplit() }
 
             collectJob.cancel()
         }
@@ -604,12 +602,12 @@ class MigrationKeystoneSignVMTest {
                     coEvery { keystoneSigningRoundBudget() } returns
                         cash.z.ecc.android.sdk
                             .KeystoneSigningRoundBudget(96, 16, 3)
-                    coEvery { isNoteSplitNeeded() } returns true
-                    coEvery { prepareNoteSplit() } throws RuntimeException("split failed")
+                    coEvery { createUnsignedNoteSplitPczt(any()) } throws RuntimeException("split failed")
                 }
-            val pendingSchedule =
-                PendingMigrationScheduleRepositoryImpl()
-                    .apply { set(testAccountKeyId, schedule()) }
+            val reviewed = ReviewedMigrationSchedule(
+                schedule(), cash.z.ecc.android.sdk.NoteSplitProposal(listOf(50_000L), 1_000L, 0L)
+            )
+            val pendingSchedule = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, reviewed) }
             val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
             val router = FakeNavigationRouter()
             val vm = vm(sdk, pendingSchedule, pendingPczts, router)

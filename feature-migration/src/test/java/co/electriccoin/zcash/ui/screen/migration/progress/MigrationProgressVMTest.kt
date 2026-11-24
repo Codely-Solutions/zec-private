@@ -456,7 +456,7 @@ class MigrationProgressVMTest {
     fun migrationProgressSubtitle_complete_shows_all_complete() {
         val transfers = listOf(transfer(index = 0, id = 1, isSent = true))
         val snapshot = LiveMigrationSnapshot(transfers = transfers, preparations = emptyList(), tipHeight = 1_000L)
-        assertEquals("All 1 transfers are complete.", migrationProgressSubtitle(snapshot, now))
+        assertEquals("All 1 transfers were submitted.", migrationProgressSubtitle(snapshot, now))
     }
 
     @Suppress("UNCHECKED_CAST")

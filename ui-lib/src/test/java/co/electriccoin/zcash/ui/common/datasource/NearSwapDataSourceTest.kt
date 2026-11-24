@@ -6,7 +6,9 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
+import co.electriccoin.zcash.ui.common.model.near.AppFee
 import co.electriccoin.zcash.ui.common.model.near.ErrorDto
+import co.electriccoin.zcash.ui.common.model.near.SwapInputProvenanceFixture
 import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
 import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
@@ -182,6 +184,22 @@ class NearSwapDataSourceTest {
             assertEquals(null, captured.referral)
             assertEquals(emptyList(), captured.appFees)
         }
+
+    @Test
+    fun freshQuoteRefusesAnUnexpectedAppFee() = runBlocking {
+        val returned = SwapInputProvenanceFixture.status(
+            origin, zec, "synthetic-deposit", SwapType.FLEX_INPUT, "{}",
+        ).response.quoteResponse
+        coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
+            returned.copy(quoteRequest = firstArg<QuoteRequest>().copy(appFees = listOf(AppFee("fixture", 1))))
+        }
+        val failure = assertFailsWith<IllegalArgumentException> {
+            dataSource.requestQuote(
+                SwapMode.FLEX_INPUT, BigDecimal.ONE, "refund", origin, "destination", zec, BigDecimal.ONE
+            )
+        }
+        assertEquals("Unexpected swap app fee", failure.message)
+    }
 
     @Test
     fun requestQuoteMapsAmountTooLowToOriginAssetForExactInput() =

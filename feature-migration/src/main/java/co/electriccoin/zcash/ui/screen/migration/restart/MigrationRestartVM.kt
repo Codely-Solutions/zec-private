@@ -31,6 +31,7 @@ import co.electriccoin.zcash.ui.design.R as DesignR
  * discards the in-flight plan.
  */
 class MigrationRestartVM(
+    private val args: MigrationRestartArgs,
     private val restartMigration: RestartMigrationUseCase,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val getOrchardBalance: GetOrchardBalanceUseCase,
@@ -54,6 +55,9 @@ class MigrationRestartVM(
         loadLce.execute {
             val uuid = getSelectedWalletAccount().sdkAccount.accountUuid
             val owner = uuid.toStorageKeyId()
+            check(args.accountKeyId == null || args.accountKeyId == owner) {
+                "The migration restart belongs to a different account"
+            }
             val snapshot = getMigrationSnapshot(owner)
             summaryFlow.value =
                 Summary(

@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.model.near.RefundType
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.requireNearTokenDecimals
+import co.electriccoin.zcash.ui.common.model.near.requireNoAffiliateFees
 import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
 import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.model.near.toNearProviderDecimalOrNull
@@ -179,6 +180,7 @@ class NearSwapDataSource(
                 "TEX swap deposits require an intermediate transparent wallet address and are not supported."
             }
             response.requireSimpleChainRouting()
+            response.requireNoAffiliateFees()
             val deposit = response.quote.depositAddress
             require(deposit.isNotEmpty() && deposit.all { it in '!'..'~' }) {
                 "Swap quote deposit address must be a single address"

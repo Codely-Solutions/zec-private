@@ -120,6 +120,10 @@ class MigrationScheduledVM(
             return
         }
         val states = checkNotNull(sdk.getMigrationTransferStates()) { "Migration state is unavailable" }.transfers
+        if (states.any { it.blocker in RETIRED_SIGNATURE_BLOCKERS }) {
+            returnToHomeForRecovery(accountKeyId, schedule, pending)
+            return
+        }
         val remaining = pending.remainingScheduleSignatures(states)
         // Make all later signatures durable before persisting or broadcasting the split.
         // After process loss, the engine can drive a signed split without the in-memory batch.
@@ -263,3 +267,7 @@ private fun MigrationTransferState.needsSignature(): Boolean =
         }
         else -> error("The reviewed migration step cannot be reconciled")
     }
+
+private val RETIRED_SIGNATURE_BLOCKERS = setOf(
+    MigrationBlocker.EXPIRED, MigrationBlocker.UNSATISFIABLE, MigrationBlocker.UNPROVABLE_ANCHOR
+)

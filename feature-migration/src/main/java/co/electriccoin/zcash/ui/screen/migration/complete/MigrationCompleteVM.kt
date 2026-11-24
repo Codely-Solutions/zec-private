@@ -27,7 +27,6 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
-import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
@@ -36,6 +35,7 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
@@ -44,7 +44,6 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExplainerArgs
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
-import co.electriccoin.zcash.work.MigrationScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -68,21 +67,19 @@ class MigrationCompleteVM(
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val lockOrchardBalance: LockOrchardBalanceUseCase,
     private val zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource,
     private val biometricRepository: BiometricRepository,
     private val proposalDataSource: ProposalDataSource,
     private val keystoneProposalRepository: KeystoneProposalRepository,
-    private val migrationScheduler: MigrationScheduler,
-    private val migrationNotifier: MigrationNotifier,
 ) : ViewModel() {
     private data class Summary(
         val accountKeyId: String,
-        val totalTransferred: Long,
-        val totalCount: Int,
-        val firstAt: Long,
-        val lastAt: Long,
+        val totalTransferred: Long?,
+        val totalCount: Int?,
+        val durationSeconds: Long?,
         val dustZatoshi: Long,
     )
 
@@ -116,27 +113,26 @@ class MigrationCompleteVM(
             val owner = activeCompletionOwner()
             val uuid = owner.sdkAccount.accountUuid
             val key = uuid.toStorageKeyId()
-            migrationScheduler.cancel(key)
-            migrationNotifier.cancel(key)
-            migrationNotifier.cancelStepDue(key)
             val summary = if (args.isResidueOnly) {
                 Summary(
                     accountKeyId = key,
                     totalTransferred = getIronwoodBalance(uuid).value,
-                    totalCount = 0,
-                    firstAt = 0L,
-                    lastAt = 0L,
+                    totalCount = null,
+                    durationSeconds = null,
                     dustZatoshi = getOrchardBalance(uuid).value,
                 )
             } else {
-                val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-                val migration = sdk.getMigrationSummary()
+                // The pinned SDK's historical summary combines runs and accounts. Only a
+                // current snapshot requested for this account can supply these figures.
+                val transfers = getMigrationSnapshot(key)?.takeIf { it.areAllMined }?.transfers
+                val minedAt = transfers?.let { rows -> rows.mapNotNull { it.minedAt }.takeIf { it.size == rows.size } }
                 Summary(
                     accountKeyId = key,
-                    totalTransferred = migration?.totalMigratedZatoshi ?: 0L,
-                    totalCount = migration?.transferCount ?: 0,
-                    firstAt = migration?.firstMinedEpochSeconds ?: 0L,
-                    lastAt = migration?.lastMinedEpochSeconds ?: 0L,
+                    totalTransferred = transfers?.takeIf { it.all { row -> row.amountZatoshi > 0L } }
+                        ?.sumOf { it.amountZatoshi },
+                    totalCount = transfers?.size,
+                    durationSeconds = minedAt?.takeIf { it.isNotEmpty() }
+                        ?.let { (it.max() - it.min()).inWholeSeconds },
                     dustZatoshi = getOrchardBalance(uuid).value,
                 )
             }
@@ -178,23 +174,15 @@ class MigrationCompleteVM(
         failure: SubmitResult?,
     ): MigrationCompleteState =
         MigrationCompleteState(
-            totalTransferred = stringRes(Zatoshi(summary.totalTransferred)),
+            totalTransferred = summary.totalTransferred?.let { stringRes(Zatoshi(it)) },
             remainingDust = if (summary.dustZatoshi > 0L) stringRes(Zatoshi(summary.dustZatoshi)) else null,
             isDustLocked = isLocked,
-            transfersProgress =
-                stringRes(
-                    DesignR.string.migrationComplete_transfersProgress,
-                    summary.totalCount,
-                    summary.totalCount
-                ),
-            // The full campaign span between its first and last MINED transfer -- both timestamps
-            // are already on-chain-public, so the pre-broadcast correlation risk the privacy floor
-            // guards against (see formatMigrationDuration's kdoc) doesn't apply here; flooring it
-            // would only inflate an already-short real duration up to a full hour on mainnet.
-            duration =
-                stringRes(
-                    formatMigrationDuration(summary.lastAt - summary.firstAt, applyPrivacyFloor = false)
-                ),
+            transfersProgress = summary.totalCount?.let {
+                stringRes(DesignR.string.migrationComplete_transfersProgress, it, it)
+            },
+            duration = summary.durationSeconds?.let {
+                stringRes(formatMigrationDuration(it, applyPrivacyFloor = false))
+            },
             isMigrating = isMigrating,
             isLocking = isLocking,
             isResidueOnly = args.isResidueOnly,

@@ -986,7 +986,7 @@
     <string name="swapStatus_paying">Pagando</string>
     <string name="swapStatus_swapIncomplete">Swap incompleto</string>
     <string name="swapStatus_paymentIncomplete">Pago incompleto</string>
-    <string name="transaction_detail_info_incomplete_deposit_message">Deposita %1$s adicionales para completar este swap antes del %2$s, o tu depósito será reembolsado.</string>
+    <string name="transaction_detail_info_incomplete_deposit_message">Envía %1$s antes del %2$s para alcanzar el depósito requerido.</string>
 
     <!-- ===== transaction_filters ===== -->
     <string name="filter_title">Filtrar</string>

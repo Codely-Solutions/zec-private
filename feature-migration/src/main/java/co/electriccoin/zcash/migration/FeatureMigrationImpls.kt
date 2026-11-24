@@ -271,7 +271,7 @@ class MigrationNavigatorImpl(
 ) : MigrationNavigator {
     override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 
-    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
+    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
 }
 
 class MigrationNavContributorImpl : MigrationNavContributor {
@@ -294,7 +294,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }
-            composable<MigrationRestartArgs> { MigrationRestartScreen() }
+            composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }
         }
     }
 }

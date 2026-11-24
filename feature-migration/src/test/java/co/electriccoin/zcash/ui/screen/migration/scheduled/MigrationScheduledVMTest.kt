@@ -401,6 +401,40 @@ class MigrationScheduledVMTest {
     }
 
     @Test
+    fun expiredStepInAnActiveRunRetiresTheHandoffBeforeAnyWrite() = runTest {
+        val pending = PendingKeystoneMigrationPczts(
+            requestId = byteArrayOf(1),
+            splitUnsignedPczt = null,
+            transferUnsignedPczts = listOf(11L to byteArrayOf(2), 12L to byteArrayOf(3)),
+            accumulatedTransferSigned = listOf(11L to byteArrayOf(4), 12L to byteArrayOf(5)),
+            isFullySigned = true,
+        )
+        val batch = PendingKeystoneMigrationPcztsRepositoryImpl().apply { set(testAccountKeyId, pending) }
+        val plan = schedule()
+        val schedules = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, plan) }
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+            coEvery { getMigrationTransferStates() } returns sdkStates(
+                sdkStep(11L, blocker = MigrationBlocker.EXPIRED), sdkStep(12L),
+            )
+        }
+        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
+        val vm = vm(
+            pendingSchedule = schedules, pendingKeystonePczts = batch,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
+            finalizeMigrationSchedule = finalize,
+        )
+        advanceUntilIdle()
+
+        assertNotNull(vm.homeRecoveryMessage.value)
+        assertNull(vm.finalizationError.value)
+        assertNull(batch.peek(testAccountKeyId))
+        assertNull(schedules.peek(testAccountKeyId))
+        coVerify(exactly = 0) { sdk.storeSignedSchedulePczts(any()) }
+        coVerify(exactly = 0) { finalize(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun restoredScheduledShowsKeystoneRecoveryWhenTheSdkStillNeedsSignatures() = runTest {
         val snapshot = co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot(
             transfers = listOf(
@@ -428,7 +462,12 @@ class MigrationScheduledVMTest {
     private fun sdkStates(vararg steps: MigrationTransferState) =
         MigrationTransferStates(transfers = steps.toList(), tipHeight = 100L)
 
-    private fun sdkStep(id: Long, isTransfer: Boolean = true, hasSignature: Boolean = false) =
+    private fun sdkStep(
+        id: Long,
+        isTransfer: Boolean = true,
+        hasSignature: Boolean = false,
+        blocker: MigrationBlocker = if (hasSignature) MigrationBlocker.SCHEDULE else MigrationBlocker.SIGNATURE,
+    ) =
         MigrationTransferState(
             id = id,
             isTransfer = isTransfer,
@@ -436,7 +475,7 @@ class MigrationScheduledVMTest {
             isProved = false,
             scheduledHeight = 200L,
             anchorBoundaryHeight = null,
-            blocker = if (hasSignature) MigrationBlocker.SCHEDULE else MigrationBlocker.SIGNATURE,
+            blocker = blocker,
             prepLayer = if (isTransfer) null else 0,
             prepIndex = if (isTransfer) null else 0,
         )

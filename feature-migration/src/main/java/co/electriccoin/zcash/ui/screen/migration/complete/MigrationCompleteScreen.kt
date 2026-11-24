@@ -59,11 +59,11 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 data class MigrationCompleteState(
-    val totalTransferred: StringResource,
+    val totalTransferred: StringResource?,
     val remainingDust: StringResource?,
     val isDustLocked: Boolean,
-    val transfersProgress: StringResource,
-    val duration: StringResource,
+    val transfersProgress: StringResource?,
+    val duration: StringResource?,
     val onDone: () -> Unit,
     val onMigrateAnyway: () -> Unit,
     val onLockBalance: () -> Unit,
@@ -176,8 +176,10 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                     color = ZashiColors.Text.textTertiary,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(24.dp))
-                SummaryCard(state)
+                if (state.totalTransferred != null || state.remainingDust != null || state.transfersProgress != null) {
+                    Spacer(Modifier.height(24.dp))
+                    SummaryCard(state)
+                }
                 Spacer(Modifier.weight(1f))
                 when {
                     state.remainingDust == null -> {
@@ -279,38 +281,32 @@ private fun SummaryCard(state: MigrationCompleteState) {
                 .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (state.isResidueOnly) {
-            // MOB-1750: reduced summary — no Transfers/Duration rows, since a residue not tied
-            // to an unseen in-app celebration has no round-trip campaign to report on (whether
-            // it's genuinely 0 sent-in-app, or an already-seen completion's leftover residue).
-            SummaryRow(
-                label = stringRes(DesignR.string.migrationComplete_inIronwoodLabel).getValue(),
-                value = state.totalTransferred.getValue(),
-            )
-            state.remainingDust?.let { dust ->
-                SummaryRow(
-                    label = stringRes(DesignR.string.migrationComplete_leftInOrchardLabel).getValue(),
-                    value = dust.getValue(),
-                )
+        state.totalTransferred?.let { amount ->
+            val label = if (state.isResidueOnly) {
+                DesignR.string.migrationComplete_inIronwoodLabel
+            } else {
+                DesignR.string.migrationComplete_totalTransferredLabel
             }
-        } else {
-            SummaryRow(
-                label = stringRes(DesignR.string.migrationComplete_totalTransferredLabel).getValue(),
-                value = state.totalTransferred.getValue(),
-            )
-            state.remainingDust?.let { dust ->
-                SummaryRow(
-                    label = stringRes(DesignR.string.migrationComplete_remainingDustLabel).getValue(),
-                    value = dust.getValue(),
-                )
+            SummaryRow(label = stringRes(label).getValue(), value = amount.getValue())
+        }
+        state.remainingDust?.let { dust ->
+            val label = if (state.isResidueOnly) {
+                DesignR.string.migrationComplete_leftInOrchardLabel
+            } else {
+                DesignR.string.migrationComplete_remainingDustLabel
             }
+            SummaryRow(label = stringRes(label).getValue(), value = dust.getValue())
+        }
+        state.transfersProgress?.let {
             SummaryRow(
                 label = stringRes(DesignR.string.migrationComplete_transfersLabel).getValue(),
-                value = state.transfersProgress.getValue(),
+                value = it.getValue(),
             )
+        }
+        state.duration?.let {
             SummaryRow(
                 label = stringRes(DesignR.string.migrationComplete_durationLabel).getValue(),
-                value = state.duration.getValue(),
+                value = it.getValue(),
             )
         }
     }

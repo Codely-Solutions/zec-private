@@ -105,30 +105,49 @@ for clear in (False, True):
     def test_unfunded_near_probe_binds_every_reviewed_term(self):
         import live_near
 
-        def run_probe(root, change=None):
+        fixture_address = live_near.FIXTURE['unified']
+        report_time = '2026-11-24T00:00:00Z'
+
+        def run_probe(root, change=None, issued_deadline='2099-01-01T00:00:00Z', omit_dry_quote=False):
             issued = None
 
             def request(path, body=None):
                 nonlocal issued
                 if path == '/v0/quote':
                     if body['dry']:
-                        return 200, {'quoteRequest': body}
+                        dry_quote = {'timestamp': report_time, 'quoteRequest': body}
+                        if not omit_dry_quote:
+                            amount_in = int(body['amount']) if body['swapType'] != 'EXACT_OUTPUT' else 900_000
+                            amount_out = int(body['amount']) if body['swapType'] == 'EXACT_OUTPUT' else 900_000
+                            dry_quote['quote'] = {
+                                'amountIn': str(amount_in), 'amountInFormatted': f'{amount_in / 100_000_000:.8f}',
+                                'minAmountIn': str(amount_in), 'amountInUsd': '35',
+                                'amountOut': str(amount_out), 'amountOutFormatted': f'{amount_out / 100_000_000:.8f}',
+                                'minAmountOut': str(amount_out), 'amountOutUsd': '34.64',
+                                'deadline': body['deadline'],
+                            }
+                        return 200, dry_quote
                     issued = {
+                        'timestamp': report_time,
                         'quoteRequest': body,
-                        'quote': {'depositAddress': 't1fixture', 'amountIn': '100000000', 'amountInFormatted': '1',
+                        'quote': {'depositAddress': fixture_address, 'amountIn': '100000000', 'amountInFormatted': '1',
                                   'amountInUsd': '35', 'minAmountIn': '99000000', 'amountOut': '900000',
                                   'amountOutFormatted': '0.009', 'amountOutUsd': '34.64', 'minAmountOut': '892000',
-                                  'deadline': '2099-01-01T00:00:00Z'},
+                                  'deadline': issued_deadline},
                     }
                     return 200, issued
-                if path == '/v0/status?depositAddress=t1fixture':
+                if path == '/v0/status?depositAddress=' + fixture_address:
                     observed = deepcopy(issued)
+                    status = {'status': 'PENDING_DEPOSIT', 'updatedAt': report_time, 'quoteResponse': observed}
                     if change:
                         section, field, value = change
-                        observed[section][field] = value
+                        target = {'status': status, 'envelope': observed}.get(section)
+                        if target is None:
+                            target = observed[section]
+                        target[field] = value
                     else:
                         observed['quote']['amountOutFormatted'] = '0.0090'
-                    return 200, {'status': 'PENDING_DEPOSIT', 'quoteResponse': observed}
+                    return 200, status
                 self.assertEqual((path, body), ('/v0/deposit/submit', {}))
                 return 400, {}
 
@@ -136,7 +155,15 @@ for clear in (False, True):
                   patch.object(live_near, 'ROOT', root),
                   patch.object(live_near.subprocess, 'check_output', return_value='a' * 40),
                   contextlib.redirect_stdout(StringIO())):
-                if change:
+                if omit_dry_quote:
+                    with self.assertRaisesRegex(KeyError, 'quote'):
+                        live_near.main()
+                    self.assertEqual(remote.call_count, 1)
+                elif issued_deadline < '2000':
+                    with self.assertRaisesRegex(RuntimeError, 'deadline is not in the future'):
+                        live_near.main()
+                    self.assertEqual(remote.call_count, 4)
+                elif change:
                     with self.assertRaises((RuntimeError, ValueError)):
                         live_near.main()
                     self.assertEqual(remote.call_count, 5)
@@ -153,6 +180,9 @@ for clear in (False, True):
             ('quoteRequest', 'swapType', 'FLEX_INPUT'), ('quoteRequest', 'originAsset', 'different'),
             ('quoteRequest', 'destinationAsset', 'different'), ('quoteRequest', 'amount', '120000000'),
             ('quoteRequest', 'slippageTolerance', 101), ('quoteRequest', 'recipientType', 'INTENTS'),
+            ('quoteRequest', 'appFees', [{'recipient': 'fixture', 'fee': 1}]),
+            ('quote', 'amountInUsd', 'undefined'), ('envelope', 'timestamp', None),
+            ('status', 'updatedAt', 'invalid'),
         )
         with fixture_directory() as temp:
             root = Path(temp)
@@ -161,6 +191,9 @@ for clear in (False, True):
             self.assertTrue(json.loads(receipt.read_text())['unused_quote_status_passed'])
         with fixture_directory() as temp:
             root = Path(temp)
+            run_probe(root, omit_dry_quote=True)
+            run_probe(root, issued_deadline='1999-01-01T00:00:00Z')
+            self.assertFalse((root / 'artifact' / 'near-contract.json').exists())
             for change in mutations:
                 with self.subTest(change=change):
                     run_probe(root, change)

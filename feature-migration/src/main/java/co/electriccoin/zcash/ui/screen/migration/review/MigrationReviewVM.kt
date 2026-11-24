@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.MigrationState
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
@@ -47,6 +48,7 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
@@ -99,7 +101,7 @@ class MigrationReviewVM(
     // this account's Orchard balance at propose time (the whole point of a send-max sweep).
     private sealed class ReviewProposal {
         data class Automatic(
-            val schedule: MigrationSchedule,
+            val reviewed: ReviewedMigrationSchedule,
             val keystoneRunCount: Int?
         ) : ReviewProposal()
 
@@ -142,6 +144,10 @@ class MigrationReviewVM(
     private val failure = MutableStateFlow<TransferResult?>(null)
 
     init {
+        loadProposal()
+    }
+
+    private fun loadProposal() {
         proposeLce.execute {
             // Timed, bracketed logging (2026-08-07 Review-screen slow-load investigation): pairs
             // with the MIGRATION_DB_ACCESS_MUTEX queued/acquired/released lines OrchardMigrationSdkImpl.logged()
@@ -180,18 +186,8 @@ class MigrationReviewVM(
                         // doc: the two calls compute independent guesses over the same balance that
                         // aren't guaranteed to agree). Falls back to a fresh proposal for every
                         // ordinary, non-recovery entry into this screen.
-                        val reused = restartMigrationScheduleRepository.consume(key)
-                        val schedule =
-                            reused ?: run {
-                                val t0 = SystemClock.elapsedRealtime()
-                                migrationLog("MIGRATION_DIAG ReviewVM: proposeMigrationTransfers start")
-                                val s = sdk.proposeMigrationTransfers()
-                                migrationLog(
-                                    "MIGRATION_DIAG ReviewVM: proposeMigrationTransfers done in " +
-                                        "${SystemClock.elapsedRealtime() - t0}ms"
-                                )
-                                s
-                            }
+                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
+                        val schedule = reviewed.schedule
                         // IMMEDIATE has no Keystone branch at all (a documented pre-existing gap —
                         // see MigrationReviewVM.confirmAutomatic()'s Keystone check below), so round
                         // display is AUTOMATIC-only. Stateless preview, called fresh on every Review
@@ -222,7 +218,7 @@ class MigrationReviewVM(
                                 "${SystemClock.elapsedRealtime() - t0}ms"
                         )
                         logProposedPlan(schedule)
-                        ReviewProposal.Automatic(schedule, keystoneRunCount)
+                        ReviewProposal.Automatic(reviewed, keystoneRunCount)
                     }
                 }
             migrationLog(
@@ -275,7 +271,7 @@ class MigrationReviewVM(
         isKeystone: Boolean,
         failureResult: TransferResult?,
     ): MigrationReviewState {
-        val sched = proposal.schedule
+        val sched = proposal.reviewed.schedule
         val total = sched.transfers.sumOf { it.amountZatoshi }
         // From the plan's "now" reference (anchorHeight — every transfer shares the same plan-time
         // tip) to the LAST transfer's height, matching scheduledLabel()'s per-transfer calculation
@@ -320,7 +316,7 @@ class MigrationReviewVM(
             keystoneRound =
                 proposal.keystoneRunCount?.takeIf { it > 1 }?.let { MigrationKeystoneRound(current = 1, total = it) },
             isConfirming = isConfirming,
-            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(sched) } },
+            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(proposal) } },
             onBack = ::onBack,
             failureSheet =
                 failureResult?.let {
@@ -328,7 +324,7 @@ class MigrationReviewVM(
                         message = migrationFailureMessage(it),
                         onRetry = {
                             failure.value = null
-                            proposeLce.guardLoading { onConfirmAutomatic(sched) }
+                            proposeLce.guardLoading { onConfirmAutomatic(proposal) }
                         },
                         onDismiss = { failure.value = null },
                     )
@@ -383,8 +379,9 @@ class MigrationReviewVM(
         )
     }
 
-    private fun onConfirmAutomatic(sched: MigrationSchedule) =
+    private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
         confirmLce.execute {
+            if (proposeLce.state.value.success !== proposal) return@execute
             try {
                 biometricRepository.requestBiometrics(
                     request =
@@ -401,100 +398,79 @@ class MigrationReviewVM(
             } catch (_: BiometricsCancelledException) {
                 return@execute
             }
-            confirmAutomatic(sched)
+            if (proposeLce.state.value.success === proposal) {
+                confirmAutomatic(proposal.reviewed)
+            }
         }
 
-    private suspend fun confirmAutomatic(sched: MigrationSchedule) {
+    private suspend fun loadAutomaticPlan(
+        sdk: OrchardMigrationSdk,
+        accountKeyId: String,
+        usesKeystone: Boolean
+    ): ReviewedMigrationSchedule {
+        if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
+            return checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
+                "Return to Home to recover the existing migration."
+            }
+        }
+        val restarted = restartMigrationScheduleRepository.consume(accountKeyId)
+        return if (restarted != null && restarted.proposalHandle >= 0) {
+            ReviewedMigrationSchedule(restarted)
+        } else {
+            sdk.prepareReviewedAutomaticMigration()
+        }
+    }
+
+    private suspend fun confirmAutomatic(reviewed: ReviewedMigrationSchedule) {
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        val newTorPreference = args.useTor?.takeUnless { requestedTor ->
-            !requestedTor && sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
+        val nativePlanActive = sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
+        val pending = pendingMigrationScheduleRepository.review(accountKeyId)
+        check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
+            "The migration changed. Return to Home to recover it."
         }
+        val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
         if (account is KeystoneAccount) {
-            confirmKeystone(sched, accountKeyId, newTorPreference)
+            confirmKeystone(reviewed, accountKeyId, newTorPreference)
             return
         }
-        // Note-split is the first step of this confirm action (design spec §7) — a schedule with
-        // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
-        // balance on the first transfer, leaving every subsequent transfer InsufficientFunds. Per
-        // spec §3 the split is a fully shielded self-send and needs no sync-decoupling delay, so
-        // proceeding straight to signAndStoreMigrationSchedule below is safe. Under the crate's
-        // sign-now/prove-later pipeline that call now signs successfully immediately even though
-        // the split's own output isn't mined/witnessed yet.
-        //
-        // `sched` was proposed at screen init, before any split — proposeMigrationTransfers()'s
-        // denomination guess and prepareNoteSplit()'s own (independent) guess over the same
-        // balance are not guaranteed to agree. Reusing the stale `sched` here could schedule a
-        // transfer for a denomination the split never actually mints, which then silently falls
-        // back to an unrelated already-existing note — one the split's own "sweep everything"
-        // construction may already be consuming as one of its own inputs (a real double-spend
-        // found live on testnet). Re-deriving the schedule from the split's own realized output
-        // plan makes every crossing value provably match a note this split actually produces.
-        val needsSplit = sdk.isNoteSplitNeeded()
-        if (needsSplit && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
+        val split = reviewed.noteSplit
+        if (split != null && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
             throw PrivateNoteSplitUnavailable()
         }
         newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
-        val scheduleToSign =
-            if (needsSplit) {
-                val proposal = sdk.prepareNoteSplit()
-                // Derive the from-split schedule BEFORE submitting the split, not after: submitNoteSplit()
-                // signs the split through the SDK's commit_or_reuse, which clears the in-memory
-                // migration-plan cache that `proposal.proposalHandle` points at once it commits. Calling
-                // proposeMigrationTransfersFromSplit() afterwards then throws "No pending migration
-                // proposal for this account — call propose/prepare first", because the plan the handle
-                // identifies is already gone. Reading the schedule first (the cache is still populated by
-                // prepareNoteSplit()) mirrors MigrationKeystoneSignVM, which likewise derives the
-                // from-split schedule before its first commit.
-                val scheduleFromSplit = sdk.proposeMigrationTransfersFromSplit(proposal)
-                // No write-ahead persistence needed anymore: the engine's own committed state IS
-                // the recovery signal — if the app dies between the commit below and finalize,
-                // re-entry sees engine InProgress and every screen renders live from it.
-                val splitResult = sdk.submitNoteSplit(proposal, zashiSpendingKeyDataSource.getZashiSpendingKey())
-                if (splitResult !is TransferResult.Success) {
-                    failure.value = splitResult
+        try {
+            val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
+            requireReviewAccount()
+            if (split != null) {
+                val result = sdk.submitNoteSplit(split, spendingKey)
+                if (result !is TransferResult.Success) {
+                    failure.value = result
                     return
                 }
-                // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
-                // already stored locally, so without this the normal enhancement queue would skip
-                // it forever and the Activity row would stay "Sent" instead of "Note split"/
-                // "Migrated". See MigrationDriveOnce.handleExecuted's identical call for transfers.
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(splitResult.txId)
-                scheduleFromSplit
-            } else {
-                sched
+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
+                requireReviewAccount()
             }
-        try {
-            sdk.signAndStoreMigrationSchedule(scheduleToSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
-            // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
-            // also never eagerly starts a drive loop right after signAndStoreMigrationSchedule —
-            // see FinalizeMigrationScheduleUseCase's doc.
-            finalizeMigrationSchedule(scheduleToSign, args.mode, accountKeyId, startLiveDriverImmediately = false)
+            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
+            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
             navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
         } catch (e: RuntimeException) {
-            val retryable =
-                e.message?.contains("StalePlan") == true ||
-                    e.message?.contains("BoundaryCheckpointMissing") == true
-            if (!retryable) throw e
-            // StalePlan: the plan is a planning-time snapshot of wallet note indices; any note
-            // received or changed between this screen's propose and the commit (the bursty
-            // testnet syncs continuously) shifts them and the engine correctly refuses with
-            // "must be re-planned". Same balance, fresh draw — re-propose once and commit that.
-            // Retrying the SAME cached schedule can never succeed (observed live: six identical
-            // StalePlan failures from the retry button). BoundaryCheckpointMissing: the commit
-            // drew an anchor boundary onto a grid height with no retained checkpoint (pre-
-            // always-on-retention scan history) — a fresh draw lands on retained boundaries.
-            migrationLog("MigrationReview: StalePlan on commit — re-proposing once and retrying")
-            val fresh = sdk.proposeMigrationTransfers()
-            sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
-            finalizeMigrationSchedule(fresh, args.mode, accountKeyId, startLiveDriverImmediately = false)
-            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+            val needsNewReview = e.message?.contains("StalePlan") == true ||
+                e.message?.contains("BoundaryCheckpointMissing") == true ||
+                e.message?.contains("plan superseded", ignoreCase = true) == true
+            if (!needsNewReview) throw e
+            if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
+                // The SDK owns the already-committed plan. Do not draw or sign a replacement.
+                navigationRouter.backToRoot()
+            } else {
+                loadProposal()
+            }
         }
     }
 
     private suspend fun confirmKeystone(
-        schedule: MigrationSchedule,
+        reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
         newTorPreference: Boolean?,
     ) {
@@ -502,12 +478,15 @@ class MigrationReviewVM(
         // Keystone can't sign in-process — hand the unsigned schedule off to the QR
         // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
         // instead (MigrationKeystoneScanVM), not here.
-        if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
-            pendingMigrationScheduleRepository.peek(accountKeyId) != null
-        ) {
+        val existingPlan = pendingMigrationScheduleRepository.review(accountKeyId)
+        val existingSignatures = pendingKeystone.peek(accountKeyId)
+        if (existingPlan === reviewed && existingSignatures?.isFullySigned == true) {
             navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
         } else {
-            pendingMigrationScheduleRepository.set(accountKeyId, schedule)
+            if (existingPlan !== reviewed && existingSignatures != null) {
+                pendingKeystone.clear(accountKeyId, existingSignatures)
+            }
+            pendingMigrationScheduleRepository.set(accountKeyId, reviewed)
             navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
         }
     }
@@ -681,4 +660,28 @@ class MigrationReviewVM(
             onDismiss = {},
         )
     }
+}
+
+private const val MAX_MIGRATION_PROPOSAL_ATTEMPTS = 8
+
+private suspend fun OrchardMigrationSdk.prepareReviewedAutomaticMigration(): ReviewedMigrationSchedule {
+    val requiresSplit = isNoteSplitNeeded()
+    repeat(MAX_MIGRATION_PROPOSAL_ATTEMPTS) {
+        // The pinned SDK can expose an unsigned native handle as a negative Kotlin Long and
+        // refuses that handle when passed back over JNI. Retry only before displaying the plan.
+        if (requiresSplit) {
+            val split = prepareNoteSplit()
+            if (split.proposalHandle >= 0) {
+                val schedule = proposeMigrationTransfersFromSplit(split)
+                check(schedule.proposalHandle == split.proposalHandle) {
+                    "The migration plan changed during preparation"
+                }
+                return ReviewedMigrationSchedule(schedule, split)
+            }
+        } else {
+            val schedule = proposeMigrationTransfers()
+            if (schedule.proposalHandle >= 0) return ReviewedMigrationSchedule(schedule)
+        }
+    }
+    error("The SDK did not provide a usable migration proposal. Try again.")
 }

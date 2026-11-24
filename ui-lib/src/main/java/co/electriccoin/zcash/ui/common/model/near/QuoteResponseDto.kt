@@ -80,6 +80,10 @@ data class ChainDepositAddress(
     val memo: String? = null,
 )
 
+internal fun QuoteResponseDto.requireNoAffiliateFees() {
+    require(quoteRequest.appFees.all { it.fee == 0 }) { "Unexpected swap app fee" }
+}
+
 /** The wallet funds and looks up one address on the origin chain with no additional instructions. */
 internal fun QuoteResponseDto.requireSimpleChainRouting() {
     val request = quoteRequest

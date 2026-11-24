@@ -346,8 +346,12 @@ internal fun migrationProgressSubtitle(
     val lastScheduled = allScheduled.maxOrNull() ?: now
     val remainingCount = snapshot.totalCount - snapshot.completedCount
     return when {
-        snapshot.isComplete -> {
+        snapshot.areAllMined -> {
             "All ${snapshot.totalCount} transfers are complete."
+        }
+
+        snapshot.isComplete -> {
+            "All ${snapshot.totalCount} transfers were submitted."
         }
 
         // Not yet started (no transfer has completed): keep today's existing static total-span

@@ -42,7 +42,7 @@ jobs:
             test_quote_recovery test_hosted_release test_publish test_maintenance_watch \
             test_maintenance_cadence test_packaging test_sync test_custom_release test_funded_reuse \
             test_dev_session test_notify test_release_preparation test_core_faucet test_core_instrumentation_pairing \
-            test_swap_price_catalog test_actions_artifact_cleanup
+            test_swap_price_catalog test_actions_artifact_cleanup test_controls
       - name: Reverify an existing public release without signing or publication
         if: github.ref != 'refs/heads/main' && inputs.verify_existing_release != ''
         shell: bash

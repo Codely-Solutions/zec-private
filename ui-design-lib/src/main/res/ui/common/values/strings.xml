@@ -1049,7 +1049,7 @@
     <string name="swapStatus_paying">Paying</string>
     <string name="swapStatus_swapIncomplete">Swap Incomplete</string>
     <string name="swapStatus_paymentIncomplete">Payment Incomplete</string>
-    <string name="transaction_detail_info_incomplete_deposit_message">Deposit an additional %1$s to complete this swap before %2$s, or your deposit will be refunded.</string>
+    <string name="transaction_detail_info_incomplete_deposit_message">Send %1$s by %2$s to reach the required deposit.</string>
 
     <!-- ===== transaction_filters ===== -->
     <string name="filter_title">Filter</string>

@@ -23,12 +23,16 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -50,6 +54,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -273,7 +278,7 @@ class MigrationReviewVMTest {
                 )
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
-                    coEvery { getMigrationState() } returns MigrationState.NotStarted
+                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
                     coEvery { isNoteSplitNeeded() } returns true
                     coEvery { prepareNoteSplit() } returns splitProposal
                     coEvery { proposeMigrationTransfersFromSplit(splitProposal) } returns scheduleFromSplit
@@ -290,7 +295,10 @@ class MigrationReviewVMTest {
                     mode = MigrationMode.AUTOMATIC,
                 )
 
-            invokeOnConfirmAutomatic(vm, scheduleFromSplit)
+            val review = vm.currentReview()
+            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
+            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
+            review.onConfirm()
             advanceUntilIdle()
 
             // Schedule is derived from the split before the split is submitted (the engine's own
@@ -302,11 +310,45 @@ class MigrationReviewVMTest {
         }
 
     @Test
+    fun rejectsNegativeHandlesBeforeReviewAndRequiresApprovalForAReplacement() = runTest {
+        val unusable = schedule(-1L, 400_000L)
+        val first = schedule(1L, 100_000L)
+        val replacement = schedule(2L, 200_000L)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { proposeMigrationTransfers() } returnsMany listOf(unusable, first, replacement)
+            coEvery { signAndStoreMigrationSchedule(first, any()) } throws IllegalStateException("StalePlan")
+        }
+        val vm = vm(
+            router = FakeNavigationRouter(),
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+        )
+        val review = vm.currentReview()
+        assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+
+        review.onConfirm()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(first, any()) }
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(replacement, any()) }
+
+        val refreshed = vm.currentReview()
+        assertEquals(stringRes(Zatoshi(200_000L)), refreshed.totalAmount)
+        review.onConfirm()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        refreshed.onConfirm()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(replacement, any()) }
+    }
+
+    @Test
     fun torProtectedSoftwarePlanStopsBeforeAnUnsupportedSplit() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { isNoteSplitNeeded() } returns true
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
         }
-        val review = mockk<MigrationSchedule>(relaxed = true)
         val tor = mockk<IsMigrationTorEnabledStorageProvider> {
             coEvery { this@mockk.get(any<String>()) } returns true
         }
@@ -318,11 +360,11 @@ class MigrationReviewVMTest {
             mode = MigrationMode.AUTOMATIC,
         )
 
-        invokeOnConfirmAutomatic(vm, review)
+        vm.currentReview().onConfirm()
         advanceUntilIdle()
 
         coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-        coVerify(exactly = 0) { sdk.prepareNoteSplit() }
+        coVerify(exactly = 1) { sdk.prepareNoteSplit() }
         coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
         coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
         assertEquals(emptyList(), router.forwardedRoutes)
@@ -345,13 +387,13 @@ class MigrationReviewVMTest {
             draftTor = true,
         )
 
-        invokeOnConfirmAutomatic(vm, mockk(relaxed = true))
+        vm.currentReview().onConfirm()
         advanceUntilIdle()
 
         coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
         coVerify(exactly = 0) { tor.get(any<String>()) }
         coVerify(exactly = 0) { tor.store(any<String>(), any()) }
-        coVerify(exactly = 0) { sdk.prepareNoteSplit() }
+        coVerify(exactly = 1) { sdk.prepareNoteSplit() }
     }
 
     @Test
@@ -363,7 +405,11 @@ class MigrationReviewVMTest {
         val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true) {
             coEvery { this@mockk.get(any<String>()) } returns false
         }
+        val pending = PendingMigrationScheduleRepositoryImpl().apply {
+            set(account.sdkAccount.accountUuid.toStorageKeyId(), ReviewedMigrationSchedule(schedule(1L, 200_000L)))
+        }
         val vm = vm(
+            pendingMigrationScheduleRepository = pending,
             router = FakeNavigationRouter(),
             getSelectedWalletAccount = mockk {
                 coEvery { this@mockk() } returns account
@@ -375,7 +421,7 @@ class MigrationReviewVMTest {
             draftTor = true,
         )
 
-        invokeOnConfirmAutomatic(vm, mockk(relaxed = true))
+        vm.currentReview().onConfirm()
         advanceUntilIdle()
 
         coVerify(exactly = 1) { tor.store(any<String>(), true) }
@@ -418,7 +464,10 @@ class MigrationReviewVMTest {
     fun automaticConfirmOnAViewOnlyAccountIsRefusedWithoutProposing() =
         runTest {
             val router = FakeNavigationRouter()
-            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
+            }
             val finalizeMigrationSchedule = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
             val vm =
                 vm(
@@ -429,14 +478,11 @@ class MigrationReviewVMTest {
                     mode = MigrationMode.AUTOMATIC,
                 )
 
-            invokeOnConfirmAutomatic(
-                vm,
-                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
-            )
+            vm.currentReview().onConfirm()
             advanceUntilIdle()
 
             assertRefusedAsViewOnly(vm)
-            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
+            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
             coVerify(exactly = 0) { sdk.prepareNoteSplit() }
             coVerify(exactly = 0) { sdk.proposeMigrationTransfersFromSplit(any()) }
             coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
@@ -467,12 +513,17 @@ class MigrationReviewVMTest {
         )
     }
 
-    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
-        val method =
-            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
-        method.isAccessible = true
-        method.invoke(vm, sched)
-    }
+    private suspend fun MigrationReviewVM.currentReview() =
+        requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
+
+    private fun schedule(handle: Long, amount: Long) = MigrationSchedule(
+        transfers = listOf(TransferProposal(
+            id = handle, amountZatoshi = amount, anchorHeight = 10L,
+            nextExecutableAfterHeight = 20L, expiryHeight = 30L,
+        )),
+        estimatedDurationHours = 1,
+        proposalHandle = handle,
+    )
 
     // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
     // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
@@ -514,6 +565,8 @@ class MigrationReviewVMTest {
         finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
         migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
         mode: MigrationMode = MigrationMode.IMMEDIATE,
+        pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
+            PendingMigrationScheduleRepositoryImpl(),
         draftTor: Boolean? = null,
         restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
             mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
@@ -521,7 +574,7 @@ class MigrationReviewVMTest {
     ) = MigrationReviewVM(
         args = MigrationReviewArgs(mode = mode, useTor = draftTor),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
-        pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
+        pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
         pendingKeystone = mockk { every { peek(any()) } returns null },
         restartMigrationScheduleRepository = restartMigrationScheduleRepository,
         finalizeMigrationSchedule = finalizeMigrationSchedule,

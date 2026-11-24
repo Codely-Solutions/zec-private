@@ -158,7 +158,9 @@ class SwapDetailVM(
                 )
             }.stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+                started = SharingStarted.WhileSubscribed(
+                    ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO
+                ),
                 initialValue = null
             )
 

@@ -317,8 +317,9 @@ class GetSwapStatusUseCaseTest {
             coEvery { reloadSwapMetadata(saved) } returns saved
         }
         val start = Instant.parse("2026-11-24T00:00:00Z")
+        var wallClockOffset = 0.milliseconds
         val clock = object : Clock {
-            override fun now() = start + testScheduler.currentTime.milliseconds
+            override fun now() = start + testScheduler.currentTime.milliseconds + wallClockOffset
         }
         val incomplete = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
         every { incomplete.deadline } returns start + 95_000.milliseconds
@@ -335,7 +336,8 @@ class GetSwapStatusUseCaseTest {
         }
         val states = mutableListOf<SwapQuoteStatusData>()
         backgroundScope.launch {
-            GetSwapStatusUseCase(metadata, provider, clock = clock).observe("deposit").collect { states += it }
+            GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
+                .observe("deposit").collect { states += it }
         }
         runCurrent()
         assertTrue(states.last().isFundingWindowOpen)
@@ -355,6 +357,7 @@ class GetSwapStatusUseCaseTest {
         runCurrent()
         assertFalse(states.last().isFundingWindowOpen)
         assertSame(incomplete, states.last().status)
+        wallClockOffset = (-60_000).milliseconds
         stalledPoll.complete(incomplete)
         runCurrent()
         assertFalse(states.last().isFundingWindowOpen)

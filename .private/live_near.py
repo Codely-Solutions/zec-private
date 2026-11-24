@@ -33,15 +33,7 @@ def request(path,body=None):
             if attempt<2:
                 time.sleep(attempt+1);continue
         if status>=400:
-            text=raw.decode('utf-8',errors='replace')
-            try:
-                parsed=json.loads(text)
-                reason=str(parsed.get('message',parsed.get('error','HTTP error')))
-            except json.JSONDecodeError:
-                title=re.search(r'<title>(.*?)</title>',text,re.I|re.S)
-                reason=title[1].strip() if title else text[:200]
-            reason=re.sub(r'[A-Za-z0-9_-]{30,}','[redacted]',reason)[:400]
-            return status,{'http_error':reason}
+            return status, {}
         return status,json.loads(raw, parse_float=Decimal)
 
 def quote(mode,incoming,dry=True):
@@ -56,11 +48,13 @@ def quote(mode,incoming,dry=True):
               appFees=[])
     status,result=request('/v0/quote',body)
     if status not in (200,201) or not result:
-        reason=result.get('http_error','') if result else ''
-        raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status)+' '+reason)
+        raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status))
+    read_timestamp(result['timestamp'])
     echo=result['quoteRequest']
     if reviewed_request(echo) != reviewed_request(body):
         raise RuntimeError('NEAR quote echo is incompatible; publication stopped')
+    if dry:
+        reviewed_quote(result, require_deposit=False)
     return result
 
 def read_positive_atomic(value):
@@ -72,43 +66,68 @@ def read_positive_atomic(value):
     return amount
 
 
+def read_timestamp(value):
+    try:
+        timestamp = datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise RuntimeError('Invalid NEAR response timestamp') from None
+    if timestamp.tzinfo is None:
+        raise RuntimeError('NEAR response timestamp is missing a timezone')
+    return timestamp
+
+
+def read_decimal(value):
+    if type(value) not in (Decimal, int, str) or not re.fullmatch(r'[+-]?[0-9]{1,128}(\.[0-9]{1,128})?', str(value)):
+        raise RuntimeError('Invalid NEAR response decimal')
+    return Decimal(str(value))
+
+
 def reviewed_request(request):
     route_fields = ('swapType', 'originAsset', 'destinationAsset', 'depositType', 'refundType',
                     'recipientType', 'refundTo', 'recipient')
     if (type(request['dry']) is not bool or type(request['slippageTolerance']) is not int
             or request.get('depositMode', 'SIMPLE') != 'SIMPLE'):
         raise RuntimeError('Unsupported NEAR quote request terms')
+    fees = request['appFees']
+    if not isinstance(fees, list) or any(type(entry['fee']) is not int or entry['fee'] != 0 for entry in fees):
+        raise RuntimeError('NEAR quote echoed an app fee')
     return tuple(request[field] for field in route_fields) + (
         request['dry'], request['slippageTolerance'], read_positive_atomic(request['amount']),
     )
 
 
-def reviewed_quote(result):
+def reviewed_quote(result, require_deposit=True):
+    read_timestamp(result['timestamp'])
     request = result['quoteRequest']
     quote = result['quote']
-    address = quote['depositAddress']
+    read_timestamp(request['deadline'])
+    address = quote['depositAddress'] if require_deposit else quote.get('depositAddress')
     extra_fields = ('virtualChainRecipient', 'virtualChainRefundRecipient', 'customRecipientMsg')
     if (quote.get('depositMemo') is not None
             or any(item['address'] == address and item.get('memo') is not None
                    for item in quote.get('chainDepositAddresses') or [])
             or any(part.get(field) is not None for part in (request, quote) for field in extra_fields)):
         raise RuntimeError('Unsupported NEAR deposit or recipient instructions')
-    if quote.get('amountInUsd') is None or quote.get('amountOutUsd') is None:
-        raise RuntimeError('NEAR production quote response is incomplete')
+    if any(read_decimal(quote[field]) < 0 for field in ('amountInUsd', 'amountOutUsd')):
+        raise RuntimeError('NEAR quote response has a negative USD value')
     amount_in, minimum_in, amount_out, minimum_out = (
         read_positive_atomic(quote[field]) for field in ('amountIn', 'minAmountIn', 'amountOut', 'minAmountOut')
     )
     # The live BTC and ZEC fixtures both use eight decimals. Compare without rounding.
     for field, atomic in (('amountInFormatted', amount_in), ('amountOutFormatted', amount_out)):
-        if Decimal(str(quote[field])) != Decimal(f'{atomic}e-8'):
+        if read_decimal(quote[field]) != Decimal(f'{atomic}e-8'):
             raise RuntimeError('NEAR formatted amount does not match base units')
+    mode = request['swapType']
+    fixed_amount = amount_out if mode == 'EXACT_OUTPUT' else amount_in
+    slippage_multiplier = 10_000 - request['slippageTolerance']
+    too_low_in = mode != 'EXACT_INPUT' and minimum_in < amount_in * slippage_multiplier // 10_000
+    too_low_out = mode != 'EXACT_OUTPUT' and minimum_out < amount_out * slippage_multiplier // 10_000
     if (minimum_in > amount_in or minimum_out > amount_out
-            or amount_in != read_positive_atomic(request['amount'])
-            or minimum_out < amount_out * (10_000 - request['slippageTolerance']) // 10_000):
-        raise RuntimeError('NEAR production quote has inconsistent amounts or minima')
+            or fixed_amount != read_positive_atomic(request['amount']) or too_low_in or too_low_out):
+        raise RuntimeError('NEAR quote has inconsistent amounts or minima')
     deadline = quote['deadline']
-    if datetime.datetime.fromisoformat(deadline).tzinfo is None:
-        raise RuntimeError('NEAR quote deadline is missing a timezone')
+    if read_timestamp(deadline) <= datetime.datetime.now(datetime.timezone.utc):
+        raise RuntimeError('NEAR production quote deadline is not in the future')
     return reviewed_request(request), address, amount_in, minimum_in, amount_out, minimum_out, deadline
 
 
@@ -121,11 +140,12 @@ def main():
     address=result['quote']['depositAddress']
     if address.lower().startswith('tex'):
         raise RuntimeError('Provider requires a TEX transparent intermediate; publication stopped')
-    if not address.startswith(('t1','t3','u1','zs1')):
+    if not re.fullmatch(r'(?:t[13][1-9A-HJ-NP-Za-km-z]{33}|(?:u1|zs1)[0-9a-z]{30,1022})', address):
         raise RuntimeError('Unrecognized provider Zcash deposit address type')
     status,poll=request('/v0/status?'+urllib.parse.urlencode({'depositAddress':address}))
     if status!=200 or poll['status']!='PENDING_DEPOSIT':
         raise RuntimeError('Unauthenticated unused-quote status contract changed')
+    read_timestamp(poll['updatedAt'])
     if reviewed_quote(poll['quoteResponse']) != reviewed:
         raise RuntimeError('NEAR status changed the reviewed funding quote')
     status,_=request('/v0/deposit/submit',{})

@@ -5,6 +5,8 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
+import co.electriccoin.zcash.ui.screen.migration.restart.MigrationRestartArgs
 import co.electriccoin.zcash.ui.screen.home.migration.MigrationMessageState
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import kotlinx.coroutines.flow.first
@@ -84,6 +86,22 @@ class MigrationHomeMessageSourceViewOnlyTest {
         verify(exactly = 0) { observeMigrationLiveReadout(any()) }
     }
 
+    @Test
+    fun coldUnsignedMigrationOffersExplicitRecoveryForTheObservedOwner() {
+        val owner = zodl()
+        val ownerKey = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val home = source(owner, router = router)
+        val unsigned = MigrationHomeMessageData(
+            isRunActive = true, accountKeyId = ownerKey, isAwaitingSignatures = true
+        )
+
+        val message = assertIs<MigrationMessageState>(home.createMessageState(unsigned))
+        assertNotNull(message.onClick).invoke()
+
+        verify(exactly = 1) { router.forward(MigrationRestartArgs(ownerKey)) }
+    }
+
     private fun TestScope.collectEmissions(source: MigrationHomeMessageSourceImpl): List<MigrationHomeMessage?> {
         val emissions = mutableListOf<MigrationHomeMessage?>()
         backgroundScope.launch { source.observe().toList(emissions) }
@@ -111,6 +129,7 @@ class MigrationHomeMessageSourceViewOnlyTest {
             navigationRouter = router,
             migrationUpgradeNoticeStorageProvider = mockk(relaxed = true),
             pendingKeystone = pending,
+            pendingSchedule = PendingMigrationScheduleRepositoryImpl(),
         )
 
     private fun zodl() =

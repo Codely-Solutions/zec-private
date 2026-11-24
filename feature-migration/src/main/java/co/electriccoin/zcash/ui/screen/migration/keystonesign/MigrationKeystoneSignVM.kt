@@ -71,7 +71,7 @@ class MigrationKeystoneSignVM(
                 check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
                     "The signing request belongs to a different account"
                 }
-                val sched = pendingSchedule.get(accountKeyId) ?: return@runCatching null
+                val reviewed = pendingSchedule.review(accountKeyId) ?: return@runCatching null
                 val existing = pendingKeystonePczts.get(accountKeyId)
                 if (existing?.isFullySigned == true) {
                     navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
@@ -94,41 +94,13 @@ class MigrationKeystoneSignVM(
                     accumulatedPrepSigned = existing.accumulatedPrepSigned
                     accumulatedTransferSigned = existing.accumulatedTransferSigned
                 } else {
-                    // Opaque-handle contract (SDK 2.6.5+): createUnsignedNoteSplitPczt(proposal)
-                    // and createUnsignedTransferPczts(schedule) must refer to the SAME cached plan
-                    // (same proposalHandle) or the split call throws "plan superseded". When a
-                    // split is needed we therefore prepare it and re-derive the schedule FROM it —
-                    // proposeMigrationTransfersFromSplit() keeps the same handle — mirroring
-                    // MigrationReviewVM's Zashi path, which re-derives for the same reason (a
-                    // pre-split proposeMigrationTransfers() schedule can name denominations the
-                    // split never actually mints). The re-derived schedule is written back to
-                    // pendingSchedule so the scan screen finalizes THIS plan, not the pre-split one.
-                    if (sdk.isNoteSplitNeeded()) {
-                        val splitProposal = sdk.prepareNoteSplit()
-                        val scheduleFromSplit = sdk.proposeMigrationTransfersFromSplit(splitProposal)
-                        splitUnsignedPczt = sdk.createUnsignedNoteSplitPczt(splitProposal).toByteArray()
-                        // The WHOLE note-split tree is built (and pre-signable) at commit — every
-                        // preparation beyond the first layer-0 split joins the batch here; only
-                        // that first split keeps the immediate-broadcast storeSignedNoteSplitPczt
-                        // path (2026-07-30 finding: these used to be silently dropped and stayed
-                        // AwaitingSignature forever).
-                        prepUnsignedPczts =
-                            sdk
-                                .createUnsignedPreparationPczts(scheduleFromSplit)
-                                .filterNot { it.layer == 0 && it.index == 0 }
-                                .map { it.id to it.pczt.toByteArray() }
-                        transferUnsignedPczts =
-                            sdk
-                                .createUnsignedTransferPczts(scheduleFromSplit)
-                                .map { it.first to it.second.toByteArray() }
-                        pendingSchedule.set(accountKeyId, scheduleFromSplit)
-                    } else {
-                        splitUnsignedPczt = null
-                        prepUnsignedPczts =
-                            sdk.createUnsignedPreparationPczts(sched).map { it.id to it.pczt.toByteArray() }
-                        transferUnsignedPczts =
-                            sdk.createUnsignedTransferPczts(sched).map { it.first to it.second.toByteArray() }
-                    }
+                    // Use the SDK plan shown in Review, including the exact split proposal if present.
+                    splitUnsignedPczt = reviewed.noteSplit?.let { sdk.createUnsignedNoteSplitPczt(it).toByteArray() }
+                    prepUnsignedPczts = sdk.createUnsignedPreparationPczts(reviewed.schedule)
+                        .filterNot { splitUnsignedPczt != null && it.layer == 0 && it.index == 0 }
+                        .map { it.id to it.pczt.toByteArray() }
+                    transferUnsignedPczts = sdk.createUnsignedTransferPczts(reviewed.schedule)
+                        .map { it.first to it.second.toByteArray() }
                     roundIndex = 0
                     accumulatedSplitSigned = null
                     accumulatedPrepSigned = emptyList()

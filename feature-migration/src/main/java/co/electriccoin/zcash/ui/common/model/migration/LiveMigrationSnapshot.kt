@@ -29,6 +29,7 @@ data class LiveMigrationSnapshot(
     val completedCount: Int get() = transfers.count { it.isSent }
     val totalCount: Int get() = transfers.size
     val isComplete: Boolean get() = transfers.isNotEmpty() && transfers.all { it.isSent }
+    val areAllMined: Boolean get() = transfers.isNotEmpty() && transfers.all { it.minedHeight != null }
 }
 
 /** One crossing transfer, live from the engine. [index] is the 0-based display position. */

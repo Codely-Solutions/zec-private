@@ -58,6 +58,7 @@ class MigrationRestartVMTest {
             val router = mockk<NavigationRouter>(relaxed = true)
             val vm =
                 MigrationRestartVM(
+            args = MigrationRestartArgs(),
                     restartMigration = restart,
                     getMigrationSnapshot = fakeSnapshot(completed = 7, total = 11),
                     getOrchardBalance = fakeBalance(Zatoshi(307_000_000)),
@@ -101,6 +102,7 @@ class MigrationRestartVMTest {
         val restart = mockk<RestartMigrationUseCase>(relaxed = true)
         val router = mockk<NavigationRouter>(relaxed = true)
         val vm = MigrationRestartVM(
+            args = MigrationRestartArgs(),
             restartMigration = restart,
             getMigrationSnapshot = fakeSnapshot(completed = 1, total = 3),
             getOrchardBalance = fakeBalance(Zatoshi(307_000_000)),

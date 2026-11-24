@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.swap.detail
 
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
+import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -415,6 +417,35 @@ class SwapDetailVMTest {
         assertEquals(stringRes(R.string.private_swap_deposit_reference), savedReference.title)
         assertNull(savedReference.onClick)
         verify(exactly = 0) { copy(DEPOSIT) }
+    }
+
+    @Test
+    fun stoppedDetailDiscardsItsPreviouslyRenderedFundingAdvice() = runTest {
+        val status = SwapInputProvenanceFixture.status(
+            SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
+            SwapAssetTestFixture.zecAsset(),
+            DEPOSIT,
+            SwapType.FLEX_INPUT,
+            """{"depositedAmount":"10000000"}""",
+        ).let { live ->
+            val returned = live.response.quoteResponse
+            live.copy(response = live.response.copy(
+                status = co.electriccoin.zcash.ui.common.model.near.SwapStatus.INCOMPLETE_DEPOSIT,
+                quoteResponse = returned.copy(quote = returned.quote.copy(
+                    deadline = kotlin.time.Instant.parse("2099-01-01T00:00:00Z"),
+                )),
+            ))
+        }
+        val harness = harness(SwapQuoteStatusData(
+            status = status, isLoading = false, savedMetadata = saved(SwapStatus.INCOMPLETE_DEPOSIT)
+                .copy(reviewedIdentity = "v2:fixture"),
+            isFundingWindowOpen = true,
+        ))
+        assertNotNull(harness.state().message)
+        harness.collector.cancel()
+        advanceTimeBy(ANDROID_STATE_FLOW_TIMEOUT.inWholeMilliseconds + 1)
+        runCurrent()
+        assertNull(harness.vm.state.value)
     }
 
     @Test

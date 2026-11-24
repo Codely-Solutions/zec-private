@@ -91,7 +91,7 @@ class TransactionDetailVM(
             .observe(transactionDetailArgs.transactionId, transactionDetailArgs.accountKeyId)
             .shareIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(),
+                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
                 replay = 1,
             )
 
@@ -146,7 +146,9 @@ class TransactionDetailVM(
                 )
             }.stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+                started = SharingStarted.WhileSubscribed(
+                    ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO
+                ),
                 initialValue = createEmptyState()
             )
 
