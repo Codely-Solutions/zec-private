@@ -4141,7 +4141,7 @@ index 237fdf105..df03e4247 100644
 -    }
 +    override fun consume(decision: MigrationTorFailureDecision): Boolean = pending.compareAndSet(decision, null)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..8da942819 100644
+index 9451c3bae..96a7b9cd3 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -7,0 +8 @@ import cash.z.ecc.android.sdk.MigrationState
@@ -4279,7 +4279,7 @@ index 9451c3bae..8da942819 100644
 +        resetPending.flatMapLatest { pending ->
 +            if (pending) flowOf(null) else accountDataSource.selectedAccount.filterNotNull()
 +        }.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
-@@ -149,9 +125,10 @@ class CheckMigrationRecoveryUseCase(
+@@ -149,9 +125,9 @@ class CheckMigrationRecoveryUseCase(
 -                        MigrationWorkerRunState.ABSENT -> {
 -                            // Revival: recovers the DURABLE background chain after process kill, device
 -                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
@@ -4291,20 +4291,19 @@ index 9451c3bae..8da942819 100644
 -                        }
 +    private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>) = withContext(Dispatchers.IO) {
 +        val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
-+        val pendingKeys = MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(context)
-+        for (key in pendingKeys) {
++        for (key in MigrationWorkerHeartbeat.accountKeyIds(context)) {
 +            MigrationAccountRetirement.admit(key) {
 +                if (!resetPending.value && MigrationWorkerHeartbeat.removalPending(context, key)) {
 +                    if (key !in accountKeys) {
 +                        migrationNotifier.cancel(key)
 +                        migrationNotifier.cancelStepDue(key)
 +                        cancelRemovedWake(key)
-@@ -158,0 +136 @@ class CheckMigrationRecoveryUseCase(
+@@ -158,0 +135 @@ class CheckMigrationRecoveryUseCase(
 +                    MigrationWorkerHeartbeat.clearRemovalPending(context, key)
-@@ -160,0 +139,2 @@ class CheckMigrationRecoveryUseCase(
+@@ -160,0 +138,2 @@ class CheckMigrationRecoveryUseCase(
 +        }
 +    }
-@@ -162,36 +142,60 @@ class CheckMigrationRecoveryUseCase(
+@@ -162,36 +141,60 @@ class CheckMigrationRecoveryUseCase(
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
 -                // The flag only records THAT a background attempt once failed on Tor, not what the
 -                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -4401,7 +4400,7 @@ index 9451c3bae..8da942819 100644
 +                        "(next transfer action=${nextTransfer?.action}) — clearing."
 +                )
 +                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
-@@ -199,10 +202,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -199,10 +201,0 @@ class CheckMigrationRecoveryUseCase(
 -            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
 -            // the engine's own state is the single, authoritative record (a commit that never happened
 -            // simply leaves the engine NotStarted, and every screen renders that live).
@@ -4412,7 +4411,7 @@ index 9451c3bae..8da942819 100644
 -                e
 -            )
 -            throttleMutex.withLock { lastRunMark = null }
-@@ -215 +209 @@ class CheckMigrationRecoveryUseCase(
+@@ -215 +208 @@ class CheckMigrationRecoveryUseCase(
 -        private val throttleMutex = Mutex()
 +        private val recoveryMutex = Mutex()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt
@@ -7335,7 +7334,7 @@ index d7cac7de3..156a52efa 100644
 +    private fun retryWhileRemoving(accountKeyId: String): Result =
 +        if (MigrationAccountRetirement.isRemoved(accountKeyId)) Result.success() else Result.retry()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
-index 5a7def039..3c956752b 100644
+index 5a7def039..212c61948 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
 @@ -18,0 +19,11 @@ object MigrationWorkerHeartbeat {
@@ -7350,13 +7349,7 @@ index 5a7def039..3c956752b 100644
 +            }?.takeIf { it.isNotEmpty() }
 +        }.toSet()
 +
-@@ -32,0 +44,19 @@ object MigrationWorkerHeartbeat {
-+    internal fun pendingRemovalAccountKeyIds(context: Context): Set<String> =
-+        prefs(context).all.mapNotNull { (key, value) ->
-+            key.takeIf { it.startsWith(KEY_REMOVAL_PENDING) && value == true }
-+                ?.removePrefix(KEY_REMOVAL_PENDING)?.takeIf { it.isNotEmpty() }
-+        }.toSet()
-+
+@@ -32,0 +44,13 @@ object MigrationWorkerHeartbeat {
 +    internal fun removalPending(context: Context, accountKeyId: String): Boolean =
 +        prefs(context).getBoolean(KEY_REMOVAL_PENDING + accountKeyId, false)
 +
@@ -7370,7 +7363,7 @@ index 5a7def039..3c956752b 100644
 +        }
 +    }
 +
-@@ -44,0 +75 @@ object MigrationWorkerHeartbeat {
+@@ -44,0 +69 @@ object MigrationWorkerHeartbeat {
 +    private const val KEY_REMOVAL_PENDING = "removal_pending_"
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 index 698a60fbd..546f89772 100644
@@ -7846,10 +7839,21 @@ index 000000000..9aeb20a52
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
-index d329553c7..37c30cc5f 100644
+index d329553c7..1e3337dae 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationBackgroundRecoveryScenarioTest.kt
-@@ -133,0 +134 @@ class MigrationBackgroundRecoveryScenarioTest {
+@@ -18,0 +19 @@ import io.mockk.mockk
++import kotlinx.coroutines.flow.flowOf
+@@ -38,2 +39 @@ import kotlin.test.assertTrue
+- *  - A worker merely SCHEDULED for later (armed, not yet due) is accelerated to run now — the
+- *    app-open forward-progress trigger, for users with no reliable background execution.
++ *  - A worker scheduled for later keeps its wake. The live driver accelerates work in the app.
+@@ -124 +124 @@ class MigrationBackgroundRecoveryScenarioTest {
+-                coEvery { get() } returns pendingMigrationTorFailure
++                coEvery { get(any()) } returns pendingMigrationTorFailure
+@@ -128,0 +129 @@ class MigrationBackgroundRecoveryScenarioTest {
++                every { selectedAccount } returns flowOf(testWalletAccount)
+@@ -133,0 +135 @@ class MigrationBackgroundRecoveryScenarioTest {
 +        migrationNotifier = mockk(relaxed = true),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationNotificationIdentityTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationNotificationIdentityTest.kt
 new file mode 100644
@@ -7911,7 +7915,7 @@ index e2be5482b..7544e3d4f 100644
 +        assertEquals(true, repo.consume(second))
 +        assertNull(repo.decision.value)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
-index 05231840e..f95a3c5b6 100644
+index 05231840e..d7de3900e 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -7956,7 +7960,7 @@ index 05231840e..f95a3c5b6 100644
 +        migrationNotifier = migrationNotifier,
 +        resetPending = resetState,
 +        cancelRemovedWake = cancelRemovedWake,
-@@ -105,0 +128,69 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -105,0 +128,70 @@ class CheckMigrationRecoveryUseCaseTest {
 +    @Test
 +    fun foregroundRecoveryClearsGoneOwnerNoticesWithoutAWorkerAndRetainsTheSurvivingWake() = runTest {
 +        val goneKey = "00000000000000000000000000000002"
@@ -7983,7 +7987,8 @@ index 05231840e..f95a3c5b6 100644
 +        verify(exactly = 0) { notifier.cancelStepDue(ownerKey) }
 +        assertEquals(listOf(goneKey), cancelled)
 +        assertEquals(emptyList(), scheduled)
-+        assertEquals(emptySet(), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
++        assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, goneKey))
++        assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, ownerKey))
 +    }
 +
 +    @Test
@@ -7993,13 +7998,13 @@ index 05231840e..f95a3c5b6 100644
 +        val notifier = mockk<MigrationNotifier>(relaxed = true)
 +        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +        useCase(sdk, mockk(relaxed = true), accounts = emptyList(), context = heartbeat).invoke()
-+        assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
++        assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.accountKeyIds(heartbeat))
 +
 +        CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
 +        MigrationAccountRetirement.begin(goneKey)
 +        try {
 +            useCase(sdk, mockk(relaxed = true), context = heartbeat, migrationNotifier = notifier).invoke()
-+            assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
++            assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.accountKeyIds(heartbeat))
 +            verify(exactly = 0) { notifier.cancel(any()) }
 +            verify(exactly = 0) { notifier.cancelStepDue(any()) }
 +        } finally {
@@ -8026,7 +8031,7 @@ index 05231840e..f95a3c5b6 100644
 +        }
 +    }
 +
-@@ -107,0 +199,69 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -107,0 +200,69 @@ class CheckMigrationRecoveryUseCaseTest {
 +    @Test
 +    fun foregroundRecoveryWaitsForTheAccountWithoutAnotherLifecycleEvent() = runTest {
 +        val selection = MutableStateFlow<WalletAccount?>(null)
@@ -8096,10 +8101,10 @@ index 05231840e..f95a3c5b6 100644
 +        coVerify(exactly = 1) { driver.startIfNotRunning(testSdkAccount.accountUuid.toStorageKeyId()) }
 +    }
 +
-@@ -123 +283 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -123 +284 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
-@@ -145 +305,23 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -145 +306,23 @@ class CheckMigrationRecoveryUseCaseTest {
 -            useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true).invoke()
 +            val otherAccount = mockk<WalletAccount> {
 +                every { sdkAccount } returns
@@ -8124,34 +8129,34 @@ index 05231840e..f95a3c5b6 100644
 +            CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
 +            val deferredOwners = mutableListOf<String>()
 +            recovery { deferredOwners += it }
-@@ -147 +329 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -147 +330 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 1) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
 +            assertEquals(listOf(ownerKey), deferredOwners)
-@@ -168,2 +350,2 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -168,2 +351,2 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs) }
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs(ownerKey)) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
-@@ -183 +365 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -183 +366 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { get() } returns true
 +                    coEvery { this@mockk.get(ownerKey) } returns true
-@@ -204,2 +386,2 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -204,2 +387,2 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
 -            coVerify(exactly = 1) { storageProvider.store(false) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
 +            coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
-@@ -213 +395 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -213 +396 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { get() } returns true
 +                    coEvery { this@mockk.get(ownerKey) } returns true
-@@ -231,2 +413,2 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -231,2 +414,2 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
 -            coVerify(exactly = 1) { storageProvider.store(false) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
 +            coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
-@@ -250 +432 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -250 +433 @@ class CheckMigrationRecoveryUseCaseTest {
 -            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs) }
 +            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs(ownerKey)) }
-@@ -433 +614,0 @@ class CheckMigrationRecoveryUseCaseTest {
+@@ -433 +615,0 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { this@mockk() } returns sdk
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
 index 860a02aa2..6a978b8f1 100644

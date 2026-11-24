@@ -124,8 +124,7 @@ class CheckMigrationRecoveryUseCase(
 
     private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>) = withContext(Dispatchers.IO) {
         val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
-        val pendingKeys = MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(context)
-        for (key in pendingKeys) {
+        for (key in MigrationWorkerHeartbeat.accountKeyIds(context)) {
             MigrationAccountRetirement.admit(key) {
                 if (!resetPending.value && MigrationWorkerHeartbeat.removalPending(context, key)) {
                     if (key !in accountKeys) {

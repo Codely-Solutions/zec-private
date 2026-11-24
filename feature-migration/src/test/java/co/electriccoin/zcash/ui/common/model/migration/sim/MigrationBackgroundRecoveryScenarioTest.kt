@@ -16,6 +16,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import java.util.UUID
 import kotlin.test.BeforeTest
@@ -35,8 +36,7 @@ import kotlin.test.assertTrue
  *    the worker were absent) and does NOT auto-navigate (Task 6: only a pending Tor failure
  *    auto-navigates on app-open).
  *  - A completed migration with no saved plan skips reconciliation entirely.
- *  - A worker merely SCHEDULED for later (armed, not yet due) is accelerated to run now — the
- *    app-open forward-progress trigger, for users with no reliable background execution.
+ *  - A worker scheduled for later keeps its wake. The live driver accelerates work in the app.
  *
  * Scope note: `getWorkerRunState`/`scheduleNow` are injected specifically so this file's
  * reconciliation/acceleration assertions don't need a real WorkManager-initialised `Context`
@@ -121,11 +121,12 @@ class MigrationBackgroundRecoveryScenarioTest {
         navigationRouter = navigationRouter,
         pendingMigrationTorFailureStorageProvider =
             mockk<PendingMigrationTorFailureStorageProvider> {
-                coEvery { get() } returns pendingMigrationTorFailure
+                coEvery { get(any()) } returns pendingMigrationTorFailure
             },
         accountDataSource =
             mockk<AccountDataSource>(relaxed = true) {
                 coEvery { getAllAccounts() } returns listOf(testWalletAccount)
+                every { selectedAccount } returns flowOf(testWalletAccount)
             },
         context = mockk<Context>(relaxed = true),
         getWorkerRunState = getWorkerRunState,

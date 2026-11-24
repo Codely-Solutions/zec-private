@@ -151,7 +151,8 @@ class CheckMigrationRecoveryUseCaseTest {
         verify(exactly = 0) { notifier.cancelStepDue(ownerKey) }
         assertEquals(listOf(goneKey), cancelled)
         assertEquals(emptyList(), scheduled)
-        assertEquals(emptySet(), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+        assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, goneKey))
+        assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, ownerKey))
     }
 
     @Test
@@ -161,13 +162,13 @@ class CheckMigrationRecoveryUseCaseTest {
         val notifier = mockk<MigrationNotifier>(relaxed = true)
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
         useCase(sdk, mockk(relaxed = true), accounts = emptyList(), context = heartbeat).invoke()
-        assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+        assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.accountKeyIds(heartbeat))
 
         CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
         MigrationAccountRetirement.begin(goneKey)
         try {
             useCase(sdk, mockk(relaxed = true), context = heartbeat, migrationNotifier = notifier).invoke()
-            assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+            assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.accountKeyIds(heartbeat))
             verify(exactly = 0) { notifier.cancel(any()) }
             verify(exactly = 0) { notifier.cancelStepDue(any()) }
         } finally {
