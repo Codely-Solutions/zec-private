@@ -7444,7 +7444,7 @@ index f030dbba0..0a7509abc 100644
 +
 +            busy = false
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
-index 14369fe4c..19a99dda2 100644
+index 14369fe4c..495855535 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.MigrationState
@@ -7465,58 +7465,57 @@ index 14369fe4c..19a99dda2 100644
 -import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 @@ -29,0 +27 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-@@ -31,0 +30,9 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
+@@ -31,0 +30,8 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 +import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
-+import cash.z.ecc.android.sdk.MigrationState
 +import kotlin.test.assertFalse
 +import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 +import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 +import kotlin.time.Instant
 +import kotlin.test.assertNull
-@@ -37 +43,0 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -37 +42,0 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
-@@ -39 +44,0 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -39 +43,0 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 -import co.electriccoin.zcash.work.MigrationScheduler
-@@ -96 +101 @@ class MigrationCompleteVMTest {
+@@ -96 +100 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { seen.store(true) }
 +            coVerify(exactly = 0) { seen.store(any(), true) }
-@@ -118 +123 @@ class MigrationCompleteVMTest {
+@@ -118 +122 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { seen.store(true) }
 +            coVerify(exactly = 0) { seen.store(any(), true) }
-@@ -139 +144 @@ class MigrationCompleteVMTest {
+@@ -139 +143 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -162 +167 @@ class MigrationCompleteVMTest {
+@@ -162 +166 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -186 +191 @@ class MigrationCompleteVMTest {
+@@ -186 +190 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -208 +213 @@ class MigrationCompleteVMTest {
+@@ -208 +212 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -244 +249 @@ class MigrationCompleteVMTest {
+@@ -244 +248 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -257 +262 @@ class MigrationCompleteVMTest {
+@@ -257 +261 @@ class MigrationCompleteVMTest {
 -    fun migrateAnywayForZashiAccountSignsAndSubmitsProposalDirectly() =
 +    fun migrateAnywayForZashiAccountHandsTheOriginalProposalToSharedSubmission() =
-@@ -260 +265 @@ class MigrationCompleteVMTest {
+@@ -260 +264 @@ class MigrationCompleteVMTest {
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
 +            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
-@@ -262 +266,0 @@ class MigrationCompleteVMTest {
+@@ -262 +265,0 @@ class MigrationCompleteVMTest {
 -            val usk = mockk<UnifiedSpendingKey>(relaxed = true)
-@@ -266 +269,0 @@ class MigrationCompleteVMTest {
+@@ -266 +268,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -268 +271,4 @@ class MigrationCompleteVMTest {
+@@ -268 +270,4 @@ class MigrationCompleteVMTest {
 -            coEvery { proposalDataSource.submitTransaction(proposal, usk) } returns SubmitResult.Success(listOf("txid"))
 +            val adopted = MigrationSweepTransactionProposal(proposal)
 +            val zashiProposalRepository = mockk<ZashiProposalRepository> {
 +                every { setMigrationSweepProposal(proposal) } returns adopted
 +            }
-@@ -275,3 +281,4 @@ class MigrationCompleteVMTest {
+@@ -275,3 +280,4 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 -                    zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
 -                    proposalDataSource = proposalDataSource,
@@ -7524,31 +7523,31 @@ index 14369fe4c..19a99dda2 100644
 +                    zashiProposalRepository = zashiProposalRepository,
 +                    submitProposal = submitProposal,
 +                    args = MigrationCompleteArgs(isResidueOnly = true),
-@@ -284,2 +291,2 @@ class MigrationCompleteVMTest {
+@@ -284,2 +290,2 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proposal, usk) }
 -            assertEquals(listOf<Any>(MigrationSuccessArgs("txid")), router.forwardedRoutes)
 +            coVerify(exactly = 1) { submitProposal(adopted) }
 +            assertEquals(emptyList(), router.forwardedRoutes)
-@@ -296 +302,0 @@ class MigrationCompleteVMTest {
+@@ -296 +301,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -299 +305 @@ class MigrationCompleteVMTest {
+@@ -299 +304 @@ class MigrationCompleteVMTest {
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
 +            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
-@@ -306 +312 @@ class MigrationCompleteVMTest {
+@@ -306 +311 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -308 +314,2 @@ class MigrationCompleteVMTest {
+@@ -308 +313,2 @@ class MigrationCompleteVMTest {
 -                    proposalDataSource = proposalDataSource,
 +                    submitProposal = submitProposal,
 +                    args = MigrationCompleteArgs(isResidueOnly = true),
-@@ -315,3 +322,3 @@ class MigrationCompleteVMTest {
+@@ -315,3 +321,3 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L)) }
 -            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal() }
 -            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
 +            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal) }
 +            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
 +            coVerify(exactly = 0) { submitProposal(any()) }
-@@ -322,29 +329,4 @@ class MigrationCompleteVMTest {
+@@ -322,29 +328,4 @@ class MigrationCompleteVMTest {
 -    fun summaryIsReadFromEngineSdkNotTheAppSidePlan() =
 -        runTest {
 -            // The Migration Complete summary (amount migrated / transfer count / duration) must come
@@ -7582,7 +7581,7 @@ index 14369fe4c..19a99dda2 100644
 +        val account = mockk<ZodlAccount>(relaxed = true) {
 +            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { 4 }))
 +            every { isSpendable } returns true
-@@ -351,0 +334,21 @@ class MigrationCompleteVMTest {
+@@ -351,0 +333,21 @@ class MigrationCompleteVMTest {
 +        val owner = account.sdkAccount.accountUuid.toStorageKeyId()
 +        val snapshot = mockk<GetMigrationSnapshotUseCase>()
 +        val first = crossing(1L, 200_000L, 1_785_281_502L)
@@ -7604,7 +7603,7 @@ index 14369fe4c..19a99dda2 100644
 +        coVerify(exactly = 1) { snapshot(owner) }
 +        collectJob.cancel()
 +    }
-@@ -354,35 +357,4 @@ class MigrationCompleteVMTest {
+@@ -354,35 +356,4 @@ class MigrationCompleteVMTest {
 -    fun residueVariantReadsTotalTransferredFromLiveIronwoodBalanceNotEngineSummary() =
 -        runTest {
 -            // MOB-1750: for isResidueOnly, "In Ironwood" must be the live Ironwood pool balance
@@ -7644,10 +7643,10 @@ index 14369fe4c..19a99dda2 100644
 +        val snapshot = mockk<GetMigrationSnapshotUseCase> {
 +            coEvery { this@mockk(any()) } returns LiveMigrationSnapshot(
 +                listOf(crossing(1L, 200_000L, null)), emptyList(), 300L,
-@@ -390,2 +361,0 @@ class MigrationCompleteVMTest {
+@@ -390,2 +360,0 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { sdk.getMigrationSummary() }
 -            collectJob.cancel()
-@@ -392,0 +363,16 @@ class MigrationCompleteVMTest {
+@@ -392,0 +362,16 @@ class MigrationCompleteVMTest {
 +        val vm = vm(
 +            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
 +            orchardBalanceZatoshi = 0L,
@@ -7664,7 +7663,7 @@ index 14369fe4c..19a99dda2 100644
 +        assertNull(state.duration)
 +        collectJob.cancel()
 +    }
-@@ -395,30 +381,17 @@ class MigrationCompleteVMTest {
+@@ -395,30 +380,17 @@ class MigrationCompleteVMTest {
 -    fun durationDoesNotApplyThePrivacyFloorSinceBothTimestampsAreAlreadyMined() =
 -        runTest {
 -            // The displayed duration spans the campaign's first to last MINED transfer -- both
@@ -7712,7 +7711,7 @@ index 14369fe4c..19a99dda2 100644
 +        coVerify(exactly = 0) { snapshot(any()) }
 +        collectJob.cancel()
 +    }
-@@ -426,8 +399,14 @@ class MigrationCompleteVMTest {
+@@ -426,8 +398,14 @@ class MigrationCompleteVMTest {
 -            val expected = stringRes(formatMigrationDuration(spanSeconds, applyPrivacyFloor = false))
 -            assertEquals(
 -                expected,
@@ -7735,22 +7734,22 @@ index 14369fe4c..19a99dda2 100644
 +        minedHeight = minedAt?.let { 11L },
 +        minedAt = minedAt?.let { Instant.fromEpochSeconds(it) },
 +    )
-@@ -488 +466,0 @@ class MigrationCompleteVMTest {
+@@ -488 +465,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -490 +467,0 @@ class MigrationCompleteVMTest {
+@@ -490 +466,0 @@ class MigrationCompleteVMTest {
 -            val zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true)
-@@ -492 +469 @@ class MigrationCompleteVMTest {
+@@ -492 +468 @@ class MigrationCompleteVMTest {
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
 +            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
-@@ -498,2 +475 @@ class MigrationCompleteVMTest {
+@@ -498,2 +474 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 -                    zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -501 +477,2 @@ class MigrationCompleteVMTest {
+@@ -501 +476,2 @@ class MigrationCompleteVMTest {
 -                    proposalDataSource = proposalDataSource,
 +                    submitProposal = submitProposal,
 +                    args = MigrationCompleteArgs(isResidueOnly = true),
-@@ -518,4 +495,3 @@ class MigrationCompleteVMTest {
+@@ -518,4 +494,3 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { zashiSpendingKeyDataSource.getZashiSpendingKey() }
 -            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
@@ -7758,7 +7757,7 @@ index 14369fe4c..19a99dda2 100644
 +            coVerify(exactly = 0) { submitProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
-@@ -524,0 +501,23 @@ class MigrationCompleteVMTest {
+@@ -524,0 +500,23 @@ class MigrationCompleteVMTest {
 +    @Test
 +    fun completionForAStaleOwnerLeavesTheSelectedAccountsScheduleAndPreferencesAlone() = runTest {
 +        val reviewed = AccountUuid.new(ByteArray(16))
@@ -7782,40 +7781,40 @@ index 14369fe4c..19a99dda2 100644
 +        coVerify(exactly = 0) { seen.store(any(), any()) }
 +    }
 +
-@@ -544,0 +544 @@ class MigrationCompleteVMTest {
+@@ -544,0 +543 @@ class MigrationCompleteVMTest {
 +        getMigrationSnapshot: GetMigrationSnapshotUseCase = mockk { coEvery { this@mockk(any()) } returns null },
-@@ -547 +547,3 @@ class MigrationCompleteVMTest {
+@@ -547 +546,3 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns mockk(relaxed = true)
 +                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true) {
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.Complete
 +                }
-@@ -549 +550,0 @@ class MigrationCompleteVMTest {
+@@ -549 +549,0 @@ class MigrationCompleteVMTest {
 -        zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource = mockk(relaxed = true),
-@@ -551 +552,2 @@ class MigrationCompleteVMTest {
+@@ -551 +551,2 @@ class MigrationCompleteVMTest {
 -        proposalDataSource: ProposalDataSource = mockk(relaxed = true),
 +        zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
 +        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
-@@ -553,2 +554,0 @@ class MigrationCompleteVMTest {
+@@ -553,2 +553,0 @@ class MigrationCompleteVMTest {
 -        migrationScheduler: MigrationScheduler = mockk(relaxed = true),
 -        migrationNotifier: MigrationNotifier = mockk(relaxed = true),
-@@ -559 +559 @@ class MigrationCompleteVMTest {
+@@ -559 +558 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(orchardBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(orchardBalanceZatoshi)
-@@ -563 +563 @@ class MigrationCompleteVMTest {
+@@ -563 +562 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(ironwoodBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(ironwoodBalanceZatoshi)
-@@ -571 +571 @@ class MigrationCompleteVMTest {
+@@ -571 +570 @@ class MigrationCompleteVMTest {
 -                every { observe() } returns flowOf(false)
 +                every { observe(any<String>()) } returns flowOf(false)
-@@ -579,0 +580 @@ class MigrationCompleteVMTest {
+@@ -579,0 +579 @@ class MigrationCompleteVMTest {
 +        getMigrationSnapshot = getMigrationSnapshot,
-@@ -581 +581,0 @@ class MigrationCompleteVMTest {
+@@ -581 +580,0 @@ class MigrationCompleteVMTest {
 -        zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
-@@ -583 +583,2 @@ class MigrationCompleteVMTest {
+@@ -583 +582,2 @@ class MigrationCompleteVMTest {
 -        proposalDataSource = proposalDataSource,
 +        zashiProposalRepository = zashiProposalRepository,
 +        submitProposal = submitProposal,
-@@ -585,2 +585,0 @@ class MigrationCompleteVMTest {
+@@ -585,2 +584,0 @@ class MigrationCompleteVMTest {
 -        migrationScheduler = migrationScheduler,
 -        migrationNotifier = migrationNotifier,
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/invalid/MigrationTransferInvalidVMTest.kt
@@ -8209,18 +8208,24 @@ index 92b55c664..c47c139b4 100644
 +        every { sdkAccount } returns AccountFixture.new(accountUuid = UUID.fromString(uuid))
 +    }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewPlanShapeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewPlanShapeTest.kt
-index 20a8edf27..5372c57fd 100644
+index 20a8edf27..1e3c55a22 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewPlanShapeTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewPlanShapeTest.kt
+@@ -21 +20,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
+@@ -361,0 +361 @@ class MigrationReviewPlanShapeTest {
++                coEvery { getMigrationStateUnreconciled() } returns cash.z.ecc.android.sdk.MigrationState.NotStarted
 @@ -368 +368,2 @@ class MigrationReviewPlanShapeTest {
 -            getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
 +            pendingKeystone = mockk { every { peek(any()) } returns null },
 @@ -374,0 +376 @@ class MigrationReviewPlanShapeTest {
 +            migrationTorEnabled = mockk(relaxed = true),
-@@ -387 +389 @@ class MigrationReviewPlanShapeTest {
+@@ -385,4 +386,0 @@ class MigrationReviewPlanShapeTest {
+-            getOrchardBalance =
+-                mockk<GetOrchardBalanceUseCase> {
 -                    coEvery { this@mockk() } returns Zatoshi(500_000L)
-+                    coEvery { this@mockk(any()) } returns Zatoshi(500_000L)
+-                },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 index d0838db0c..0808ddfbe 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt

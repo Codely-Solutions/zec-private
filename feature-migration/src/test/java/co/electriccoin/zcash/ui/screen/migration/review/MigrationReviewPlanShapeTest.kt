@@ -18,7 +18,6 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
@@ -359,6 +358,7 @@ class MigrationReviewPlanShapeTest {
     private fun vmWithSchedule(schedule: MigrationSchedule): MigrationReviewVM {
         val sdk =
             mockk<OrchardMigrationSdk>(relaxed = true) {
+                coEvery { getMigrationStateUnreconciled() } returns cash.z.ecc.android.sdk.MigrationState.NotStarted
                 coEvery { proposeMigrationTransfers(any()) } returns schedule
                 coEvery { estimateMigrationRunCount() } returns 1
                 coEvery { estimatedSecondsPerBlock() } returns 75L
@@ -383,10 +383,6 @@ class MigrationReviewPlanShapeTest {
                 mockk<GetSelectedWalletAccountUseCase> {
                     coEvery { this@mockk() } returns mockk<ZodlAccount>(relaxed = true)
                     every { observe() } returns flowOf(mockk<ZodlAccount>(relaxed = true))
-                },
-            getOrchardBalance =
-                mockk<GetOrchardBalanceUseCase> {
-                    coEvery { this@mockk(any()) } returns Zatoshi(500_000L)
                 },
             errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
             zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true),
