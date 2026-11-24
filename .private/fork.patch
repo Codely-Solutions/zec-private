@@ -4372,7 +4372,7 @@ index d4aee1768..86f32e269 100644
 +            walletUsesTor -> MigrationBatteryArgs(owner, useTor = true)
 +            else -> MigrationPrivacyArgs(mode, owner)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetOrchardMigrationSdkUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetOrchardMigrationSdkUseCase.kt
-index 218b10420..1175bc193 100644
+index 218b10420..e43c9d77f 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetOrchardMigrationSdkUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetOrchardMigrationSdkUseCase.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -4406,12 +4406,22 @@ index 218b10420..1175bc193 100644
 +                    ?: MigrationSdkLookup.Gone
 +            }
 +        }
-@@ -73,0 +87 @@ class GetOrchardMigrationSdkUseCase(
-+        if (MigrationAccountRetirement.blocks(accountKeyId)) return null
-@@ -79 +93,2 @@ class GetOrchardMigrationSdkUseCase(
+@@ -74,6 +87,9 @@ class GetOrchardMigrationSdkUseCase(
+-        val account =
+-            accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId) ?: run {
+-                migrationLog("GetOrchardMigrationSdk: no account for keyId=$accountKeyId")
+-                return null
+-            }
 -        return buildFor(account)
-+        val sdk = buildFor(account)
-+        return MigrationAccountRetirement.admit(accountKeyId) { sdk }
++        if (MigrationAccountRetirement.blocks(accountKeyId)) return null
++        val account = accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId)
++        return if (account == null) {
++            migrationLog("GetOrchardMigrationSdk: no account for the requested migration")
++            null
++        } else {
++            val sdk = buildFor(account)
++            MigrationAccountRetirement.admit(accountKeyId) { sdk }
++        }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/LockOrchardBalanceUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/LockOrchardBalanceUseCase.kt
 index c2045aa9b..4bae99de4 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/LockOrchardBalanceUseCase.kt
@@ -40088,7 +40098,7 @@ index 9174c2293..5bc75d47f 100644
 @@ -58,0 +102 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..a0e439957 100644
+index a33c847ad..62c8f7f58 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -40105,21 +40115,22 @@ index a33c847ad..a0e439957 100644
 @@ -6,0 +15,2 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Job
-@@ -13,0 +24,4 @@ import kotlinx.coroutines.launch
+@@ -13,0 +24,5 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlin.time.Clock
++import kotlin.time.Duration
 +import kotlin.time.TimeSource
-@@ -18,0 +33,3 @@ class GetSwapStatusUseCase(
+@@ -18,0 +34,3 @@ class GetSwapStatusUseCase(
 +    context: Context? = null,
 +    clock: Clock = Clock.System,
 +    timeSource: TimeSource = AndroidElapsedTimeSource,
-@@ -19,0 +37,4 @@ class GetSwapStatusUseCase(
+@@ -19,0 +38,4 @@ class GetSwapStatusUseCase(
 +    private val donationPreferences = context?.let(::DonationPreferences)
 +    private val fundingClock = ElapsedTimeClock(clock, timeSource)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -21,0 +43,8 @@ class GetSwapStatusUseCase(
+@@ -21,0 +44,8 @@ class GetSwapStatusUseCase(
 +    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
 +        observe(expected.depositAddress, expected).first { !it.isLoading }
 +
@@ -40128,28 +40139,28 @@ index a33c847ad..a0e439957 100644
 +    internal fun observeForAccount(depositAddress: String, account: WalletAccount): Flow<SwapQuoteStatusData> =
 +        observe(depositAddress, null, account)
 +
-@@ -23 +52,5 @@ class GetSwapStatusUseCase(
+@@ -23 +53,5 @@ class GetSwapStatusUseCase(
 -    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
 +    private fun observe(
 +        depositAddress: String,
 +        initial: TransactionSwapMetadata?,
 +        account: WalletAccount? = null,
 +    ): Flow<SwapQuoteStatusData> =
-@@ -32 +65,4 @@ class GetSwapStatusUseCase(
+@@ -32 +66,4 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
 +                val loaded = runCatchingRecoverable {
 +                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
 +                }
 +                val expectedMetadata = loaded.getOrNull()
-@@ -38 +74,2 @@ class GetSwapStatusUseCase(
+@@ -38 +75,2 @@ class GetSwapStatusUseCase(
 -                            error = IllegalStateException("No metadata for deposit addr")
 +                            error = loaded.exceptionOrNull() as? Exception
 +                                ?: IllegalStateException("No metadata for deposit addr"),
-@@ -43,0 +81,3 @@ class GetSwapStatusUseCase(
+@@ -43,0 +82,3 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
 +                var fundingExpiry: Job? = null
-@@ -46,9 +86,8 @@ class GetSwapStatusUseCase(
+@@ -46,9 +87,8 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -40167,29 +40178,23 @@ index a33c847ad..a0e439957 100644
 +                            ?.observedAtProvider?.let { result.deadline - maxOf(it, fundingClock.now()) }
 +                            ?.takeIf { it.isPositive() }
 +                        fundingExpiry?.cancel()
-@@ -57,0 +97 @@ class GetSwapStatusUseCase(
+@@ -57,0 +98 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -59 +99,2 @@ class GetSwapStatusUseCase(
+@@ -59 +100,2 @@ class GetSwapStatusUseCase(
 -                                error = null
 +                                error = null,
 +                                isFundingWindowOpen = fundingTimeLeft != null,
-@@ -61,0 +103,12 @@ class GetSwapStatusUseCase(
+@@ -61,0 +104,6 @@ class GetSwapStatusUseCase(
 +                        fundingExpiry = fundingTimeLeft?.let { remaining ->
 +                            launch {
-+                                val displayUntil = fundingClock.now() + remaining
-+                                var timeLeft = displayUntil - fundingClock.now()
-+                                while (timeLeft.isPositive()) {
-+                                    // Re-evaluate device time on resume or after a clock correction.
-+                                    delay(minOf(timeLeft, 1.seconds))
-+                                    timeLeft = displayUntil - fundingClock.now()
-+                                }
++                                waitForFundingExpiry(remaining)
 +                                data.update { it.copy(isFundingWindowOpen = false) }
 +                            }
 +                        }
-@@ -64,0 +118,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +113,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +121,13 @@ class GetSwapStatusUseCase(
+@@ -66,2 +116,13 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        fundingExpiry?.cancel()
@@ -40205,7 +40210,17 @@ index a33c847ad..a0e439957 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +141,44 @@ class GetSwapStatusUseCase(
+@@ -74,0 +136,54 @@ class GetSwapStatusUseCase(
++
++    private suspend fun waitForFundingExpiry(remaining: Duration) {
++        val displayUntil = fundingClock.now() + remaining
++        var timeLeft = displayUntil - fundingClock.now()
++        while (timeLeft.isPositive()) {
++            // Re-evaluate device time on resume or after a clock correction.
++            delay(minOf(timeLeft, 1.seconds))
++            timeLeft = displayUntil - fundingClock.now()
++        }
++    }
 +
 +    private suspend fun savedAfterFailure(
 +        expected: TransactionSwapMetadata,
@@ -40250,10 +40265,10 @@ index a33c847ad..a0e439957 100644
 +
 +    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
 +        IllegalStateException("Swap status refresh was not saved")
-@@ -80,0 +191,2 @@ data class SwapQuoteStatusData(
+@@ -80,0 +196,2 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
 +    val isFundingWindowOpen: Boolean = false,
-@@ -83,0 +196,19 @@ data class SwapQuoteStatusData(
+@@ -83,0 +201,19 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)

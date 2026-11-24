@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.seconds
 
@@ -102,13 +103,7 @@ class GetSwapStatusUseCase(
                         }
                         fundingExpiry = fundingTimeLeft?.let { remaining ->
                             launch {
-                                val displayUntil = fundingClock.now() + remaining
-                                var timeLeft = displayUntil - fundingClock.now()
-                                while (timeLeft.isPositive()) {
-                                    // Re-evaluate device time on resume or after a clock correction.
-                                    delay(minOf(timeLeft, 1.seconds))
-                                    timeLeft = displayUntil - fundingClock.now()
-                                }
+                                waitForFundingExpiry(remaining)
                                 data.update { it.copy(isFundingWindowOpen = false) }
                             }
                         }
@@ -138,6 +133,16 @@ class GetSwapStatusUseCase(
 
             awaitClose()
         }
+
+    private suspend fun waitForFundingExpiry(remaining: Duration) {
+        val displayUntil = fundingClock.now() + remaining
+        var timeLeft = displayUntil - fundingClock.now()
+        while (timeLeft.isPositive()) {
+            // Re-evaluate device time on resume or after a clock correction.
+            delay(minOf(timeLeft, 1.seconds))
+            timeLeft = displayUntil - fundingClock.now()
+        }
+    }
 
     private suspend fun savedAfterFailure(
         expected: TransactionSwapMetadata,

@@ -85,13 +85,14 @@ class GetOrchardMigrationSdkUseCase(
      */
     suspend operator fun invoke(accountKeyId: String): OrchardMigrationSdk? {
         if (MigrationAccountRetirement.blocks(accountKeyId)) return null
-        val account =
-            accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId) ?: run {
-                migrationLog("GetOrchardMigrationSdk: no account for keyId=$accountKeyId")
-                return null
-            }
-        val sdk = buildFor(account)
-        return MigrationAccountRetirement.admit(accountKeyId) { sdk }
+        val account = accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId)
+        return if (account == null) {
+            migrationLog("GetOrchardMigrationSdk: no account for the requested migration")
+            null
+        } else {
+            val sdk = buildFor(account)
+            MigrationAccountRetirement.admit(accountKeyId) { sdk }
+        }
     }
 
     @OptIn(InternalTestingApi::class)
