@@ -31677,14 +31677,26 @@ index abd227feb..436f4f2d3 100644
 +        singleOf(::LaunchNavigationRequests)
 +        singleOf(::KeystoneEnrollmentSession)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
-index b1dfa14c3..658aa14e4 100644
+index b1dfa14c3..68a82bc20 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
 @@ -13 +12,0 @@ import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSourceI
 -import co.electriccoin.zcash.ui.common.datasource.NearSwapDataSource
 @@ -18 +16,0 @@ import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSourceImpl
 -import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
-@@ -35 +32,0 @@ val dataSourceModule =
+@@ -29 +27,10 @@ val dataSourceModule =
+-        singleOf(::AccountDataSourceImpl) bind AccountDataSource::class
++        single<AccountDataSource> {
++            AccountDataSourceImpl(
++                synchronizerProvider = get(),
++                selectedAccountUUIDProvider = get(),
++                persistableWalletProvider = get(),
++                ledgerAccountBindingProvider = get(),
++                viewOnlyContent = get(),
++                context = get(),
++            )
++        }
+@@ -35 +41,0 @@ val dataSourceModule =
 -        singleOf(::NearSwapDataSource) bind SwapDataSource::class
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt
 new file mode 100644
@@ -32561,72 +32573,108 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..58f9769fb 100644
+index 4d388e80f..31ff1acd4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
 +import cash.z.ecc.android.sdk.tool.DerivationTool
 @@ -22,0 +24 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountImportException
 +import co.electriccoin.zcash.ui.common.model.VersionInfo
-@@ -119 +121 @@ interface AccountDataSource {
+@@ -41 +42,0 @@ import kotlinx.coroutines.channels.Channel
+-import kotlinx.coroutines.channels.ClosedSendChannelException
+@@ -119 +120 @@ interface AccountDataSource {
 -    suspend fun requestNextShieldedAddress(): String
 +    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String
-@@ -284 +286 @@ class AccountDataSourceImpl(
+@@ -143,0 +145 @@ class AccountDataSourceImpl(
++    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+@@ -146 +147,0 @@ class AccountDataSourceImpl(
+-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+@@ -284 +285 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
-@@ -356 +358 @@ class AccountDataSourceImpl(
+@@ -356,18 +357,13 @@ class AccountDataSourceImpl(
 -    override suspend fun requestNextShieldedAddress(): String {
-+    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String {
-@@ -360,2 +362,2 @@ class AccountDataSourceImpl(
+-        var result: String? = null
+-        scope
+-            .launch {
 -                val accountUuid = getSelectedAccount().sdkAccount.accountUuid
 -                log("requestNextShieldedAddress for $accountUuid")
-+                val accountUuid = (account ?: getSelectedAccount()).sdkAccount.accountUuid
-+                log("requesting a fresh shielded address")
-@@ -367 +369 @@ class AccountDataSourceImpl(
+-                val responseChannel = Channel<String>(1)
+-                requestNextShieldedAddressChannel.emit(AddressRequest(accountUuid, responseChannel))
+-                try {
+-                    val address = withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) { responseChannel.receive() }
+-                    if (address == null) {
 -                        log("timed out waiting for address for $accountUuid")
-+                        log("timed out waiting for a shielded address")
-@@ -369 +371 @@ class AccountDataSourceImpl(
+-                    } else {
 -                        log("received address $address for $accountUuid")
-+                        log("received a shielded address")
-@@ -371,0 +374,2 @@ class AccountDataSourceImpl(
-+                } catch (e: CancellationException) {
-+                    throw e
-@@ -373 +377 @@ class AccountDataSourceImpl(
+-                    }
+-                    result = address
+-                } catch (e: Exception) {
 -                    log("failed to receive address for $accountUuid", e)
-+                    log("failed to receive a shielded address (${e.javaClass.simpleName})")
-@@ -376,2 +380,4 @@ class AccountDataSourceImpl(
++    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String {
++        val requestedAccount = account ?: getSelectedAccount()
++        val responseChannel = Channel<String>(1)
++        log("requesting a fresh shielded address")
++        val result =
++            try {
++                withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) {
++                    requestNextShieldedAddressChannel.emit(
++                        AddressRequest(requestedAccount.sdkAccount.accountUuid, responseChannel)
++                    )
++                    responseChannel.receive()
++                }.also {
++                    if (it == null) log("timed out waiting for a shielded address")
+@@ -375,3 +371,12 @@ class AccountDataSourceImpl(
+-            }.join()
 -        return (result ?: getSelectedAccount().unifiedAddress).also {
 -            log("returning address $it")
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                log("failed to receive a shielded address (${e.javaClass.simpleName})")
++                null
++            } finally {
++                responseChannel.close()
++            }
 +        return result ?: if (requireFresh) {
 +            throw FreshShieldedAddressUnavailableException()
 +        } else {
-+            (account ?: getSelectedAccount()).unifiedAddress
-@@ -446 +452 @@ class AccountDataSourceImpl(
++            requestedAccount.unifiedAddress
+@@ -446 +451 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +489 @@ class AccountDataSourceImpl(
+@@ -483 +488 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -497 +503 @@ class AccountDataSourceImpl(
+@@ -497 +502 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -526 +532 @@ class AccountDataSourceImpl(
+@@ -526 +531 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -565 +571 @@ class AccountDataSourceImpl(
+@@ -565 +570 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +582 @@ class AccountDataSourceImpl(
+@@ -576 +581 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -610,2 +616 @@ class AccountDataSourceImpl(
+@@ -598,6 +603,2 @@ class AccountDataSourceImpl(
+-                        try {
+-                            it.responseChannel.send(address)
+-                            it.responseChannel.close()
+-                        } catch (_: ClosedSendChannelException) {
+-                            // ignore
+-                        }
++                        it.responseChannel.trySend(address)
++                        it.responseChannel.close()
+@@ -610,2 +611 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +631 @@ class AccountDataSourceImpl(
+@@ -626 +626 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +633,12 @@ class AccountDataSourceImpl(
+@@ -628 +628,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -32640,10 +32688,10 @@ index 4d388e80f..58f9769fb 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -659 +675 @@ private data class AccountSnapshot(
+@@ -659 +670 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -665,0 +682,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +677,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -32659,7 +32707,15 @@ index 4d388e80f..58f9769fb 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -720,0 +752,3 @@ class AccountDeletionException(
+@@ -667,5 +693,2 @@ private const val RETRY_DELAY = 3L
+- * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
+- * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
+- * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
+- * unbounded wait can hang indefinitely; on timeout the caller falls back to the account's current
+- * address.
++ * Bounds both submission to the rotation collector and delivery of the address. Receive can
++ * use the current address on timeout. A swap that requires a new address must get one first.
+@@ -720,0 +744,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -32975,7 +33031,7 @@ index cd30d81f4..21d69fa61 100644
 +private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
-index abf14322d..d3cd2bc49 100644
+index abf14322d..c46d193b6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 @@ -0,0 +1,2 @@
@@ -33191,10 +33247,28 @@ index abf14322d..d3cd2bc49 100644
 +                undecodableFiles.clear()
 +                mergedFiles.clear()
 +                metadataUpdatePipeline.emit(null to null)
+@@ -374 +478 @@ class MetadataDataSourceImpl(
+-                    .onFailure { e -> Twig.warn(e) { "Failed to list metadata files" } }
++                    .onFailure { e -> Twig.warn { "Failed to list metadata files (${e.javaClass.simpleName})" } }
+@@ -378 +482 @@ class MetadataDataSourceImpl(
+-                    .onFailure { e -> Twig.warn(e) { "Failed to create metadata file" } }
++                    .onFailure { e -> Twig.warn { "Failed to create metadata file (${e.javaClass.simpleName})" } }
+@@ -473 +577 @@ class MetadataDataSourceImpl(
+-            .onFailure { e -> Twig.warn(e) { "Failed to set the undecodable metadata file aside" } }
++            .onFailure { e -> Twig.warn { "Failed to set undecodable metadata aside (${e.javaClass.simpleName})" } }
+@@ -480 +584 @@ class MetadataDataSourceImpl(
+-                    Twig.warn(e) { "Failed to flush the metadata directory" }
++                    Twig.warn { "Failed to flush the metadata directory (${e.javaClass.simpleName})" }
+@@ -542 +646 @@ class MetadataDataSourceImpl(
+-            Twig.warn(error) { "Failed to read metadata" }
++            Twig.warn { "Failed to read metadata (${error.javaClass.simpleName})" }
 @@ -574 +678,2 @@ class MetadataDataSourceImpl(
 -     * Returns whether the write landed. A failed write leaves the previous file content intact.
 +     * Returns whether replacement and directory sync completed. A failed sync keeps any replacement
 +     * already renamed into place so tracking remains available for recovery.
+@@ -581 +686 @@ class MetadataDataSourceImpl(
+-            }.onFailure { e -> Twig.warn(e) { "Failed to write metadata" } }
++            }.onFailure { e -> Twig.warn { "Failed to write metadata (${e.javaClass.simpleName})" } }
 @@ -654 +759 @@ class MetadataDataSourceImpl(
 -        transform: (AccountMetadataV3) -> AccountMetadataV3
 +        transform: (AccountMetadataV3) -> AccountMetadataV3?
@@ -51952,12 +52026,15 @@ index 2e9fcdef9..efaf94eac 100644
 +    val accountKeyId: String? = null,
 +    val fundingTxId: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
-index 22fac8c3b..f21365b16 100644
+index 22fac8c3b..17cf911b3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
 @@ -16 +16 @@ data class SwapDetailState(
 -    val depositTo: TransactionDetailInfoRowState,
 +    val depositTo: TransactionDetailInfoRowState?,
+@@ -18 +18 @@ data class SwapDetailState(
+-    val totalFees: TransactionDetailInfoRowState,
++    val quotedOutput: TransactionDetailInfoRowState,
 @@ -25,0 +26,5 @@ data class SwapDetailState(
 +    val explorerLinks: List<co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink> = emptyList(),
 +    val refundedAmount: TransactionDetailInfoRowState? = null,
@@ -51965,7 +52042,7 @@ index 22fac8c3b..f21365b16 100644
 +    val showLiveDetails: Boolean = true,
 +    val supportButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..5734dd7bc 100644
+index a874453ef..8bdfd57c0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9,3 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -52030,7 +52107,7 @@ index a874453ef..5734dd7bc 100644
 +                        },
 @@ -77 +90 @@ class SwapDetailVM(
 -                    totalFees = createTotalFeesState(swapData),
-+                    totalFees = createQuotedOutputState(swapData),
++                    quotedOutput = createQuotedOutputState(swapData),
 @@ -81 +94,7 @@ class SwapDetailVM(
 -                            title = stringRes(R.string.transactionHistory_timestamp),
 +                            title = stringRes(
@@ -52239,7 +52316,7 @@ index a874453ef..5734dd7bc 100644
 +        ?: status?.amountOutFormatted
 +        ?: savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-index 48d3039d5..32eee4cf2 100644
+index 48d3039d5..777a31ef3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 @@ -71,0 +72 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionErrorFooter
@@ -52251,7 +52328,7 @@ index 48d3039d5..32eee4cf2 100644
 +                        ZashiSwapQuoteHeader(state.quoteHeader)
 +                        Spacer(20.dp)
 +                    }
-@@ -162,9 +165,19 @@ fun SwapDetailView(
+@@ -162,9 +165,21 @@ fun SwapDetailView(
 -                                ZashiHorizontalDivider()
 -                                TransactionDetailInfoRow(state.depositTo)
 -                                ZashiHorizontalDivider()
@@ -52273,26 +52350,36 @@ index 48d3039d5..32eee4cf2 100644
 +                                    ZashiHorizontalDivider()
 +                                    TransactionDetailInfoRow(it)
 +                                }
-+                                if (state.showLiveDetails) {
++                                if (state.showLiveDetails || state.quotedOutput.message != null) {
 +                                    ZashiHorizontalDivider()
-+                                    TransactionDetailInfoRow(state.totalFees)
++                                    TransactionDetailInfoRow(state.quotedOutput, wrapMessage = true)
++                                }
++                                if (state.showLiveDetails) {
 +                                    ZashiHorizontalDivider()
 +                                    CompositionLocalProvider(LocalBalancesAvailable provides true) {
 +                                        TransactionDetailInfoRow(state.maxSlippage)
 +                                    }
-@@ -175 +188 @@ fun SwapDetailView(
+@@ -175 +190 @@ fun SwapDetailView(
 -                        TransactionDetailInfoRow(state = state.timestamp)
 +                        TransactionDetailInfoRow(state = state.timestamp, wrapMessage = true)
-@@ -180,0 +194,4 @@ fun SwapDetailView(
+@@ -180,0 +196,4 @@ fun SwapDetailView(
 +                    if (state.explorerLinks.isNotEmpty()) {
 +                        Spacer(8.dp)
 +                        TransactionExplorerLinks(state.explorerLinks)
 +                    }
-@@ -210,0 +228,4 @@ private fun BottomBar(
+@@ -210,0 +230,4 @@ private fun BottomBar(
 +        state.supportButton?.let {
 +            ZashiButton(modifier = Modifier.fillMaxWidth(), state = it)
 +            if (state.primaryButton != null) Spacer(8.dp)
 +        }
+@@ -309 +332 @@ private fun Preview() =
+-                    totalFees =
++                    quotedOutput =
+@@ -311,2 +334,2 @@ private fun Preview() =
+-                            title = stringRes("Total fees"),
+-                            message = stringRes("totalFees").withStyle(),
++                            title = stringRes("Quoted output"),
++                            message = stringRes("0.01 ZEC").withStyle(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportState.kt
 index 202849dc7..3b0e96ebb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportState.kt
@@ -61736,10 +61823,74 @@ index 4e28ba3d9..ca4d7ba2e 100644
 -                coEvery { isFlexaAvailable() } returns false
 -            },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-index 5c72d78d5..56231bdf6 100644
+index 5c72d78d5..bb8da60b8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-@@ -107,0 +108,22 @@ class AccountDataSourceImplTest {
+@@ -25,0 +26,5 @@ import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.async
+@@ -26,0 +32 @@ import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancelAndJoin
+@@ -32,0 +39,3 @@ import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
+@@ -72,0 +82,2 @@ class AccountDataSourceImplTest {
++        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
++        deriveAddress: suspend () -> String = { "unified-address" },
+@@ -78 +89 @@ class AccountDataSourceImplTest {
+-                coEvery { getCustomUnifiedAddress(any(), any()) } returns "unified-address"
++                coEvery { getCustomUnifiedAddress(any(), any()) } coAnswers { deriveAddress() }
+@@ -104,0 +116 @@ class AccountDataSourceImplTest {
++            scope = scope,
+@@ -107,0 +120,66 @@ class AccountDataSourceImplTest {
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun pendingRotationCannotExtendTheNextRequestsDeadline() = runTest {
++        var calls = 0
++        val rotationStarted = CompletableDeferred<Unit>()
++        val releaseRotation = CompletableDeferred<Unit>()
++        val source = dataSource(MutableStateFlow(null), scope = backgroundScope) {
++            when (++calls) {
++                1 -> "initial-address"
++                2 -> {
++                    rotationStarted.complete(Unit)
++                    releaseRotation.await()
++                    "rotated-address"
++                }
++                else -> "new-address"
++            }
++        }
++        runCurrent()
++        val account = assertNotNull(source.allAccounts.value).single()
++        val first = launch { source.requestNextShieldedAddress(requireFresh = true, account = account) }
++        runCurrent()
++        assertTrue(rotationStarted.isCompleted)
++        first.cancelAndJoin()
++
++        val receive = async { source.requestNextShieldedAddress(account = account) }
++        val swap = async { runCatching { source.requestNextShieldedAddress(requireFresh = true, account = account) } }
++        runCurrent()
++        advanceTimeBy(14_999)
++        assertFalse(receive.isCompleted)
++        assertFalse(swap.isCompleted)
++        advanceTimeBy(1)
++        runCurrent()
++        assertTrue(receive.isCompleted)
++        assertEquals("initial-address", receive.await())
++        assertTrue(swap.isCompleted)
++        assertTrue(swap.await().exceptionOrNull() is FreshShieldedAddressUnavailableException)
++        assertEquals(2, calls)
++
++        releaseRotation.complete(Unit)
++        runCurrent()
++        assertEquals("rotated-address", assertNotNull(source.allAccounts.value).single().unifiedAddress)
++        assertEquals("new-address", source.requestNextShieldedAddress(requireFresh = true, account = account))
++    }
++
 +    @Test
 +    fun replacementAndUnavailableSnapshotsDoNotAccumulatePreviousBalances() = runBlocking {
 +        val walletBalances = MutableStateFlow<Map<AccountUuid, AccountBalance>?>(null)
@@ -62686,6 +62837,61 @@ index 000000000..3e08374a9
 +            stage.value = value
 +            pending.value = value != null
 +        }
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceDiagnosticsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceDiagnosticsTest.kt
+new file mode 100644
+index 000000000..cd3bbbf96
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceDiagnosticsTest.kt
+@@ -0,0 +1,49 @@
++package co.electriccoin.zcash.ui.common.datasource
++
++import co.electriccoin.zcash.ui.common.provider.MetadataProvider
++import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
++import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.verify
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.runTest
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.shadows.ShadowLog
++import java.io.File
++import java.nio.file.AccessDeniedException
++import kotlin.test.Test
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class MetadataDataSourceDiagnosticsTest {
++    @Test
++    fun unreadableFileRetainsRecoveryWithoutLoggingItsAccountIdentifier() = runTest {
++        val file = File("synthetic", "synthetic-account-identifier")
++        val key = mockk<MetadataKey> {
++            every { fileIdentifier() } returns file.name
++            every { fileIdentifiers() } returns listOf(file.name)
++        }
++        val storage = mockk<MetadataStorageProvider> {
++            every { getStorageFiles(key) } returns listOf(file)
++            every { getOrCreateStorageFile(key) } returns file
++            every { sizeOf(file) } returns 1L
++        }
++        val provider = mockk<MetadataProvider> {
++            every { readMetadataFromFile(file, key) } throws AccessDeniedException(file.path)
++        }
++        val dataSource = MetadataDataSourceImpl(storage, provider, mockk(), StandardTestDispatcher(testScheduler))
++        ShadowLog.clear()
++
++        assertNull(dataSource.read(key))
++        verify(atLeast = 2) { provider.readMetadataFromFile(file, key) }
++        verify(exactly = 0) { storage.setAsideUndecodable(file) }
++        val logs = ShadowLog.getLogs()
++        assertTrue(logs.any { "Failed to read metadata (AccessDeniedException)" in it.msg })
++        assertTrue(logs.none { file.name in it.msg || file.name in it.throwable?.stackTraceToString().orEmpty() })
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
@@ -85136,7 +85342,7 @@ index 000000000..f12495eaa
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
 new file mode 100644
-index 000000000..79911f166
+index 000000000..c74e68b7e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
 @@ -0,0 +1,615 @@
@@ -85416,7 +85622,7 @@ index 000000000..79911f166
 +            assertEquals(type, assertNotNull(harness.state().message).type)
 +            assertFalse(harness.state().transactionHeader.showAmount)
 +            assertNull(harness.state().transactionHeader.amount)
-+            assertNotNull(harness.state().totalFees.message)
++            assertNotNull(harness.state().quotedOutput.message)
 +            assertEquals(
 +                stringRes(R.string.errorPage_action_contactSupport),
 +                assertNotNull(harness.state().primaryButton).text,
@@ -85566,7 +85772,7 @@ index 000000000..79911f166
 +        val refund = assertNotNull(harness.state().refundedAmount)
 +        assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
 +        assertFalse(harness.state().transactionHeader.showAmount)
-+        assertNotNull(harness.state().totalFees.message)
++        assertNotNull(harness.state().quotedOutput.message)
 +    }
 +
 +    @Test
@@ -87943,10 +88149,10 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..8f4e5c31d
+index 000000000..bab64e38c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,270 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import android.graphics.Bitmap
@@ -87962,6 +88168,8 @@ index 000000000..8f4e5c31d
 +import androidx.compose.ui.test.captureToImage
 +import androidx.compose.ui.test.onRoot
 +import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import androidx.compose.ui.test.performScrollTo
 +import androidx.compose.ui.test.performSemanticsAction
 +import androidx.compose.ui.text.TextLayoutResult
 +import androidx.compose.ui.unit.Density
@@ -87976,6 +88184,8 @@ index 000000000..8f4e5c31d
 +import co.electriccoin.zcash.ui.design.util.imageRes
 +import co.electriccoin.zcash.ui.design.util.withStyle
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
++import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailState
++import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailView
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRow
 +import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
@@ -88026,6 +88236,57 @@ index 000000000..8f4e5c31d
 +        compose.onNodeWithText("Swap refunded").assertIsDisplayed()
 +        compose.onNodeWithText("0.1 BTC").assertDoesNotExist()
 +        capture("standalone-refund-header")
++    }
++
++    @Test
++    fun expandedSavedRefundKeepsTheLabeledQuoteWithoutLiveDetails() {
++        val app = RuntimeEnvironment.getApplication()
++        val details = SwapDetailState(
++            transactionHeader = TransactionDetailHeaderState(
++                title = stringRes("Swap refunded"),
++                amount = null,
++                icons = listOf(
++                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
++                    imageRes(R.drawable.ic_transaction_received),
++                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
++                ),
++                showAmount = false,
++            ),
++            quoteHeader = SwapQuoteHeaderState(null, null),
++            status = TransactionDetailSwapStatusRowState(
++                stringRes("Saved status"),
++                SwapStatus.REFUNDED,
++                mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
++            ),
++            depositTo = TransactionDetailInfoRowState(
++                stringRes("Deposit reference"), stringRes("Synthetic").withStyle()
++            ),
++            recipient = TransactionDetailInfoRowState(stringRes("Live recipient")),
++            quotedOutput = TransactionDetailInfoRowState(
++                stringRes(R.string.private_quoted_output), stringRes("0.075 ZEC").withStyle()
++            ),
++            maxSlippage = TransactionDetailInfoRowState(stringRes("Live slippage")),
++            timestamp = TransactionDetailInfoRowState(stringRes("Swap created"), stringRes("Today").withStyle()),
++            message = null,
++            errorFooter = null,
++            infoFooter = null,
++            primaryButton = null,
++            onBack = {},
++            showLiveDetails = false,
++        )
++        compose.setContent {
++            val density = LocalDensity.current
++            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
++                ZcashTheme { SwapDetailView(details, appBarState = null) }
++            }
++        }
++        compose.onNodeWithText("0.075 ZEC").assertDoesNotExist()
++        compose.onNodeWithText(app.getString(co.electriccoin.zcash.ui.design.R.string.general_more)).performClick()
++        compose.onNodeWithText(app.getString(R.string.private_quoted_output)).performScrollTo().assertIsDisplayed()
++        compose.onNodeWithText("0.075 ZEC").assertIsDisplayed()
++        compose.onNodeWithText("Live recipient").assertDoesNotExist()
++        compose.onNodeWithText("Live slippage").assertDoesNotExist()
++        capture("standalone-expanded-saved-refund")
 +    }
 +
 +    @Test

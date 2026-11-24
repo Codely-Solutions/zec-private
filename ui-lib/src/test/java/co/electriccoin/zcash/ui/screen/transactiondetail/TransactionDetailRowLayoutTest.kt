@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -27,6 +29,8 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailState
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailView
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
@@ -77,6 +81,57 @@ class TransactionDetailRowLayoutTest {
         compose.onNodeWithText("Swap refunded").assertIsDisplayed()
         compose.onNodeWithText("0.1 BTC").assertDoesNotExist()
         capture("standalone-refund-header")
+    }
+
+    @Test
+    fun expandedSavedRefundKeepsTheLabeledQuoteWithoutLiveDetails() {
+        val app = RuntimeEnvironment.getApplication()
+        val details = SwapDetailState(
+            transactionHeader = TransactionDetailHeaderState(
+                title = stringRes("Swap refunded"),
+                amount = null,
+                icons = listOf(
+                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
+                    imageRes(R.drawable.ic_transaction_received),
+                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
+                ),
+                showAmount = false,
+            ),
+            quoteHeader = SwapQuoteHeaderState(null, null),
+            status = TransactionDetailSwapStatusRowState(
+                stringRes("Saved status"),
+                SwapStatus.REFUNDED,
+                mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
+            ),
+            depositTo = TransactionDetailInfoRowState(
+                stringRes("Deposit reference"), stringRes("Synthetic").withStyle()
+            ),
+            recipient = TransactionDetailInfoRowState(stringRes("Live recipient")),
+            quotedOutput = TransactionDetailInfoRowState(
+                stringRes(R.string.private_quoted_output), stringRes("0.075 ZEC").withStyle()
+            ),
+            maxSlippage = TransactionDetailInfoRowState(stringRes("Live slippage")),
+            timestamp = TransactionDetailInfoRowState(stringRes("Swap created"), stringRes("Today").withStyle()),
+            message = null,
+            errorFooter = null,
+            infoFooter = null,
+            primaryButton = null,
+            onBack = {},
+            showLiveDetails = false,
+        )
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                ZcashTheme { SwapDetailView(details, appBarState = null) }
+            }
+        }
+        compose.onNodeWithText("0.075 ZEC").assertDoesNotExist()
+        compose.onNodeWithText(app.getString(co.electriccoin.zcash.ui.design.R.string.general_more)).performClick()
+        compose.onNodeWithText(app.getString(R.string.private_quoted_output)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("0.075 ZEC").assertIsDisplayed()
+        compose.onNodeWithText("Live recipient").assertDoesNotExist()
+        compose.onNodeWithText("Live slippage").assertDoesNotExist()
+        capture("standalone-expanded-saved-refund")
     }
 
     @Test

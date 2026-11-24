@@ -40,7 +40,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -143,9 +142,9 @@ class AccountDataSourceImpl(
     private val ledgerAccountBindingProvider: LedgerAccountBindingProvider,
     private val viewOnlyContent: ViewOnlyContent,
     private val context: Context,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 ) : AccountDataSource {
     private val log = loggableNot("AccountDataSource")
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val requestNextShieldedAddressChannel = MutableSharedFlow<AddressRequest>()
 
@@ -356,31 +355,31 @@ class AccountDataSourceImpl(
 
     @Suppress("TooGenericExceptionCaught")
     override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String {
-        var result: String? = null
-        scope
-            .launch {
-                val accountUuid = (account ?: getSelectedAccount()).sdkAccount.accountUuid
-                log("requesting a fresh shielded address")
-                val responseChannel = Channel<String>(1)
-                requestNextShieldedAddressChannel.emit(AddressRequest(accountUuid, responseChannel))
-                try {
-                    val address = withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) { responseChannel.receive() }
-                    if (address == null) {
-                        log("timed out waiting for a shielded address")
-                    } else {
-                        log("received a shielded address")
-                    }
-                    result = address
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    log("failed to receive a shielded address (${e.javaClass.simpleName})")
+        val requestedAccount = account ?: getSelectedAccount()
+        val responseChannel = Channel<String>(1)
+        log("requesting a fresh shielded address")
+        val result =
+            try {
+                withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) {
+                    requestNextShieldedAddressChannel.emit(
+                        AddressRequest(requestedAccount.sdkAccount.accountUuid, responseChannel)
+                    )
+                    responseChannel.receive()
+                }.also {
+                    if (it == null) log("timed out waiting for a shielded address")
                 }
-            }.join()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("failed to receive a shielded address (${e.javaClass.simpleName})")
+                null
+            } finally {
+                responseChannel.close()
+            }
         return result ?: if (requireFresh) {
             throw FreshShieldedAddressUnavailableException()
         } else {
-            (account ?: getSelectedAccount()).unifiedAddress
+            requestedAccount.unifiedAddress
         }
     }
 
@@ -601,12 +600,8 @@ class AccountDataSourceImpl(
                                 throw e
                             }
                         send(address)
-                        try {
-                            it.responseChannel.send(address)
-                            it.responseChannel.close()
-                        } catch (_: ClosedSendChannelException) {
-                            // ignore
-                        }
+                        it.responseChannel.trySend(address)
+                        it.responseChannel.close()
                     }
             }
 
@@ -695,11 +690,8 @@ internal suspend fun resolveTransparentReceiver(
 }
 
 /**
- * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
- * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
- * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
- * unbounded wait can hang indefinitely; on timeout the caller falls back to the account's current
- * address.
+ * Bounds both submission to the rotation collector and delivery of the address. Receive can
+ * use the current address on timeout. A swap that requires a new address must get one first.
  */
 private val ADDRESS_REQUEST_TIMEOUT = 15.seconds
 

@@ -274,7 +274,7 @@ class SwapDetailVMTest {
             assertEquals(type, assertNotNull(harness.state().message).type)
             assertFalse(harness.state().transactionHeader.showAmount)
             assertNull(harness.state().transactionHeader.amount)
-            assertNotNull(harness.state().totalFees.message)
+            assertNotNull(harness.state().quotedOutput.message)
             assertEquals(
                 stringRes(R.string.errorPage_action_contactSupport),
                 assertNotNull(harness.state().primaryButton).text,
@@ -424,7 +424,7 @@ class SwapDetailVMTest {
         val refund = assertNotNull(harness.state().refundedAmount)
         assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
         assertFalse(harness.state().transactionHeader.showAmount)
-        assertNotNull(harness.state().totalFees.message)
+        assertNotNull(harness.state().quotedOutput.message)
     }
 
     @Test

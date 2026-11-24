@@ -24,7 +24,16 @@ import org.koin.dsl.module
 
 val dataSourceModule =
     module {
-        singleOf(::AccountDataSourceImpl) bind AccountDataSource::class
+        single<AccountDataSource> {
+            AccountDataSourceImpl(
+                synchronizerProvider = get(),
+                selectedAccountUUIDProvider = get(),
+                persistableWalletProvider = get(),
+                ledgerAccountBindingProvider = get(),
+                viewOnlyContent = get(),
+                context = get(),
+            )
+        }
         singleOf(::ZashiSpendingKeyDataSourceImpl) bind ZashiSpendingKeyDataSource::class
         singleOf(::ProposalDataSourceImpl) bind ProposalDataSource::class
         singleOf(::RestoreTimestampDataSourceImpl) bind RestoreTimestampDataSource::class

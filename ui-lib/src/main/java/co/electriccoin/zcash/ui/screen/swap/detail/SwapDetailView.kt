@@ -174,9 +174,11 @@ fun SwapDetailView(
                                     ZashiHorizontalDivider()
                                     TransactionDetailInfoRow(it)
                                 }
-                                if (state.showLiveDetails) {
+                                if (state.showLiveDetails || state.quotedOutput.message != null) {
                                     ZashiHorizontalDivider()
-                                    TransactionDetailInfoRow(state.totalFees)
+                                    TransactionDetailInfoRow(state.quotedOutput, wrapMessage = true)
+                                }
+                                if (state.showLiveDetails) {
                                     ZashiHorizontalDivider()
                                     CompositionLocalProvider(LocalBalancesAvailable provides true) {
                                         TransactionDetailInfoRow(state.maxSlippage)
@@ -327,10 +329,10 @@ private fun Preview() =
                             message = stringRes("recipient").withStyle(),
                             trailingIcon = R.drawable.ic_transaction_detail_info_copy,
                         ),
-                    totalFees =
+                    quotedOutput =
                         TransactionDetailInfoRowState(
-                            title = stringRes("Total fees"),
-                            message = stringRes("totalFees").withStyle(),
+                            title = stringRes("Quoted output"),
+                            message = stringRes("0.01 ZEC").withStyle(),
                         ),
                     maxSlippage =
                         TransactionDetailInfoRowState(

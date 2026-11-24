@@ -67,7 +67,7 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
                 stringRes(R.string.private_swap_deposit_reference), stringRes("Sample deposit").withStyle()
             ),
             recipient = empty,
-            totalFees = if (live) {
+            quotedOutput = if (live) {
                 TransactionDetailInfoRowState(stringRes(R.string.private_quoted_output), stringRes("0.075 ZEC").withStyle())
             } else {
                 empty

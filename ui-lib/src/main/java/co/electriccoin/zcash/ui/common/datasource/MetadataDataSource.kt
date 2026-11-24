@@ -475,11 +475,11 @@ class MetadataDataSourceImpl(
         withContext(ioDispatcher) {
             val existingFiles =
                 runCatchingRecoverable { metadataStorageProvider.getStorageFiles(key) }
-                    .onFailure { e -> Twig.warn(e) { "Failed to list metadata files" } }
+                    .onFailure { e -> Twig.warn { "Failed to list metadata files (${e.javaClass.simpleName})" } }
                     .getOrNull()
             val canonicalFile =
                 runCatchingRecoverable { metadataStorageProvider.getOrCreateStorageFile(key) }
-                    .onFailure { e -> Twig.warn(e) { "Failed to create metadata file" } }
+                    .onFailure { e -> Twig.warn { "Failed to create metadata file (${e.javaClass.simpleName})" } }
                     .getOrNull()
 
             if (existingFiles == null || canonicalFile == null) {
@@ -574,14 +574,14 @@ class MetadataDataSourceImpl(
 
     private fun setAsideUndecodable(file: File): Boolean =
         runCatchingRecoverable { check(metadataStorageProvider.setAsideUndecodable(file)) { "Rename failed" } }
-            .onFailure { e -> Twig.warn(e) { "Failed to set the undecodable metadata file aside" } }
+            .onFailure { e -> Twig.warn { "Failed to set undecodable metadata aside (${e.javaClass.simpleName})" } }
             .isSuccess
 
     private fun syncDirectoryOf(file: File): Boolean =
         runCatchingRecoverable { metadataProvider.syncDirectoryOf(file) }
             .onFailure { e ->
                 if (isFlushFailureLogged.compareAndSet(false, true)) {
-                    Twig.warn(e) { "Failed to flush the metadata directory" }
+                    Twig.warn { "Failed to flush the metadata directory (${e.javaClass.simpleName})" }
                 }
             }.isSuccess
 
@@ -643,7 +643,7 @@ class MetadataDataSourceImpl(
             signature?.let { undecodableFiles += it }
         }
         if (read == FileRead.Unreadable || read == FileRead.Undecodable) {
-            Twig.warn(error) { "Failed to read metadata" }
+            Twig.warn { "Failed to read metadata (${error.javaClass.simpleName})" }
         }
         return read
     }
@@ -683,7 +683,7 @@ class MetadataDataSourceImpl(
             runCatchingRecoverable {
                 val file = metadataStorageProvider.getOrCreateStorageFile(key)
                 metadataProvider.writeMetadataToFile(file, metadata, key)
-            }.onFailure { e -> Twig.warn(e) { "Failed to write metadata" } }
+            }.onFailure { e -> Twig.warn { "Failed to write metadata (${e.javaClass.simpleName})" } }
                 .isSuccess
         }
 

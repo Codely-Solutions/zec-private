@@ -15,7 +15,7 @@ data class SwapDetailState(
     val status: TransactionDetailSwapStatusRowState,
     val depositTo: TransactionDetailInfoRowState?,
     val recipient: TransactionDetailInfoRowState,
-    val totalFees: TransactionDetailInfoRowState,
+    val quotedOutput: TransactionDetailInfoRowState,
     val maxSlippage: TransactionDetailInfoRowState,
     val timestamp: TransactionDetailInfoRowState,
     val message: ZashiMessageState?,

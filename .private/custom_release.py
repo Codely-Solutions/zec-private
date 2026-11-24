@@ -19,13 +19,15 @@ def validate_inputs(inputs):
     require(isinstance(source, str) and re.fullmatch(r'[a-f0-9]{40}', source),
             'Select the exact reviewed candidate commit')
     require(operation in ('check', 'preflight', 'publish', 'recover'), 'Select a supported custom release operation')
-    selectors = [inputs.get(name, '') for name in ('recover_run', 'quote_run', 'preclaim_run', 'core_run')]
+    selectors = {name: inputs.get(name, '') for name in ('recover_run', 'quote_run', 'preclaim_run', 'core_run')}
     require(all(isinstance(value, str) and (not value or re.fullmatch(r'[1-9][0-9]*', value))
-                for value in selectors), 'Recovery selectors require exact positive GitHub run IDs')
+                for value in selectors.values()), 'Recovery selectors require exact positive GitHub run IDs')
     if operation == 'recover':
-        require(selectors[0], 'Recovery requires the original APK-producing run')
+        require(selectors['recover_run'], 'Recovery requires the original APK-producing run')
+        require(not (selectors['preclaim_run'] and selectors['core_run']),
+                'Choose a passing wallet run or a failed pre-claim run')
     else:
-        require(not any(selectors), 'Use recovery selectors only with the recover operation')
+        require(not any(selectors.values()), 'Use recovery selectors only with the recover operation')
 
 
 def verify_custom_child(source, controller, root):

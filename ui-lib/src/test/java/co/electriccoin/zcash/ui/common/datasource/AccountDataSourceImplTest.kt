@@ -23,13 +23,22 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,12 +79,14 @@ class AccountDataSourceImplTest {
         walletBalances: MutableStateFlow<Map<AccountUuid, AccountBalance>?>,
         sdkAccount: Account = account,
         ledgerBinding: LedgerAccountBindingData? = null,
+        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+        deriveAddress: suspend () -> String = { "unified-address" },
     ): AccountDataSourceImpl {
         val synchronizer =
             mockk<Synchronizer> {
                 every { accountsFlow } returns MutableStateFlow(listOf(sdkAccount))
                 every { this@mockk.walletBalances } returns walletBalances
-                coEvery { getCustomUnifiedAddress(any(), any()) } returns "unified-address"
+                coEvery { getCustomUnifiedAddress(any(), any()) } coAnswers { deriveAddress() }
                 coEvery { getTransparentAddress(any()) } returns "transparent-address"
                 coEvery { getSaplingAddress(any()) } returns "sapling-address"
             }
@@ -102,7 +113,52 @@ class AccountDataSourceImplTest {
             ledgerAccountBindingProvider = ledgerAccountBindingProvider,
             viewOnlyContent = viewOnlyContent,
             context = mockk(relaxed = true),
+            scope = scope,
         )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun pendingRotationCannotExtendTheNextRequestsDeadline() = runTest {
+        var calls = 0
+        val rotationStarted = CompletableDeferred<Unit>()
+        val releaseRotation = CompletableDeferred<Unit>()
+        val source = dataSource(MutableStateFlow(null), scope = backgroundScope) {
+            when (++calls) {
+                1 -> "initial-address"
+                2 -> {
+                    rotationStarted.complete(Unit)
+                    releaseRotation.await()
+                    "rotated-address"
+                }
+                else -> "new-address"
+            }
+        }
+        runCurrent()
+        val account = assertNotNull(source.allAccounts.value).single()
+        val first = launch { source.requestNextShieldedAddress(requireFresh = true, account = account) }
+        runCurrent()
+        assertTrue(rotationStarted.isCompleted)
+        first.cancelAndJoin()
+
+        val receive = async { source.requestNextShieldedAddress(account = account) }
+        val swap = async { runCatching { source.requestNextShieldedAddress(requireFresh = true, account = account) } }
+        runCurrent()
+        advanceTimeBy(14_999)
+        assertFalse(receive.isCompleted)
+        assertFalse(swap.isCompleted)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(receive.isCompleted)
+        assertEquals("initial-address", receive.await())
+        assertTrue(swap.isCompleted)
+        assertTrue(swap.await().exceptionOrNull() is FreshShieldedAddressUnavailableException)
+        assertEquals(2, calls)
+
+        releaseRotation.complete(Unit)
+        runCurrent()
+        assertEquals("rotated-address", assertNotNull(source.allAccounts.value).single().unifiedAddress)
+        assertEquals("new-address", source.requestNextShieldedAddress(requireFresh = true, account = account))
     }
 
     @Test

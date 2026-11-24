@@ -87,7 +87,7 @@ class SwapDetailVM(
                             null
                         },
                     recipient = createRecipientState(swapData),
-                    totalFees = createQuotedOutputState(swapData),
+                    quotedOutput = createQuotedOutputState(swapData),
                     maxSlippage = createSlippageState(swapData),
                     timestamp =
                         TransactionDetailInfoRowState(

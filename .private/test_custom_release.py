@@ -31,6 +31,8 @@ class CustomReleaseTests(unittest.TestCase):
         custom_release.validate_inputs(dict(recovery, recover_run='9'))
         custom_release.validate_inputs(dict(recovery, recover_run='9', core_run='10', quote_run='11'))
         custom_release.validate_inputs(dict(recovery, recover_run='9', preclaim_run='10'))
+        with self.assertRaisesRegex(ValueError, 'Choose a passing wallet run'):
+            custom_release.validate_inputs(dict(recovery, recover_run='9', core_run='10', preclaim_run='11'))
         with self.assertRaisesRegex(ValueError, 'exact reviewed candidate'):
             custom_release.validate_inputs(dict(recovery, source_sha='HEAD', recover_run='9'))
 
