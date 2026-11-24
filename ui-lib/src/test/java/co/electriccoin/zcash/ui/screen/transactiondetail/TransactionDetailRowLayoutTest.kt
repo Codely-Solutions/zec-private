@@ -209,7 +209,12 @@ class TransactionDetailRowLayoutTest {
         compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
             action(layouts)
         }
-        assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete")
+        val layout = layouts.single()
+        assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
+        for (line in 0 until layout.lineCount) {
+            assertFalse(layout.isLineEllipsized(line), "$text must remain complete")
+            assertTrue(layout.getLineRight(line) <= layout.size.width + 1f, "$text must fit horizontally")
+        }
     }
 
     private fun capture(name: String) {

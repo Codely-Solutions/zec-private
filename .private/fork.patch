@@ -88280,10 +88280,10 @@ index 000000000..c26c1ef9b
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
-index 000000000..18410df94
+index 000000000..33d74cd42
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,284 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import android.graphics.Bitmap
@@ -88495,7 +88495,12 @@ index 000000000..18410df94
 +        compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
 +            action(layouts)
 +        }
-+        assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete")
++        val layout = layouts.single()
++        assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1, visibleEnd = true))
++        for (line in 0 until layout.lineCount) {
++            assertFalse(layout.isLineEllipsized(line), "$text must remain complete")
++            assertTrue(layout.getLineRight(line) <= layout.size.width + 1f, "$text must fit horizontally")
++        }
 +    }
 +
 +    private fun capture(name: String) {
