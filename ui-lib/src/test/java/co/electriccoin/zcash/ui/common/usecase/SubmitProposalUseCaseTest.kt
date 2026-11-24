@@ -234,11 +234,13 @@ class SubmitProposalUseCaseTest {
         val fx = useCase()
         val proposal = swapProposal("eth", "eth")
         fx.givenLedger(proposal)
+        val publication = SwapQuoteData.Success(proposal.quote)
+        fx.publication.value = publication
 
-        fx.submitReviewed(proposal)
-        fx.submitReviewed(proposal)
+        fx.useCase(proposal, publication)
+        fx.useCase(proposal, publication)
 
-        verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, any()) }
+        verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, refEq(publication)) }
         verify(exactly = 2) { fx.ledgerNavigator.forwardToSign() }
         coVerify(exactly = 0) { fx.processSwapTransaction.reserveFunding(any(), any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }

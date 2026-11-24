@@ -64535,7 +64535,7 @@ index c24cb37bd..62d64d1ed 100644
 +            every { signingPreparationId() } returns "prepared"
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt
-index 2c3089d4f..f3a471f3f 100644
+index 2c3089d4f..991ba4920 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -64641,7 +64641,7 @@ index 2c3089d4f..f3a471f3f 100644
 @@ -169 +182 @@ class SubmitProposalUseCaseTest {
 -            fx.useCase()
 +            fx.submitReviewed(proposal)
-@@ -178 +191,85 @@ class SubmitProposalUseCaseTest {
+@@ -178 +191,87 @@ class SubmitProposalUseCaseTest {
 -    private fun swapProposal(
 +    @Test
 +    fun replacementDuringAuthenticationCannotFundAnUnreviewedSwap() = runTest {
@@ -64689,11 +64689,13 @@ index 2c3089d4f..f3a471f3f 100644
 +        val fx = useCase()
 +        val proposal = swapProposal("eth", "eth")
 +        fx.givenLedger(proposal)
++        val publication = SwapQuoteData.Success(proposal.quote)
++        fx.publication.value = publication
 +
-+        fx.submitReviewed(proposal)
-+        fx.submitReviewed(proposal)
++        fx.useCase(proposal, publication)
++        fx.useCase(proposal, publication)
 +
-+        verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, any()) }
++        verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, refEq(publication)) }
 +        verify(exactly = 2) { fx.ledgerNavigator.forwardToSign() }
 +        coVerify(exactly = 0) { fx.processSwapTransaction.reserveFunding(any(), any()) }
 +        coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
@@ -64728,36 +64730,36 @@ index 2c3089d4f..f3a471f3f 100644
 +    }
 +
 +    private suspend fun swapProposal(
-@@ -181,2 +278,4 @@ class SubmitProposalUseCaseTest {
+@@ -181,2 +280,4 @@ class SubmitProposalUseCaseTest {
 -    ): SwapTransactionProposal =
 -        mockk {
 +    ): SwapTransactionProposal {
 +        val address = WalletAddress.Unified.new("deposit-address")
 +        return mockk {
 +            every { destination } returns address
-@@ -186,0 +286 @@ class SubmitProposalUseCaseTest {
+@@ -186,0 +288 @@ class SubmitProposalUseCaseTest {
 +                    every { deadline } returns kotlin.time.Instant.fromEpochMilliseconds(Long.MAX_VALUE)
-@@ -188,0 +289 @@ class SubmitProposalUseCaseTest {
+@@ -188,0 +291 @@ class SubmitProposalUseCaseTest {
 +    }
-@@ -192 +293 @@ class SubmitProposalUseCaseTest {
+@@ -192 +295 @@ class SubmitProposalUseCaseTest {
 -        coEvery { keystoneProposalRepository.getTransactionProposal() } returns proposal
 +        every { keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-@@ -197 +298 @@ class SubmitProposalUseCaseTest {
+@@ -197 +300 @@ class SubmitProposalUseCaseTest {
 -        coEvery { ledgerProposalPipeline.getTransactionProposal() } returns proposal
 +        every { ledgerProposalPipeline.transactionProposal } returns MutableStateFlow(proposal)
-@@ -205,2 +306,2 @@ class SubmitProposalUseCaseTest {
+@@ -205,2 +308,2 @@ class SubmitProposalUseCaseTest {
 -        coEvery { zashiProposalRepository.getTransactionProposal() } returns proposal
 -        coEvery { zashiProposalRepository.submit() } returns submitResult
 +        zashiProposal.value = proposal
 +        coEvery { zashiProposalRepository.submit(proposal, matchNullable { true }) } returns submitResult
-@@ -217,0 +319,4 @@ class SubmitProposalUseCaseTest {
+@@ -217,0 +321,4 @@ class SubmitProposalUseCaseTest {
 +        val zashiProposal = MutableStateFlow<TransactionProposal?>(null)
 +        val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true) {
 +            every { transactionProposal } returns zashiProposal
 +        }
-@@ -220 +324,0 @@ class SubmitProposalUseCaseTest {
+@@ -220 +326,0 @@ class SubmitProposalUseCaseTest {
 -        val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
-@@ -225,2 +329,10 @@ class SubmitProposalUseCaseTest {
+@@ -225,2 +331,10 @@ class SubmitProposalUseCaseTest {
 -        val swapRepository = mockk<SwapRepository>(relaxed = true)
 -        val metadataRepository = mockk<MetadataRepository>(relaxed = true)
 +        val publication = MutableStateFlow<SwapQuoteData?>(null)
@@ -64770,11 +64772,11 @@ index 2c3089d4f..f3a471f3f 100644
 +            publication.value = reviewed
 +            useCase(proposal, reviewed)
 +        }
-@@ -227,0 +340 @@ class SubmitProposalUseCaseTest {
+@@ -227,0 +342 @@ class SubmitProposalUseCaseTest {
 +        val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
-@@ -239 +351,0 @@ class SubmitProposalUseCaseTest {
+@@ -239 +353,0 @@ class SubmitProposalUseCaseTest {
 -                metadataRepository = metadataRepository,
-@@ -242 +354 @@ class SubmitProposalUseCaseTest {
+@@ -242 +356 @@ class SubmitProposalUseCaseTest {
 -                navigateToError = mockk(relaxed = true),
 +                navigateToError = navigateToError,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
@@ -72347,10 +72349,10 @@ index 8ad312da8..43e9b5894 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
 new file mode 100644
-index 000000000..5ff26d696
+index 000000000..78091bcd3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,231 @@
 +package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -72497,7 +72499,13 @@ index 000000000..5ff26d696
 +        repository.createProposal(send)
 +        repository.createPCZTFromProposal()
 +        repository.approveForSigning(approved)
++        val superseded = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
++        repository.createPCZTFromProposal()
++        repository.approveForSigning(approved)
 +        val route = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
++        assertFalse(vm.canScan(superseded))
++        vm.onScanned("synthetic-stale-qr", superseded).join()
++        verify(exactly = 0) { signer.decodeQR("synthetic-stale-qr") }
 +        assertTrue(vm.canScan(route))
 +
 +        vm.onScanned(fragments.first(), route).join()
@@ -76302,7 +76310,7 @@ index 38427672d..639979164 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..a471fdb86 100644
+index 3027e6cda..762d00969 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 @@ -3,0 +4,2 @@ import cash.z.ecc.android.sdk.model.Account
@@ -76335,7 +76343,7 @@ index 3027e6cda..a471fdb86 100644
 +import kotlin.test.assertFalse
 @@ -42,0 +63 @@ import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -96,0 +118,159 @@ class SwapQuoteVMTest {
+@@ -96,0 +118,160 @@ class SwapQuoteVMTest {
 +    @Test
 +    fun sheetDismissalCallbacksOnlyCancelOnce() =
 +        runTest {
@@ -76385,9 +76393,9 @@ index 3027e6cda..a471fdb86 100644
 +        assertTrue(poor.priceCheck?.isWarning == true)
 +        assertEquals("Swap anyway", poor.primaryButton.text.getString(RuntimeEnvironment.getApplication(), Locale.US))
 +        checking.primaryButton.onClick()
-+        coVerify(exactly = 0) { submit(any()) }
++        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
 +        poor.primaryButton.onClick()
-+        coVerify(exactly = 1) { submit(any()) }
++        coVerify(exactly = 1) { submit(any(), any()) }
 +    }
 +
 +    @Test
@@ -76403,9 +76411,9 @@ index 3027e6cda..a471fdb86 100644
 +            FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 +        )
 +        old.primaryButton.onClick()
-+        coVerify(exactly = 0) { submit(any()) }
++        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
 +        (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
-+        coVerify(exactly = 1) { submit(any()) }
++        coVerify(exactly = 1) { submit(any(), refEq(quotes.value as SwapQuoteData.Success)) }
 +    }
 +
 +    @Test
@@ -76416,7 +76424,8 @@ index 3027e6cda..a471fdb86 100644
 +        val prices = mockk<IndependentPriceProvider> {
 +            coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
 +        }
-+        val vm = vm(zashi(), proposals = proposals, quoteData = SwapQuoteData.Success(quote),
++        val publication = SwapQuoteData.Success(quote)
++        val vm = vm(zashi(), proposals = proposals, quoteData = publication,
 +            submit = submit, prices = prices)
 +        collect(vm)
 +        kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
@@ -76431,11 +76440,11 @@ index 3027e6cda..a471fdb86 100644
 +        assertTrue(reviewed.primaryButton.isEnabled)
 +        proposals.value = null
 +        reviewed.primaryButton.onClick()
-+        coVerify(exactly = 0) { submit(any()) }
++        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
 +        kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
 +        proposals.value = prepared
 +        (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
-+        coVerify(exactly = 1) { submit(prepared) }
++        coVerify(exactly = 1) { submit(prepared, refEq(publication)) }
 +    }
 +
 +    @Test
@@ -76495,7 +76504,7 @@ index 3027e6cda..a471fdb86 100644
 +        assertEquals("2.50% less value", result.getString(RuntimeEnvironment.getApplication(), Locale.US))
 +    }
 +
-@@ -105,2 +285,24 @@ class SwapQuoteVMTest {
+@@ -105,2 +286,24 @@ class SwapQuoteVMTest {
 -    private fun vm(account: WalletAccount) =
 -        SwapQuoteVM(
 +    private fun vm(
@@ -76522,28 +76531,28 @@ index 3027e6cda..a471fdb86 100644
 +            }
 +        }
 +        return SwapQuoteVM(
-@@ -109 +311 @@ class SwapQuoteVMTest {
+@@ -109 +312 @@ class SwapQuoteVMTest {
 -                    every { observeNullable() } returns flowOf(null)
 +                    every { observeNullable() } returns proposalFlow
-@@ -113 +315 @@ class SwapQuoteVMTest {
+@@ -113 +316 @@ class SwapQuoteVMTest {
 -                    every { require() } returns flowOf(account)
 +                    every { this@mockk() } returns flowOf(account)
-@@ -122,5 +324 @@ class SwapQuoteVMTest {
+@@ -122,5 +325 @@ class SwapQuoteVMTest {
 -                        MutableStateFlow(
 -                            SwapQuoteData.Success(
 -                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 -                            )
 -                        )
 +                        quoteFlow
-@@ -128 +326 @@ class SwapQuoteVMTest {
+@@ -128 +327 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
-@@ -131 +329 @@ class SwapQuoteVMTest {
+@@ -131 +330 @@ class SwapQuoteVMTest {
 -            submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
 +            submitProposal = submit,
-@@ -132,0 +331 @@ class SwapQuoteVMTest {
+@@ -132,0 +332 @@ class SwapQuoteVMTest {
 +            independentPrices = prices,
-@@ -133,0 +333 @@ class SwapQuoteVMTest {
+@@ -133,0 +334 @@ class SwapQuoteVMTest {
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt
 new file mode 100644
@@ -76781,10 +76790,10 @@ index 000000000..29df1fe95
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt
 new file mode 100644
-index 000000000..4a8dca070
+index 000000000..c26c1ef9b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,225 @@
 +package co.electriccoin.zcash.ui.screen.taxexport
 +
 +import android.content.Intent
@@ -76931,11 +76940,8 @@ index 000000000..4a8dca070
 +        )
 +        val scheduled = mutableListOf<File>()
 +        export.scheduleCleanup = {
++            assertTrue(it.listFiles().orEmpty().isEmpty())
 +            scheduled.add(it)
-+            if (change == Change.HANDOFF) {
-+                appAccessSession.lock()
-+                appAccessSession.unlock()
-+            }
 +        }
 +        val vm = TaxExportViewModel(
 +            GetSelectedWalletAccountUseCase(accountDataSource), export, navigation, appAccessSession, walletWriteAccess
@@ -76947,6 +76953,11 @@ index 000000000..4a8dca070
 +        try {
 +            every { FileProvider.getUriForFile(application, authority, any()) } answers {
 +                output = thirdArg()
++                if (change == Change.HANDOFF) {
++                    assertTrue(output.length() > 0)
++                    appAccessSession.lock()
++                    appAccessSession.unlock()
++                }
 +                uri
 +            }
 +            runCurrent()

@@ -144,7 +144,13 @@ class ScanKeystonePCZTViewModelTest {
         repository.createProposal(send)
         repository.createPCZTFromProposal()
         repository.approveForSigning(approved)
+        val superseded = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
+        repository.createPCZTFromProposal()
+        repository.approveForSigning(approved)
         val route = ScanKeystonePCZTRequest(checkNotNull(repository.signingPreparationId()))
+        assertFalse(vm.canScan(superseded))
+        vm.onScanned("synthetic-stale-qr", superseded).join()
+        verify(exactly = 0) { signer.decodeQR("synthetic-stale-qr") }
         assertTrue(vm.canScan(route))
 
         vm.onScanned(fragments.first(), route).join()

@@ -164,9 +164,9 @@ class SwapQuoteVMTest {
         assertTrue(poor.priceCheck?.isWarning == true)
         assertEquals("Swap anyway", poor.primaryButton.text.getString(RuntimeEnvironment.getApplication(), Locale.US))
         checking.primaryButton.onClick()
-        coVerify(exactly = 0) { submit(any()) }
+        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
         poor.primaryButton.onClick()
-        coVerify(exactly = 1) { submit(any()) }
+        coVerify(exactly = 1) { submit(any(), any()) }
     }
 
     @Test
@@ -182,9 +182,9 @@ class SwapQuoteVMTest {
             FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
         )
         old.primaryButton.onClick()
-        coVerify(exactly = 0) { submit(any()) }
+        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
         (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
-        coVerify(exactly = 1) { submit(any()) }
+        coVerify(exactly = 1) { submit(any(), refEq(quotes.value as SwapQuoteData.Success)) }
     }
 
     @Test
@@ -195,7 +195,8 @@ class SwapQuoteVMTest {
         val prices = mockk<IndependentPriceProvider> {
             coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
         }
-        val vm = vm(zashi(), proposals = proposals, quoteData = SwapQuoteData.Success(quote),
+        val publication = SwapQuoteData.Success(quote)
+        val vm = vm(zashi(), proposals = proposals, quoteData = publication,
             submit = submit, prices = prices)
         collect(vm)
         kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
@@ -210,11 +211,11 @@ class SwapQuoteVMTest {
         assertTrue(reviewed.primaryButton.isEnabled)
         proposals.value = null
         reviewed.primaryButton.onClick()
-        coVerify(exactly = 0) { submit(any()) }
+        coVerify(exactly = 0) { submit(any(), matchNullable { true }) }
         kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
         proposals.value = prepared
         (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
-        coVerify(exactly = 1) { submit(prepared) }
+        coVerify(exactly = 1) { submit(prepared, refEq(publication)) }
     }
 
     @Test

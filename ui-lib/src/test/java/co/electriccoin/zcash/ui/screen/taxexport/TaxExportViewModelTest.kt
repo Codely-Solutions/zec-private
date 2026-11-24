@@ -144,11 +144,8 @@ class TaxExportViewModelTest {
         )
         val scheduled = mutableListOf<File>()
         export.scheduleCleanup = {
+            assertTrue(it.listFiles().orEmpty().isEmpty())
             scheduled.add(it)
-            if (change == Change.HANDOFF) {
-                appAccessSession.lock()
-                appAccessSession.unlock()
-            }
         }
         val vm = TaxExportViewModel(
             GetSelectedWalletAccountUseCase(accountDataSource), export, navigation, appAccessSession, walletWriteAccess
@@ -160,6 +157,11 @@ class TaxExportViewModelTest {
         try {
             every { FileProvider.getUriForFile(application, authority, any()) } answers {
                 output = thirdArg()
+                if (change == Change.HANDOFF) {
+                    assertTrue(output.length() > 0)
+                    appAccessSession.lock()
+                    appAccessSession.unlock()
+                }
                 uri
             }
             runCurrent()
