@@ -637,7 +637,7 @@
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/torfailure/MigrationTorFailureState.kt": "7cfe4c89a8b3bdd7d273e29e8231c8d5c0bc5b3b7e027a36a4ade2b4074d2009",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/torfailure/MigrationTorFailureVM.kt": "777bb47a83d04dd35bb16cd6533dbb856c4a09bee241a241eaed95da2e5fc545",
   "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationAccountRetirement.kt": "5f52905712e5d809780fe05f26504107071fc65e57a145b508ccf9f4db10f2a5",
-  "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt": "57321ff2b57c840110dad7c8f4b08f72b0fc24b90657ba96df85ba10a9193bb9",
+  "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt": "5aca40fb2a8733974f1aa8d377f2452ef90fcecf09da0cd5cb82fc7faf561086",
   "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt": "2866741e9133f6aae023a5d5d4342ed1fc99d4c9d6633928dd76d9d9d18225f8",
   "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt": "a35099d76f19b49c06a9ab9961c133867481b8a166cec2a778b7b12c7d15e906",
   "feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt": "062fc432df3787da9ca71d17c0627667ef8f992c83bd685bc6f8e396f91a4d13",

@@ -7001,7 +7001,7 @@ index 000000000..66a802200
 +        if (isRemoved(accountKeyId)) null else block()
 +}
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
-index 79bb58513..a8ccc4038 100644
+index 79bb58513..4e9c2302f 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
 @@ -26,0 +27 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -7028,6 +7028,9 @@ index 79bb58513..a8ccc4038 100644
 -            return block()
 +            val canRun = !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
 +            return if (canRun) block() else null
+@@ -487 +499 @@ class MigrationDriveOnce(
+-                migrationLog("MigrationDriveOnce: sent — txId=${result.txId.txIdString()}")
++                migrationLog("MigrationDriveOnce: sent a migration transaction.")
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt
 index b0f6f5e02..ff7f13bce 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt

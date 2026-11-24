@@ -496,7 +496,7 @@ class MigrationDriveOnce(
     ): DriveOnceResult =
         when (result) {
             is TransferResult.Success -> {
-                migrationLog("MigrationDriveOnce: sent — txId=${result.txId.txIdString()}")
+                migrationLog("MigrationDriveOnce: sent a migration transaction.")
                 // Classify zip318_kind immediately rather than waiting on the mempool watcher or a
                 // later rescan — our own broadcast path already stores `raw` locally, which makes
                 // the normal enhancement queue skip this txid forever (`raw IS NOT NULL` guard), so
