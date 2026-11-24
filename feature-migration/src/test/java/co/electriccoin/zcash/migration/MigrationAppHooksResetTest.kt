@@ -160,7 +160,7 @@ class MigrationAppHooksResetTest {
             runCurrent()
 
             assertTrue(navigation.resolvingMigrationNotice == null)
-            coVerify(exactly = 0) { accounts.selectAccount(any()) }
+            coVerify(exactly = 0) { accounts.selectAccount(target) }
             coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any()) }
             verify(exactly = 1) { readouts.clear(key) }
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }

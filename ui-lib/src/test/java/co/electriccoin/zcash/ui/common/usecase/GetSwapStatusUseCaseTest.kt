@@ -399,6 +399,7 @@ class GetSwapStatusUseCaseTest {
         coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun slowProviderAndPersistenceConsumeTheOriginalFundingBudgetAfterRestart() = runTest {
         val issuedAt = Instant.parse("2026-11-24T00:00:00Z")

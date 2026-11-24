@@ -7188,7 +7188,7 @@ index 698a60fbd..546f89772 100644
 +        koin.koin.get<MigrationTransferInvalidVM> { parametersOf(MigrationTransferInvalidArgs("fixture-owner")) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..5fda9e77e
+index 000000000..cf49bb4ef
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 @@ -0,0 +1,343 @@
@@ -7354,7 +7354,7 @@ index 000000000..5fda9e77e
 +            runCurrent()
 +
 +            assertTrue(navigation.resolvingMigrationNotice == null)
-+            coVerify(exactly = 0) { accounts.selectAccount(any()) }
++            coVerify(exactly = 0) { accounts.selectAccount(target) }
 +            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any()) }
 +            verify(exactly = 1) { readouts.clear(key) }
 +            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
@@ -70977,7 +70977,7 @@ index f0dc3ea70..18d6269c4 100644
 +        assertNull(emissions.last().status)
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
-index 40bfe60a6..46cfaf081 100644
+index 40bfe60a6..c505169cc 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -71140,7 +71140,7 @@ index 40bfe60a6..46cfaf081 100644
 @@ -103 +226 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
-@@ -105,0 +229,208 @@ class GetSwapStatusUseCaseTest {
+@@ -105,0 +229,209 @@ class GetSwapStatusUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun restartResumesSavedReferenceAndRefundStopsPolling() =
@@ -71314,6 +71314,7 @@ index 40bfe60a6..46cfaf081 100644
 +        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
 +    }
 +
++    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun slowProviderAndPersistenceConsumeTheOriginalFundingBudgetAfterRestart() = runTest {
 +        val issuedAt = Instant.parse("2026-11-24T00:00:00Z")
