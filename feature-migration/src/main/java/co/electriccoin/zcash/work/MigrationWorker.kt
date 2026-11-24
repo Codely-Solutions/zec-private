@@ -43,7 +43,7 @@ class MigrationWorker(
 
         return when (val lookup = getOrchardMigrationSdk.lookup(accountKeyId)) {
             is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId)
-            MigrationSdkLookup.RemovalManaged -> Result.success()
+            MigrationSdkLookup.RemovalManaged -> retryWhileRemoving(accountKeyId)
             MigrationSdkLookup.NotReady -> waitForSdk(accountKeyId)
             MigrationSdkLookup.Gone -> stopMissingAccount(accountKeyId)
         }
@@ -55,7 +55,7 @@ class MigrationWorker(
             // A pending retry is still a worker wake for the fallback alarm.
             migrationLog("Worker: SDK not ready — retrying via WorkManager backoff.")
             MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId)
-        } ?: return Result.success()
+        } ?: return retryWhileRemoving(accountKeyId)
         return Result.retry()
     }
 
@@ -65,7 +65,7 @@ class MigrationWorker(
             migrationLog("Worker: account/wallet gone — cancelling the migration work chain.")
             MigrationScheduler(applicationContext).cancel(accountKeyId)
             migrationNotifier.cancel(accountKeyId)
-        }
+        } ?: return retryWhileRemoving(accountKeyId)
         return Result.success()
     }
 
@@ -84,6 +84,8 @@ class MigrationWorker(
                 }
             }
 
+            DriveOnceResult.RemovalManaged -> return retryWhileRemoving(accountKeyId)
+
             DriveOnceResult.Terminal -> {
                 // Complete, or a terminal-until-user-acts state — the chain intentionally ends
                 // here, matching today's behavior exactly.
@@ -91,4 +93,7 @@ class MigrationWorker(
         }
         return Result.success()
     }
+
+    private fun retryWhileRemoving(accountKeyId: String): Result =
+        if (MigrationAccountRetirement.isRemoved(accountKeyId)) Result.success() else Result.retry()
 }

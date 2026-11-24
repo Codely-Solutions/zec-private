@@ -110,7 +110,11 @@ class TransactionDetailVM(
                 }
                 val info = createTransactionInfoState(transaction)
                 val retry = transaction.swap?.error?.let {
-                    mapper.createTransactionDetailErrorButtonState(it, transaction.reloadHandle)
+                    mapper.createTransactionDetailErrorButtonState(
+                        it,
+                        transaction.reloadHandle,
+                        allowServiceRetry = transaction.swap.savedMetadata != null || recorded != null,
+                    )
                 }
                 val support = createSwapSupportButton(transaction)
                 TransactionDetailState(

@@ -18,24 +18,33 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Identify exact validation scope
+        id: dispatch_scope
+        shell: python
+        run: |
+          import os
+
+          exact_main = os.environ["GITHUB_REF"] == "refs/heads/main"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"main={str(exact_main).lower()}\n")
       - name: Fee and authentication regression simulations
-        if: github.ref == 'refs/heads/main'
+        if: steps.dispatch_scope.outputs.main == 'true'
         run: python3 .private/test_controls.py
       - name: Product branding and compatibility exceptions
-        if: github.ref == 'refs/heads/main'
+        if: steps.dispatch_scope.outputs.main == 'true'
         run: python3 -B .private/test_branding.py
       - name: Simulated stable update and incompatible-change checks
-        if: github.ref == 'refs/heads/main'
+        if: steps.dispatch_scope.outputs.main == 'true'
         run: python3 .private/test_sync.py
       - name: Test push delivery acceptance
-        if: github.ref == 'refs/heads/main'
+        if: steps.dispatch_scope.outputs.main == 'true'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
         run: python3 .private/notify.py "ZEC Private automation test passed. This is a test notification; no APK was published."
       - name: Run offline release-controller suites
-        if: github.ref != 'refs/heads/main'
+        if: steps.dispatch_scope.outputs.main == 'false'
         run: |
           mkdir -p ../work
           PYTHONPATH=.private python3 -B -m unittest -v \
@@ -44,7 +53,7 @@ jobs:
             test_dev_session test_notify test_release_preparation test_core_faucet test_core_instrumentation_pairing \
             test_swap_price_catalog test_actions_artifact_cleanup test_controls
       - name: Reverify an existing public release without signing or publication
-        if: github.ref != 'refs/heads/main' && inputs.verify_existing_release != ''
+        if: steps.dispatch_scope.outputs.main == 'false' && inputs.verify_existing_release != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

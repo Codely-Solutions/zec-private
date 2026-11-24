@@ -254,7 +254,6 @@ class MigrationAppHooksImpl(
     override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
         val generation = walletWriteAccess.token()
         val scheduler = MigrationScheduler(context)
-        var wakeToRestore: Long? = null
         var retirementStarted = false
         var deleted = false
         try {
@@ -262,16 +261,15 @@ class MigrationAppHooksImpl(
                 // A step already inside the drive finishes arming its successor first.
                 MigrationAccountRetirement.begin(accountKeyId)
                 retirementStarted = true
-                wakeToRestore = scheduler.nextWakeAt(accountKeyId)
             }
             migrationLiveDriver.stopAndJoin(accountKeyId)
-            withContext(NonCancellable) { scheduler.cancelAndWait(accountKeyId) }
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
                 migrationDriveOnce.withIdleDrive {
                     checkNotNull(walletWriteAccess.write(generation) { deleteAccount() }) {
                         "The wallet changed before the account could be removed"
                     }
+                    MigrationAccountRetirement.markRemoved(accountKeyId)
                     deleted = true
                     launchNavigation.clearMigrationRequests(accountKeyId)
                 }
@@ -280,33 +278,29 @@ class MigrationAppHooksImpl(
                 pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
                 migrationNotifier.cancel(accountKeyId)
                 migrationNotifier.cancelStepDue(accountKeyId)
+                cancelRemovedAccountWork(scheduler, accountKeyId)
             }
         } finally {
             if (retirementStarted && !deleted) {
-                restoreRetirement(accountKeyId, generation, scheduler, wakeToRestore)
+                restoreRetirement(accountKeyId, generation)
             }
         }
     }
 
-    @Suppress("TooGenericExceptionCaught") // Keep the original removal failure visible if re-enqueue fails.
-    private suspend fun restoreRetirement(
-        accountKeyId: String,
-        generation: Long,
-        scheduler: MigrationScheduler,
-        wakeToRestore: Long?,
-    ) = withContext(NonCancellable) {
-        MigrationAccountRetirement.restore(accountKeyId)
-        walletWriteAccess.write(generation) {
-            wakeToRestore?.let { wake ->
-                try {
-                    scheduler.restoreWake(accountKeyId, wake)
-                } catch (e: Exception) {
-                    migrationLog("Migration background wake restore unavailable (${e.javaClass.simpleName}).")
-                }
-            }
-            migrationLiveDriver.startIfNotRunning(accountKeyId)
+    private suspend fun restoreRetirement(accountKeyId: String, generation: Long) {
+        withContext(NonCancellable) {
+            MigrationAccountRetirement.restore(accountKeyId)
+            walletWriteAccess.write(generation) { migrationLiveDriver.startIfNotRunning(accountKeyId) }
         }
-        Unit
+    }
+
+    @Suppress("TooGenericExceptionCaught") // The account is gone even if the OS rejects worker cleanup.
+    private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
+        try {
+            scheduler.cancelAndWait(accountKeyId)
+        } catch (e: Exception) {
+            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
+        }
     }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {

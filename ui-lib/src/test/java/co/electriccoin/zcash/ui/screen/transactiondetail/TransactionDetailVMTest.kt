@@ -41,6 +41,8 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveTransparentState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendShieldedState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
+import io.ktor.client.plugins.ResponseException
+import io.ktor.http.HttpStatusCode
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -354,6 +356,24 @@ class TransactionDetailVMTest {
         support.onClick()
         verify(exactly = 1) { reload.requestReload() }
         verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
+    }
+
+    @Test
+    fun offlineSavedIncompleteDepositKeepsRetryAndSupportDuringProviderOutage() = runTest(dispatcher) {
+        val saved = swapMetadata(SwapStatus.INCOMPLETE_DEPOSIT)
+        val outage = mockk<ResponseException> {
+            every { response } returns mockk { every { status } returns HttpStatusCode.ServiceUnavailable }
+        }
+        val detail = state(data(sent, saved, SwapQuoteStatusData(
+            isLoading = false, error = outage, savedMetadata = saved,
+        )))
+
+        assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
+        assertNotNull(detail.errorFooter)
+        assertNotNull(detail.primaryButton).onClick()
+        assertNotNull(detail.secondaryButton).onClick()
+        verify(exactly = 1) { reload.requestReload() }
+        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress)) }
     }
 
     @Test

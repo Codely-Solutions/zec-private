@@ -127,7 +127,7 @@ class MigrationLiveDriverImpl(
                         // run for nearly a full privacy buffer.
                         driveByLiveLoop = true,
                     )
-                if (result !is DriveOnceResult.LockBusy) {
+                if (result !is DriveOnceResult.LockBusy && result != DriveOnceResult.RemovalManaged) {
                     // A step actually ran (ReArmed) or the migration reached a terminal state —
                     // either way, publish one fresh read for every screen/use-case that used to
                     // poll OrchardMigrationSdk.getMigrationTransferStates()/estimatedChainTip()/
@@ -161,8 +161,8 @@ class MigrationLiveDriverImpl(
                         delay(result.retryDelay)
                     }
 
-                    DriveOnceResult.Terminal -> {
-                        migrationLog("MigrationLiveDriver: $accountKeyId reached a terminal state — stopping loop.")
+                    DriveOnceResult.RemovalManaged, DriveOnceResult.Terminal -> {
+                        migrationLog("MigrationLiveDriver: $accountKeyId has no admitted work — stopping loop.")
                         return
                     }
                 }

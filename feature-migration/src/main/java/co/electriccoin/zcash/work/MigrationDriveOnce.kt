@@ -66,6 +66,8 @@ sealed class DriveOnceResult {
         val retryDelay: Duration
     ) : DriveOnceResult()
 
+    object RemovalManaged : DriveOnceResult()
+
     object Terminal : DriveOnceResult()
 }
 
@@ -113,9 +115,8 @@ class MigrationDriveOnce(
         }
         liveLoopActive = driveByLiveLoop
         try {
-            if (resetProgress.isPending.value || MigrationAccountRetirement.blocks(accountKeyId)) {
-                return DriveOnceResult.Terminal
-            }
+            if (MigrationAccountRetirement.blocks(accountKeyId)) return DriveOnceResult.RemovalManaged
+            if (resetProgress.isPending.value) return DriveOnceResult.Terminal
             // This IS a run — stamp the heartbeat regardless of which caller drove it, so the
             // dead-man's-switch alarm (MigrationTransferDueReceiver) never fires a spurious
             // "step due" notification just because the WORKER specifically didn't fire (the live

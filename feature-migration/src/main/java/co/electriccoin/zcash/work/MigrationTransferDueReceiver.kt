@@ -40,7 +40,7 @@ class MigrationTransferDueReceiver :
             "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
                 "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
         )
-        migrationNotifier.notifyMigrationStepDue(accountKeyId)
+        MigrationAccountRetirement.keepWake(accountKeyId) { migrationNotifier.notifyMigrationStepDue(accountKeyId) }
     }
 
 }

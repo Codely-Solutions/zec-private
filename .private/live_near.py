@@ -73,25 +73,18 @@ def read_positive_atomic(value):
 
 
 def read_timestamp(value):
-    try:
-        timestamp = datetime.datetime.fromisoformat(value)
-    except (TypeError, ValueError):
-        raise RuntimeError('Invalid NEAR response timestamp') from None
-    if timestamp.tzinfo is None:
-        raise RuntimeError('NEAR response timestamp is missing a timezone')
-    return timestamp
-
-
-def deadline_identity(value):
-    timestamp = read_timestamp(value).astimezone(datetime.timezone.utc)
-    fractional = re.fullmatch(
-        r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
-        r'(?:\.([0-9]{1,9}))?(?:Z|[+-][0-9]{2}:[0-9]{2})',
+    instant = re.fullmatch(
+        r'[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}'
+        r'(?:\.([0-9]{1,9}))?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})',
         value,
-    )
-    if fractional is None:
-        raise RuntimeError('Invalid NEAR quote deadline precision')
-    return timestamp.replace(microsecond=0), int((fractional[1] or '').ljust(9, '0'))
+    ) if isinstance(value, str) else None
+    if instant is None:
+        raise RuntimeError('Invalid NEAR response timestamp')
+    try:
+        timestamp = datetime.datetime.fromisoformat(value.upper()).astimezone(datetime.timezone.utc)
+    except ValueError:
+        raise RuntimeError('Invalid NEAR response timestamp') from None
+    return timestamp.replace(microsecond=0), int((instant[1] or '').ljust(9, '0'))
 
 
 def read_decimal(value):
@@ -168,7 +161,7 @@ def reviewed_quote(result, require_deposit=True):
     if (minimum_in > amount_in or minimum_out > amount_out
             or fixed_amount != read_positive_atomic(request['amount']) or too_low_in or too_low_out):
         raise RuntimeError('NEAR quote has inconsistent amounts or minima')
-    deadline = deadline_identity(quote['deadline'])
+    deadline = read_timestamp(quote['deadline'])
     now = datetime.datetime.now(datetime.timezone.utc)
     if deadline <= (now.replace(microsecond=0), now.microsecond * 1000):
         raise RuntimeError('NEAR production quote deadline is not in the future')

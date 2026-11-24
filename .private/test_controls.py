@@ -3,6 +3,7 @@ from copy import deepcopy
 from io import StringIO
 from unittest.mock import patch
 from pathlib import Path
+from textwrap import dedent
 import shutil
 import re
 import subprocess
@@ -94,6 +95,24 @@ for clear in (False, True):
                 self.assertTrue(uri.startswith(prefix))
                 self.assertEqual(config,json.loads(unquote(uri[len(prefix):])))
 
+    def test_automation_test_classifies_only_the_exact_main_ref(self):
+        workflow = (checks.ROOT / '.github/workflows/automation-test.yml').read_text()
+        step = re.search(r'(?ms)^        id: dispatch_scope\n.*?^        run: \|\n(.*?)^      - name:', workflow)
+        self.assertIsNotNone(step)
+        code = dedent(step[1])
+        self.assertEqual(workflow.count("if: steps.dispatch_scope.outputs.main == 'true'"), 4)
+        self.assertEqual(workflow.count("if: steps.dispatch_scope.outputs.main == 'false'"), 2)
+        with fixture_directory() as temp:
+            output = Path(temp) / 'scope.txt'
+            for ref, exact_main in (
+                ('refs/heads/main', True), ('refs/heads/Main', False), ('refs/heads/review/fixture', False),
+            ):
+                with self.subTest(ref=ref):
+                    output.write_text('')
+                    env = dict(os.environ, GITHUB_REF=ref, GITHUB_OUTPUT=str(output))
+                    subprocess.run([sys.executable, '-B', '-c', code], env=env, check=True)
+                    self.assertEqual(output.read_text(), f'main={str(exact_main).lower()}\n')
+
     def test_unfunded_near_probe_rejects_non_atomic_output(self):
         from live_near import read_positive_atomic
 
@@ -117,11 +136,11 @@ for clear in (False, True):
         self.assertEqual(read_decimal(WireDecimal('1.25e-2')), read_decimal('0.0125'))
 
     def test_unfunded_near_probe_compares_deadlines_at_nanosecond_precision(self):
-        from live_near import deadline_identity
+        from live_near import read_timestamp
 
-        deadline = deadline_identity('2099-01-01T00:00:00.000000001Z')
-        self.assertEqual(deadline, deadline_identity('2099-01-01T01:00:00.000000001+01:00'))
-        self.assertNotEqual(deadline, deadline_identity('2099-01-01T00:00:00.000000002Z'))
+        deadline = read_timestamp('2099-01-01T00:00:00.000000001Z')
+        self.assertEqual(deadline, read_timestamp('2099-01-01T01:00:00.000000001+01:00'))
+        self.assertNotEqual(deadline, read_timestamp('2099-01-01T00:00:00.000000002Z'))
 
     def test_unfunded_near_probe_binds_every_reviewed_term(self):
         import live_near
@@ -216,6 +235,9 @@ for clear in (False, True):
             ('quoteRequest', 'appFees', [{'recipient': 'fixture', 'fee': 1}]),
             ('quote', 'amountInUsd', 'undefined'), ('envelope', 'timestamp', None),
             ('status', 'updatedAt', 'invalid'),
+            ('envelope', 'timestamp', '2026-11-24 00:00:00Z'),
+            ('quoteRequest', 'deadline', '2099-01-01 00:00:00Z'),
+            ('status', 'updatedAt', '2026-11-24 00:00:00Z'),
             ('quoteRequest', 'appFees', [{'fee': 0}]),
             ('status', 'swapDetails', {'depositedAmount': '0.5'}),
             ('status', 'swapDetails', {'amountOut': '500000', 'amountOutFormatted': '1'}),

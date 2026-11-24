@@ -2,7 +2,9 @@ package co.electriccoin.zcash.ui.screen.transactiondetail
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -217,27 +220,35 @@ private fun BottomBar(
             Spacer(4.dp)
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            state.secondaryButton?.let {
-                ZashiButton(
-                    modifier = Modifier.weight(1f),
-                    state = it,
-                    defaultPrimaryColors = ZashiButtonDefaults.tertiaryColors()
-                )
+        DetailActions(state.primaryButton, state.secondaryButton)
+    }
+}
+
+@Composable
+private fun DetailActions(primary: ButtonState?, secondary: ButtonState?) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val textAdjustedWidth = maxWidth / LocalDensity.current.fontScale
+        if (primary != null && secondary != null && textAdjustedWidth < 250.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DetailSecondaryButton(secondary, Modifier.fillMaxWidth())
+                ZashiButton(state = primary, modifier = Modifier.fillMaxWidth())
             }
-            if (state.secondaryButton != null && state.primaryButton != null) {
-                Spacer(Modifier.width(8.dp))
-            }
-            state.primaryButton?.let {
-                ZashiButton(
-                    modifier = Modifier.weight(1f),
-                    state = it
-                )
+        } else {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                secondary?.let { DetailSecondaryButton(it, Modifier.weight(1f)) }
+                primary?.let { ZashiButton(state = it, modifier = Modifier.weight(1f)) }
             }
         }
     }
+}
+
+@Composable
+private fun DetailSecondaryButton(state: ButtonState, modifier: Modifier) {
+    ZashiButton(
+        modifier = modifier,
+        state = state,
+        defaultPrimaryColors = ZashiButtonDefaults.tertiaryColors(),
+    )
 }
 
 @Composable

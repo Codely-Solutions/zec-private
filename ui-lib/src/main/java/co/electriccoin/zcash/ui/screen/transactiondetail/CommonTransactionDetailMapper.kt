@@ -54,10 +54,14 @@ class CommonTransactionDetailMapper {
         }
     }
 
-    fun createTransactionDetailErrorButtonState(error: Exception?, reloadHandle: ReloadHandle): ButtonState? {
+    fun createTransactionDetailErrorButtonState(
+        error: Exception?,
+        reloadHandle: ReloadHandle,
+        allowServiceRetry: Boolean = false,
+    ): ButtonState? {
         val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
 
-        return if (isServiceUnavailableError || error is ActivityDetailUnavailableException) {
+        return if (error is ActivityDetailUnavailableException || (isServiceUnavailableError && !allowServiceRetry)) {
             null
         } else {
             ButtonState(

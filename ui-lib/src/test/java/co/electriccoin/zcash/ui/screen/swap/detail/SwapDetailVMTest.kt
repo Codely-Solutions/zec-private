@@ -98,7 +98,8 @@ class SwapDetailVMTest {
 
     @Test
     fun savedProblemStatusesOfferGenericSupportWithoutSignedEvidence() = runTest {
-        for (status in listOf(SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)) {
+        val outcomes = listOf(SwapStatus.INCOMPLETE_DEPOSIT, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)
+        for (status in outcomes) {
             val harness = harness(SwapQuoteStatusData(
                 isLoading = false, error = unavailable(), savedMetadata = saved(status),
             ))

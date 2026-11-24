@@ -72,8 +72,11 @@ class MigrationAppHooksResetTest {
         )
         mockkConstructor(MigrationScheduler::class)
         try {
-            every { anyConstructed<MigrationScheduler>().nextWakeAt(key) } returns null
-            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers { cancel.await() }
+            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers {
+                assertTrue(removed.isCompleted)
+                assertTrue(MigrationAccountRetirement.isRemoved(key))
+                cancel.await()
+            }
             val retirement = launch { hooks.retireHardwareAccount(key) { removed.complete(Unit) } }
             runCurrent()
 
@@ -87,7 +90,9 @@ class MigrationAppHooksResetTest {
             assertTrue(MigrationAccountRetirement.blocks(key))
             assertFalse(MigrationAccountRetirement.blocks("other-owner"))
             coVerify(exactly = 1) { driver.stopAndJoin(key) }
-            assertFalse(removed.isCompleted)
+            assertTrue(removed.isCompleted)
+            assertFalse(retirement.isCompleted)
+            assertEquals(null, MigrationAccountRetirement.keepWake(key) { "stale wake" })
 
             cancel.complete(Unit)
             runCurrent()
@@ -114,26 +119,21 @@ class MigrationAppHooksResetTest {
         )
         mockkConstructor(MigrationScheduler::class)
         try {
-            val originalWake = 1795560000000L
             val sdk = GetOrchardMigrationSdkUseCase(mockk(), mockk(), mockk(), mockk(), mockk())
-            every { anyConstructed<MigrationScheduler>().nextWakeAt(key) } returns originalWake
-            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers {
-                assertEquals(MigrationSdkLookup.RemovalManaged, sdk.lookup(key))
-            }
-            coEvery { anyConstructed<MigrationScheduler>().restoreWake(key, originalWake) } coAnswers {
-                assertFalse(MigrationAccountRetirement.blocks(key))
-            }
+            var queuedWake: String? = "existing wake"
 
             assertFailsWith<IllegalStateException> {
-                hooks.retireHardwareAccount(key) { error("Synthetic account deletion failed") }
+                hooks.retireHardwareAccount(key) {
+                    assertEquals(MigrationSdkLookup.RemovalManaged, sdk.lookup(key))
+                    assertEquals("existing wake", queuedWake)
+                    MigrationAccountRetirement.keepWake(key) { queuedWake = "wake from sync" }
+                    error("Synthetic account deletion failed")
+                }
             }
             assertFalse(MigrationAccountRetirement.blocks(key))
-            coVerifyOrder {
-                anyConstructed<MigrationScheduler>().cancelAndWait(key)
-                anyConstructed<MigrationScheduler>().restoreWake(key, originalWake)
-                driver.startIfNotRunning(key)
-            }
-            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().restoreWake(neq(key), any()) }
+            assertEquals("wake from sync", queuedWake)
+            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().cancelAndWait(any()) }
+            coVerify(exactly = 1) { driver.startIfNotRunning(key) }
         } finally {
             MigrationAccountRetirement.restore(key)
             unmockkConstructor(MigrationScheduler::class)
@@ -160,7 +160,6 @@ class MigrationAppHooksResetTest {
         )
         mockkConstructor(MigrationScheduler::class)
         try {
-            every { anyConstructed<MigrationScheduler>().nextWakeAt(key) } returns null
             coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } returns Unit
 
             hooks.restoreNotificationProgress(key, this, runStepPending = true)

@@ -165,4 +165,6 @@ internal fun TransactionSwapMetadata.savedSwapSupportButton(onSupportClicked: (S
         null
     }
 
-private val SETTLEMENT_SUPPORT_STATUSES = setOf(SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)
+private val SETTLEMENT_SUPPORT_STATUSES = setOf(
+    SwapStatus.INCOMPLETE_DEPOSIT, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED,
+)
