@@ -231,16 +231,7 @@ class RestoredWalletRoutesLayoutTest {
                     every { hide() } answers { reviewAllowed = false }
                 }
                 val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = ime)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
-                val router = NavigationRouterImpl()
-                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-                    router.observePipeline().collect {
-                        when (it) {
-                            is CustomNavigationCommand -> navigator.executeCommand(it)
-                            is NavigationCommand -> navigator.executeCommand(it)
-                        }
-                    }
-                }
+                val router = collectOwnedNavigation(keyboard = keyboard)
                 val originalEntry = checkNotNull(controller.currentBackStackEntry).id
                 val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
                 router.forwardFrom(originalEntry, { reviewAllowed }) { request }
@@ -557,6 +548,7 @@ class RestoredWalletRoutesLayoutTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun TestScope.collectOwnedNavigation(
         resumed: Flow<Boolean> = flowOf(true),
+        keyboard: KeyboardManager = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null),
         canCommit: () -> Boolean = { true },
     ): NavigationRouterImpl {
         val router = NavigationRouterImpl()
@@ -565,7 +557,6 @@ class RestoredWalletRoutesLayoutTest {
             observer.update(nav.currentBackStackEntry?.toActiveNavigationEntry())
         }
         controller.addOnDestinationChangedListener(listener)
-        val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
         val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk(), canCommit)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {

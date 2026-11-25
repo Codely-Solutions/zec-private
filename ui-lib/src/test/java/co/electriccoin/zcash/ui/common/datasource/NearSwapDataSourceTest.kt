@@ -192,6 +192,10 @@ class NearSwapDataSourceTest {
     @Test
     fun fundingExpiresByProviderTimeEvenWhenTheDeviceStartsSlow() = runBlocking {
         val deposit = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { validateAddress("recipient") } returns AddressType.Unified
+        }
+        coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
         val issued = Instant.parse("2030-01-01T00:00:00Z")
         val deadline = issued + 60.seconds
         val response = SwapInputProvenanceFixture.status(origin, zec, deposit, SwapType.FLEX_INPUT, "{}")
