@@ -6214,7 +6214,7 @@ index b6f483196..ff4ccc074 100644
 @@ -27,0 +29 @@ data class MigrationProgressState(
 +    val recoveryRetry: ButtonState? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
-index f1f185d9b..dcbd86fa2 100644
+index f1f185d9b..a846664a7 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 @@ -3,0 +4,2 @@ import androidx.lifecycle.ViewModel
@@ -6253,7 +6253,8 @@ index f1f185d9b..dcbd86fa2 100644
 @@ -97 +112 @@ class MigrationProgressVM(
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +            val accountKeyId = args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-@@ -100,0 +116,35 @@ class MigrationProgressVM(
+@@ -101 +116,40 @@ class MigrationProgressVM(
+-    fun navigateBack() = navigationRouter.back()
 +    private fun recoveryRetry(readout: MigrationLiveReadout): ButtonState? {
 +        val owner = args.accountKeyId?.takeIf { args.offerRetry }
 +        val nextTransfer = readout.states.transfers.filter { it.isTransfer && !it.isSent }
@@ -6289,21 +6290,26 @@ index f1f185d9b..dcbd86fa2 100644
 +        super.onCleared()
 +    }
 +
-@@ -102,0 +153,4 @@ class MigrationProgressVM(
++    fun navigateBack() = sendLce.guardLoading { navigationRouter.back() }
++
 +    fun retryReadout() {
 +        retry.value++
 +    }
-+
-@@ -191 +245 @@ class MigrationProgressVM(
+@@ -191,3 +245,3 @@ class MigrationProgressVM(
 -            isComplete = snapshot.isComplete,
-+            isComplete = snapshot.areAllMined,
-@@ -193 +247 @@ class MigrationProgressVM(
+-            onBack = ::onBack,
 -            onDone = if (snapshot.isComplete) ::onDone else null,
-+            onDone = if (snapshot.areAllMined) ::onDone else null,
-@@ -339 +393 @@ internal fun migrationProgressSubtitle(
++            isComplete = snapshot.areAllMined,
++            onBack = ::navigateBack,
++            onDone = if (snapshot.areAllMined) navigationRouter::backToRoot else null,
+@@ -271 +324,0 @@ class MigrationProgressVM(
+-    private fun onBack() = sendLce.guardLoading { navigationRouter.back() }
+@@ -276 +328,0 @@ class MigrationProgressVM(
+-    private fun onDone() = navigationRouter.backToRoot()
+@@ -339 +391 @@ internal fun migrationProgressSubtitle(
 -        snapshot.isComplete -> {
 +        snapshot.areAllMined -> {
-@@ -342,0 +397,4 @@ internal fun migrationProgressSubtitle(
+@@ -342,0 +395,4 @@ internal fun migrationProgressSubtitle(
 +        snapshot.isComplete -> {
 +            "All ${snapshot.totalCount} transfers were submitted."
 +        }

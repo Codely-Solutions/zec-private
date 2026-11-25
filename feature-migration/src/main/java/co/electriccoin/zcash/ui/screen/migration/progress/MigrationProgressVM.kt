@@ -148,7 +148,7 @@ class MigrationProgressVM(
         super.onCleared()
     }
 
-    fun navigateBack() = navigationRouter.back()
+    fun navigateBack() = sendLce.guardLoading { navigationRouter.back() }
 
     fun retryReadout() {
         retry.value++
@@ -243,8 +243,8 @@ class MigrationProgressVM(
                     )
                 },
             isComplete = snapshot.areAllMined,
-            onBack = ::onBack,
-            onDone = if (snapshot.areAllMined) ::onDone else null,
+            onBack = ::navigateBack,
+            onDone = if (snapshot.areAllMined) navigationRouter::backToRoot else null,
         )
     }
 
@@ -322,12 +322,10 @@ class MigrationProgressVM(
         )
     }
 
-    private fun onBack() = sendLce.guardLoading { navigationRouter.back() }
 
     // "Reschedule" no longer mutates the plan — a missed-but-unexpired transfer needs NO plan
     // change by design (ZIP 374: the signature does not cover the anchor, so it proves late
     // against its committed boundary and broadcasts late; the engine is the single source of
-    private fun onDone() = navigationRouter.backToRoot()
 }
 
 /**
