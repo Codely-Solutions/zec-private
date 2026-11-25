@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -93,7 +94,7 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
      * Starts a signing session unless one is running: over the link a previous attempt kept open,
      * or by looking for the device.
      */
-    fun startSigning()
+    fun startSigning(onSigned: ((SignedLedgerSubmission) -> Unit)? = null)
 
     /**
      * Picks the device to sign with while the session is [LedgerSigningState.Selecting].
@@ -108,19 +109,21 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
     /**
      * Stops the session and closes the link; the proposal, the PCZT and the proofs stay.
      */
-    fun cancelSigning()
-
-    /**
-     * Fails a session that reached [LedgerSigningState.Signed] but has no proposal left to submit,
-     * with an issue that offers no retry, so the sheet leaves Cancel Transaction as the way out.
-     */
-    fun failSignedSessionWithoutProposal()
-
-    fun signingOwner(expectedProposal: TransactionProposal): AccountUuid?
-
-    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
+    fun cancelSigning(onlyUnsigned: Boolean = false)
 
     fun getProposalPCZT(): Pczt?
+}
+
+/** The original signed preparation can enter the process submission queue once. */
+class SignedLedgerSubmission internal constructor(
+    val proposal: TransactionProposal,
+    val owner: AccountUuid?,
+    val reviewedQuote: SwapQuoteData.Success?,
+    internal val submit: suspend () -> SubmitResult,
+) {
+    private val enqueued = AtomicBoolean()
+
+    internal fun enqueueOnce(): Boolean = enqueued.compareAndSet(false, true)
 }
 
 @Suppress("TooManyFunctions")
@@ -282,24 +285,31 @@ class LedgerProposalRepositoryImpl(
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex
 
-    override fun startSigning() {
+    private var signedHandoff: ((SignedLedgerSubmission) -> Unit)? = null
+
+    override fun startSigning(onSigned: ((SignedLedgerSubmission) -> Unit)?) {
         if (shieldApprovalExpired(transactionProposal.value)) {
             cancelSigning()
             signingState.value = LedgerSigningState.Failed(LedgerIssue.expiredShieldApproval)
-        } else if (sessionJob?.isActive != true) {
-            startApprovedSession()
+        } else {
+            synchronized(lock) {
+                if (sessionJob?.isActive != true && signingState.value != LedgerSigningState.Signed) {
+                    startApprovedSession(onSigned)
+                }
+            }
         }
     }
 
-    private fun startApprovedSession() {
+    private fun startApprovedSession(onSigned: ((SignedLedgerSubmission) -> Unit)?) {
         val prepared = hardwareProposal.getApproved(transactionProposal.value)
         if (prepared == null) {
             Twig.warn { "Ledger signing: no PCZT to sign" }
             signingState.update { LedgerSigningState.Failed(LedgerIssue.unknownWithoutRetry) }
             return
         }
+        signedHandoff = onSigned
         val pendingClose = closeJob
-        val session = synchronized(lock) { ++generation }
+        val session = ++generation
         sessionJob =
             scope.launch {
                 pendingClose?.join()
@@ -330,6 +340,9 @@ class LedgerProposalRepositoryImpl(
                 Twig.warn { "Ledger signing: the selected account has no Ledger binding" }
                 publish(session, LedgerSigningState.Failed(LedgerIssue.unbound))
                 return
+            }
+            if (prepared.owner != null && account.sdkAccount.accountUuid != prepared.owner) {
+                throw LedgerPreparationExpired()
             }
             if (ledgerSigningDataSource.isLinked || scanAndConnect(session)) {
                 sign(session, prepared, account)
@@ -566,9 +579,15 @@ class LedgerProposalRepositoryImpl(
             if (generation != session) return
             if (!permitsSigning()) throw LedgerPreparationExpired()
             prepared.signatures = signed
+            signedHandoff?.invoke(
+                SignedLedgerSubmission(prepared.proposal, prepared.owner, prepared.reviewedQuote) {
+                    submitPrepared(prepared.proposal, expectedPreparation = prepared, expectedSignature = signed)
+                }
+            )
+            signedHandoff = null
+            signingState.value = LedgerSigningState.Signed
         }
         Twig.info { "Ledger signing: stage Signed" }
-        publish(session, LedgerSigningState.Signed)
     }
 
     override fun selectDevice(identifier: String) {
@@ -577,11 +596,13 @@ class LedgerProposalRepositoryImpl(
     }
 
     override fun retry() {
-        if (signingState.value !is LedgerSigningState.Failed) return
-        sessionJob?.cancel()
-        sessionJob = null
-        signingState.update { null }
-        startSigning()
+        synchronized(lock) {
+            if (signingState.value !is LedgerSigningState.Failed) return
+            sessionJob?.cancel()
+            sessionJob = null
+            signingState.update { null }
+            startSigning(signedHandoff)
+        }
     }
 
     /**
@@ -589,42 +610,52 @@ class LedgerProposalRepositoryImpl(
      * it can never close the link the next session opens. Nothing happens when no session ever ran
      * and no link is held.
      */
-    override fun cancelSigning() {
-        if (isIdle) return
-        synchronized(lock) { generation++ }
-        sessionJob?.cancel()
-        sessionJob = null
-        selection = null
-        hardwareProposal.getPrepared(transactionProposal.value)?.signatures = null
-        signingState.update { null }
-        val previousClose = closeJob
-        closeJob =
-            scope.launch {
-                previousClose?.join()
-                ledgerSigningDataSource.close()
-            }
-    }
-
-    override fun failSignedSessionWithoutProposal() {
+    override fun cancelSigning(onlyUnsigned: Boolean) {
         synchronized(lock) {
-            if (signingState.value == LedgerSigningState.Signed) {
-                signingState.value = LedgerSigningState.Failed(LedgerIssue.unknownWithoutRetry)
-            }
+            if (isIdle || (onlyUnsigned && signingState.value == LedgerSigningState.Signed)) return
+            generation++
+            signedHandoff = null
+            sessionJob?.cancel()
+            sessionJob = null
+            selection = null
+            hardwareProposal.getPrepared(transactionProposal.value)?.signatures = null
+            signingState.update { null }
+            val previousClose = closeJob
+            closeJob =
+                scope.launch {
+                    previousClose?.join()
+                    ledgerSigningDataSource.close()
+                }
         }
     }
 
+    @VisibleForTesting
+    internal suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult =
+        submitPrepared(expectedProposal)
+
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
+    private suspend fun submitPrepared(
+        expectedProposal: TransactionProposal?,
+        expectedPreparation: PreparedHardwareProposal? = null,
+        expectedSignature: Pczt? = null,
+    ): SubmitResult =
         scope.async {
             try {
                 val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
+                check(expectedPreparation == null || prepared === expectedPreparation) {
+                    "The signed Ledger preparation changed before submission."
+                }
                 val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
+                check(expectedSignature == null || signed === expectedSignature) {
+                    "The Ledger signature changed before submission."
+                }
                 submitState.update { SubmitProposalState.Submitting }
                 val proofs = prepared.proofs.await()
                 val proposal = prepared.proposal
                 val validateFunding: () -> Unit = {
                     proposal.requireCurrentShieldingApproval()
                     requireCurrentApproval(prepared)
+                    check(prepared.signatures === signed) { "The Ledger signature changed before submission." }
                     if (proposal is SwapTransactionProposal) {
                         proposal.requireFundingApproval(prepared.reviewedQuote)
                         ZecSwapComposition.validate(proposal.quote)
@@ -651,9 +682,6 @@ class LedgerProposalRepositoryImpl(
                 throw e
             }
         }.await()
-
-    override fun signingOwner(expectedProposal: TransactionProposal): AccountUuid? =
-        hardwareProposal.getApproved(transactionProposal.value)?.takeIf { it.proposal === expectedProposal }?.owner
 
     private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
         check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {

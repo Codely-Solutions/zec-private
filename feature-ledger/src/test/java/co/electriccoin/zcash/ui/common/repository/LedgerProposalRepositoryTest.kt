@@ -83,6 +83,32 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     }
 
     @Test
+    fun signedHandoffDoesNotDependOnASheetObserverAndCannotAttachToAReplacement() = runTest(dispatcher) {
+        every { ledgerSigningDataSource.isLinked } returns true
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        val account = ledgerAccount()
+        givenPczt(account)
+        val original = repository.getTransactionProposal()
+        val accepted = mutableListOf<SignedLedgerSubmission>()
+
+        repository.startSigning { accepted.add(it) }
+        runCurrent()
+        val signed = accepted.single()
+        assertSame(original, signed.proposal)
+        assertEquals(account.sdkAccount.accountUuid, signed.owner)
+        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+        repository.cancelSigning(onlyUnsigned = true)
+        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+        repository.startSigning { accepted.add(it) }
+        runCurrent()
+        assertEquals(1, accepted.size)
+
+        givenPczt(account, proposal = original)
+        assertFailsWith<IllegalStateException> { signed.submit() }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
+    }
+
+    @Test
     fun recreatedLedgerRepositoryPublishesMissingProposalToReview() = runTest(dispatcher) {
         val account = ledgerAccount()
         every { accountDataSource.selectedAccount } returns flowOf(account)

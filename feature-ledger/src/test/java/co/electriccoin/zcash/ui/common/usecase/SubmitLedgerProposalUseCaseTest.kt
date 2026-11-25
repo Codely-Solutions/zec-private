@@ -4,9 +4,9 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
-import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
-import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
+import co.electriccoin.zcash.ui.common.repository.SignedLedgerSubmission
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -16,7 +16,6 @@ import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -31,47 +30,31 @@ import kotlin.test.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SubmitLedgerProposalUseCaseTest {
     @Test
-    fun submitsClearsSwapStateAndNavigatesToProgress() =
+    fun submitsAndNavigatesToProgressWithoutClearingAnUnrelatedSwap() =
         runTest {
             val fx = useCase()
-            fx.givenProposal(mockk<TransactionProposal>())
+            val signed = fx.signed(mockk())
 
-            fx.useCase()
+            fx.useCase(signed)
 
-            coVerify(exactly = 1) { fx.ledgerProposalRepository.submit(any()) }
-            verify(exactly = 1) { fx.swapRepository.clear() }
+            coVerify(exactly = 1) { fx.nativeSubmit() }
+            verify(exactly = 0) { fx.swapRepository.clearIfCurrent(any()) }
             verify(exactly = 1) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
         }
 
     @Test
-    fun aSecondSignedAfterANewPcztSubmitsAgain() =
-        runTest {
-            val fx = useCase()
-            val submitState = MutableStateFlow<SubmitProposalState?>(null)
-            every { fx.ledgerProposalRepository.submitState } returns submitState
-            fx.givenProposal(mockk<TransactionProposal>())
+    fun eachSignedPreparationEntersTheQueueOnlyOnce() = runTest {
+        val fx = useCase()
+        val first = fx.signed(mockk())
+        val second = fx.signed(mockk())
 
-            fx.useCase()
-            submitState.value = SubmitProposalState.Result(mockk(relaxed = true))
-            fx.useCase()
+        fx.useCase(first)
+        fx.useCase(first)
+        fx.useCase(second)
 
-            coVerify(exactly = 2) { fx.ledgerProposalRepository.submit(any()) }
-            verify(exactly = 2) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
-        }
-
-    @Test
-    fun anEmptyRepositoryFailsTheSessionInsteadOfSubmitting() =
-        runTest {
-            val fx = useCase()
-            every { fx.ledgerProposalRepository.transactionProposal } returns MutableStateFlow(null)
-
-            fx.useCase()
-
-            coVerify(exactly = 0) { fx.ledgerProposalRepository.getTransactionProposal() }
-            coVerify(exactly = 0) { fx.ledgerProposalRepository.submit(any()) }
-            verify(exactly = 0) { fx.navigationRouter.replaceAll(*anyVararg()) }
-            verify(exactly = 1) { fx.ledgerProposalRepository.failSignedSessionWithoutProposal() }
-        }
+        coVerify(exactly = 2) { fx.nativeSubmit() }
+        verify(exactly = 2) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
+    }
 
     @Test
     fun swapProposalsRunPostProcessing() =
@@ -79,10 +62,10 @@ class SubmitLedgerProposalUseCaseTest {
             val fx = useCase()
             val proposal = mockk<SwapTransactionProposal>(relaxed = true)
             val result = mockk<SubmitResult>(relaxed = true)
-            fx.givenProposal(proposal, result)
+            val reviewedQuote = mockk<SwapQuoteData.Success>()
+            fx.useCase(fx.signed(proposal, result, reviewedQuote))
 
-            fx.useCase()
-
+            verify(exactly = 1) { fx.swapRepository.clearIfCurrent(reviewedQuote) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, result) }
         }
 
@@ -90,9 +73,7 @@ class SubmitLedgerProposalUseCaseTest {
     fun nonSwapProposalsSkipPostProcessing() =
         runTest {
             val fx = useCase()
-            fx.givenProposal(mockk<TransactionProposal>())
-
-            fx.useCase()
+            fx.useCase(fx.signed(mockk()))
 
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
         }
@@ -101,10 +82,10 @@ class SubmitLedgerProposalUseCaseTest {
     fun theSendPrefillIsClearedEvenWhenSubmitFails() =
         runTest {
             val fx = useCase()
-            fx.givenProposal(mockk<TransactionProposal>())
-            coEvery { fx.ledgerProposalRepository.submit(any()) } throws RuntimeException("boom")
+            val signed = fx.signed(mockk())
+            coEvery { fx.nativeSubmit() } throws RuntimeException("boom")
 
-            fx.useCase()
+            fx.useCase(signed)
 
             verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             verify(exactly = 1) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
@@ -114,11 +95,11 @@ class SubmitLedgerProposalUseCaseTest {
     fun completedLedgerSubmissionDiscardsOnlyRequestsPresentWhenItStarted() = runTest {
         val fx = useCase()
         val nativeResult = CompletableDeferred<SubmitResult>()
-        fx.givenProposal(mockk<TransactionProposal>())
-        coEvery { fx.ledgerProposalRepository.submit(any()) } coAnswers { nativeResult.await() }
+        val signed = fx.signed(mockk())
+        coEvery { fx.nativeSubmit() } coAnswers { nativeResult.await() }
         every { fx.prefillSend.pendingThrough() } returns 1
 
-        fx.useCase()
+        fx.useCase(signed)
         every { fx.prefillSend.pendingThrough() } returns 2
         nativeResult.complete(mockk(relaxed = true))
 
@@ -126,12 +107,13 @@ class SubmitLedgerProposalUseCaseTest {
         verify(exactly = 0) { fx.prefillSend.clearThrough(2) }
     }
 
-    private fun Fixtures.givenProposal(
+    private fun Fixtures.signed(
         proposal: TransactionProposal,
         submitResult: SubmitResult = mockk(relaxed = true),
-    ) {
-        every { ledgerProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-        coEvery { ledgerProposalRepository.submit(any()) } returns submitResult
+        reviewedQuote: SwapQuoteData.Success? = null,
+    ): SignedLedgerSubmission {
+        coEvery { nativeSubmit() } returns submitResult
+        return SignedLedgerSubmission(proposal, owner = null, reviewedQuote = reviewedQuote, submit = nativeSubmit)
     }
 
     /** Pins the use case's off-thread submit scope to the test scheduler so it runs eagerly. */
@@ -143,14 +125,12 @@ class SubmitLedgerProposalUseCaseTest {
 
     private class Fixtures {
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-        val ledgerProposalRepository =
-            mockk<LedgerProposalRepository>(relaxed = true)
+        val nativeSubmit = mockk<suspend () -> SubmitResult>()
         val swapRepository = mockk<SwapRepository>(relaxed = true)
         val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
         val useCase =
             SubmitLedgerProposalUseCase(
-                ledgerProposalRepository = ledgerProposalRepository,
                 navigationRouter = navigationRouter,
                 swapRepository = swapRepository,
                 processSwapTransaction = processSwapTransaction,

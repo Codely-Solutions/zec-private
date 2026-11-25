@@ -24,7 +24,6 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.RetryLedgerSigningUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectLedgerSigningDeviceUseCase
 import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
-import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.connectledger.common.LedgerDeviceRowRole
@@ -221,29 +220,6 @@ class LedgerSignVMTest {
                 listOf(stringRes("Ledger Device AA"), stringRes("Ledger Device BB"), stringRes("Ledger Device CC")),
                 (vm.state.value?.content as LedgerSignContent.Devices).devices.map { it.name }
             )
-        }
-
-    @Test
-    fun signedSubmitsExactlyOnce() =
-        runTest(dispatcher) {
-            val signingState = MutableStateFlow<LedgerSigningState?>(null)
-            val submitLedgerProposal = mockk<SubmitLedgerProposalUseCase>(relaxed = true)
-            val vm = vm(signingState = signingState, submitLedgerProposal = submitLedgerProposal)
-            collect(vm)
-            runCurrent()
-
-            signingState.value = LedgerSigningState.Signed
-            runCurrent()
-
-            coVerify(exactly = 1) { submitLedgerProposal.invoke() }
-
-            val alreadySigned = MutableStateFlow<LedgerSigningState?>(LedgerSigningState.Signed)
-            val submitAlreadySigned = mockk<SubmitLedgerProposalUseCase>(relaxed = true)
-            val vmAlreadySigned = vm(signingState = alreadySigned, submitLedgerProposal = submitAlreadySigned)
-            collect(vmAlreadySigned)
-            runCurrent()
-
-            coVerify(exactly = 1) { submitAlreadySigned.invoke() }
         }
 
     @Test
@@ -730,7 +706,6 @@ class LedgerSignVMTest {
         selectLedgerSigningDevice: SelectLedgerSigningDeviceUseCase = mockk(relaxed = true),
         retryLedgerSigning: RetryLedgerSigningUseCase = mockk(relaxed = true),
         cancelLedgerSigning: CancelLedgerSigningUseCase = mockk(relaxed = true),
-        submitLedgerProposal: SubmitLedgerProposalUseCase = mockk(relaxed = true),
         navigateToLedgerRepair: NavigateToLedgerRepairUseCase = mockk(relaxed = true),
         navigationRouter: NavigationRouter = mockk(relaxed = true),
     ) = LedgerSignVM(
@@ -748,7 +723,6 @@ class LedgerSignVMTest {
         selectLedgerSigningDevice = selectLedgerSigningDevice,
         retryLedgerSigning = retryLedgerSigning,
         cancelLedgerSigning = cancelLedgerSigning,
-        submitLedgerProposal = submitLedgerProposal,
         navigateToLedgerRepair = navigateToLedgerRepair,
         navigationRouter = navigationRouter,
     )

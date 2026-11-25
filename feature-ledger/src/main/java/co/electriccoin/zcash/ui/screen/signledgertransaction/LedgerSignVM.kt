@@ -21,7 +21,6 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.RetryLedgerSigningUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectLedgerSigningDeviceUseCase
 import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
-import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -35,7 +34,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -65,7 +63,6 @@ class LedgerSignVM(
     private val selectLedgerSigningDevice: SelectLedgerSigningDeviceUseCase,
     private val retryLedgerSigning: RetryLedgerSigningUseCase,
     private val cancelLedgerSigning: CancelLedgerSigningUseCase,
-    private val submitLedgerProposal: SubmitLedgerProposalUseCase,
     private val navigateToLedgerRepair: NavigateToLedgerRepairUseCase,
     private val navigationRouter: NavigationRouter,
     private val sourceEntryId: String? = null,
@@ -118,10 +115,6 @@ class LedgerSignVM(
                 navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
             }
         }
-        viewModelScope.launch {
-            observeLedgerSigningState().filterIsInstance<LedgerSigningState.Signed>().first()
-            submitLedgerProposal(sourceEntryId)
-        }
     }
 
     /**
@@ -134,7 +127,7 @@ class LedgerSignVM(
             if (!hasProposal.await()) return@launch
             when (val signingState = observeLedgerSigningState().value) {
                 null -> {
-                    startLedgerSigning()
+                    startLedgerSigning(sourceEntryId)
                 }
 
                 is LedgerSigningState.Failed -> {
@@ -142,7 +135,7 @@ class LedgerSignVM(
                 }
 
                 LedgerSigningState.Signed -> return@launch
-                else -> startLedgerSigning()
+                else -> startLedgerSigning(sourceEntryId)
             }
         }
     }

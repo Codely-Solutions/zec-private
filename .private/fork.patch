@@ -2199,7 +2199,7 @@ index d13db1a11..be8272aaa 100644
 +        return true
 +    }
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
-index 683867b58..349858a1b 100644
+index 683867b58..aad7fd08d 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
 @@ -7,0 +8 @@ import cash.z.ecc.android.sdk.ledger.LedgerSigningProgress
@@ -2228,24 +2228,48 @@ index 683867b58..349858a1b 100644
 +import kotlinx.coroutines.ensureActive
 @@ -50 +65,0 @@ import kotlinx.coroutines.flow.combine
 -import kotlinx.coroutines.flow.filter
-@@ -104 +119,3 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
+@@ -56,0 +72 @@ import kotlinx.coroutines.withTimeout
++import java.util.concurrent.atomic.AtomicBoolean
+@@ -81 +97 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
+-    fun startSigning()
++    fun startSigning(onSigned: ((SignedLedgerSubmission) -> Unit)? = null)
+@@ -96 +112 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
+-    fun cancelSigning()
++    fun cancelSigning(onlyUnsigned: Boolean = false)
+@@ -98,5 +114,2 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
+-    /**
+-     * Fails a session that reached [LedgerSigningState.Signed] but has no proposal left to submit,
+-     * with an issue that offers no retry, so the sheet leaves Cancel Transaction as the way out.
+-     */
+-    fun failSignedSessionWithoutProposal()
++    fun getProposalPCZT(): Pczt?
++}
+@@ -104 +117,8 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
 -    suspend fun submit(): SubmitResult
-+    fun signingOwner(expectedProposal: TransactionProposal): AccountUuid?
-+
-+    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
-@@ -114,0 +132,2 @@ class LedgerProposalRepositoryImpl(
++/** The original signed preparation can enter the process submission queue once. */
++class SignedLedgerSubmission internal constructor(
++    val proposal: TransactionProposal,
++    val owner: AccountUuid?,
++    val reviewedQuote: SwapQuoteData.Success?,
++    internal val submit: suspend () -> SubmitResult,
++) {
++    private val enqueued = AtomicBoolean()
+@@ -106 +126 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
+-    fun getProposalPCZT(): Pczt?
++    internal fun enqueueOnce(): Boolean = enqueued.compareAndSet(false, true)
+@@ -114,0 +135,2 @@ class LedgerProposalRepositoryImpl(
 +    private val processSwapTransaction: ProcessSwapTransactionUseCase,
 +    walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -125,4 +143,0 @@ class LedgerProposalRepositoryImpl(
+@@ -125 +146,0 @@ class LedgerProposalRepositoryImpl(
 -    private val pcztWithProofs = MutableStateFlow(LedgerPcztState(isLoading = false, pczt = null))
--
+@@ -127,5 +148 @@ class LedgerProposalRepositoryImpl(
 -    @Volatile
 -    private var proposalPczt: Pczt? = null
-@@ -130,2 +145 @@ class LedgerProposalRepositoryImpl(
+-
 -    @Volatile
 -    private var pcztWithSignatures: Pczt? = null
 +    private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
-@@ -166,0 +181,10 @@ class LedgerProposalRepositoryImpl(
+@@ -166,0 +184,10 @@ class LedgerProposalRepositoryImpl(
 +    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
 +        val previous = transactionProposal.value
 +        val proposal = proposalDataSource.preparePayment(owner, draft)
@@ -2256,20 +2280,20 @@ index 683867b58..349858a1b 100644
 +        return proposal
 +    }
 +
-@@ -178,0 +203 @@ class LedgerProposalRepositoryImpl(
+@@ -178,0 +206 @@ class LedgerProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -182 +207 @@ class LedgerProposalRepositoryImpl(
+@@ -182 +210 @@ class LedgerProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -190,0 +216 @@ class LedgerProposalRepositoryImpl(
+@@ -190,0 +219 @@ class LedgerProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -194 +220 @@ class LedgerProposalRepositoryImpl(
+@@ -194 +223 @@ class LedgerProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -201 +227 @@ class LedgerProposalRepositoryImpl(
+@@ -201 +230 @@ class LedgerProposalRepositoryImpl(
 -        createProposalInternal {
 +        createProposalInternal(includeFailureCause = false) {
-@@ -208,5 +234,8 @@ class LedgerProposalRepositoryImpl(
+@@ -208,5 +237,8 @@ class LedgerProposalRepositoryImpl(
 -    override suspend fun createShieldProposal() {
 -        createProposalInternal {
 -            proposalDataSource.createShieldProposal(
@@ -2283,9 +2307,9 @@ index 683867b58..349858a1b 100644
 +        approval.requireCurrent()
 +        check(transactionProposal.value === preceding && transactionProposal.compareAndSet(preceding, shield)) {
 +            "The transaction changed during shielding preparation."
-@@ -213,0 +243 @@ class LedgerProposalRepositoryImpl(
+@@ -213,0 +246 @@ class LedgerProposalRepositoryImpl(
 +        return shield
-@@ -218,9 +248,20 @@ class LedgerProposalRepositoryImpl(
+@@ -218,9 +251,20 @@ class LedgerProposalRepositoryImpl(
 -        val result =
 -            try {
 -                proposalDataSource.createPcztFromProposal(
@@ -2315,14 +2339,14 @@ index 683867b58..349858a1b 100644
 +        }
 +
 +    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
-@@ -229,3 +270,3 @@ class LedgerProposalRepositoryImpl(
+@@ -229,3 +273,3 @@ class LedgerProposalRepositoryImpl(
 -        pcztWithSignatures = null
 -        proposalPczt = result
 -        addProofsToPczt(result)
 +        val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
 +        pcztWithProofsJob?.cancel()
 +        pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
-@@ -233,0 +275,7 @@ class LedgerProposalRepositoryImpl(
+@@ -233,0 +278,7 @@ class LedgerProposalRepositoryImpl(
 +
 +    override fun approveForSigning(
 +        expectedProposal: TransactionProposal?,
@@ -2330,7 +2354,7 @@ index 683867b58..349858a1b 100644
 +        canSign: () -> Boolean,
 +    ) = hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote, canSign)
 +
-@@ -237,13 +285,7 @@ class LedgerProposalRepositoryImpl(
+@@ -237,11 +288,10 @@ class LedgerProposalRepositoryImpl(
 -    private fun addProofsToPczt(proposalPczt: Pczt) {
 -        pcztWithProofsJob?.cancel()
 -        pcztWithProofsJob =
@@ -2342,65 +2366,133 @@ index 683867b58..349858a1b 100644
 -                } catch (e: PcztException.AddProofsToPcztException) {
 -                    Twig.error(e) { "Failed to add proofs to PCZT" }
 -                    pcztWithProofs.update { LedgerPcztState(isLoading = false, pczt = null, error = e) }
--                }
--            }
-+    override fun startSigning() {
++    private var signedHandoff: ((SignedLedgerSubmission) -> Unit)? = null
++
++    override fun startSigning(onSigned: ((SignedLedgerSubmission) -> Unit)?) {
 +        if (shieldApprovalExpired(transactionProposal.value)) {
 +            cancelSigning()
 +            signingState.value = LedgerSigningState.Failed(LedgerIssue.expiredShieldApproval)
-+        } else if (sessionJob?.isActive != true) {
-+            startApprovedSession()
++        } else {
++            synchronized(lock) {
++                if (sessionJob?.isActive != true && signingState.value != LedgerSigningState.Signed) {
++                    startApprovedSession(onSigned)
+@@ -249,0 +300 @@ class LedgerProposalRepositoryImpl(
 +        }
-@@ -252,4 +294,3 @@ class LedgerProposalRepositoryImpl(
+@@ -252,4 +303,3 @@ class LedgerProposalRepositoryImpl(
 -    override fun startSigning() {
 -        if (sessionJob?.isActive == true) return
 -        val pczt = proposalPczt
 -        if (pczt == null) {
-+    private fun startApprovedSession() {
++    private fun startApprovedSession(onSigned: ((SignedLedgerSubmission) -> Unit)?) {
 +        val prepared = hardwareProposal.getApproved(transactionProposal.value)
 +        if (prepared == null) {
-@@ -265 +306 @@ class LedgerProposalRepositoryImpl(
+@@ -259,0 +310 @@ class LedgerProposalRepositoryImpl(
++        signedHandoff = onSigned
+@@ -261 +312 @@ class LedgerProposalRepositoryImpl(
+-        val session = synchronized(lock) { ++generation }
++        val session = ++generation
+@@ -265 +316 @@ class LedgerProposalRepositoryImpl(
 -                runSession(session, pczt)
 +                runSession(session, prepared)
-@@ -268,0 +310,3 @@ class LedgerProposalRepositoryImpl(
+@@ -268,0 +320,3 @@ class LedgerProposalRepositoryImpl(
 +    private fun shieldApprovalExpired(proposal: TransactionProposal?): Boolean =
 +        proposal is ShieldTransactionProposal && proposal.approval?.isCurrent() != true
 +
-@@ -281 +325 @@ class LedgerProposalRepositoryImpl(
+@@ -281 +335 @@ class LedgerProposalRepositoryImpl(
 -        pczt: Pczt
 +        prepared: PreparedHardwareProposal
-@@ -291 +335 @@ class LedgerProposalRepositoryImpl(
+@@ -289,0 +344,3 @@ class LedgerProposalRepositoryImpl(
++            if (prepared.owner != null && account.sdkAccount.accountUuid != prepared.owner) {
++                throw LedgerPreparationExpired()
++            }
+@@ -291 +348 @@ class LedgerProposalRepositoryImpl(
 -                sign(session, pczt, account)
 +                sign(session, prepared, account)
-@@ -305,0 +350,2 @@ class LedgerProposalRepositoryImpl(
+@@ -305,0 +363,2 @@ class LedgerProposalRepositoryImpl(
 +        } catch (_: LedgerPreparationExpired) {
 +            showRevokedPreparation(session, prepared.proposal)
-@@ -311,0 +358,6 @@ class LedgerProposalRepositoryImpl(
+@@ -311,0 +371,6 @@ class LedgerProposalRepositoryImpl(
 +    private fun showRevokedPreparation(session: Int, proposal: TransactionProposal) {
 +        val issue = if (shieldApprovalExpired(proposal)) LedgerIssue.expiredShieldApproval
 +            else LedgerIssue.unknownWithoutRetry
 +        publish(session, LedgerSigningState.Failed(issue))
 +    }
 +
-@@ -500 +552 @@ class LedgerProposalRepositoryImpl(
+@@ -500 +565 @@ class LedgerProposalRepositoryImpl(
 -        pczt: Pczt,
 +        prepared: PreparedHardwareProposal,
-@@ -502,0 +555,4 @@ class LedgerProposalRepositoryImpl(
+@@ -502,0 +568,4 @@ class LedgerProposalRepositoryImpl(
 +        val permitsSigning = {
 +            generation == session && hardwareProposal.getApproved(transactionProposal.value) === prepared
 +        }
 +        if (!permitsSigning()) throw LedgerPreparationExpired()
-@@ -506 +562 @@ class LedgerProposalRepositoryImpl(
+@@ -506 +575 @@ class LedgerProposalRepositoryImpl(
 -            ledgerSigningDataSource.sign(pczt.clonePczt(), account) { progress ->
 +            ledgerSigningDataSource.sign(prepared.pczt.clonePczt(), account, permitsSigning) { progress ->
-@@ -511 +567,2 @@ class LedgerProposalRepositoryImpl(
+@@ -511 +580,9 @@ class LedgerProposalRepositoryImpl(
 -            pcztWithSignatures = signed
 +            if (!permitsSigning()) throw LedgerPreparationExpired()
 +            prepared.signatures = signed
-@@ -541 +598 @@ class LedgerProposalRepositoryImpl(
++            signedHandoff?.invoke(
++                SignedLedgerSubmission(prepared.proposal, prepared.owner, prepared.reviewedQuote) {
++                    submitPrepared(prepared.proposal, expectedPreparation = prepared, expectedSignature = signed)
++                }
++            )
++            signedHandoff = null
++            signingState.value = LedgerSigningState.Signed
+@@ -514 +590,0 @@ class LedgerProposalRepositoryImpl(
+-        publish(session, LedgerSigningState.Signed)
+@@ -523,5 +599,7 @@ class LedgerProposalRepositoryImpl(
+-        if (signingState.value !is LedgerSigningState.Failed) return
+-        sessionJob?.cancel()
+-        sessionJob = null
+-        signingState.update { null }
+-        startSigning()
++        synchronized(lock) {
++            if (signingState.value !is LedgerSigningState.Failed) return
++            sessionJob?.cancel()
++            sessionJob = null
++            signingState.update { null }
++            startSigning(signedHandoff)
++        }
+@@ -535,17 +613 @@ class LedgerProposalRepositoryImpl(
+-    override fun cancelSigning() {
+-        if (isIdle) return
+-        synchronized(lock) { generation++ }
+-        sessionJob?.cancel()
+-        sessionJob = null
+-        selection = null
 -        pcztWithSignatures = null
-+        hardwareProposal.getPrepared(transactionProposal.value)?.signatures = null
-@@ -559,35 +616,15 @@ class LedgerProposalRepositoryImpl(
+-        signingState.update { null }
+-        val previousClose = closeJob
+-        closeJob =
+-            scope.launch {
+-                previousClose?.join()
+-                ledgerSigningDataSource.close()
+-            }
+-    }
+-
+-    override fun failSignedSessionWithoutProposal() {
++    override fun cancelSigning(onlyUnsigned: Boolean) {
+@@ -553,3 +615,14 @@ class LedgerProposalRepositoryImpl(
+-            if (signingState.value == LedgerSigningState.Signed) {
+-                signingState.value = LedgerSigningState.Failed(LedgerIssue.unknownWithoutRetry)
+-            }
++            if (isIdle || (onlyUnsigned && signingState.value == LedgerSigningState.Signed)) return
++            generation++
++            signedHandoff = null
++            sessionJob?.cancel()
++            sessionJob = null
++            selection = null
++            hardwareProposal.getPrepared(transactionProposal.value)?.signatures = null
++            signingState.update { null }
++            val previousClose = closeJob
++            closeJob =
++                scope.launch {
++                    previousClose?.join()
++                    ledgerSigningDataSource.close()
++                }
+@@ -559,35 +632,30 @@ class LedgerProposalRepositoryImpl(
 -    @Suppress("UseCheckOrError", "ThrowingExceptionsWithoutMessageOrCause", "TooGenericExceptionCaught")
 -    override suspend fun submit(): SubmitResult =
 -        scope
@@ -2436,22 +2528,37 @@ index 683867b58..349858a1b 100644
 -                            submitState.update { SubmitProposalState.Result(result) }
 -                            throw e
 -                        }
++    @VisibleForTesting
++    internal suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult =
++        submitPrepared(expectedProposal)
++
 +    @Suppress("TooGenericExceptionCaught")
-+    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
++    private suspend fun submitPrepared(
++        expectedProposal: TransactionProposal?,
++        expectedPreparation: PreparedHardwareProposal? = null,
++        expectedSignature: Pczt? = null,
++    ): SubmitResult =
 +        scope.async {
 +            try {
 +                val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
++                check(expectedPreparation == null || prepared === expectedPreparation) {
++                    "The signed Ledger preparation changed before submission."
++                }
 +                val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
++                check(expectedSignature == null || signed === expectedSignature) {
++                    "The Ledger signature changed before submission."
++                }
 +                submitState.update { SubmitProposalState.Submitting }
 +                val proofs = prepared.proofs.await()
 +                val proposal = prepared.proposal
 +                val validateFunding: () -> Unit = {
 +                    proposal.requireCurrentShieldingApproval()
 +                    requireCurrentApproval(prepared)
++                    check(prepared.signatures === signed) { "The Ledger signature changed before submission." }
 +                    if (proposal is SwapTransactionProposal) {
 +                        proposal.requireFundingApproval(prepared.reviewedQuote)
 +                        ZecSwapComposition.validate(proposal.quote)
-@@ -596 +633,30 @@ class LedgerProposalRepositoryImpl(
+@@ -596 +664,27 @@ class LedgerProposalRepositoryImpl(
 -            }.await()
 +                val submit: suspend (() -> Unit, () -> Unit) -> SubmitResult = { beforeCreation, beforeSubmission ->
 +                    proposalDataSource.submitTransaction(
@@ -2475,39 +2582,36 @@ index 683867b58..349858a1b 100644
 +            }
 +        }.await()
 +
-+    override fun signingOwner(expectedProposal: TransactionProposal): AccountUuid? =
-+        hardwareProposal.getApproved(transactionProposal.value)?.takeIf { it.proposal === expectedProposal }?.owner
-+
 +    private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
 +        check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
 +            "The reviewed transaction changed before submission."
 +        }
 +    }
-@@ -600 +666 @@ class LedgerProposalRepositoryImpl(
+@@ -600 +694 @@ class LedgerProposalRepositoryImpl(
 -    override fun getProposalPCZT(): Pczt? = proposalPczt
 +    override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
-@@ -602 +668,4 @@ class LedgerProposalRepositoryImpl(
+@@ -602 +696,4 @@ class LedgerProposalRepositoryImpl(
 -    override fun clear() {
 +    override fun clear(expected: TransactionProposal?) {
 +        if (expected != null && (transactionProposal.value !== expected ||
 +                !transactionProposal.compareAndSet(expected, null))
 +        ) return
-@@ -608 +676,0 @@ class LedgerProposalRepositoryImpl(
+@@ -608 +704,0 @@ class LedgerProposalRepositoryImpl(
 -        pcztWithProofs.update { LedgerPcztState(isLoading = false, pczt = null) }
-@@ -610 +678 @@ class LedgerProposalRepositoryImpl(
+@@ -610 +706 @@ class LedgerProposalRepositoryImpl(
 -        transactionProposal.update { null }
 +        if (expected == null) transactionProposal.update { null }
-@@ -612,2 +680 @@ class LedgerProposalRepositoryImpl(
+@@ -612,2 +708 @@ class LedgerProposalRepositoryImpl(
 -        proposalPczt = null
 -        pcztWithSignatures = null
 +        hardwareProposal.clear()
-@@ -619 +686,4 @@ class LedgerProposalRepositoryImpl(
+@@ -619 +714,4 @@ class LedgerProposalRepositoryImpl(
 -    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
 +    private suspend inline fun <T : TransactionProposal> createProposalInternal(
 +        includeFailureCause: Boolean = true,
 +        block: () -> T,
 +    ): T {
-@@ -624 +694,6 @@ class LedgerProposalRepositoryImpl(
+@@ -624 +722,6 @@ class LedgerProposalRepositoryImpl(
 -                Twig.error(e) { "Unable to create proposal" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -2515,7 +2619,7 @@ index 683867b58..349858a1b 100644
 +                } else {
 +                    Twig.error { "Unable to create ZIP321 proposal" }
 +                }
-@@ -628 +703,6 @@ class LedgerProposalRepositoryImpl(
+@@ -628 +731,6 @@ class LedgerProposalRepositoryImpl(
 -                Twig.error(e) { "Insufficient funds" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -2523,9 +2627,9 @@ index 683867b58..349858a1b 100644
 +                } else {
 +                    Twig.error { "Insufficient funds for ZIP321 proposal" }
 +                }
-@@ -631,0 +712 @@ class LedgerProposalRepositoryImpl(
+@@ -631,0 +740 @@ class LedgerProposalRepositoryImpl(
 +        currentCoroutineContext().ensureActive()
-@@ -663,6 +743,0 @@ private fun LedgerSigningProgress.toSigningState(): LedgerSigningState =
+@@ -663,6 +771,0 @@ private fun LedgerSigningProgress.toSigningState(): LedgerSigningState =
 -
 -private data class LedgerPcztState(
 -    val isLoading: Boolean,
@@ -2574,15 +2678,24 @@ index 4f4201a1a..5ce5fb05e 100644
 +    val owner: WalletEnrollmentToken,
 +)
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCase.kt
-index e8193931b..2df8185a6 100644
+index e8193931b..b3715bbfd 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCase.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCase.kt
-@@ -16 +16 @@ class CancelLedgerSigningUseCase(
+@@ -5 +4,0 @@ import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+-import co.electriccoin.zcash.ui.common.model.LedgerSigningState
+@@ -16 +15 @@ class CancelLedgerSigningUseCase(
 -    operator fun invoke() {
 +    operator fun invoke(navigateBack: Boolean = true) {
-@@ -22 +22 @@ class CancelLedgerSigningUseCase(
+@@ -22 +21 @@ class CancelLedgerSigningUseCase(
 -        navigationRouter.back()
 +        if (navigateBack) navigationRouter.back()
+@@ -29,5 +28 @@ class CancelLedgerSigningUseCase(
+-    fun stopSession() {
+-        if (ledgerProposalRepository.signingState.value != LedgerSigningState.Signed) {
+-            ledgerProposalRepository.cancelSigning()
+-        }
+-    }
++    fun stopSession() = ledgerProposalRepository.cancelSigning(onlyUnsigned = true)
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 index 291d24903..111e5e5de 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
@@ -2862,36 +2975,70 @@ index bdac82535..4b41fd75f 100644
 @@ -98,0 +140,2 @@ sealed interface PairLedgerDeviceResult {
 +    data object Superseded : PairLedgerDeviceResult
 +
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/StartLedgerSigningUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/StartLedgerSigningUseCase.kt
+index 631ad87c4..91d1836bc 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/StartLedgerSigningUseCase.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/StartLedgerSigningUseCase.kt
+@@ -6,0 +7 @@ class StartLedgerSigningUseCase(
++    private val submitLedgerProposal: SubmitLedgerProposalUseCase,
+@@ -8 +9,3 @@ class StartLedgerSigningUseCase(
+-    operator fun invoke() = ledgerProposalRepository.startSigning()
++    operator fun invoke(sourceEntryId: String? = null) = ledgerProposalRepository.startSigning { signed ->
++        submitLedgerProposal(signed, sourceEntryId)
++    }
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt
-index a2d66d9fb..62ab4e42b 100644
+index a2d66d9fb..f3e67021c 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt
-@@ -11 +10,0 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -8,2 +8 @@ import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+-import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+-import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
++import co.electriccoin.zcash.ui.common.repository.SignedLedgerSubmission
+@@ -11 +10 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 -import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
-@@ -22,0 +22 @@ class SubmitLedgerProposalUseCase(
++import kotlinx.coroutines.CancellationException
+@@ -18 +16,0 @@ class SubmitLedgerProposalUseCase(
+-    private val ledgerProposalRepository: LedgerProposalRepository,
+@@ -22,0 +21 @@ class SubmitLedgerProposalUseCase(
 +    private val submissionProgress: SubmissionProgressStore? = null,
-@@ -33 +33 @@ class SubmitLedgerProposalUseCase(
+@@ -28,15 +27,7 @@ class SubmitLedgerProposalUseCase(
+-    /**
+-     * Submits the proposal the device has signed and replaces the whole back stack with the
+-     * Transaction Progress screen. An empty repository leaves nothing to submit, so the session
+-     * fails instead of staying on its signed state with Cancel disabled.
+-     */
 -    suspend operator fun invoke() {
-+    suspend operator fun invoke(sourceEntryId: String? = null) {
-@@ -41,2 +41,5 @@ class SubmitLedgerProposalUseCase(
+-        val proposal = ledgerProposalRepository.transactionProposal.value
+-        if (proposal == null) {
+-            Twig.warn { "Ledger signing: signed without a proposal to submit" }
+-            ledgerProposalRepository.failSignedSessionWithoutProposal()
+-            return
+-        }
+-        swapRepository.clear()
 -        submitLedgerProposal(proposal)
 -        navigationRouter.replaceAll(TransactionProgressArgs)
-+        val progress = sourceEntryId?.let {
-+            submissionProgress?.begin(proposal, owner = ledgerProposalRepository.signingOwner(proposal))
-+        }
-+        submitLedgerProposal(proposal, progress)
++    /** Queues the signed preparation before the sheet is told that the device finished. */
++    operator fun invoke(signed: SignedLedgerSubmission, sourceEntryId: String? = null) {
++        if (!signed.enqueueOnce()) return
++        signed.reviewedQuote?.let(swapRepository::clearIfCurrent)
++        val progress = sourceEntryId?.let { submissionProgress?.begin(signed.proposal, owner = signed.owner) }
++        submitLedgerProposal(signed, progress)
 +        navigationRouter.showTransactionProgress(sourceEntryId, progress?.id, replaceWalletStack = true)
-@@ -46 +49,2 @@ class SubmitLedgerProposalUseCase(
+@@ -46 +37,3 @@ class SubmitLedgerProposalUseCase(
 -    private fun submitLedgerProposal(proposal: TransactionProposal) {
-+    private fun submitLedgerProposal(proposal: TransactionProposal, progress: SubmissionProgress?) {
++    private fun submitLedgerProposal(signed: SignedLedgerSubmission, progress: SubmissionProgress?) {
++        val proposal = signed.proposal
 +        val originalPrefill = prefillSend.pendingThrough()
-@@ -49 +53,2 @@ class SubmitLedgerProposalUseCase(
+@@ -49 +42,2 @@ class SubmitLedgerProposalUseCase(
 -                val result = ledgerProposalRepository.submit()
-+                val result = ledgerProposalRepository.submit(proposal)
++                val result = signed.submit()
 +                progress?.record(result)
-@@ -53,0 +59 @@ class SubmitLedgerProposalUseCase(
+@@ -52,0 +47,2 @@ class SubmitLedgerProposalUseCase(
++            } catch (e: CancellationException) {
++                throw e
+@@ -53,0 +50 @@ class SubmitLedgerProposalUseCase(
 +                progress?.recordFailure(e)
-@@ -56 +62 @@ class SubmitLedgerProposalUseCase(
+@@ -56 +53 @@ class SubmitLedgerProposalUseCase(
 -                prefillSend.clear()
 +                prefillSend.clearThrough(originalPrefill)
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeScreen.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeScreen.kt
@@ -3063,7 +3210,7 @@ index 1e4432f09..0f2116660 100644
 +fun LedgerSignScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<LedgerSignVM> { parametersOf(sourceEntryId) }
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt
-index af6a0fa1d..53fd73312 100644
+index af6a0fa1d..0d46985a3 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ledger.R
@@ -3071,28 +3218,39 @@ index af6a0fa1d..53fd73312 100644
 @@ -9,0 +11,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.stageResultFrom
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -67,0 +71 @@ class LedgerSignVM(
+@@ -21 +23,0 @@ import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
+-import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
+@@ -35 +36,0 @@ import kotlinx.coroutines.flow.combine
+-import kotlinx.coroutines.flow.filterIsInstance
+@@ -65 +65,0 @@ class LedgerSignVM(
+-    private val submitLedgerProposal: SubmitLedgerProposalUseCase,
+@@ -67,0 +68 @@ class LedgerSignVM(
 +    private val sourceEntryId: String? = null,
-@@ -68,0 +73,4 @@ class LedgerSignVM(
+@@ -68,0 +70,4 @@ class LedgerSignVM(
 +    private val contentEntryId = sourceEntryId?.let { source ->
 +        navigationRouter.activeEntry.value?.takeIf { it.id == source }?.contentEntryId
 +    }
 +
-@@ -110 +118 @@ class LedgerSignVM(
+@@ -110 +115 @@ class LedgerSignVM(
 -                navigationRouter.backToRoot()
 +                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-@@ -115 +123 @@ class LedgerSignVM(
+@@ -113,4 +117,0 @@ class LedgerSignVM(
+-        viewModelScope.launch {
+-            observeLedgerSigningState().filterIsInstance<LedgerSigningState.Signed>().first()
 -            submitLedgerProposal()
-+            submitLedgerProposal(sourceEntryId)
-@@ -136,3 +144,2 @@ class LedgerSignVM(
+-        }
+@@ -129 +130 @@ class LedgerSignVM(
+-                    startLedgerSigning()
++                    startLedgerSigning(sourceEntryId)
+@@ -136,3 +137,2 @@ class LedgerSignVM(
 -                else -> {
 -                    Unit
 -                }
 +                LedgerSigningState.Signed -> return@launch
-+                else -> startLedgerSigning()
-@@ -347,0 +355 @@ class LedgerSignVM(
++                else -> startLedgerSigning(sourceEntryId)
+@@ -347,0 +348 @@ class LedgerSignVM(
 +        navigationRouter.discardResultFrom(sourceEntryId, contentEntryId)
-@@ -359 +367 @@ class LedgerSignVM(
+@@ -359 +360 @@ class LedgerSignVM(
 -        repairJob = viewModelScope.launch { navigateToLedgerRepair() }
 +        repairJob = viewModelScope.launch { navigateToLedgerRepair(sourceEntryId) }
 diff --git a/feature-ledger/src/main/res/values-es/strings.xml b/feature-ledger/src/main/res/values-es/strings.xml
@@ -3374,7 +3532,7 @@ index b50298078..66398d786 100644
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
-index 4ae26a42d..73a0ef272 100644
+index 4ae26a42d..2b352fe49 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 @@ -6,0 +7,5 @@ import cash.z.ecc.android.sdk.model.Pczt
@@ -3401,7 +3559,7 @@ index 4ae26a42d..73a0ef272 100644
 @@ -34,0 +51,2 @@ import kotlin.time.Duration.Companion.seconds
 +import kotlin.time.Instant
 +import java.math.BigDecimal
-@@ -42,0 +61,157 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -42,0 +61,183 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 +    @Test
 +    fun aRevokedShieldApprovalCannotReachLedgerSigningOnResume() = runTest(dispatcher) {
 +        val account = ledgerAccount()
@@ -3424,6 +3582,32 @@ index 4ae26a42d..73a0ef272 100644
 +        assertEquals(LedgerIssueKind.EXPIRED_SHIELD_APPROVAL, failure.issue.kind)
 +        assertEquals(LedgerIssueRetry.NONE, failure.issue.retry)
 +        coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any(), any()) }
++    }
++
++    @Test
++    fun signedHandoffDoesNotDependOnASheetObserverAndCannotAttachToAReplacement() = runTest(dispatcher) {
++        every { ledgerSigningDataSource.isLinked } returns true
++        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
++        val account = ledgerAccount()
++        givenPczt(account)
++        val original = repository.getTransactionProposal()
++        val accepted = mutableListOf<SignedLedgerSubmission>()
++
++        repository.startSigning { accepted.add(it) }
++        runCurrent()
++        val signed = accepted.single()
++        assertSame(original, signed.proposal)
++        assertEquals(account.sdkAccount.accountUuid, signed.owner)
++        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
++        repository.cancelSigning(onlyUnsigned = true)
++        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
++        repository.startSigning { accepted.add(it) }
++        runCurrent()
++        assertEquals(1, accepted.size)
++
++        givenPczt(account, proposal = original)
++        assertFailsWith<IllegalStateException> { signed.submit() }
++        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
 +    }
 +
 +    @Test
@@ -3559,31 +3743,31 @@ index 4ae26a42d..73a0ef272 100644
 +        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
 +    }
 +
-@@ -52 +227 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -52 +253 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), capture(progress)) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), capture(progress)) } coAnswers {
-@@ -85 +260 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -85 +286 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
-@@ -87 +262 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -87 +288 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
 +            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any(), any()) } returns submitResult
-@@ -96 +271 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -96 +297 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed) }
 +            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed, any(), any()) }
-@@ -108 +283 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -108 +309 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
-@@ -139 +314 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -139 +340 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
-@@ -198 +373 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -198 +399 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
-@@ -200 +375 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -200 +401 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
 +            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any(), any()) } returns submitResult
-@@ -209,0 +385,29 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -209,0 +411,29 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 +    @Test
 +    fun cancelBeforeDeviceSigningAllowsReapprovalWithoutReservingFunding() = runTest(dispatcher) {
 +        val reviewed = ExactInputSwapTransactionProposal(
@@ -3613,27 +3797,27 @@ index 4ae26a42d..73a0ef272 100644
 +        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
 +    }
 +
-@@ -244 +448 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -244 +474 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
-@@ -267 +471 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -267 +497 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
-@@ -269 +473,3 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -269 +499,3 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) } returns submitResult
 +            coEvery {
 +                proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any())
 +            } returns submitResult
-@@ -297 +503 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -297 +529 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
-@@ -325 +531 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -325 +557 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } throws
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } throws
-@@ -370 +576 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -370 +602 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
-@@ -395 +601 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -395 +627 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt
@@ -3686,6 +3870,38 @@ index c1fa287d0..5949cce90 100644
 @@ -60 +63 @@ class LedgerRepairTargetRepositoryTest {
 -        repository.set(first, Zip32AccountIndex.new(4))
 +        repository.set(first, Zip32AccountIndex.new(4), owner)
+diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCaseTest.kt
+index 7aa2b041f..ff6e3d7b2 100644
+--- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCaseTest.kt
++++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCaseTest.kt
+@@ -8 +7,0 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+-import co.electriccoin.zcash.ui.common.model.LedgerSigningState
+@@ -50,2 +49,2 @@ class CancelLedgerSigningUseCaseTest {
+-    fun stoppingTheSessionCancelsItWithoutNavigating() {
+-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true), LedgerSigningState.Connecting)
++    fun stoppingTheSheetRequestsCancellationOfOnlyAnUnsignedSession() {
++        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true))
+@@ -56 +55 @@ class CancelLedgerSigningUseCaseTest {
+-        verify(exactly = 1) { repository.cancelSigning() }
++        verify(exactly = 1) { repository.cancelSigning(onlyUnsigned = true) }
+@@ -60,14 +59 @@ class CancelLedgerSigningUseCaseTest {
+-    @Test
+-    fun stoppingASignedSessionLeavesItsSubmissionAlone() {
+-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true), LedgerSigningState.Signed)
+-
+-        CancelLedgerSigningUseCase(repository, mockk(relaxed = true)).stopSession()
+-
+-        verify(exactly = 0) { repository.cancelSigning() }
+-        verify(exactly = 0) { repository.clear() }
+-    }
+-
+-    private fun repository(
+-        proposal: TransactionProposal,
+-        signingState: LedgerSigningState? = null,
+-    ) = mockk<LedgerProposalRepository>(relaxed = true) {
++    private fun repository(proposal: TransactionProposal) = mockk<LedgerProposalRepository>(relaxed = true) {
+@@ -75 +60,0 @@ class CancelLedgerSigningUseCaseTest {
+-        every { this@mockk.signingState } returns MutableStateFlow(signingState)
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 index bed02742e..d32f788c3 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
@@ -4136,36 +4352,107 @@ index 0e6af0f6c..39efb6c93 100644
 +    }
 +}
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt
-index 018fa19f5..1512e0e0c 100644
+index 018fa19f5..676e1bd2b 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt
+@@ -7,2 +7 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
+-import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
+-import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
++import co.electriccoin.zcash.ui.common.repository.SignedLedgerSubmission
+@@ -9,0 +9 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
++import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 @@ -15,0 +16 @@ import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
-@@ -40 +41 @@ class SubmitLedgerProposalUseCaseTest {
+@@ -18 +18,0 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+-import kotlinx.coroutines.flow.MutableStateFlow
+@@ -33 +33 @@ class SubmitLedgerProposalUseCaseTest {
+-    fun submitsClearsSwapStateAndNavigatesToProgress() =
++    fun submitsAndNavigatesToProgressWithoutClearingAnUnrelatedSwap() =
+@@ -36 +36 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.givenProposal(mockk<TransactionProposal>())
++            val signed = fx.signed(mockk())
+@@ -38 +38 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.useCase()
++            fx.useCase(signed)
+@@ -40,2 +40,2 @@ class SubmitLedgerProposalUseCaseTest {
 -            coVerify(exactly = 1) { fx.ledgerProposalRepository.submit() }
-+            coVerify(exactly = 1) { fx.ledgerProposalRepository.submit(any()) }
-@@ -57 +58 @@ class SubmitLedgerProposalUseCaseTest {
+-            verify(exactly = 1) { fx.swapRepository.clear() }
++            coVerify(exactly = 1) { fx.nativeSubmit() }
++            verify(exactly = 0) { fx.swapRepository.clearIfCurrent(any()) }
+@@ -46,20 +46,4 @@ class SubmitLedgerProposalUseCaseTest {
+-    fun aSecondSignedAfterANewPcztSubmitsAgain() =
+-        runTest {
+-            val fx = useCase()
+-            val submitState = MutableStateFlow<SubmitProposalState?>(null)
+-            every { fx.ledgerProposalRepository.submitState } returns submitState
+-            fx.givenProposal(mockk<TransactionProposal>())
+-
+-            fx.useCase()
+-            submitState.value = SubmitProposalState.Result(mockk(relaxed = true))
+-            fx.useCase()
+-
 -            coVerify(exactly = 2) { fx.ledgerProposalRepository.submit() }
-+            coVerify(exactly = 2) { fx.ledgerProposalRepository.submit(any()) }
-@@ -70 +71 @@ class SubmitLedgerProposalUseCaseTest {
+-            verify(exactly = 2) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
+-        }
+-
+-    @Test
+-    fun anEmptyRepositoryFailsTheSessionInsteadOfSubmitting() =
+-        runTest {
+-            val fx = useCase()
+-            every { fx.ledgerProposalRepository.transactionProposal } returns MutableStateFlow(null)
++    fun eachSignedPreparationEntersTheQueueOnlyOnce() = runTest {
++        val fx = useCase()
++        val first = fx.signed(mockk())
++        val second = fx.signed(mockk())
+@@ -67 +51,3 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.useCase()
++        fx.useCase(first)
++        fx.useCase(first)
++        fx.useCase(second)
+@@ -69,5 +55,3 @@ class SubmitLedgerProposalUseCaseTest {
+-            coVerify(exactly = 0) { fx.ledgerProposalRepository.getTransactionProposal() }
 -            coVerify(exactly = 0) { fx.ledgerProposalRepository.submit() }
-+            coVerify(exactly = 0) { fx.ledgerProposalRepository.submit(any()) }
-@@ -104 +105 @@ class SubmitLedgerProposalUseCaseTest {
+-            verify(exactly = 0) { fx.navigationRouter.replaceAll(*anyVararg()) }
+-            verify(exactly = 1) { fx.ledgerProposalRepository.failSignedSessionWithoutProposal() }
+-        }
++        coVerify(exactly = 2) { fx.nativeSubmit() }
++        verify(exactly = 2) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
++    }
+@@ -81,3 +65,2 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.givenProposal(proposal, result)
+-
+-            fx.useCase()
++            val reviewedQuote = mockk<SwapQuoteData.Success>()
++            fx.useCase(fx.signed(proposal, result, reviewedQuote))
+@@ -84,0 +68 @@ class SubmitLedgerProposalUseCaseTest {
++            verify(exactly = 1) { fx.swapRepository.clearIfCurrent(reviewedQuote) }
+@@ -92,3 +76 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.givenProposal(mockk<TransactionProposal>())
+-
+-            fx.useCase()
++            fx.useCase(fx.signed(mockk()))
+@@ -103,2 +85,2 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.givenProposal(mockk<TransactionProposal>())
 -            coEvery { fx.ledgerProposalRepository.submit() } throws RuntimeException("boom")
-+            coEvery { fx.ledgerProposalRepository.submit(any()) } throws RuntimeException("boom")
-@@ -108 +109 @@ class SubmitLedgerProposalUseCaseTest {
++            val signed = fx.signed(mockk())
++            coEvery { fx.nativeSubmit() } throws RuntimeException("boom")
+@@ -106 +88 @@ class SubmitLedgerProposalUseCaseTest {
+-            fx.useCase()
++            fx.useCase(signed)
+@@ -108 +90 @@ class SubmitLedgerProposalUseCaseTest {
 -            verify(exactly = 1) { fx.prefillSend.clear() }
 +            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
-@@ -111,0 +113,16 @@ class SubmitLedgerProposalUseCaseTest {
+@@ -112 +94,17 @@ class SubmitLedgerProposalUseCaseTest {
+-    private fun Fixtures.givenProposal(
 +    @Test
 +    fun completedLedgerSubmissionDiscardsOnlyRequestsPresentWhenItStarted() = runTest {
 +        val fx = useCase()
 +        val nativeResult = CompletableDeferred<SubmitResult>()
-+        fx.givenProposal(mockk<TransactionProposal>())
-+        coEvery { fx.ledgerProposalRepository.submit(any()) } coAnswers { nativeResult.await() }
++        val signed = fx.signed(mockk())
++        coEvery { fx.nativeSubmit() } coAnswers { nativeResult.await() }
 +        every { fx.prefillSend.pendingThrough() } returns 1
 +
-+        fx.useCase()
++        fx.useCase(signed)
 +        every { fx.prefillSend.pendingThrough() } returns 2
 +        nativeResult.complete(mockk(relaxed = true))
 +
@@ -4173,9 +4460,21 @@ index 018fa19f5..1512e0e0c 100644
 +        verify(exactly = 0) { fx.prefillSend.clearThrough(2) }
 +    }
 +
-@@ -117 +134 @@ class SubmitLedgerProposalUseCaseTest {
++    private fun Fixtures.signed(
+@@ -115,3 +113,4 @@ class SubmitLedgerProposalUseCaseTest {
+-    ) {
+-        every { ledgerProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
 -        coEvery { ledgerProposalRepository.submit() } returns submitResult
-+        coEvery { ledgerProposalRepository.submit(any()) } returns submitResult
++        reviewedQuote: SwapQuoteData.Success? = null,
++    ): SignedLedgerSubmission {
++        coEvery { nativeSubmit() } returns submitResult
++        return SignedLedgerSubmission(proposal, owner = null, reviewedQuote = reviewedQuote, submit = nativeSubmit)
+@@ -129,2 +128 @@ class SubmitLedgerProposalUseCaseTest {
+-        val ledgerProposalRepository =
+-            mockk<LedgerProposalRepository>(relaxed = true)
++        val nativeSubmit = mockk<suspend () -> SubmitResult>()
+@@ -136 +133,0 @@ class SubmitLedgerProposalUseCaseTest {
+-                ledgerProposalRepository = ledgerProposalRepository,
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
 index 817fc5154..98f8d1d61 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
@@ -4291,16 +4590,46 @@ index 9513b5798..949b12a17 100644
 -            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex)
 +            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex, LedgerEnrollmentFixture().owner)
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
-index c8b49c833..d661162ab 100644
+index c8b49c833..51ea6cee1 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
 @@ -19,0 +20 @@ import co.electriccoin.zcash.ui.common.usecase.CancelLedgerSigningUseCase
 +import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
-@@ -624,0 +626 @@ class LedgerSignVMTest {
+@@ -26 +26,0 @@ import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
+-import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
+@@ -225,23 +224,0 @@ class LedgerSignVMTest {
+-    @Test
+-    fun signedSubmitsExactlyOnce() =
+-        runTest(dispatcher) {
+-            val signingState = MutableStateFlow<LedgerSigningState?>(null)
+-            val submitLedgerProposal = mockk<SubmitLedgerProposalUseCase>(relaxed = true)
+-            val vm = vm(signingState = signingState, submitLedgerProposal = submitLedgerProposal)
+-            collect(vm)
+-            runCurrent()
+-
+-            signingState.value = LedgerSigningState.Signed
+-            runCurrent()
+-
+-            coVerify(exactly = 1) { submitLedgerProposal.invoke() }
+-
+-            val alreadySigned = MutableStateFlow<LedgerSigningState?>(LedgerSigningState.Signed)
+-            val submitAlreadySigned = mockk<SubmitLedgerProposalUseCase>(relaxed = true)
+-            val vmAlreadySigned = vm(signingState = alreadySigned, submitLedgerProposal = submitAlreadySigned)
+-            collect(vmAlreadySigned)
+-            runCurrent()
+-
+-            coVerify(exactly = 1) { submitAlreadySigned.invoke() }
+-        }
+-
+@@ -624,0 +602 @@ class LedgerSignVMTest {
 +                    walletEnrollment = LedgerEnrollmentFixture().access,
-@@ -652 +654 @@ class LedgerSignVMTest {
+@@ -652 +630 @@ class LedgerSignVMTest {
 -            verify(exactly = 1) { navigationRouter.forward(LedgerConnectArgs) }
 +            verify(exactly = 1) { navigationRouter.replace(LedgerConnectArgs) }
+@@ -731 +708,0 @@ class LedgerSignVMTest {
+-        submitLedgerProposal: SubmitLedgerProposalUseCase = mockk(relaxed = true),
+@@ -749 +725,0 @@ class LedgerSignVMTest {
+-        submitLedgerProposal = submitLedgerProposal,
 diff --git a/feature-migration/build.gradle.kts b/feature-migration/build.gradle.kts
 index 459ac8e4e..6d1aa04df 100644
 --- a/feature-migration/build.gradle.kts

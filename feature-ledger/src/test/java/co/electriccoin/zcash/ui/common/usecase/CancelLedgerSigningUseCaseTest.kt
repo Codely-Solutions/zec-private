@@ -5,7 +5,6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
-import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -47,31 +46,17 @@ class CancelLedgerSigningUseCaseTest {
     }
 
     @Test
-    fun stoppingTheSessionCancelsItWithoutNavigating() {
-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true), LedgerSigningState.Connecting)
+    fun stoppingTheSheetRequestsCancellationOfOnlyAnUnsignedSession() {
+        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true))
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 
         CancelLedgerSigningUseCase(repository, navigationRouter).stopSession()
 
-        verify(exactly = 1) { repository.cancelSigning() }
+        verify(exactly = 1) { repository.cancelSigning(onlyUnsigned = true) }
         verify(exactly = 0) { navigationRouter.back() }
     }
 
-    @Test
-    fun stoppingASignedSessionLeavesItsSubmissionAlone() {
-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true), LedgerSigningState.Signed)
-
-        CancelLedgerSigningUseCase(repository, mockk(relaxed = true)).stopSession()
-
-        verify(exactly = 0) { repository.cancelSigning() }
-        verify(exactly = 0) { repository.clear() }
-    }
-
-    private fun repository(
-        proposal: TransactionProposal,
-        signingState: LedgerSigningState? = null,
-    ) = mockk<LedgerProposalRepository>(relaxed = true) {
+    private fun repository(proposal: TransactionProposal) = mockk<LedgerProposalRepository>(relaxed = true) {
         every { transactionProposal } returns MutableStateFlow(proposal)
-        every { this@mockk.signingState } returns MutableStateFlow(signingState)
     }
 }
