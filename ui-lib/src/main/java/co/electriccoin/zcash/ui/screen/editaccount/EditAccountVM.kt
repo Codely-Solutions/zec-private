@@ -31,6 +31,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -192,28 +193,7 @@ class EditAccountVM(
         saveJob =
             viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
-                    val current = account.first()
-                    if (current == null) {
-                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-                        return@launch
-                    }
-                    val isTaken =
-                        current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
-                    if (isTaken) return@launch
-                    val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
-                    val color = newColor(picked, storedColor.value)
-                    if (renamed == null && color == null) return@launch
-                    renamed?.let { renameViewOnlyAccount(it, typed) }
-                    val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
-                    ensureActive()
-                    if (isColorSaved) {
-                        navigationRouter.stageResultFrom(
-                            sourceEntryId,
-                            isStillAllowed = { name.value == typed && pickedColor.value == picked },
-                        ) { NavigationCommand.Back }
-                    } else {
-                        navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
-                    }
+                    saveEdits(typed, picked)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -222,6 +202,31 @@ class EditAccountVM(
                     isSaving.value = false
                 }
             }
+    }
+
+    private suspend fun saveEdits(typed: String, picked: Color?) {
+        val current = account.first()
+        if (current == null) {
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+            return
+        }
+        val isTaken = current is ViewOnlyAccount &&
+            isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
+        val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
+        val color = newColor(picked, storedColor.value)
+        if (isTaken || (renamed == null && color == null)) return
+
+        renamed?.let { renameViewOnlyAccount(it, typed) }
+        val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
+        currentCoroutineContext().ensureActive()
+        if (isColorSaved) {
+            navigationRouter.stageResultFrom(
+                sourceEntryId,
+                isStillAllowed = { name.value == typed && pickedColor.value == picked },
+            ) { NavigationCommand.Back }
+        } else {
+            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
+        }
     }
 
     private fun onRemoveClick() {

@@ -333,7 +333,8 @@ class GiftCardDataSourceImplTest : GiftCardDataSourceTestFixture() {
             val dataSource = dataSource(this)
             val handle = dataSource.parse(LINK).summary.handle
             coEvery { redeemer.redeem(recipient, any(), any()) } throws IllegalStateException("submit")
-            coEvery { isTorEnabledStorageProvider.get() } throws IllegalStateException("preferences")
+            every { GiftCardRedeemers.new(any(), any(), any(), any(), any(), any()) } throws
+                IllegalStateException("synthetic redeemer creation failure")
 
             assertFailsWith<GiftCardException.SubmitFailed> { dataSource.redeem(handle, ADDRESS) }
             advanceUntilIdle()
@@ -349,9 +350,11 @@ class GiftCardDataSourceImplTest : GiftCardDataSourceTestFixture() {
             val dataSource = dataSource(this)
             val handle = dataSource.parse(LINK).summary.handle
             coEvery { redeemer.redeem(recipient, any(), any()) } throws IllegalStateException("submit")
-            coEvery { isTorEnabledStorageProvider.get() } throws CancellationException("cancelled")
+            every { GiftCardRedeemers.new(any(), any(), any(), any(), any(), any()) } throws
+                CancellationException("synthetic redeemer creation cancellation")
 
             assertFailsWith<CancellationException> { dataSource.redeem(handle, ADDRESS) }
+            coVerify(exactly = 1) { redeemer.redeem(recipient, any(), any()) }
             assertEquals(1, newRedeemerCalls)
         }
 

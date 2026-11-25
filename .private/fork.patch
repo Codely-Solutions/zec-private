@@ -54200,14 +54200,14 @@ index db4e24fd1..80525a93d 100644
 -    }
 -
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
-index bd6f1d343..380431b87 100644
+index bd6f1d343..2f9edeaac 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
 @@ -18,0 +19 @@ import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.LaunchedEffect
 @@ -36,0 +38 @@ import co.electriccoin.zcash.ui.design.component.rememberZashiFrostState
 +import co.electriccoin.zcash.ui.design.component.rememberScreenModalBottomSheetState
-@@ -52,2 +54,6 @@ import co.electriccoin.zcash.ui.design.util.getValue
+@@ -52,2 +54,10 @@ import co.electriccoin.zcash.ui.design.util.getValue
 -internal fun ColorPickerView(state: ColorPickerState?) {
 -    ZashiScreenModalBottomSheet(state = state, dragHandle = null) { innerState, contentPadding ->
 +internal fun ColorPickerView(state: ColorPickerState?, refusedCloseCount: Int = 0) {
@@ -54215,7 +54215,11 @@ index bd6f1d343..380431b87 100644
 +    LaunchedEffect(refusedCloseCount) {
 +        if (refusedCloseCount > 0 && !sheetState.isVisible) sheetState.show()
 +    }
-+    ZashiScreenModalBottomSheet(state = state, sheetState = sheetState, dragHandle = null) { innerState, contentPadding ->
++    ZashiScreenModalBottomSheet(
++        state = state,
++        sheetState = sheetState,
++        dragHandle = null,
++    ) { innerState, contentPadding ->
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt
 new file mode 100644
 index 000000000..c12c22a84
@@ -56057,7 +56061,7 @@ index d03354a1e..b6daf564d 100644
 -                name = stringRes("Zodl"),
 +                name = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
-index c930d5920..9df443247 100644
+index c930d5920..60b817e5c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
 @@ -6,0 +7 @@ import androidx.lifecycle.viewModelScope
@@ -56070,30 +56074,32 @@ index c930d5920..9df443247 100644
 +import co.electriccoin.zcash.ui.screen.error.showFrom
 @@ -25,0 +31 @@ import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CoroutineStart
-@@ -66,0 +73 @@ class EditAccountVM(
+@@ -27,0 +34 @@ import kotlinx.coroutines.Job
++import kotlinx.coroutines.currentCoroutineContext
+@@ -66,0 +74 @@ class EditAccountVM(
 +    private val sourceEntryId: String? = null,
-@@ -119,0 +127 @@ class EditAccountVM(
+@@ -119,0 +128 @@ class EditAccountVM(
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -123 +131 @@ class EditAccountVM(
+@@ -123 +132 @@ class EditAccountVM(
 -                navigationRouter.back()
 +                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -165 +173 @@ class EditAccountVM(
+@@ -165 +174 @@ class EditAccountVM(
 -        if (colorPickerJob?.isActive == true) return
 +        if (isSaving.value || colorPickerJob?.isActive == true) return
-@@ -168 +176 @@ class EditAccountVM(
+@@ -168 +177 @@ class EditAccountVM(
 -                navigateToColorPicker(pickedColor.value ?: storedColor.value).collect { color ->
 +                navigateToColorPicker(pickedColor.value ?: storedColor.value, sourceEntryId).collect { color ->
-@@ -174 +182,3 @@ class EditAccountVM(
+@@ -174 +183,3 @@ class EditAccountVM(
 -    private fun onValueChange(value: String) = name.update { AccountNameLimit.cap(value) }
 +    private fun onValueChange(value: String) {
 +        if (!isSaving.value) name.update { AccountNameLimit.cap(value) }
 +    }
-@@ -178 +188 @@ class EditAccountVM(
+@@ -178 +189 @@ class EditAccountVM(
 -        if (saveJob?.isActive == true) return
 +        if (isSaving.value || colorPickerJob?.isActive == true) return
-@@ -180,0 +191 @@ class EditAccountVM(
+@@ -180,0 +192 @@ class EditAccountVM(
 +        isSaving.value = true
-@@ -182,13 +193 @@ class EditAccountVM(
+@@ -182,13 +194 @@ class EditAccountVM(
 -            viewModelScope.launch {
 -                val current = account.first()
 -                if (current == null) {
@@ -56108,37 +56114,52 @@ index c930d5920..9df443247 100644
 -                if (renamed == null && color == null) return@launch
 -                isSaving.update { true }
 +            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
-@@ -195,0 +195,11 @@ class EditAccountVM(
-+                    val current = account.first()
-+                    if (current == null) {
-+                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-+                        return@launch
-+                    }
-+                    val isTaken =
-+                        current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
-+                    if (isTaken) return@launch
-+                    val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
-+                    val color = newColor(picked, storedColor.value)
-+                    if (renamed == null && color == null) return@launch
-@@ -200 +210,4 @@ class EditAccountVM(
+@@ -196,8 +196 @@ class EditAccountVM(
+-                    renamed?.let { renameViewOnlyAccount(it, typed) }
+-                    val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
+-                    ensureActive()
+-                    if (isColorSaved) {
 -                        navigationRouter.back()
-+                        navigationRouter.stageResultFrom(
-+                            sourceEntryId,
-+                            isStillAllowed = { name.value == typed && pickedColor.value == picked },
-+                        ) { NavigationCommand.Back }
-@@ -202 +215 @@ class EditAccountVM(
+-                    } else {
 -                        navigateToError(ErrorArgs.General(AccountColorNotSavedException()))
-+                        navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
-@@ -207 +220 @@ class EditAccountVM(
+-                    }
++                    saveEdits(typed, picked)
+@@ -207 +200 @@ class EditAccountVM(
 -                    navigateToError(ErrorArgs.General(e))
 +                    navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
-@@ -209 +222 @@ class EditAccountVM(
+@@ -209 +202 @@ class EditAccountVM(
 -                    isSaving.update { false }
 +                    isSaving.value = false
-@@ -215 +228 @@ class EditAccountVM(
+@@ -213,0 +207,25 @@ class EditAccountVM(
++    private suspend fun saveEdits(typed: String, picked: Color?) {
++        val current = account.first()
++        if (current == null) {
++            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
++            return
++        }
++        val isTaken = current is ViewOnlyAccount &&
++            isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
++        val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
++        val color = newColor(picked, storedColor.value)
++        if (isTaken || (renamed == null && color == null)) return
++
++        renamed?.let { renameViewOnlyAccount(it, typed) }
++        val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
++        currentCoroutineContext().ensureActive()
++        if (isColorSaved) {
++            navigationRouter.stageResultFrom(
++                sourceEntryId,
++                isStillAllowed = { name.value == typed && pickedColor.value == picked },
++            ) { NavigationCommand.Back }
++        } else {
++            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
++        }
++    }
++
+@@ -215 +233 @@ class EditAccountVM(
 -        if (saveJob?.isActive == true) return
 +        if (isSaving.value) return
-@@ -220,2 +233,6 @@ class EditAccountVM(
+@@ -220,2 +238,6 @@ class EditAccountVM(
 -        saveJob?.cancel()
 -        navigationRouter.back()
 +        viewModelScope.launch {
@@ -76401,7 +76422,7 @@ index 000000000..01f8991ed
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
-index e40bbf794..f0841b1d0 100644
+index e40bbf794..323463584 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -76567,7 +76588,17 @@ index e40bbf794..f0841b1d0 100644
 +            coVerify(exactly = 0) { replacementRedeemer.check() }
 +        }
 +
-@@ -751,46 +754,0 @@ class GiftCardDataSourceImplTest {
+@@ -332 +336,2 @@ class GiftCardDataSourceImplTest {
+-            coEvery { isTorEnabledStorageProvider.get() } throws IllegalStateException("preferences")
++            every { GiftCardRedeemers.new(any(), any(), any(), any(), any(), any()) } throws
++                IllegalStateException("synthetic redeemer creation failure")
+@@ -348 +353,2 @@ class GiftCardDataSourceImplTest {
+-            coEvery { isTorEnabledStorageProvider.get() } throws CancellationException("cancelled")
++            every { GiftCardRedeemers.new(any(), any(), any(), any(), any(), any()) } throws
++                CancellationException("synthetic redeemer creation cancellation")
+@@ -350,0 +357 @@ class GiftCardDataSourceImplTest {
++            coVerify(exactly = 1) { redeemer.redeem(recipient, any(), any()) }
+@@ -751,46 +757,0 @@ class GiftCardDataSourceImplTest {
 -
 -    private fun dataSource(scope: TestScope? = null) =
 -        GiftCardDataSourceImpl(
@@ -96845,7 +96876,7 @@ index 000000000..51b91b89e
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..923b2a63c
+index 000000000..918d3680d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 @@ -0,0 +1,380 @@
@@ -97198,7 +97229,7 @@ index 000000000..923b2a63c
 +        progress = ResetProgressStore(context, DirectorySync {})
 +        val writeAccess = WalletWriteAccess(progress)
 +        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk(), mockk())
-+        assertTrue(reportAccess.captureWallet()())
++        assertEquals(!progress.isPending.value, reportAccess.captureWallet()())
 +        val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
 +        val reset = ResetZashiUseCase(
 +            resetWalletSdkData = sdkData,

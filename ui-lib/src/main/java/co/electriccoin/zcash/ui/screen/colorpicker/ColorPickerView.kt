@@ -56,7 +56,11 @@ internal fun ColorPickerView(state: ColorPickerState?, refusedCloseCount: Int = 
     LaunchedEffect(refusedCloseCount) {
         if (refusedCloseCount > 0 && !sheetState.isVisible) sheetState.show()
     }
-    ZashiScreenModalBottomSheet(state = state, sheetState = sheetState, dragHandle = null) { innerState, contentPadding ->
+    ZashiScreenModalBottomSheet(
+        state = state,
+        sheetState = sheetState,
+        dragHandle = null,
+    ) { innerState, contentPadding ->
         val hazeState = rememberZashiFrostState()
         Box(modifier = Modifier.weight(1f, false)) {
             Column(

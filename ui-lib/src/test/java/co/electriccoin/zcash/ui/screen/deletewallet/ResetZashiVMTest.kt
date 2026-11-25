@@ -347,7 +347,7 @@ class ResetZashiVMTest {
         progress = ResetProgressStore(context, DirectorySync {})
         val writeAccess = WalletWriteAccess(progress)
         reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk(), mockk())
-        assertTrue(reportAccess.captureWallet()())
+        assertEquals(!progress.isPending.value, reportAccess.captureWallet()())
         val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val reset = ResetZashiUseCase(
             resetWalletSdkData = sdkData,
