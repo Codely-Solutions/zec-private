@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -32,6 +33,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
@@ -353,8 +355,11 @@ class Zip321MemoScanTest {
 
     @Test
     fun deferredZip321FallbackRechecksTheWalletBeforePrefillingOrShowingAnError() = runTest {
-        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws
-            IllegalStateException("synthetic proposal failure")
+        val unavailable = mockk<ZashiProposalRepository> {
+            coEvery { preparePayment(any(), any()) } throws TransactionProposalNotCreatedException(
+                IllegalStateException("synthetic proposal failure"),
+            )
+        }
         for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
             val wallet = WalletWriteAccess()
             val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
@@ -367,7 +372,7 @@ class Zip321MemoScanTest {
                 }
             }
             val fallback = OnZip321ScannedUseCase(
-                review = paymentReviewFixture(accounts, guarded, repository, wallet = wallet),
+                review = paymentReviewFixture(accounts, guarded, unavailable, wallet = wallet),
                 navigationRouter = guarded,
                 prefillSend = prefill,
                 navigateToErrorUseCase = NavigateToErrorUseCase(guarded),

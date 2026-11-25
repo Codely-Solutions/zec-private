@@ -93,11 +93,12 @@ class ResetZashiVMTest {
     }
 
     @Test
-    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
+    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() = runBlocking {
         createViewModel()
         val state = assertNotNull(vm.state.value.content)
         state.buttonState.onClick()
-        val confirmation = assertNotNull(vm.state.value.content?.confirmationDialog)
+        val confirmedState = awaitState { it.content?.confirmationDialog != null }
+        val confirmation = assertNotNull(confirmedState.content?.confirmationDialog)
         val checkbox = state.checkboxState
         val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
         val context = RuntimeEnvironment.getApplication()

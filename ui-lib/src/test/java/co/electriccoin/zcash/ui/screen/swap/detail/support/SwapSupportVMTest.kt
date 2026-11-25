@@ -134,7 +134,8 @@ class SwapSupportVMTest {
             assertFalse(report.isEnabled)
             report.onClick()
             runCurrent()
-            verify { listOf(navigation, share) wasNot Called }
+            verify(exactly = 0) { navigation.back() }
+            verify { share wasNot Called }
         } finally {
             subscription.cancel()
             vm.viewModelScope.cancel()

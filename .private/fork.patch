@@ -83734,10 +83734,10 @@ index 5479877f8..893932864 100644
 +        }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-index 638b04663..1343bf28a 100644
+index 638b04663..74cd22657 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-@@ -2,0 +3,11 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,10 @@ package co.electriccoin.zcash.ui.common.usecase
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
 +import cash.z.ecc.android.sdk.model.PersistableWallet
 +import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -83747,38 +83747,37 @@ index 638b04663..1343bf28a 100644
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
 +import co.electriccoin.zcash.ui.NavigationCommand
-+import co.electriccoin.zcash.ui.NavigationRouterImpl
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-@@ -3,0 +15 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -3,0 +14 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -4,0 +17 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+@@ -4,0 +16 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
-@@ -10 +23,5 @@ import io.mockk.mockk
+@@ -10 +22,5 @@ import io.mockk.mockk
 -import io.mockk.verify
 +import kotlin.test.assertFalse
 +import kotlin.test.assertIs
 +import kotlin.test.assertEquals
 +import kotlin.test.assertTrue
 +import kotlin.test.Test
-@@ -11,0 +29 @@ import kotlinx.coroutines.CancellationException
+@@ -11,0 +28 @@ import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -12,0 +31 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -12,0 +30 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.flow
-@@ -17,2 +35,0 @@ import kotlinx.coroutines.test.runTest
+@@ -17,2 +34,0 @@ import kotlinx.coroutines.test.runTest
 -import kotlin.test.Test
 -import kotlin.test.assertTrue
-@@ -33 +50,3 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -33 +49,3 @@ class ObserveSeedMismatchUseCaseTest {
 -    private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
-+    private val navigateToError = NavigateToErrorUseCase(NavigationRouterImpl())
++    private val navigateToError = NavigateToErrorUseCase(mockk())
 +    private val launchNavigation = LaunchNavigationRequests()
 +    private val walletWriteAccess = WalletWriteAccess()
-@@ -39,0 +59,2 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -39,0 +58,2 @@ class ObserveSeedMismatchUseCaseTest {
 +            launchNavigation = launchNavigation,
 +            walletWriteAccess = walletWriteAccess,
-@@ -70 +91 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -70 +90 @@ class ObserveSeedMismatchUseCaseTest {
 -            verify(exactly = 0) { navigateToError(any(), any()) }
 +            assertTrue(launchNavigation.changes.value.isEmpty())
-@@ -74,6 +95,5 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -74,6 +94,5 @@ class ObserveSeedMismatchUseCaseTest {
 -    fun terminalFailureRoutesToNavigateToError() =
 -        runTest {
 -            val exception = SeedMismatchRecoveryException(3)
@@ -83790,7 +83789,7 @@ index 638b04663..1343bf28a 100644
 +        coEvery { recoverFromSeedMismatch() } throws exception
 +        backgroundScope.launch { useCase() }
 +        runCurrent()
-@@ -81,2 +101,27 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -81,2 +100,27 @@ class ObserveSeedMismatchUseCaseTest {
 -            isSeedMismatchState.value = true
 -            runCurrent()
 +        isSeedMismatchState.value = true
@@ -83820,7 +83819,7 @@ index 638b04663..1343bf28a 100644
 +        assertEquals(2, attempts)
 +        assertTrue(launchNavigation.changes.value.isEmpty())
 +    }
-@@ -84 +129,12 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -84 +128,12 @@ class ObserveSeedMismatchUseCaseTest {
 -            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
 +    @Test
 +    fun resetInvalidatesARecoveryErrorThatHasNotReachedTheWallet() = runTest {
@@ -83834,13 +83833,13 @@ index 638b04663..1343bf28a 100644
 +
 +        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
 +            error("A previous wallet's failure must not be presented")
-@@ -85,0 +142,2 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -85,0 +141,2 @@ class ObserveSeedMismatchUseCaseTest {
 +        assertTrue(launchNavigation.changes.value.isEmpty())
 +    }
-@@ -107 +165 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -107 +164 @@ class ObserveSeedMismatchUseCaseTest {
 -            verify(exactly = 0) { navigateToError(any(), any()) }
 +            assertTrue(launchNavigation.changes.value.isEmpty())
-@@ -108,0 +167,61 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -108,0 +166,61 @@ class ObserveSeedMismatchUseCaseTest {
 +
 +    @Test
 +    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
@@ -87326,10 +87325,10 @@ index 1d445dd11..61c8436c5 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..c8fe989ff
+index 000000000..410e77a88
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,575 @@
+@@ -0,0 +1,580 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
@@ -87356,6 +87355,7 @@ index 000000000..c8fe989ff
 +import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 +import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
++import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 +import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 +import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -87364,6 +87364,7 @@ index 000000000..c8fe989ff
 +import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 +import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
 +import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
@@ -87685,8 +87686,11 @@ index 000000000..c8fe989ff
 +
 +    @Test
 +    fun deferredZip321FallbackRechecksTheWalletBeforePrefillingOrShowingAnError() = runTest {
-+        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws
-+            IllegalStateException("synthetic proposal failure")
++        val unavailable = mockk<ZashiProposalRepository> {
++            coEvery { preparePayment(any(), any()) } throws TransactionProposalNotCreatedException(
++                IllegalStateException("synthetic proposal failure"),
++            )
++        }
 +        for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
 +            val wallet = WalletWriteAccess()
 +            val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
@@ -87699,7 +87703,7 @@ index 000000000..c8fe989ff
 +                }
 +            }
 +            val fallback = OnZip321ScannedUseCase(
-+                review = paymentReviewFixture(accounts, guarded, repository, wallet = wallet),
++                review = paymentReviewFixture(accounts, guarded, unavailable, wallet = wallet),
 +                navigationRouter = guarded,
 +                prefillSend = prefill,
 +                navigateToErrorUseCase = NavigateToErrorUseCase(guarded),
@@ -89761,10 +89765,10 @@ index 000000000..12197a153
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..fa729da2e
+index 000000000..7f471b583
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,345 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -89860,11 +89864,12 @@ index 000000000..fa729da2e
 +    }
 +
 +    @Test
-+    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
++    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() = runBlocking {
 +        createViewModel()
 +        val state = assertNotNull(vm.state.value.content)
 +        state.buttonState.onClick()
-+        val confirmation = assertNotNull(vm.state.value.content?.confirmationDialog)
++        val confirmedState = awaitState { it.content?.confirmationDialog != null }
++        val confirmation = assertNotNull(confirmedState.content?.confirmationDialog)
 +        val checkbox = state.checkboxState
 +        val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
 +        val context = RuntimeEnvironment.getApplication()
@@ -98306,10 +98311,10 @@ index 000000000..38487460e
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
 new file mode 100644
-index 000000000..af7d3c555
+index 000000000..5910b03f5
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
-@@ -0,0 +1,499 @@
+@@ -0,0 +1,500 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail.support
 +
 +import android.content.Intent
@@ -98446,7 +98451,8 @@ index 000000000..af7d3c555
 +            assertFalse(report.isEnabled)
 +            report.onClick()
 +            runCurrent()
-+            verify { listOf(navigation, share) wasNot Called }
++            verify(exactly = 0) { navigation.back() }
++            verify { share wasNot Called }
 +        } finally {
 +            subscription.cancel()
 +            vm.viewModelScope.cancel()
