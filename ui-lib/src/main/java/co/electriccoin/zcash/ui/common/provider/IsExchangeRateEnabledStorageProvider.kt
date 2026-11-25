@@ -1,26 +1,35 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
 
-interface IsExchangeRateEnabledStorageProvider : NullableBooleanStorageProvider
+interface IsExchangeRateEnabledStorageProvider : NullableBooleanStorageProvider {
+    override suspend fun store(amount: Boolean) = store(amount, null)
+
+    suspend fun store(amount: Boolean, currency: FiatCurrency?)
+}
 
 class IsExchangeRateEnabledStorageProviderImpl(
     private val preferenceHolder: StandardPreferenceProvider,
 ) : IsExchangeRateEnabledStorageProvider {
-    private val newProvider = NewIsExchangeRateEnabledStorageProvider(preferenceHolder)
+    private val newProvider = NewIsExchangeRateEnabledStorageProvider(preferenceHolder, OPTED_IN_KEY)
 
     override suspend fun get(): Boolean? {
         cleanUpLegacyPreference()
-        return runCatchingRecoverable { newProvider.get() }.getOrElse { false }
+        return newProvider.get()
     }
 
-    override suspend fun store(amount: Boolean) {
+    override suspend fun store(amount: Boolean, currency: FiatCurrency?) {
         cleanUpLegacyPreference()
-        newProvider.store(amount)
+        val values = buildMap {
+            put(OPTED_IN_KEY, amount.toString())
+            currency?.let { put(PreferredFiatProviderImpl.KEY, it.code) }
+        }
+        preferenceHolder().putStringsWithRollback(values)
     }
 
     override fun observe(): Flow<Boolean?> =
@@ -45,10 +54,11 @@ class IsExchangeRateEnabledStorageProviderImpl(
 
     private companion object {
         val LEGACY_KEY = PreferenceKey("EXCHANGE_RATE_OPTED_IN")
+        val OPTED_IN_KEY = PreferenceKey("EXCHANGE_RATE_OPTED_IN_2")
     }
 }
 
 private class NewIsExchangeRateEnabledStorageProvider(
     override val preferenceHolder: StandardPreferenceProvider,
-) : BaseNullableBooleanStorageProvider(key = PreferenceKey("EXCHANGE_RATE_OPTED_IN_2")),
-    IsExchangeRateEnabledStorageProvider
+    key: PreferenceKey,
+) : BaseNullableBooleanStorageProvider(key = key)

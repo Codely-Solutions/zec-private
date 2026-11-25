@@ -18,6 +18,10 @@ interface PreferenceProvider {
      */
     suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = putString(key, value)
 
+    /** Acknowledges one commit for all values and restores the previous visible values on failure. */
+    suspend fun putStringsWithRollback(values: Map<PreferenceKey, String?>): Unit =
+        throw UnsupportedOperationException("This preference provider does not support grouped writes")
+
     suspend fun putStringSet(
         key: PreferenceKey,
         value: Set<String>?

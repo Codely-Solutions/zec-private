@@ -18,6 +18,57 @@ import kotlin.test.assertNull
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidPreferenceWriteTest {
     @Test
+    fun groupedWriteRestoresBothValuesOnFailureAndRetriesWithOneCommit() = runTest {
+        val enabled = PreferenceKey("synthetic_enabled")
+        val currency = PreferenceKey("synthetic_currency")
+        val original = mapOf<String, String?>(enabled.key to "false", currency.key to "USD")
+        val requested = mapOf<String, String?>(enabled.key to "true", currency.key to "EUR")
+        val stored = original.toMutableMap()
+        val commits = mutableListOf<Map<String, String?>>()
+        val preferences = Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, args ->
+            when (method.name) {
+                "getString" -> stored[checkNotNull(args)[0] as String]
+                "edit" -> {
+                    val pending = mutableMapOf<String, String?>()
+                    Proxy.newProxyInstance(
+                        SharedPreferences.Editor::class.java.classLoader,
+                        arrayOf(SharedPreferences.Editor::class.java),
+                    ) { editor, operation, values ->
+                        when (operation.name) {
+                            "putString" -> {
+                                pending[checkNotNull(values)[0] as String] = values[1] as String?
+                                editor
+                            }
+                            "commit" -> {
+                                pending.forEach { (key, value) ->
+                                    if (value == null) stored.remove(key) else stored[key] = value
+                                }
+                                commits += pending.toMap()
+                                commits.size != 1
+                            }
+                            else -> error("Unexpected editor method")
+                        }
+                    }
+                }
+                else -> error("Unexpected preferences method")
+            }
+        } as SharedPreferences
+        val provider = AndroidPreferenceProvider(preferences, StandardTestDispatcher(testScheduler))
+        val choice = mapOf(enabled to "true", currency to "EUR")
+
+        assertFailsWith<IOException> { provider.putStringsWithRollback(choice) }
+        assertEquals(original, stored)
+        assertEquals(listOf(requested, original), commits)
+
+        provider.putStringsWithRollback(choice)
+        assertEquals(requested, stored)
+        assertEquals(listOf(requested, original, requested), commits)
+    }
+
+    @Test
     fun failedWritesPropagateAndCanBeRetried() = runTest {
         var durable = false
         var commits = 0

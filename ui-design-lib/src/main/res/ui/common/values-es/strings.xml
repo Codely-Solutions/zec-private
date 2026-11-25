@@ -1349,4 +1349,5 @@
     <string name="accountName_duplicate">Ya existe una cuenta con este nombre</string>
     <string name="editAccount_save">Guardar cambios</string>
 
+    <string name="currencyConversion_preferenceUnavailable">La configuración de conversión de divisas no está disponible. Inténtalo de nuevo.</string>
 </resources>

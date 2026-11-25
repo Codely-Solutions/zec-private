@@ -34,7 +34,7 @@ class IsSwapRefundWarningDismissedStorageProviderImpl(
     override suspend fun get(mode: SwapMode): Boolean = defaults.getValue(mode).getValue(preferenceHolder())
 
     override suspend fun store(mode: SwapMode, value: Boolean) {
-        defaults.getValue(mode).putValue(preferenceHolder(), value)
+        preferenceHolder().putStringWithRollback(defaults.getValue(mode).key, value.toString())
     }
 }
 

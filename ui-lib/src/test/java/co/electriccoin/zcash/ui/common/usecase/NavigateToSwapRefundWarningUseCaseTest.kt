@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -58,6 +59,26 @@ class NavigateToSwapRefundWarningUseCaseTest {
             runCurrent()
             active.value = ActiveNavigationEntry("external-scan", "Scanner")
             assertFalse(replaced.await())
+        }
+
+    @Test
+    fun failedSuppressionReadAndWriteStillWarnAndLetTheReviewedPaymentContinue() =
+        runTest(UnconfinedTestDispatcher()) {
+            val storage = object : IsSwapRefundWarningDismissedStorageProvider {
+                override suspend fun get(mode: SwapMode): Boolean = throw IOException("Synthetic read failure")
+                override suspend fun store(mode: SwapMode, value: Boolean) {
+                    throw IOException("Synthetic write failure")
+                }
+            }
+            val useCase = useCase(storage)
+            for (mode in SwapMode.entries) {
+                val result = async { useCase(BigDecimal("10"), mode) }
+                val args = forwarded.last() as SwapRefundWarningArgs
+                assertEquals(mode, args.mode)
+                useCase.onContinue(args, true)
+                assertTrue(result.await())
+            }
+            assertEquals(SwapMode.entries.size, forwarded.size)
         }
 
     @Test
@@ -199,7 +220,7 @@ class NavigateToSwapRefundWarningUseCaseTest {
         }
 
     private fun useCase(
-        isSwapRefundWarningDismissed: FakeIsSwapRefundWarningDismissedStorageProvider =
+        isSwapRefundWarningDismissed: IsSwapRefundWarningDismissedStorageProvider =
             FakeIsSwapRefundWarningDismissedStorageProvider()
     ) = NavigateToSwapRefundWarningUseCase(
         navigationRouter = router,

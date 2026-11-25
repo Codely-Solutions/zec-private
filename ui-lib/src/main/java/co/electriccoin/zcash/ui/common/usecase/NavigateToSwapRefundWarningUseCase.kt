@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProvider
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -55,7 +56,9 @@ class NavigateToSwapRefundWarningUseCase(
      */
     suspend operator fun invoke(fiatAmount: BigDecimal?, mode: SwapMode, sourceEntryId: String? = null): Boolean {
         val isAboveThreshold = fiatAmount != null && fiatAmount >= SWAP_REFUND_WARNING_THRESHOLD_USD
-        if (isAboveThreshold || isSwapRefundWarningDismissed.get(mode)) return true
+        if (isAboveThreshold || runCatchingRecoverable { isSwapRefundWarningDismissed.get(mode) }.getOrDefault(false)) {
+            return true
+        }
         return showWarning(mode, sourceEntryId)
     }
 
@@ -93,7 +96,7 @@ class NavigateToSwapRefundWarningUseCase(
 
             is SwapRefundWarningPipelineResult.Confirmed -> {
                 if (result.dontShowAgain) {
-                    isSwapRefundWarningDismissed.store(mode, true)
+                    runCatchingRecoverable { isSwapRefundWarningDismissed.store(mode, true) }
                 }
                 true
             }

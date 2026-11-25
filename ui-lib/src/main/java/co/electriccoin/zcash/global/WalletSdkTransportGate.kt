@@ -17,16 +17,15 @@ import kotlinx.coroutines.flow.transform
 
 /** Delivers a read-verified transport choice before admitting its wallet to the SDK. */
 class WalletSdkTransportGate {
-    private val deliveredGeneration = MutableStateFlow<Long?>(null)
+    private val transportRead = MutableStateFlow<WalletSdkTransportRead?>(null)
     private val withdrawnGeneration = MutableStateFlow<Long?>(null)
-    val verifiedGeneration = deliveredGeneration.asStateFlow()
-    private val failed = MutableStateFlow(false)
-    val unavailable = failed.asStateFlow()
+    val readiness = transportRead.asStateFlow()
 
     internal fun walletDecisions(wallets: Flow<WalletSdkRead?>, generation: StateFlow<Long>): Flow<WalletSdkRead> =
-        combine(wallets, generation, deliveredGeneration) { read, _, _ ->
+        combine(wallets, generation, transportRead) { read, _, _ ->
             val selected = generation.value
-            val wallet = read?.takeIf { it.generation == selected && deliveredGeneration.value == selected }?.wallet
+            val verified = transportRead.value == WalletSdkTransportRead(selected, verified = true)
+            val wallet = read?.takeIf { it.generation == selected && verified }?.wallet
             WalletSdkRead(selected, wallet)
         }
 
@@ -44,19 +43,18 @@ class WalletSdkTransportGate {
         }.buffer(0).transform { read ->
             if (read.generation != generation.value) return@transform
             if (read.preference.isSuccess) {
-                if (deliveredGeneration.value != read.generation) {
+                val verified = WalletSdkTransportRead(read.generation, verified = true)
+                if (transportRead.value != verified) {
                     // The SDK combines these inputs independently. Withdraw its old wallet first.
                     awaitWalletWithdrawal(read.generation, generation)
                     if (read.generation != generation.value) return@transform
                 }
                 emit(read.preference.getOrThrow())
                 if (read.generation == generation.value) {
-                    deliveredGeneration.value = read.generation
-                    failed.value = false
+                    transportRead.value = verified
                 }
             } else {
-                deliveredGeneration.value = null
-                failed.value = true
+                transportRead.value = WalletSdkTransportRead(read.generation, verified = false)
             }
         }
 
@@ -68,3 +66,5 @@ class WalletSdkTransportGate {
 
     private data class Read(val generation: Long, val preference: Result<Boolean?>)
 }
+
+data class WalletSdkTransportRead(val generation: Long, val verified: Boolean)

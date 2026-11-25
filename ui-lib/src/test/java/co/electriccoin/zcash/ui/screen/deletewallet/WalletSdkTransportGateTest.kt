@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.global.WalletSdkTransportGate
+import co.electriccoin.zcash.global.WalletSdkTransportRead
 import co.electriccoin.zcash.ui.common.provider.WalletSdkRead
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,14 +70,14 @@ class WalletSdkTransportGateTest {
         }
         runCurrent()
 
-        assertTrue(gate.unavailable.value)
+        assertEquals(WalletSdkTransportRead(0L, verified = false), gate.readiness.value)
         assertTrue(sdkInputs.isEmpty())
 
         nextRead = Result.success(true)
         generation.value++
         runCurrent()
 
-        assertFalse(gate.unavailable.value)
+        assertEquals(WalletSdkTransportRead(1L, verified = true), gate.readiness.value)
         assertEquals(null to true, sdkInputs.last())
         wallets.value = WalletSdkRead(generation.value, wallet)
         runCurrent()
@@ -86,7 +87,7 @@ class WalletSdkTransportGateTest {
         generation.value++
         runCurrent()
 
-        assertTrue(gate.unavailable.value)
+        assertEquals(WalletSdkTransportRead(2L, verified = false), gate.readiness.value)
         assertNull(sdkInputs.last().first)
         assertTrue(sdkInputs.all { it.second == true })
 
@@ -94,7 +95,7 @@ class WalletSdkTransportGateTest {
         generation.value++
         runCurrent()
 
-        assertFalse(gate.unavailable.value)
+        assertEquals(WalletSdkTransportRead(3L, verified = true), gate.readiness.value)
         assertEquals(null to false, sdkInputs.last())
         wallets.value = WalletSdkRead(generation.value, wallet)
         runCurrent()

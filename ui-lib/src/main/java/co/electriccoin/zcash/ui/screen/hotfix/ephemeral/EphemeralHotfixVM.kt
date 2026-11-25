@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class EphemeralHotfixVM(
     args: EphemeralHotfixArgs,
@@ -31,6 +32,7 @@ class EphemeralHotfixVM(
     private val text = MutableStateFlow(args.address)
 
     private val isError = MutableStateFlow(false)
+    private val isLoading = MutableStateFlow(false)
     private val torReadAttempts = MutableStateFlow(0L)
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,7 +43,7 @@ class EphemeralHotfixVM(
     val state: StateFlow<EphemeralHotfixState?> =
         combine(
             text,
-            fixEphemeralAddressUseCase.observeIsLoading(),
+            isLoading,
             isError,
             torPreference,
         ) { text, isLoading, isError, tor ->
@@ -101,7 +103,15 @@ class EphemeralHotfixVM(
     private fun onBack() = navigationRouter.back()
 
     private fun onRecoverFundsClick() {
+        if (!isLoading.compareAndSet(expect = false, update = true)) return
         isError.value = false
-        fixEphemeralAddressUseCase(text.value.orEmpty(), sourceEntryId) { isError.value = true }
+        val address = text.value.orEmpty()
+        viewModelScope.launch {
+            try {
+                isError.value = !fixEphemeralAddressUseCase(address, sourceEntryId)
+            } finally {
+                isLoading.value = false
+            }
+        }
     }
 }

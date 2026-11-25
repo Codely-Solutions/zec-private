@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
@@ -18,6 +19,29 @@ import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExchangeRatePreferenceRecoveryTest {
+    @Test
+    fun pairedConversionChoiceUsesOneCommitAndKeepsTheExistingPreferenceKeys() = runTest {
+        val legacy = PreferenceKey("EXCHANGE_RATE_OPTED_IN")
+        val enabled = PreferenceKey("EXCHANGE_RATE_OPTED_IN_2")
+        val currency = PreferenceKey("preferred_fiat_currency")
+        val preferences = mockk<PreferenceProvider> {
+            coEvery { hasKey(legacy) } returns false
+            coEvery { putStringsWithRollback(any()) } returns Unit
+        }
+        val holder = mockk<StandardPreferenceProvider> {
+            coEvery { this@mockk() } returns preferences
+        }
+        val provider = IsExchangeRateEnabledStorageProviderImpl(holder)
+
+        provider.store(true, FiatCurrency("EUR"))
+        provider.store(false, null)
+
+        coVerify(exactly = 1) { preferences.putStringsWithRollback(mapOf(enabled to "true", currency to "EUR")) }
+        coVerify(exactly = 1) { preferences.putStringsWithRollback(mapOf(enabled to "false")) }
+        coVerify(exactly = 0) { preferences.putString(enabled, any()) }
+        coVerify(exactly = 0) { preferences.putString(currency, any()) }
+    }
+
     @Test
     fun failedLegacyRemovalLeavesTheCurrentRatePreferenceUsable() = runTest {
         val legacy = PreferenceKey("EXCHANGE_RATE_OPTED_IN")

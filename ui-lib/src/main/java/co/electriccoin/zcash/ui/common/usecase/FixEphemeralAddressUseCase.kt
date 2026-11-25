@@ -3,28 +3,25 @@ package co.electriccoin.zcash.ui.common.usecase
 import android.content.Context
 import android.widget.Toast
 import cash.z.ecc.android.sdk.Synchronizer
-import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.isForegroundAtEntry
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.TorOnlyRequest
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
 class FixEphemeralAddressUseCase(
     private val synchronizerProvider: SynchronizerProvider,
@@ -36,69 +33,84 @@ class FixEphemeralAddressUseCase(
     private val walletWriteAccess: WalletWriteAccess,
     private val isTorEnabled: IsTorEnabledStorageProvider,
 ) {
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    private val isLoading = MutableStateFlow(false)
-
-    private var job: Job? = null
-
-    @Suppress("TooGenericExceptionCaught")
-    operator fun invoke(address: String, sourceEntryId: String?, onFailure: () -> Unit = {}) {
-        if (job?.isActive == true || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
-        val account = selectedAccount() ?: return
+    suspend operator fun invoke(address: String, sourceEntryId: String?): Boolean {
+        val account = selectedAccount() ?: return false
         val grant = appAccessSession.grant.value
         val token = walletWriteAccess.token()
         val canRecover = {
-            appAccessSession.permits(grant) && walletWriteAccess.permits(token) && selectedAccount() == account
+            appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
         }
-        job = scope.launch {
-            try {
-                isLoading.update { true }
-                recover(address, sourceEntryId, account, canRecover)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                if (canRecover() && navigationRouter.isForegroundAtEntry(sourceEntryId)) onFailure()
-            } finally {
-                isLoading.update { false }
-            }
-        }
+        return runCatchingRecoverable {
+            recover(address, sourceEntryId, account, canRecover)
+        }.getOrDefault(false)
     }
 
     private suspend fun recover(
         address: String,
         sourceEntryId: String?,
-        account: AccountUuid,
+        account: WalletAccount,
         canRecover: () -> Boolean,
-    ) {
-        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
-
-        val synchronizer = synchronizerProvider.getSynchronizer()
-        val ephemeral = resolveEphemeralAddress(synchronizer, address)
-            ?: error("A transparent address could not be established")
-        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
-
-        val confirmed = synchronizer.fetchUtxosByAddress(accountUuid = account, address = ephemeral)
-        check(confirmed) { "The lookup did not confirm funds" }
-        val committed = navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back }
-        if (committed && canRecover()) showDiscoveredFunds()
+    ): Boolean {
+        val atRecoveryEntry = { canRecover() && navigationRouter.isForegroundAtEntry(sourceEntryId) }
+        val scan = navigationRouter.whileAtEntry(sourceEntryId) {
+            withTimeoutOrNull(PRE_SCAN_TIMEOUT) {
+                if (!atRecoveryEntry() || isTorEnabled.get() != true) {
+                    return@withTimeoutOrNull null
+                }
+                val synchronizer = synchronizerProvider.getSynchronizer()
+                val ephemeral = resolveEphemeralAddress(synchronizer, address, account, atRecoveryEntry)
+                ephemeral?.takeIf { isTorEnabled.get() == true && atRecoveryEntry() }?.let { synchronizer to it }
+            }
+        }
+        return scan != null && atRecoveryEntry() && runScan(scan, account, sourceEntryId, canRecover)
     }
 
-    fun observeIsLoading() = isLoading.asStateFlow()
+    private suspend fun runScan(
+        scan: Pair<Synchronizer, String>,
+        account: WalletAccount,
+        sourceEntryId: String?,
+        canRecover: () -> Boolean,
+    ): Boolean = withContext(Dispatchers.Default) {
+        if (!canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return@withContext false
+        val (synchronizer, address) = scan
+        val confirmed = synchronizer.fetchUtxosByAddress(
+            accountUuid = account.sdkAccount.accountUuid,
+            address = address,
+        )
+        if (confirmed && navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back } &&
+            canRecover()
+        ) {
+            showDiscoveredFunds()
+        }
+        confirmed
+    }
 
     private fun selectedAccount() =
-        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
+        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }
 
-    private suspend fun resolveEphemeralAddress(synchronizer: Synchronizer, address: String): String? =
+    private suspend fun resolveEphemeralAddress(
+        synchronizer: Synchronizer,
+        address: String,
+        account: WalletAccount,
+        canRecover: () -> Boolean,
+    ): String? =
         when (synchronizer.validateAddress(address)) {
             AddressType.Shielded, AddressType.Tex, AddressType.Unified -> null
             AddressType.Transparent -> address
-            is AddressType.Invalid -> withContext(TorOnlyRequest) {
-                getSwapStatus(depositAddress = address).status?.destinationAddress?.address
+            is AddressType.Invalid -> {
+                if (!canRecover()) null else withContext(TorOnlyRequest) {
+                    getSwapStatus.observeForAccount(address, account, canRecover)
+                        .first { !it.isLoading }.status?.destinationAddress?.address
+                }
             }
         }
 
     private suspend fun showDiscoveredFunds() = withContext(Dispatchers.Main.immediate) {
         Toast.makeText(context, "Funds were successfully discovered", Toast.LENGTH_LONG).show()
+    }
+
+    private companion object {
+        val PRE_SCAN_TIMEOUT = 30.seconds
     }
 }

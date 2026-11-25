@@ -989,6 +989,41 @@ class WalletRepositoryImplTest {
     }
 
     @Test
+    fun previousTransportFailureStaysOutOfAPendingRetryWithAReadableWallet() = runTest {
+        val gate = WalletSdkTransportGate()
+        val wallet = fixtureWallet()
+        val generation = MutableStateFlow(0L)
+        val torRead = CompletableDeferred<Boolean>()
+        backgroundScope.launch {
+            gate.walletInput(gate.walletDecisions(generation.map {
+                co.electriccoin.zcash.ui.common.provider.WalletSdkRead(it, wallet)
+            }, generation)).collect()
+        }
+        backgroundScope.launch {
+            gate.transportInput(
+                flow {
+                    check(generation.value != 0L) { "Synthetic unavailable previous Tor read" }
+                    emit(torRead.await())
+                },
+                generation,
+            ).collect()
+        }
+        val storage = mockk<PersistableWalletProvider> {
+            every { readGeneration } returns generation
+            every { availabilityRead } returns generation.map {
+                StoredWalletAvailabilityRead(it, StoredWalletAvailability.PRESENT)
+            }
+        }
+        val (repository, _) = newRepository(OnboardingState.READY, wallet, storage, transportGate = gate)
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it == SecretState.UNAVAILABLE })
+
+        generation.value = 1L
+        assertEquals(SecretState.LOADING, repository.secretState.first { it == SecretState.LOADING })
+        torRead.complete(true)
+        assertEquals(SecretState.READY, repository.secretState.first { it == SecretState.READY })
+    }
+
+    @Test
     fun unreadableAccountSelectionUsesAuthenticatedWalletRecovery() = runTest {
         val read = MutableStateFlow(AccountSelectionAvailability(null, AccountSelectionReadState.UNAVAILABLE))
         val accounts = mockk<AccountDataSource> {

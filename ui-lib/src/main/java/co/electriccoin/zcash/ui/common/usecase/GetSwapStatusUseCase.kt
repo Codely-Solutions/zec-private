@@ -47,14 +47,18 @@ class GetSwapStatusUseCase(
 
     fun observe(depositAddress: String): Flow<SwapQuoteStatusData> = observe(depositAddress, null)
 
-    internal fun observeForAccount(depositAddress: String, account: WalletAccount): Flow<SwapQuoteStatusData> =
-        observe(depositAddress, null, account)
+    internal fun observeForAccount(
+        depositAddress: String,
+        account: WalletAccount,
+        canRefresh: () -> Boolean = { true },
+    ): Flow<SwapQuoteStatusData> = observe(depositAddress, null, account, canRefresh)
 
     @Suppress("TooGenericExceptionCaught", "LoopWithTooManyJumpStatements")
     private fun observe(
         depositAddress: String,
         initial: TransactionSwapMetadata?,
         account: WalletAccount? = null,
+        canRefresh: () -> Boolean = { true },
     ): Flow<SwapQuoteStatusData> =
         channelFlow {
             val data = MutableStateFlow(SwapQuoteStatusData())
@@ -86,7 +90,7 @@ class GetSwapStatusUseCase(
                 while (true) {
                     try {
                         val requestStartedAt = fundingClock.now()
-                        val (result, saved) = refresh(depositAddress, expectedMetadata)
+                        val (result, saved) = refresh(depositAddress, expectedMetadata, canRefresh)
                         donationPreferences?.recordSuccessfulSettlement(saved)
                         val fundingUntil = fundingDeadline(result, requestStartedAt)
                         fundingExpiry?.cancelAndJoin()
@@ -166,13 +170,16 @@ class GetSwapStatusUseCase(
     private suspend fun refresh(
         depositAddress: String,
         expected: TransactionSwapMetadata,
+        canRefresh: () -> Boolean,
     ): Pair<SwapQuoteStatus, TransactionSwapMetadata> {
         val refresh = synchronized(refreshes) {
             refreshes.getOrPut(depositAddress, ::RefreshLock).also { it.users++ }
         }
         try {
             return refresh.mutex.withLock {
+                check(canRefresh()) { "Swap status refresh is no longer active" }
                 val result = swapRepository.checkSwapStatus(expected)
+                check(canRefresh()) { "Swap status refresh is no longer active" }
                 val saved = metadataRepository.updateSwap(expected, result)
                     ?: throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
                 result to saved

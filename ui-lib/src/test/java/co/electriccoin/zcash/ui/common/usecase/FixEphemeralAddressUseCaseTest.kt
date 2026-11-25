@@ -18,17 +18,26 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import java.io.IOException
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FixEphemeralAddressUseCaseTest {
     @Test
-    fun failedOrInconclusiveDiscoveryKeepsItsRecoveryAction() = runBlocking {
+    fun failedOrInconclusiveDiscoveryKeepsItsRecoveryAction() = runTest {
         for (failure in Failure.entries) {
             var reads = 0
             val tor = mockk<IsTorEnabledStorageProvider> {
@@ -56,9 +65,9 @@ class FixEphemeralAddressUseCaseTest {
                 }
             }
             val status = mockk<GetSwapStatusUseCase> {
-                coEvery { this@mockk("synthetic-address") } coAnswers {
+                every { observeForAccount("synthetic-address", account, any()) } returns flow {
                     assertNotNull(currentCoroutineContext()[TorOnlyRequest.Key])
-                    SwapQuoteStatusData(isLoading = false, error = IOException("Synthetic unavailable status"))
+                    emit(SwapQuoteStatusData(isLoading = false, error = IOException("Synthetic unavailable status")))
                 }
             }
             val provider = mockk<SynchronizerProvider> {
@@ -75,17 +84,48 @@ class FixEphemeralAddressUseCaseTest {
                 walletWriteAccess = WalletWriteAccess(),
                 isTorEnabled = tor,
             )
-            val error = CompletableDeferred<Unit>()
-            recovery("synthetic-address", sourceEntryId = null) { error.complete(Unit) }
-            withTimeout(5_000) { error.await() }
+            assertFalse(recovery("synthetic-address", sourceEntryId = null))
 
             coVerify(exactly = failure.expectedReads) { tor.get() }
             val lookups = if (failure == Failure.SDK_FALSE || failure == Failure.SDK_THROW) 1 else 0
             coVerify(exactly = lookups) { synchronizer.fetchUtxosByAddress(any(), any()) }
             val statusRequests = if (failure == Failure.STATUS_READ) 1 else 0
-            coVerify(exactly = statusRequests) { status("synthetic-address") }
+            verify(exactly = statusRequests) { status.observeForAccount("synthetic-address", account, any()) }
             verify(exactly = 0) { navigation.back() }
         }
+    }
+
+    @Test
+    fun closingTheDialogCancelsItsLookupAndAnUnansweredLookupStopsWaiting() = runTest {
+        val owner = mockk<WalletAccount> {
+            every { isSelected } returns true
+            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16)))
+        }
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+        }
+        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("discover", "Discover"))
+        val navigation = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
+        val status = mockk<GetSwapStatusUseCase>()
+        val sdk = CompletableDeferred<Synchronizer>()
+        val synchronizerProvider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } coAnswers { sdk.await() }
+        }
+        val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
+        val recover = FixEphemeralAddressUseCase(
+            synchronizerProvider, navigation, accounts, status, mockk(),
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(), tor,
+        )
+        val first = async { recover("synthetic-reference", "discover") }
+        runCurrent()
+        active.value = ActiveNavigationEntry("home", "Home")
+        assertFailsWith<CancellationException> { first.await() }
+        verify(exactly = 0) { status.observeForAccount(any(), any(), any()) }
+
+        active.value = ActiveNavigationEntry("reopened", "Discover")
+        val second = async { recover("synthetic-reference", "reopened") }
+        advanceTimeBy(30_001)
+        assertFalse(second.await())
     }
 
     private enum class Failure(val expectedReads: Int, val failedRead: Int? = null) {

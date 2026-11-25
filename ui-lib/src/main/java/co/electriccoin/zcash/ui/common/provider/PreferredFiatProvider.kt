@@ -19,7 +19,11 @@ class PreferredFiatProviderImpl(
 ) : BaseNullableStorageProvider<FiatCurrency>(),
     PreferredFiatProvider {
     override val default: PreferenceDefault<FiatCurrency?> =
-        PreferredFiatPreferenceDefault(PreferenceKey("preferred_fiat_currency"))
+        PreferredFiatPreferenceDefault(KEY)
+
+    internal companion object {
+        val KEY = PreferenceKey("preferred_fiat_currency")
+    }
 }
 
 private class PreferredFiatPreferenceDefault(

@@ -317,7 +317,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<WalletUpdatingInfo> { AndroidWalletUpdatingInfo() }
         dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
         dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
-        dialogComposable<ExchangeRateUnavailableArgs> { ExchangeRateUnavailableScreen() }
+        dialogComposable<ExchangeRateUnavailableArgs> { ExchangeRateUnavailableScreen(it.id) }
         dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
         dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen(it.id) }
         dialogComposable<BalanceBreakdownArgs> { BalanceBreakdownScreen() }

@@ -2,7 +2,11 @@ package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateUnavailable
+import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
+import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
+import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -10,6 +14,15 @@ import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -24,6 +37,26 @@ import kotlin.test.assertTrue
  * [ExchangeRateRepositoryImpl] when the CMC exchange-rate lookup fails or is unavailable (MOB-1124).
  */
 class ExchangeRateRepositoryTest {
+    @Test
+    fun unreadablePreferredFiatLeavesHomeUsableWithoutRequestingAnotherCurrency() = runBlocking {
+        val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
+            every { observe() } returns flowOf(true)
+        }
+        val preferred = mockk<PreferredFiatProvider> {
+            every { observe() } returns flow { throw IOException("Synthetic stored currency read failure") }
+        }
+        val rates = mockk<ExchangeRateDataSource>()
+        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk())
+
+        val unloaded = withTimeout(5_000L) {
+            repository.state.filterIsInstance<ExchangeRateState.Data>().first { !it.isLoading }
+        }
+
+        assertNull(unloaded.currencyConversion)
+        assertFalse(unloaded.isRefreshEnabled)
+        coVerify(exactly = 0) { rates.getExchangeRate(any()) }
+    }
+
     @Test
     fun fallsBackWhenCmcUnavailableAndFiatIsUsd() {
         assertTrue(

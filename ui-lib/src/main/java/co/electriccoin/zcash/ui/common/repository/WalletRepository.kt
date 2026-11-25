@@ -164,9 +164,7 @@ class WalletRepositoryImpl(
                 onboardingStateBeforeCommit.value ?: state
             }
 
-    private val transportChanges = transportGate?.let { gate ->
-        combine(gate.unavailable, gate.verifiedGeneration, ::Pair)
-    } ?: flowOf(Unit)
+    private val transportChanges = transportGate?.readiness ?: flowOf(null)
 
     private val accountAvailability = accountDataSource?.accountSelectionReadState
         ?: flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
@@ -177,7 +175,7 @@ class WalletRepositoryImpl(
             persistableWalletProvider.availabilityRead,
             transportChanges,
             accountAvailability,
-        ) { state, wallet, _, account ->
+        ) { state, wallet, transport, account ->
             val generation = if (wallet.generation != null || account.generation != null || transportGate != null) {
                 persistableWalletProvider.readGeneration.value
             } else {
@@ -186,9 +184,9 @@ class WalletRepositoryImpl(
             val walletAvailability = when {
                 wallet.generation != null && wallet.generation != generation -> StoredWalletAvailability.CHECKING
                 wallet.availability != StoredWalletAvailability.PRESENT -> wallet.availability
-                transportGate?.unavailable?.value == true -> StoredWalletAvailability.UNAVAILABLE
-                transportGate != null && transportGate.verifiedGeneration.value != generation ->
+                transportGate != null && (transport == null || transport.generation != generation) ->
                     StoredWalletAvailability.CHECKING
+                transport?.verified == false -> StoredWalletAvailability.UNAVAILABLE
                 account.generation != null && account.generation != generation -> StoredWalletAvailability.CHECKING
                 account.state == AccountSelectionReadState.UNAVAILABLE -> StoredWalletAvailability.UNAVAILABLE
                 account.state == AccountSelectionReadState.CHECKING -> StoredWalletAvailability.CHECKING

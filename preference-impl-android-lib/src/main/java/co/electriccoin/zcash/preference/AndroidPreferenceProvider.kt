@@ -77,23 +77,33 @@ class AndroidPreferenceProvider(
         }
     }
 
+    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) =
+        putStringsWithRollback(mapOf(key to value))
+
     @SuppressLint("ApplySharedPref")
-    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = withContext(dispatcher) {
+    override suspend fun putStringsWithRollback(values: Map<PreferenceKey, String?>) = withContext(dispatcher) {
         mutex.withLock {
-            val previous = sharedPreferences.getString(key.key, null)
+            val previous = values.keys.associateWith { sharedPreferences.getString(it.key, null) }
             try {
-                sharedPreferences.edit().putString(key.key, value).commitOrThrow()
+                commitStrings(values)
             } catch (failure: IOException) {
                 // Android publishes to memory before committing. Restore the previous value before
                 // readers or another editor can use the unacknowledged update.
                 try {
-                    sharedPreferences.edit().putString(key.key, previous).commitOrThrow()
+                    commitStrings(previous)
                 } catch (rollbackFailure: IOException) {
                     failure.addSuppressed(rollbackFailure)
                 }
                 throw failure
             }
         }
+    }
+
+    @SuppressLint("ApplySharedPref")
+    private fun commitStrings(values: Map<PreferenceKey, String?>) {
+        val editor = sharedPreferences.edit()
+        values.forEach { (key, value) -> editor.putString(key.key, value) }
+        editor.commitOrThrow()
     }
 
     @SuppressLint("ApplySharedPref")

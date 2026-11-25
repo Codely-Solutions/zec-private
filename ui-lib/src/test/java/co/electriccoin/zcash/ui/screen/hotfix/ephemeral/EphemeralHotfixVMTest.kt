@@ -7,11 +7,10 @@ import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
+import io.mockk.coVerify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -39,9 +38,7 @@ class EphemeralHotfixVMTest {
                         emit(true)
                     }
                 }
-                val recover = mockk<FixEphemeralAddressUseCase> {
-                    every { observeIsLoading() } returns MutableStateFlow(false)
-                }
+                val recover = mockk<FixEphemeralAddressUseCase>()
                 val vm = EphemeralHotfixVM(EphemeralHotfixArgs("synthetic-address"), tor, mockk(), recover)
                 backgroundScope.launch { vm.state.collect { } }
                 val failed = assertNotNull(vm.state.value)
@@ -54,7 +51,7 @@ class EphemeralHotfixVMTest {
                 val verified = assertNotNull(vm.state.value)
                 assertTrue(verified.address.isEnabled)
                 assertTrue(verified.button.isEnabled)
-                verify(exactly = 0) { recover(any(), any(), any()) }
+                coVerify(exactly = 0) { recover(any(), any()) }
                 vm.viewModelScope.cancel()
             }
         } finally {

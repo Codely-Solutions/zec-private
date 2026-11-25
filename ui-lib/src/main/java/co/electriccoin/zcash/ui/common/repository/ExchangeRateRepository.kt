@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.RefreshLock
@@ -70,18 +71,20 @@ class ExchangeRateRepositoryImpl(
         preferredFiatProvider
             .observe()
             .map { it ?: FiatCurrency.USD }
+            .recoverableReads()
+            .map { it.getOrNull() }
             .distinctUntilChanged()
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(),
-                initialValue = FiatCurrency.USD
+                initialValue = null
             )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val exchangeRateUsdInternal =
         combine(isExchangeRateOptedIn, preferredFiat) { optedIn, fiat -> optedIn to fiat }
             .flatMapLatest { (optedIn, fiat) ->
-                if (optedIn == true) {
+                if (optedIn == true && fiat != null) {
                     channelFlow {
                         var cache = ExchangeRateResult(ObserveFiatCurrencyResult(isLoading = true))
                         launch {
@@ -187,17 +190,17 @@ class ExchangeRateRepositoryImpl(
         exchangeRate: ExchangeRateResult,
         isStale: Boolean,
         isRefreshEnabled: Boolean,
-        expectedCurrency: FiatCurrency,
+        expectedCurrency: FiatCurrency?,
     ): ExchangeRateState =
         when (isOptedIn) {
             true -> {
                 ExchangeRateState.Data(
-                    isLoading = exchangeRate.observed.isLoading,
-                    isStale = isStale,
-                    isRefreshEnabled = isRefreshEnabled,
-                    currencyConversion = exchangeRate.observed.currencyConversion,
-                    expectedCurrency = expectedCurrency,
-                    error = exchangeRate.error,
+                    isLoading = expectedCurrency != null && exchangeRate.observed.isLoading,
+                    isStale = expectedCurrency != null && isStale,
+                    isRefreshEnabled = expectedCurrency != null && isRefreshEnabled,
+                    currencyConversion = expectedCurrency?.let { exchangeRate.observed.currencyConversion },
+                    expectedCurrency = expectedCurrency ?: FiatCurrency.USD,
+                    error = expectedCurrency?.let { exchangeRate.error },
                     onRefresh = ::refreshExchangeRateUsd
                 )
             }

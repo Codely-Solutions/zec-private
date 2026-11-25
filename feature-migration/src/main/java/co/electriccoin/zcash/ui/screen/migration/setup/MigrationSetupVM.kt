@@ -123,7 +123,7 @@ class MigrationSetupVM(
         mode = mode,
         onModeChange = ::onModeChange,
         onFindOutMore = ::onFindOutMore,
-        onConfirm = ::onConfirm,
+        onConfirm = { onConfirm(mode) },
         onBack = ::onBack,
         gate = currentGate,
     )
@@ -152,14 +152,18 @@ class MigrationSetupVM(
         selectedMode.value = mode
     }
 
-    private fun onConfirm() = confirmLce.guardLoading {
+    private fun onConfirm(mode: MigrationMode) = confirmLce.guardLoading {
         val currentGate = gate.value ?: return@guardLoading
-        val selected = selectedMode.value
-        when (effectiveMigrationMode(selected, currentGate)) {
-            MigrationMode.IMMEDIATE -> confirmLce.execute {
-                val destination = getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
-                navigationRouter.stageResultFrom(sourceEntryId, isStillAllowed = { selectedMode.value == selected }) {
-                    NavigationCommand.Forward(listOf(destination))
+        if (effectiveMigrationMode(selectedMode.value, currentGate) != mode) return@guardLoading
+        when (mode) {
+            MigrationMode.IMMEDIATE -> {
+                // The user confirmed Immediate even if the sync gate temporarily made it the default.
+                selectedMode.value = mode
+                confirmLce.execute {
+                    val destination = getMigrationPrivacyOrReviewDestination(mode)
+                    navigationRouter.stageResultFrom(sourceEntryId, isStillAllowed = { selectedMode.value == mode }) {
+                        NavigationCommand.Forward(listOf(destination))
+                    }
                 }
             }
 

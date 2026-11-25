@@ -1,207 +1,135 @@
 package co.electriccoin.zcash.ui.screen.exchangerateunavailable
 
-import androidx.navigation.NavBackStackEntry
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
-import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.LceError
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByFiatDisplayName
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.reflect.KClass
+import java.io.IOException
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
-/**
- * The exchange-rate-unavailable sheet (MOB-1124): its copy names the currency that failed,
- * "Switch to USD" opts in with USD as the preferred fiat, and "Continue in ZEC"/back simply dismiss
- * without changing anything.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExchangeRateUnavailableVMTest {
-    @Test
-    fun titleAndSubtitleNameTheFailedCurrency() {
-        val vm = vm(expectedCurrency = FiatCurrency("JPY"))
-
-        val state = vm.state.value
-
-        // Title uses the currency code, subtitle uses the localized display name.
-        assertEquals(stringRes(R.string.send_currencyUnavailable_title, "JPY"), state.title)
-        assertEquals(
-            stringRes(
-                R.string.send_currencyUnavailable_desc,
-                stringResByFiatDisplayName(FiatCurrency("JPY"))
-            ),
-            state.subtitle
-        )
+    private val dispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
+    private val pending = PendingNavigation()
+    private val router = mockk<NavigationRouter>(relaxed = true) {
+        every { pendingNavigation } returns pending
     }
+    private val provider = mockk<IsExchangeRateEnabledStorageProvider>(relaxed = true)
+
+    @BeforeTest
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @AfterTest
+    fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun fallsBackToUsdCopyWhenStateIsNotData() {
-        val vm = vm(repositoryState = ExchangeRateState.OptIn)
-
-        assertEquals(stringRes(R.string.send_currencyUnavailable_title, "USD"), vm.state.value.title)
-    }
-
-    @Test
-    fun switchToUsdOptsInWithUsd() =
-        runTest {
-            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-            try {
-                val router = FakeNavigationRouter()
-                val optInProvider = FakeIsExchangeRateEnabledStorageProvider()
-                val fiatProvider = FakePreferredFiatProvider()
-                val vm =
-                    vm(
-                        router = router,
-                        optInProvider = optInProvider,
-                        fiatProvider = fiatProvider
-                    )
-
-                vm.state.value.switchToUsdButton
-                    .onClick()
-                advanceUntilIdle()
-
-                assertEquals(FiatCurrency.USD, fiatProvider.stored)
-                assertEquals(true, optInProvider.stored)
-                // OptInExchangeRateUseCase navigates back, and the VM also dismisses → two pops.
-                assertEquals(2, router.backCount)
-            } finally {
-                Dispatchers.resetMain()
-            }
+    fun copyUsesTheFailedCurrencyOrTheUsdDefault() {
+        val failed = vm(dataState(FiatCurrency("JPY")))
+        val fallback = vm(ExchangeRateState.OptIn)
+        try {
+            val state = assertNotNull(failed.state.value.content)
+            assertEquals(stringRes(R.string.send_currencyUnavailable_title, "JPY"), state.title)
+            assertEquals(
+                stringRes(R.string.send_currencyUnavailable_desc, stringResByFiatDisplayName(FiatCurrency("JPY"))),
+                state.subtitle,
+            )
+            assertEquals(
+                stringRes(R.string.send_currencyUnavailable_title, "USD"),
+                fallback.state.value.content?.title,
+            )
+        } finally {
+            failed.viewModelScope.cancel()
+            fallback.viewModelScope.cancel()
         }
-
-    @Test
-    fun continueInZecDismissesWithoutChangingAnything() {
-        val router = FakeNavigationRouter()
-        val optInProvider = FakeIsExchangeRateEnabledStorageProvider()
-        val fiatProvider = FakePreferredFiatProvider()
-        val vm = vm(router = router, optInProvider = optInProvider, fiatProvider = fiatProvider)
-
-        vm.state.value.continueInZecButton
-            .onClick()
-
-        assertEquals(1, router.backCount)
-        assertNull(fiatProvider.stored)
-        assertNull(optInProvider.stored)
     }
 
     @Test
-    fun backDismissesWithoutChangingAnything() {
-        val router = FakeNavigationRouter()
-        val optInProvider = FakeIsExchangeRateEnabledStorageProvider()
-        val fiatProvider = FakePreferredFiatProvider()
-        val vm = vm(router = router, optInProvider = optInProvider, fiatProvider = fiatProvider)
+    fun failedUsdSaveRetainsTheSheetAndSuccessfulRetryQueuesOneOwnedDismissal() = runTest(dispatcher) {
+        var fail = true
+        coEvery { provider.store(true, FiatCurrency.USD) } coAnswers {
+            if (fail) throw IOException("Synthetic currency preference commit failure")
+        }
+        val vm = vm()
+        backgroundScope.launch { vm.state.collect { } }
+        try {
+            assertNotNull(vm.state.value.content).switchToUsdButton.onClick()
+            assertIs<LceError.BottomSheet>(vm.state.value.error)
+            assertTrue(pending.commands.value.isEmpty())
+            assertNotNull(vm.state.value.content)
 
-        vm.state.value.onBack()
+            fail = false
+            assertNotNull(vm.state.value.content).switchToUsdButton.onClick()
 
-        assertEquals(1, router.backCount)
-        assertNull(fiatProvider.stored)
-        assertNull(optInProvider.stored)
+            assertNull(vm.state.value.error)
+            coVerify(exactly = 2) { provider.store(true, FiatCurrency.USD) }
+            verify(exactly = 0) { router.back() }
+            assertEquals(NavigationCommand.Back, pending.commands.value.getValue("conversion-dialog").buildCommand())
+        } finally {
+            vm.viewModelScope.cancel()
+        }
     }
 
-    private fun vm(
-        expectedCurrency: FiatCurrency = FiatCurrency("JPY"),
-        repositoryState: ExchangeRateState = dataState(expectedCurrency),
-        router: FakeNavigationRouter = FakeNavigationRouter(),
-        optInProvider: FakeIsExchangeRateEnabledStorageProvider = FakeIsExchangeRateEnabledStorageProvider(),
-        fiatProvider: FakePreferredFiatProvider = FakePreferredFiatProvider(),
-    ) = ExchangeRateUnavailableVM(
-        navigationRouter = router,
-        optInExchangeRate = OptInExchangeRateUseCase(router, optInProvider, fiatProvider),
-        exchangeRateRepository = FakeExchangeRateRepository(repositoryState)
-    )
-}
+    @Test
+    fun continueInZecAndBackDismissWithoutChangingConversion() {
+        val vm = vm()
+        try {
+            val view = assertNotNull(vm.state.value.content)
+            view.continueInZecButton.onClick()
+            view.onBack()
+            verify(exactly = 2) { router.back() }
+            coVerify(exactly = 0) { provider.store(any(), any()) }
+        } finally {
+            vm.viewModelScope.cancel()
+        }
+    }
 
-private fun dataState(expectedCurrency: FiatCurrency) =
-    ExchangeRateState.Data(
+    private fun vm(repositoryState: ExchangeRateState = dataState(FiatCurrency("JPY"))) =
+        ExchangeRateUnavailableVM(
+            navigationRouter = router,
+            optInExchangeRate = OptInExchangeRateUseCase(router, provider),
+            exchangeRateRepository = mockk<ExchangeRateRepository> {
+                every { state } returns MutableStateFlow(repositoryState)
+            },
+            errorMapper = ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)),
+            sourceEntryId = "conversion-dialog",
+        )
+
+    private fun dataState(currency: FiatCurrency) = ExchangeRateState.Data(
         error = ExchangeRateError.CMC_SERVER_CONNECTION_ERROR,
-        expectedCurrency = expectedCurrency,
-        onRefresh = {}
+        expectedCurrency = currency,
+        onRefresh = {},
     )
-
-private class FakeExchangeRateRepository(
-    state: ExchangeRateState
-) : ExchangeRateRepository {
-    override val state: StateFlow<ExchangeRateState> = MutableStateFlow(state).asStateFlow()
-
-    override fun refreshExchangeRateUsd() = Unit
-}
-
-private class FakeIsExchangeRateEnabledStorageProvider : IsExchangeRateEnabledStorageProvider {
-    var stored: Boolean? = null
-        private set
-
-    override suspend fun get(): Boolean? = stored
-
-    override suspend fun store(amount: Boolean) {
-        stored = amount
-    }
-
-    override fun observe(): Flow<Boolean?> = emptyFlow()
-
-    override suspend fun clear() {
-        stored = null
-    }
-}
-
-private class FakePreferredFiatProvider : PreferredFiatProvider {
-    var stored: FiatCurrency? = null
-        private set
-
-    override suspend fun get(): FiatCurrency? = stored
-
-    override suspend fun store(amount: FiatCurrency) {
-        stored = amount
-    }
-
-    override fun observe(): Flow<FiatCurrency?> = emptyFlow()
-
-    override suspend fun clear() {
-        stored = null
-    }
-}
-
-private class FakeNavigationRouter : NavigationRouter {
-    var backCount = 0
-        private set
-
-    override fun forward(vararg routes: Any) = Unit
-
-    override fun replace(vararg routes: Any) = Unit
-
-    override fun replaceAll(vararg routes: Any) = Unit
-
-    override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
-
-    override fun back() {
-        backCount++
-    }
-
-    override fun backTo(route: KClass<*>) = Unit
-
-    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
-
-    override fun backToRoot() = Unit
-
-    override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
 }

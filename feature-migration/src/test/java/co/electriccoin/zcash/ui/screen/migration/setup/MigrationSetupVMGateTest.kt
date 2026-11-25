@@ -162,7 +162,7 @@ class MigrationSetupVMGateTest {
 
         val visible = assertNotNull(setup.state.value.content)
         visible.onModeChange(MigrationMode.IMMEDIATE)
-        visible.onConfirm()
+        assertNotNull(setup.state.value.content).onConfirm()
         val confirming = assertNotNull(setup.state.value.content)
         assertTrue(confirming.isConfirming)
         confirming.onModeChange(MigrationMode.AUTOMATIC)
@@ -175,6 +175,48 @@ class MigrationSetupVMGateTest {
         verify(exactly = 1) { router.forward(accepted) }
         assertEquals(false, setup.state.value.content?.isConfirming)
     }
+
+    @Test
+    fun chainTipArrivalKeepsTheConfirmedImmediateChoiceThroughThePendingResult() =
+        runTest(UnconfinedTestDispatcher(scheduler)) {
+            val result = CompletableDeferred<MigrationReviewArgs>()
+            val destination = mockk<GetMigrationPrivacyOrReviewDestinationUseCase> {
+                coEvery { this@mockk(MigrationMode.IMMEDIATE) } coAnswers { result.await() }
+            }
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val answers = ArrayDeque(listOf(unsynced, open))
+            val setup = vm(router, destination) { if (answers.size > 1) answers.removeFirst() else answers.first() }
+            backgroundScope.launch { setup.state.collect { } }
+            val beforeTip = assertNotNull(setup.state.value.content)
+            assertEquals(MigrationMode.IMMEDIATE, beforeTip.mode)
+            beforeTip.onConfirm()
+
+            advanceTimeBy(3_001L)
+            val confirming = assertNotNull(setup.state.value.content)
+            assertEquals(MigrationSetupGate.Open, confirming.gate)
+            assertEquals(MigrationMode.IMMEDIATE, confirming.mode)
+            assertTrue(confirming.isConfirming)
+            val accepted = MigrationReviewArgs(MigrationMode.IMMEDIATE, "synthetic-owner")
+            result.complete(accepted)
+            verify(exactly = 1) { router.forward(accepted) }
+            verify(exactly = 0) { router.forward(MigrationHowItWorksArgs) }
+        }
+
+    @Test
+    fun aTapFromTheOldChoiceCannotConfirmADifferentModeAfterTheGateOpens() =
+        runTest(UnconfinedTestDispatcher(scheduler)) {
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val answers = ArrayDeque(listOf(unsynced, open))
+            val setup = vm(router) { if (answers.size > 1) answers.removeFirst() else answers.first() }
+            backgroundScope.launch { setup.state.collect { } }
+            val beforeTip = assertNotNull(setup.state.value.content)
+            advanceTimeBy(3_001L)
+            assertEquals(MigrationMode.AUTOMATIC, setup.state.value.content?.mode)
+
+            beforeTip.onConfirm()
+
+            verify(exactly = 0) { router.forward(any()) }
+        }
 
     @Test
     fun theScreenIsLoadingUntilTheGateHasAnswered() =
