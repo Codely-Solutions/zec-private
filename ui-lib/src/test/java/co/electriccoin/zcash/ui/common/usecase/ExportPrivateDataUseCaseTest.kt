@@ -141,7 +141,17 @@ class ExportPrivateDataUseCaseTest {
             assertTrue(export(sourceCurrent::get, foreground::get) { source })
             assertEquals(source.readText(), checkNotNull(staged).readText())
             assertEquals(Intent.ACTION_CHOOSER, shadowOf(application).nextStartedActivity.action)
-            coVerify(exactly = 7) { biometrics.requestBiometrics(any()) }
+            val handedOff = checkNotNull(staged)
+
+            every { FileProvider.getUriForFile(application, any(), any()) } answers {
+                foreground.set(false)
+                Uri.parse("content://synthetic/export-successor")
+            }
+            assertFalse(export(sourceCurrent::get, foreground::get) { source })
+            assertFalse(checkNotNull(staged).exists())
+            assertEquals(source.readText(), handedOff.readText())
+            assertNull(shadowOf(application).nextStartedActivity)
+            coVerify(exactly = 8) { biometrics.requestBiometrics(any()) }
         } finally {
             unmockkStatic(FileProvider::class)
             Dispatchers.resetMain()

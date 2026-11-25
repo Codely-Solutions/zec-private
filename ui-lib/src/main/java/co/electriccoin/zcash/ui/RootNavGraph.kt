@@ -35,6 +35,9 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorDialog
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
@@ -172,7 +175,8 @@ private fun CollectLaunchRequests(
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val appAccess = rememberUpdatedState(hasAppAccess)
-    LaunchedEffect(secretState, navController, requests, navigator, lifecycle) {
+    val errors = koinInject<NavigateToErrorUseCase>()
+    LaunchedEffect(secretState, navController, requests, navigator, lifecycle, errors) {
         if (secretState == SecretState.LOADING) return@LaunchedEffect
         val walletReady = secretState == SecretState.READY
         val targetGraph = if (walletReady) MainAppGraph::class else OnboardingGraph::class
@@ -184,7 +188,8 @@ private fun CollectLaunchRequests(
                 navController,
                 walletReady,
                 hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
-                navigate = navigator::executeLaunchCommand
+                navigate = navigator::executeLaunchCommand,
+                errors = errors,
             )
         }
     }
@@ -195,15 +200,23 @@ internal suspend fun LaunchNavigationRequests.deliverOnChanges(
     walletReady: Boolean,
     hasAppAccess: () -> Boolean,
     navigate: suspend (NavigationCommand, () -> Boolean) -> Boolean,
+    errors: NavigateToErrorUseCase,
 ) {
     combine(changes, navController.currentBackStackEntryFlow) { _, _ -> Unit }.collect {
         deliver(
-            walletReady, hasAppAccess,
+            walletReady,
+            hasAppAccess = { hasAppAccess() && !navController.isShowingSeedRecoveryError(errors) },
             canPresentRecovery = { navController.currentBackStackEntry?.destination?.hasRoute<HomeArgs>() == true },
             navigate = navigate,
         )
     }
 }
+
+private fun NavController.isShowingSeedRecoveryError(errors: NavigateToErrorUseCase): Boolean =
+    currentBackStackEntry
+        ?.takeIf { it.destination.hasRoute<ErrorDialog>() }
+        ?.toRoute<ErrorDialog>()
+        ?.let { errors.argsFor(it) == ErrorArgs.SeedRecoveryFailed } == true
 
 @Composable
 private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {

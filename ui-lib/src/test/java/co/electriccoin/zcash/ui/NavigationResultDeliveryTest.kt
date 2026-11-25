@@ -13,6 +13,9 @@ import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.design.KeyboardManager
+import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorDialog
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
@@ -78,7 +81,9 @@ class NavigationResultDeliveryTest {
                 val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
                 val requests = LaunchNavigationRequests()
                 backgroundScope.launch {
-                    requests.deliverOnChanges(controller, true, { true }, navigator::executeLaunchCommand)
+                    requests.deliverOnChanges(
+                        controller, true, { true }, navigator::executeLaunchCommand, NavigateToErrorUseCase(mockk()),
+                    )
                 }
                 requests.requestGiftScan()
                 runCurrent()
@@ -104,6 +109,46 @@ class NavigationResultDeliveryTest {
                 assertTrue(controller.popBackStack())
                 runCurrent()
                 assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
+            }
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun seedRecoveryStaysVisibleUntilDismissedDespiteQueuedScannerAndMigration() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val requests = LaunchNavigationRequests()
+                val errors = NavigateToErrorUseCase(mockk())
+                val recovery = errors.stage(ErrorArgs.SeedRecoveryFailed) as ErrorDialog
+                var hasAccess = false
+                val migration = requests.beginMigrationProgress("owner")
+                requests.updateSeedRecoveryError(recovery) { true }
+                requests.requestGiftScan()
+                backgroundScope.launch {
+                    requests.deliverOnChanges(controller, true, { hasAccess }, navigator::executeLaunchCommand, errors)
+                }
+                runCurrent()
+                assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
+
+                hasAccess = true
+                requests.updateSeedRecoveryError(recovery) { true }
+                runCurrent()
+                assertEquals(recovery, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
+
+                val progress = DeliveryMigrationArgs("owner")
+                requests.finishMigrationProgress(migration, NavigationCommand.ReplaceAll(listOf(progress)))
+                runCurrent()
+                assertEquals(recovery, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
+
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertTrue(controller.popBackStack())
+                assertEquals(progress, controller.currentBackStackEntry?.toRoute<DeliveryMigrationArgs>())
             }
         }
     }
@@ -190,6 +235,7 @@ class NavigationResultDeliveryTest {
                 composable<DeliveryMigrationArgs> { Text("Migration progress") }
                 composable<DeliveryOrigin> { Text("Signing") }
                 dialog<DeliverySigningSheet> { Text("Hardware signing") }
+                dialog<ErrorDialog> { Text("Seed recovery") }
                 composable<ScanGiftCardArgs> { Text("External scan") }
                 composable<ActivityHistoryArgs> { Text("Activity history") }
             }

@@ -17,6 +17,14 @@ class ToolchainPolicyTests(unittest.TestCase):
         self.assertNotIn('dependency-name: com.',config)
         self.assertIn('open-pull-requests-limit: 1',config)
 
+    def test_root_settings_select_only_the_published_wallet_dependencies(self):
+        settings = (ROOT / 'settings.gradle.kts').read_text()
+        guard = settings.index('providers.gradleProperty(property).orNull.isNullOrEmpty()')
+        for key in ('SDK_INCLUDED_BUILD_PATH', 'BIP_39_INCLUDED_BUILD_PATH'):
+            self.assertIn(key, settings[:guard])
+        self.assertLess(guard, settings.index('includeBuild("build-conventions-secant")'))
+        self.assertNotIn('dependencySubstitution', settings)
+
     def test_pull_request_job_has_no_signing_or_write_credentials(self):
         workflow=(ROOT/'.github/workflows/toolchain-review.yml').read_text()
         self.assertIn('pull_request:',workflow)

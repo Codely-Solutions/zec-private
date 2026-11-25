@@ -14243,7 +14243,7 @@ index 5faf35c95..14f058778 100644
 +        }
 +        every { preferences.edit() } returns editor
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..822db2288 100644
+index ec56161b5..9fc9220e1 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -14254,13 +14254,12 @@ index ec56161b5..822db2288 100644
 @@ -65,2 +64,0 @@ IS_SCREEN_ROTATION_ENABLED=false
 -# Set the flexa publishable key to setup local integration. Replaced by CI action.
 -ZCASH_FLEXA_KEY=
-@@ -108,3 +106,2 @@ ZCASH_GOOGLE_PLAY_DEPLOY_STATUS=draft
+@@ -108,3 +106 @@ ZCASH_GOOGLE_PLAY_DEPLOY_STATUS=draft
 -# Optional absolute path to a Zcash SDK checkout.
 -# When blank, it pulls the SDK from Maven.
 -# When set, it uses the path for a Gradle included build.  Path can either be absolute or relative to the root of this app's Gradle project.
-+# Keep this empty for ZEC Private builds. Gradle resolves the published SDK from Maven.
-+# Upstream supports an included SDK build for its own development.
-@@ -112,17 +109 @@ SDK_INCLUDED_BUILD_PATH=
++# Keep this empty. The fork resolves the published SDK from Maven.
+@@ -112,17 +108 @@ SDK_INCLUDED_BUILD_PATH=
 -# Optional commit hash on zodl-inc/zodl-android-wallet-sdk. When set, CI checks out the SDK at
 -# this exact commit and builds against it (via SDK_INCLUDED_BUILD_PATH) instead of the
 -# published Maven artifact — for co-developing an app change against unreleased SDK work,
@@ -14279,40 +14278,44 @@ index ec56161b5..822db2288 100644
 -# that branch is deleted): repoint to the merged sha on origin/main (or the relevant
 -# origin/maint/vX.Y.x line) once the companion SDK PR lands.
 +# Inherited upstream companion pin. ZEC Private's workflows use published SDK versions.
-@@ -136 +117 @@ ANDROID_TARGET_SDK_VERSION=36
+@@ -130,2 +110 @@ SDK_COMMIT_PIN=
+-# When blank, it pulls the BIP-39 library from Maven.
+-# When set, it uses the path for a Gradle included build.  Path can either be absolute or relative to the root of this app's Gradle project.
++# Keep this empty. The fork resolves the published BIP-39 library from Maven.
+@@ -136 +115 @@ ANDROID_TARGET_SDK_VERSION=36
 -ANDROID_COMPILE_SDK_VERSION=36
 +ANDROID_COMPILE_SDK_VERSION=37
-@@ -138 +119 @@ ANDROID_NDK_VERSION=27.0.12077973
+@@ -138 +117 @@ ANDROID_NDK_VERSION=27.0.12077973
 -ANDROID_GRADLE_PLUGIN_VERSION=8.13.2
 +ANDROID_GRADLE_PLUGIN_VERSION=9.5.1
-@@ -143 +124 @@ FLANK_VERSION=23.10.1
+@@ -143 +122 @@ FLANK_VERSION=23.10.1
 -FULLADLE_VERSION=0.19.0
 +FULLADLE_VERSION=0.21.0
-@@ -145,2 +126,2 @@ GOOGLE_PLAY_SERVICES_GRADLE_PLUGIN_VERSION=4.4.4
+@@ -145,2 +124,2 @@ GOOGLE_PLAY_SERVICES_GRADLE_PLUGIN_VERSION=4.4.4
 -GRADLE_VERSIONS_PLUGIN_VERSION=0.53.0
 -JGIT_VERSION=7.5.0.202512021534-r
 +GRADLE_VERSIONS_PLUGIN_VERSION=0.67.0
 +JGIT_VERSION=7.8.1.202611041320-r
-@@ -148 +129 @@ KTLINT_VERSION=1.8.0
+@@ -148 +127 @@ KTLINT_VERSION=1.8.0
 -KOIN_VERSION=4.1.1
 +KOIN_VERSION=4.2.2
-@@ -150,2 +131,2 @@ ACCOMPANIST_PERMISSIONS_VERSION=0.37.3
+@@ -150,2 +129,2 @@ ACCOMPANIST_PERMISSIONS_VERSION=0.37.3
 -ANDROIDX_ACTIVITY_VERSION=1.12.4
 -ANDROIDX_ANNOTATION_VERSION=1.9.1
 +ANDROIDX_ACTIVITY_VERSION=1.13.0
 +ANDROIDX_ANNOTATION_VERSION=1.11.0
-@@ -153,2 +134 @@ ANDROIDX_BIOMETRIC_VERSION=1.4.0-alpha05
+@@ -153,2 +132 @@ ANDROIDX_BIOMETRIC_VERSION=1.4.0-alpha05
 -ANDROIDX_CAMERA_VERSION=1.5.3
 -ANDROIDX_COMPOSE_COMPILER_VERSION=1.5.15
 +ANDROIDX_CAMERA_VERSION=1.6.2
-@@ -157 +137,2 @@ ANDROIDX_COMPOSE_MATERIAL_ICONS_VERSION=1.7.8
+@@ -157 +135,2 @@ ANDROIDX_COMPOSE_MATERIAL_ICONS_VERSION=1.7.8
 -ANDROIDX_COMPOSE_VERSION=1.10.4
 +# Preserve revision 4's resolved Compose version after removing Flexa's constraints.
 +ANDROIDX_COMPOSE_VERSION=1.12.1
-@@ -159 +140 @@ ANDROIDX_CONSTRAINTLAYOUT_VERSION=1.1.1
+@@ -159 +138 @@ ANDROIDX_CONSTRAINTLAYOUT_VERSION=1.1.1
 -ANDROIDX_CORE_VERSION=1.17.0
 +ANDROIDX_CORE_VERSION=1.19.1
-@@ -161,4 +142,5 @@ ANDROIDX_ESPRESSO_VERSION=3.7.0
+@@ -161,4 +140,5 @@ ANDROIDX_ESPRESSO_VERSION=3.7.0
 -ANDROIDX_LIFECYCLE_VERSION=2.10.0
 -ANDROIDX_FRAGMENT_VERSION=1.8.9
 -# WARNING: Higher version of this dependency causes crash in Flexa Login screen
@@ -14322,24 +14325,24 @@ index ec56161b5..822db2288 100644
 +ANDROIDX_TRANSITION_VERSION=1.7.2
 +ANDROIDX_ROOM_VERSION=2.8.5
 +ANDROIDX_NAVIGATION_COMPOSE_VERSION=2.10.2
-@@ -171 +153 @@ ANDROIDX_TEST_CORE_VERSION=1.7.0
+@@ -171 +151 @@ ANDROIDX_TEST_CORE_VERSION=1.7.0
 -ANDROIDX_TEST_MACROBENCHMARK_VERSION=1.4.1
 +ANDROIDX_TEST_MACROBENCHMARK_VERSION=1.5.0
-@@ -175,3 +157,3 @@ ANDROIDX_TEST_SERVICE_VERSION=1.6.0
+@@ -175,3 +155,3 @@ ANDROIDX_TEST_SERVICE_VERSION=1.6.0
 -ANDROIDX_UI_AUTOMATOR_VERSION=2.4.0-alpha01
 -ANDROIDX_WORK_MANAGER_VERSION=2.11.1
 -ANDROIDX_BROWSER_VERSION=1.9.0
 +ANDROIDX_UI_AUTOMATOR_VERSION=2.4.1
 +ANDROIDX_WORK_MANAGER_VERSION=2.12.0
 +ANDROIDX_BROWSER_VERSION=1.10.0
-@@ -180,4 +162,2 @@ FIREBASE_BOM_VERSION_MATCHER=34.10.0
+@@ -180,4 +160,2 @@ FIREBASE_BOM_VERSION_MATCHER=34.10.0
 -FLEXA_VERSION=1.1.3
 -## Warn: The latest version 1.33.1 suffers with: Unable to load class 'io.grpc.InternalGlobalInterceptors'
 -GOOGLE_AUTH_LIB_JAVA_VERSION=1.24.1
 -HAZE_VERSION=1.7.2
 +GOOGLE_AUTH_LIB_JAVA_VERSION=1.57.0
 +HAZE_VERSION=2.1.0
-@@ -185,8 +165,8 @@ JACOCO_VERSION=0.8.14
+@@ -185,8 +163,8 @@ JACOCO_VERSION=0.8.14
 -KEYSTONE_VERSION=0.8.3
 -KOTLIN_VERSION=2.3.10
 -KOTLINX_COROUTINES_VERSION=1.10.2
@@ -14356,7 +14359,7 @@ index ec56161b5..822db2288 100644
 +KOTLINX_SERIALIZABLE_JSON_VERSION=1.12.0
 +KOVER_VERSION=0.9.11
 +LOTTIE_VERSION=6.7.1
-@@ -195,5 +175,5 @@ MLKIT_SCANNING_VERSION=17.3.0
+@@ -195,5 +173,5 @@ MLKIT_SCANNING_VERSION=17.3.0
 -MOCKK_VERSION=1.14.2
 -PLAY_PUBLISHER_API_VERSION=v3-rev20260204-2.0.0
 -ROBOLECTRIC_VERSION=4.16
@@ -14367,17 +14370,17 @@ index ec56161b5..822db2288 100644
 +ROBOLECTRIC_VERSION=4.17
 +SHIMMER_VERSION=1.5.0
 +TINK_VERSION=1.24.0
-@@ -202 +182 @@ ZXING_VERSION=3.5.4
+@@ -202 +180 @@ ZXING_VERSION=3.5.4
 -ZXING_CPP_VERSION=3.0.2
 +ZXING_CPP_VERSION=3.1.1
-@@ -204 +184,2 @@ ZIP_321_VERSION=1.0.2
+@@ -204 +182,2 @@ ZIP_321_VERSION=1.0.2
 -KTOR_VERSION=3.4.0
 +GUAVA_VERSION=33.8.0-android
 +KTOR_VERSION=3.6.1
-@@ -208 +189 @@ ZCASH_BIP39_VERSION=1.0.9
+@@ -208 +187 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
-@@ -214,4 +195,7 @@ ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
+@@ -214,4 +193,7 @@ ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 -JVM_TOOLCHAIN=21
 -# This shouldn't be changed, as Android doesn't support targets beyond Java 8
 -KOTLIN_JVM_TARGET=8
@@ -14389,7 +14392,7 @@ index ec56161b5..822db2288 100644
 +# by minSdk and core-library desugaring, independently of this class-file target.
 +KOTLIN_JVM_TARGET=17
 +ANDROID_JVM_TARGET=17
-@@ -223,0 +208,5 @@ org.gradle.tooling.parallel=true
+@@ -223,0 +206,5 @@ org.gradle.tooling.parallel=true
 +
 +# Align fixed upstream OkHttp across transitive clients.
 +OKHTTP_VERSION=5.5.1
@@ -27046,7 +27049,7 @@ index cff1fe56a..d49777794 100644
 -    return floor(number / multiple) * multiple
 -}
 diff --git a/settings.gradle.kts b/settings.gradle.kts
-index 5831568a4..0286fa7fa 100644
+index 5831568a4..08af7337f 100644
 --- a/settings.gradle.kts
 +++ b/settings.gradle.kts
 @@ -28,0 +29,6 @@ pluginManagement {
@@ -27093,10 +27096,42 @@ index 5831568a4..0286fa7fa 100644
 -                    "androidx-compose-ui",
 -                    "androidx-compose-ui-fonts"
 +                    "androidx-compose-ui"
-@@ -361 +364,0 @@ include("feature-viewing-key")
+@@ -349,0 +354,6 @@ rootProject.name = "zcash-android-app"
++listOf("SDK_INCLUDED_BUILD_PATH", "BIP_39_INCLUDED_BUILD_PATH").forEach { property ->
++    require(providers.gradleProperty(property).orNull.isNullOrEmpty()) {
++        "$property must be empty. ZEC Private uses published Maven dependencies."
++    }
++}
++
+@@ -361 +370,0 @@ include("feature-viewing-key")
 -include("feature-voting")
-@@ -371,0 +375 @@ include("ui-lib")
+@@ -371,0 +381 @@ include("ui-lib")
 +include("wallet-foundation-lib")
+@@ -373,24 +382,0 @@ include("ui-screenshot-test")
+-
+-val zcashSdkIncludedBuildPath = extra["SDK_INCLUDED_BUILD_PATH"].toString()
+-
+-if (zcashSdkIncludedBuildPath.isNotEmpty()) {
+-    logger.lifecycle("The SDK will be used from $zcashSdkIncludedBuildPath instead of Maven Central.")
+-    includeBuild(zcashSdkIncludedBuildPath) {
+-        dependencySubstitution {
+-            substitute(module("com.zodl.android:zcash-android-sdk")).using(project(":sdk-lib"))
+-            substitute(module("com.zodl.android:zcash-android-backend")).using(project(":backend-lib"))
+-            substitute(module("com.zodl.android:zcash-android-sdk-incubator")).using(project(":sdk-incubator-lib"))
+-        }
+-    }
+-}
+-
+-val bip39IncludedBuildPath = extra["BIP_39_INCLUDED_BUILD_PATH"].toString()
+-
+-if (bip39IncludedBuildPath.isNotEmpty()) {
+-    logger.lifecycle("BIP-39 will be used from $bip39IncludedBuildPath instead of Maven Central.")
+-    includeBuild(bip39IncludedBuildPath) {
+-        dependencySubstitution {
+-            substitute(module("cash.z.ecc.android:kotlin-bip39")).using(project(":bip39-lib"))
+-        }
+-    }
+-}
 diff --git a/spackle-android-lib/build.gradle.kts b/spackle-android-lib/build.gradle.kts
 index 3cba9ca4e..31645e4b6 100644
 --- a/spackle-android-lib/build.gradle.kts
@@ -35388,7 +35423,7 @@ index 36840dcc5..cf4afa9ba 100644
 +    if (!popBackStack(RestoreSeedArgs, inclusive = false)) {
 +        navigate(RestoreSeedArgs) { popUpTo<Onboarding>() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
-index a93926c57..b6cb7f3fd 100644
+index a93926c57..f141fc98f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 @@ -4,0 +5 @@ import androidx.compose.runtime.Composable
@@ -35412,26 +35447,29 @@ index a93926c57..b6cb7f3fd 100644
 @@ -14,2 +26,0 @@ import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 -import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStore
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
-@@ -24 +35,5 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
+@@ -24 +35,8 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
 -import co.electriccoin.zcash.ui.screen.flexa.FlexaViewModel
 +import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import co.electriccoin.zcash.ui.screen.error.ErrorArgs
++import co.electriccoin.zcash.ui.screen.error.ErrorDialog
++import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 +import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
-@@ -26 +41 @@ import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
+@@ -26 +44 @@ import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 -import kotlinx.coroutines.flow.filter
 +import kotlinx.coroutines.flow.combine
-@@ -32,6 +46,0 @@ import org.koin.compose.koinInject
+@@ -32,6 +49,0 @@ import org.koin.compose.koinInject
 -/**
 - * Also opens the gift card scanner for a gift card link that arrived from outside the app. Such a link can arrive
 - * before there is a wallet, or before the wallet graph is shown (cold start, onboarding); MainActivity only records
 - * that one arrived (the link itself is discarded), and the scanner opens once the wallet graph is up, so the user
 - * scans the card with the app.
 - */
-@@ -42,0 +52 @@ fun RootNavGraph(
+@@ -42,0 +55 @@ fun RootNavGraph(
 +    hasAppAccess: () -> Boolean,
-@@ -43,0 +54,7 @@ fun RootNavGraph(
+@@ -43,0 +57,7 @@ fun RootNavGraph(
 +    val resetProgress = koinInject<ResetProgressStore>()
 +    val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
 +    if (isResetPending) {
@@ -35439,35 +35477,35 @@ index a93926c57..b6cb7f3fd 100644
 +        return
 +    }
 +
-@@ -45 +61,0 @@ fun RootNavGraph(
+@@ -45 +64,0 @@ fun RootNavGraph(
 -    val flexaViewModel = koinViewModel<FlexaViewModel>()
-@@ -51,2 +67 @@ fun RootNavGraph(
+@@ -51,2 +70 @@ fun RootNavGraph(
 -    val giftCardLinkStore = koinInject<GiftCardLinkStore>()
 -    val navigateToRedeemGiftCard = koinInject<NavigateToRedeemGiftCardUseCase>()
 +    val launchNavigation = koinInject<LaunchNavigationRequests>()
-@@ -55 +70,3 @@ fun RootNavGraph(
+@@ -55 +73,3 @@ fun RootNavGraph(
 -    val navigator: Navigator =
 +    val lifecycle = LocalLifecycleOwner.current.lifecycle
 +    val currentAccess = rememberUpdatedState(hasAppAccess)
 +    val navigator =
-@@ -57,0 +75 @@ fun RootNavGraph(
+@@ -57,0 +78 @@ fun RootNavGraph(
 +            lifecycle,
-@@ -59 +76,0 @@ fun RootNavGraph(
+@@ -59 +79,0 @@ fun RootNavGraph(
 -            flexaViewModel,
-@@ -68 +84,0 @@ fun RootNavGraph(
+@@ -68 +87,0 @@ fun RootNavGraph(
 -                flexaViewModel = flexaViewModel,
-@@ -72 +88,4 @@ fun RootNavGraph(
+@@ -72 +91,4 @@ fun RootNavGraph(
 -                isOledEnabledStorageProvider = isOledEnabledStorageProvider
 +                isOledEnabledStorageProvider = isOledEnabledStorageProvider,
 +                canCommitOwnedNavigation = {
 +                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
 +                }
-@@ -75,0 +95,2 @@ fun RootNavGraph(
+@@ -75,0 +98,2 @@ fun RootNavGraph(
 +    TrackActiveNavigationEntry(navController, navigationRouter)
 +
-@@ -77,0 +99 @@ fun RootNavGraph(
+@@ -77,0 +102 @@ fun RootNavGraph(
 +            if (!currentAccess.value()) return@collect
-@@ -84,0 +107,8 @@ fun RootNavGraph(
+@@ -84,0 +110,8 @@ fun RootNavGraph(
 +    LaunchedEffect(navigationRouter, navigator, lifecycle) {
 +        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
 +            navigationRouter.collectPendingForwards(navigator) {
@@ -35476,20 +35514,20 @@ index a93926c57..b6cb7f3fd 100644
 +        }
 +    }
 +
-@@ -107,0 +138 @@ fun RootNavGraph(
+@@ -107,0 +141 @@ fun RootNavGraph(
 +        if (!currentAccess.value()) return@LaunchedEffect
-@@ -117,5 +147,0 @@ fun RootNavGraph(
+@@ -117,5 +150,0 @@ fun RootNavGraph(
 -            // Same pattern as MainActivity.handleMigrationIntent — Home always lands on the
 -            // back stack first, then we redirect on top of it if a migration transfer needs
 -            // attention. isSyncBlocked() (fed into the synchronizer directly) already stopped
 -            // sync regardless of whether this redirect lands — this is routing only.
 -            migrationAppHooks.checkRecovery()
-@@ -123 +149 @@ fun RootNavGraph(
+@@ -123 +152 @@ fun RootNavGraph(
 -            secretState == SecretState.NONE &&
 +            (secretState == SecretState.NONE || secretState == SecretState.INCOMPLETE) &&
-@@ -132,0 +159 @@ fun RootNavGraph(
+@@ -132,0 +162 @@ fun RootNavGraph(
 +        if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
-@@ -135,7 +162,27 @@ fun RootNavGraph(
+@@ -135,7 +165,29 @@ fun RootNavGraph(
 -    LaunchedEffect(secretState, navController) {
 -        if (secretState != SecretState.READY) return@LaunchedEffect
 -        navController.currentBackStackEntryFlow.first {
@@ -35510,7 +35548,8 @@ index a93926c57..b6cb7f3fd 100644
 +) {
 +    val lifecycle = LocalLifecycleOwner.current.lifecycle
 +    val appAccess = rememberUpdatedState(hasAppAccess)
-+    LaunchedEffect(secretState, navController, requests, navigator, lifecycle) {
++    val errors = koinInject<NavigateToErrorUseCase>()
++    LaunchedEffect(secretState, navController, requests, navigator, lifecycle, errors) {
 +        if (secretState == SecretState.LOADING) return@LaunchedEffect
 +        val walletReady = secretState == SecretState.READY
 +        val targetGraph = if (walletReady) MainAppGraph::class else OnboardingGraph::class
@@ -35522,23 +35561,32 @@ index a93926c57..b6cb7f3fd 100644
 +                navController,
 +                walletReady,
 +                hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
-+                navigate = navigator::executeLaunchCommand
++                navigate = navigator::executeLaunchCommand,
++                errors = errors,
 +            )
-@@ -145,0 +193,59 @@ fun RootNavGraph(
+@@ -145,0 +198,67 @@ fun RootNavGraph(
 +internal suspend fun LaunchNavigationRequests.deliverOnChanges(
 +    navController: NavController,
 +    walletReady: Boolean,
 +    hasAppAccess: () -> Boolean,
 +    navigate: suspend (NavigationCommand, () -> Boolean) -> Boolean,
++    errors: NavigateToErrorUseCase,
 +) {
 +    combine(changes, navController.currentBackStackEntryFlow) { _, _ -> Unit }.collect {
 +        deliver(
-+            walletReady, hasAppAccess,
++            walletReady,
++            hasAppAccess = { hasAppAccess() && !navController.isShowingSeedRecoveryError(errors) },
 +            canPresentRecovery = { navController.currentBackStackEntry?.destination?.hasRoute<HomeArgs>() == true },
 +            navigate = navigate,
 +        )
 +    }
 +}
++
++private fun NavController.isShowingSeedRecoveryError(errors: NavigateToErrorUseCase): Boolean =
++    currentBackStackEntry
++        ?.takeIf { it.destination.hasRoute<ErrorDialog>() }
++        ?.toRoute<ErrorDialog>()
++        ?.let { errors.argsFor(it) == ErrorArgs.SeedRecoveryFailed } == true
 +
 +@Composable
 +private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
@@ -44953,10 +45001,10 @@ index 565cd3bea..d9b421f57 100644
 +            onSecondary = { onReport(error.dismiss) },
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt
 new file mode 100644
-index 000000000..5a2985abd
+index 000000000..9d1b94657
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,116 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Context
@@ -45046,7 +45094,6 @@ index 000000000..5a2985abd
 +                val source = sourceFile()
 +                if (!isAllowed()) return@withContext null
 +                val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.DIRECTORY).apply { mkdirs() }
-+                directory.listFiles()?.forEach { check(it.delete()) }
 +                val output = File(directory, "${UUID.randomUUID()}_${source.name}")
 +                staged = output
 +                scheduleCleanup(output)
@@ -69688,10 +69735,10 @@ index 000000000..2ae836acd
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..4e30305ed
+index 000000000..b8c20a4ff
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,269 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -69707,6 +69754,9 @@ index 000000000..4e30305ed
 +import androidx.navigation.compose.rememberNavController
 +import androidx.navigation.toRoute
 +import co.electriccoin.zcash.ui.design.KeyboardManager
++import co.electriccoin.zcash.ui.screen.error.ErrorArgs
++import co.electriccoin.zcash.ui.screen.error.ErrorDialog
++import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 +import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
@@ -69772,7 +69822,9 @@ index 000000000..4e30305ed
 +                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
 +                val requests = LaunchNavigationRequests()
 +                backgroundScope.launch {
-+                    requests.deliverOnChanges(controller, true, { true }, navigator::executeLaunchCommand)
++                    requests.deliverOnChanges(
++                        controller, true, { true }, navigator::executeLaunchCommand, NavigateToErrorUseCase(mockk()),
++                    )
 +                }
 +                requests.requestGiftScan()
 +                runCurrent()
@@ -69798,6 +69850,46 @@ index 000000000..4e30305ed
 +                assertTrue(controller.popBackStack())
 +                runCurrent()
 +                assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
++            }
++        }
++    }
++
++    @Test
++    @OptIn(ExperimentalCoroutinesApi::class)
++    fun seedRecoveryStaysVisibleUntilDismissedDespiteQueuedScannerAndMigration() {
++        install()
++        compose.runOnIdle {
++            runTest {
++                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
++                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
++                val requests = LaunchNavigationRequests()
++                val errors = NavigateToErrorUseCase(mockk())
++                val recovery = errors.stage(ErrorArgs.SeedRecoveryFailed) as ErrorDialog
++                var hasAccess = false
++                val migration = requests.beginMigrationProgress("owner")
++                requests.updateSeedRecoveryError(recovery) { true }
++                requests.requestGiftScan()
++                backgroundScope.launch {
++                    requests.deliverOnChanges(controller, true, { hasAccess }, navigator::executeLaunchCommand, errors)
++                }
++                runCurrent()
++                assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
++
++                hasAccess = true
++                requests.updateSeedRecoveryError(recovery) { true }
++                runCurrent()
++                assertEquals(recovery, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
++
++                val progress = DeliveryMigrationArgs("owner")
++                requests.finishMigrationProgress(migration, NavigationCommand.ReplaceAll(listOf(progress)))
++                runCurrent()
++                assertEquals(recovery, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
++
++                assertTrue(controller.popBackStack())
++                runCurrent()
++                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
++                assertTrue(controller.popBackStack())
++                assertEquals(progress, controller.currentBackStackEntry?.toRoute<DeliveryMigrationArgs>())
 +            }
 +        }
 +    }
@@ -69884,6 +69976,7 @@ index 000000000..4e30305ed
 +                composable<DeliveryMigrationArgs> { Text("Migration progress") }
 +                composable<DeliveryOrigin> { Text("Signing") }
 +                dialog<DeliverySigningSheet> { Text("Hardware signing") }
++                dialog<ErrorDialog> { Text("Seed recovery") }
 +                composable<ScanGiftCardArgs> { Text("External scan") }
 +                composable<ActivityHistoryArgs> { Text("Activity history") }
 +            }
@@ -82418,10 +82511,10 @@ index 000000000..ef29cc3a1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt
 new file mode 100644
-index 000000000..cf9eca08f
+index 000000000..639906519
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,170 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Intent
@@ -82565,7 +82658,17 @@ index 000000000..cf9eca08f
 +            assertTrue(export(sourceCurrent::get, foreground::get) { source })
 +            assertEquals(source.readText(), checkNotNull(staged).readText())
 +            assertEquals(Intent.ACTION_CHOOSER, shadowOf(application).nextStartedActivity.action)
-+            coVerify(exactly = 7) { biometrics.requestBiometrics(any()) }
++            val handedOff = checkNotNull(staged)
++
++            every { FileProvider.getUriForFile(application, any(), any()) } answers {
++                foreground.set(false)
++                Uri.parse("content://synthetic/export-successor")
++            }
++            assertFalse(export(sourceCurrent::get, foreground::get) { source })
++            assertFalse(checkNotNull(staged).exists())
++            assertEquals(source.readText(), handedOff.readText())
++            assertNull(shadowOf(application).nextStartedActivity)
++            coVerify(exactly = 8) { biometrics.requestBiometrics(any()) }
 +        } finally {
 +            unmockkStatic(FileProvider::class)
 +            Dispatchers.resetMain()

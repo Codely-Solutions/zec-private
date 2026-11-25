@@ -4,7 +4,7 @@ Use [dev_session.py](dev_session.py) for related compilation/unit checks, with t
 
 ## Run related checks
 
-Write one task-owned manifest. `source` is an absolute repository path; each operation selects a full committed source SHA. Parameters are non-secret development inputs. For a change headed to release, include release-scoped Detekt alongside the first focused JVM tests in one Gradle invocation, before preview builds or hosted dispatch. Use the same release analysis script as hosted preflight. Example structure:
+Write one task-owned manifest. `source` is an absolute repository path; each operation selects a full committed source SHA. Parameters are non-secret development inputs. The root Gradle settings require the published SDK and BIP-39 dependencies, including when local Gradle arguments, user properties or environment variables supply an included-build path. For a change headed to release, include release-scoped Detekt alongside the first focused JVM tests in one Gradle invocation, before preview builds or hosted dispatch. Use the same release analysis script as hosted preflight. Example structure:
 
 ```json
 {

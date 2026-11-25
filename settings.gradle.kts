@@ -351,6 +351,12 @@ dependencyResolutionManagement {
 
 rootProject.name = "zcash-android-app"
 
+listOf("SDK_INCLUDED_BUILD_PATH", "BIP_39_INCLUDED_BUILD_PATH").forEach { property ->
+    require(providers.gradleProperty(property).orNull.isNullOrEmpty()) {
+        "$property must be empty. ZEC Private uses published Maven dependencies."
+    }
+}
+
 includeBuild("build-conventions-secant")
 
 include("app")
@@ -374,27 +380,3 @@ include("ui-integration-test")
 include("ui-lib")
 include("wallet-foundation-lib")
 include("ui-screenshot-test")
-
-val zcashSdkIncludedBuildPath = extra["SDK_INCLUDED_BUILD_PATH"].toString()
-
-if (zcashSdkIncludedBuildPath.isNotEmpty()) {
-    logger.lifecycle("The SDK will be used from $zcashSdkIncludedBuildPath instead of Maven Central.")
-    includeBuild(zcashSdkIncludedBuildPath) {
-        dependencySubstitution {
-            substitute(module("com.zodl.android:zcash-android-sdk")).using(project(":sdk-lib"))
-            substitute(module("com.zodl.android:zcash-android-backend")).using(project(":backend-lib"))
-            substitute(module("com.zodl.android:zcash-android-sdk-incubator")).using(project(":sdk-incubator-lib"))
-        }
-    }
-}
-
-val bip39IncludedBuildPath = extra["BIP_39_INCLUDED_BUILD_PATH"].toString()
-
-if (bip39IncludedBuildPath.isNotEmpty()) {
-    logger.lifecycle("BIP-39 will be used from $bip39IncludedBuildPath instead of Maven Central.")
-    includeBuild(bip39IncludedBuildPath) {
-        dependencySubstitution {
-            substitute(module("cash.z.ecc.android:kotlin-bip39")).using(project(":bip39-lib"))
-        }
-    }
-}

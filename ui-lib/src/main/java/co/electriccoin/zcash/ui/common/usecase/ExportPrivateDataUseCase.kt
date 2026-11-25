@@ -87,7 +87,6 @@ class ExportPrivateDataUseCase(
                 val source = sourceFile()
                 if (!isAllowed()) return@withContext null
                 val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.DIRECTORY).apply { mkdirs() }
-                directory.listFiles()?.forEach { check(it.delete()) }
                 val output = File(directory, "${UUID.randomUUID()}_${source.name}")
                 staged = output
                 scheduleCleanup(output)
