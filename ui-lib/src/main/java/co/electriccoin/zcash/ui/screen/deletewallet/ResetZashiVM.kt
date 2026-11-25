@@ -51,7 +51,13 @@ class ResetZashiVM(
                 supportWithoutDiagnostics = resetZashi.isPending.value,
             )
         }.combine(resetZashi.failedAttempt) { state, failure ->
-            if (state.content?.isPending != true) state else state.copy(error = failure?.let(::pendingError))
+            val current = state.content
+            when {
+                current?.isPending != true -> state
+                failure?.requiresRestart == true ->
+                    state.copy(content = current.copy(requiresRestart = true), error = null)
+                else -> state.copy(error = failure?.let(::pendingError))
+            }
         }.stateIn(
             this,
             LceState(
@@ -107,7 +113,7 @@ class ResetZashiVM(
     private fun onCheckboxToggled() = isKeepFilesChecked.update { !it }
 
     private fun onConfirmClicked() {
-        if (resetZashi.isRunning.value) return
+        if (resetZashi.isRunning.value || resetZashi.failedAttempt.value?.requiresRestart == true) return
         if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
     }
 

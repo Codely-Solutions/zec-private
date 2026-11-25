@@ -145,6 +145,7 @@ data class StoredCardWallet(
  * caller's scope is cancelled; the SDK cancels an in-flight check and serializes the close after any in-flight
  * redemption on the same redeemer.
  */
+@Suppress("TooManyFunctions") // Route selection and closure share ownership of the SDK gift wallet.
 class GiftCardDataSourceImpl(
     private val application: Application,
     private val persistableWalletProvider: PersistableWalletProvider,
@@ -173,19 +174,22 @@ class GiftCardDataSourceImpl(
             } catch (e: SdkGiftCardException.InvalidLink) {
                 throw e.toAppException()
             }
-        val redeemer =
+        val route =
             try {
                 if (card.network != wallet.network) throw GiftCardException.WrongNetwork()
-                newRedeemer(card, wallet.network, wallet.endpoint)
+                newRedeemer(
+                    application, card, wallet.network, wallet.endpoint,
+                    usesTor = isTorEnabledStorageProvider.get() == true
+                )
             } catch (e: Exception) {
                 card.wipe()
                 throw e
             }
 
         val handle = GiftCardHandle(UUID.randomUUID().toString())
-        val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, redeemer = redeemer)
+        val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, route = route)
         synchronized(lock) {
-            held.priorClose = closeJobs[redeemer.alias]
+            held.priorClose = closeJobs[route.redeemer.alias]
             cards[handle] = held
         }
         return ParsedGiftCard(
@@ -197,16 +201,16 @@ class GiftCardDataSourceImpl(
                     statedAmount = card.statedAmount,
                     message = card.description
                 ),
-            walletAlias = redeemer.alias
+            walletAlias = route.redeemer.alias
         )
     }
 
     override suspend fun check(handle: GiftCardHandle): GiftCardStatus {
         val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
-        held.priorClose?.join()
+        val redeemer = readyRedeemer(handle, held, allowRouteChange = true)
         val status =
             try {
-                held.redeemer.check()
+                redeemer.check()
             } catch (e: SdkGiftCardException.Closed) {
                 throw GiftCardException.UnknownHandle(e)
             } catch (e: SdkGiftCardException.InUse) {
@@ -242,15 +246,15 @@ class GiftCardDataSourceImpl(
         beforeSubmission: () -> Unit,
     ): GiftCardRedemption {
         val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
-        held.priorClose?.join()
         val recipient = RecipientAddress.new(toAddress, held.network)
         val memo = redeemMemo(label = application.getString(R.string.redeemGift_memo), message = held.card.description)
+        val redeemer = readyRedeemer(handle, held, allowRouteChange = false)
         val destination = synchronizerProvider.synchronizer.value
         currentCoroutineContext().ensureActive()
         beforeSubmission()
         val redemption =
             try {
-                held.redeemer.redeem(recipient, memo, destination)
+                redeemer.redeem(recipient, memo, destination)
             } catch (e: SdkGiftCardException.Closed) {
                 throw GiftCardException.UnknownHandle(e)
             } catch (e: SdkGiftCardException.NetworkMismatch) {
@@ -282,7 +286,7 @@ class GiftCardDataSourceImpl(
 
     override fun close(handle: GiftCardHandle) {
         synchronized(lock) {
-            cards.remove(handle)?.let { closeLocked(it.redeemer, network = it.network, wipe = it.card) }
+            cards.remove(handle)?.let { closeLocked(it.route.redeemer, network = it.network, wipe = it.card) }
         }
     }
 
@@ -290,7 +294,7 @@ class GiftCardDataSourceImpl(
         val closed = withTimeoutOrNull(CARD_WALLET_CLOSE_TIMEOUT) {
             synchronized(lock) { closeJobs.values.toList() }.joinAll()
             val targets = synchronized(lock) {
-                check(!closeFailed) { "Could not close a gift card wallet. Restart the app before trying reset again." }
+                if (closeFailed) throw GiftWalletRestartRequiredException()
                 closedWallets.groupBy { it.network }
             }
             // SDK close may return while its teardown erases the helper wallet in the background.
@@ -316,26 +320,34 @@ class GiftCardDataSourceImpl(
     }
 
     /**
-     * A redeemer whose card wallet connects as the main synchronizer does: over Tor exactly when the user's Tor
-     * setting is on (an unset setting means off, as for the main synchronizer). Read at creation, like the endpoint.
+     * Match the current Tor setting before entering the SDK. A changed route requires a fresh card check
+     * before redemption. Read again after waiting for the previous redeemer's close.
      */
-    private suspend fun newRedeemer(
-        card: GiftCard,
-        network: ZcashNetwork,
-        endpoint: LightWalletEndpoint
+    private suspend fun readyRedeemer(
+        handle: GiftCardHandle,
+        held: HeldCard,
+        allowRouteChange: Boolean,
     ): GiftCardRedeemer {
-        val isTorEnabled = isTorEnabledStorageProvider.get() == true
-        return try {
-            GiftCardRedeemers.new(
-                context = application,
-                card = card,
-                network = network,
-                lightWalletEndpoint = endpoint,
-                isTorEnabled = isTorEnabled
-            )
-        } catch (e: SdkGiftCardException.NetworkMismatch) {
-            throw GiftCardException.WrongNetwork(e)
+        val usesTor = isTorEnabledStorageProvider.get() == true
+        val (route, priorClose) = synchronized(lock) {
+            if (cards[handle] !== held) {
+                null
+            } else {
+                if (allowRouteChange && held.route.usesTor != usesTor) replaceRouteLocked(held, usesTor)
+                held.route to held.priorClose
+            }
+        } ?: throw GiftCardException.UnknownHandle()
+        priorClose?.join()
+        val currentTor = isTorEnabledStorageProvider.get() == true
+        val refusal = synchronized(lock) {
+            when {
+                cards[handle] !== held -> GiftCardException.UnknownHandle()
+                held.route !== route || route.usesTor != currentTor -> GiftCardException.NotChecked()
+                else -> null
+            }
         }
+        if (refusal != null) throw refusal
+        return route.redeemer
     }
 
     /**
@@ -349,21 +361,23 @@ class GiftCardDataSourceImpl(
         handle: GiftCardHandle,
         held: HeldCard
     ) {
-        val fresh =
-            try {
-                newRedeemer(held.card, held.network, held.endpoint)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Twig.error { "Replacing a gift card redeemer failed: ${e::class.simpleName}" }
-                return
+        try {
+            val usesTor = isTorEnabledStorageProvider.get() == true
+            synchronized(lock) {
+                if (cards[handle] === held) replaceRouteLocked(held, usesTor)
             }
-        synchronized(lock) {
-            if (cards[handle] !== held) return
-            closeLocked(held.redeemer, network = held.network, wipe = null)
-            held.priorClose = closeJobs[fresh.alias]
-            held.redeemer = fresh
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Twig.error { "Replacing a gift card redeemer failed: ${e::class.simpleName}" }
         }
+    }
+
+    private fun replaceRouteLocked(held: HeldCard, usesTor: Boolean) {
+        val fresh = newRedeemer(application, held.card, held.network, held.endpoint, usesTor)
+        closeLocked(held.route.redeemer, network = held.network, wipe = null)
+        held.priorClose = closeJobs[fresh.redeemer.alias]
+        held.route = fresh
     }
 
     /**
@@ -397,17 +411,40 @@ class GiftCardDataSourceImpl(
         }
     }
 
+    /** Route and prior close are guarded by [lock]. */
     private class HeldCard(
         val card: GiftCard,
         val network: ZcashNetwork,
         val endpoint: LightWalletEndpoint,
-        @Volatile var redeemer: GiftCardRedeemer,
+        var route: RoutedRedeemer,
     ) {
-        /** A close of this card's alias that must finish before [redeemer] touches the card wallet. */
-        @Volatile
         var priorClose: Job? = null
     }
 }
+
+private data class RoutedRedeemer(val redeemer: GiftCardRedeemer, val usesTor: Boolean)
+
+private fun newRedeemer(
+    application: Application,
+    card: GiftCard,
+    network: ZcashNetwork,
+    endpoint: LightWalletEndpoint,
+    usesTor: Boolean,
+): RoutedRedeemer =
+    try {
+        RoutedRedeemer(
+            GiftCardRedeemers.new(
+                context = application,
+                card = card,
+                network = network,
+                lightWalletEndpoint = endpoint,
+                isTorEnabled = usesTor
+            ),
+            usesTor = usesTor
+        )
+    } catch (e: SdkGiftCardException.NetworkMismatch) {
+        throw GiftCardException.WrongNetwork(e)
+    }
 
 /**
  * The memo on the redeem transaction: the localized "Gift Card" [label], followed by the card's [message] when it
@@ -440,6 +477,8 @@ private fun String.truncatedToUtf8Bytes(maxBytes: Int): String {
     while (end > 0 && (bytes[end].toInt() and CONTINUATION_BYTE_MASK) == CONTINUATION_BYTE) end--
     return String(bytes, 0, end, Charsets.UTF_8)
 }
+
+internal class GiftWalletRestartRequiredException : IllegalStateException("Gift card wallet close requires a restart")
 
 private const val CONTINUATION_BYTE_MASK = 0xC0
 private const val CONTINUATION_BYTE = 0x80

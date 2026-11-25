@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.GiftWalletRestartRequiredException
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
@@ -56,7 +57,7 @@ class ResetZashiUseCase(
         pendingFailure.value = null
         try {
             val stage = runCatchingRecoverable { progressStore.getStage() }
-                .onFailure { reportPendingFailure() }
+                .onFailure(::reportPendingFailure)
                 .getOrThrow()
             if (stage == null) requestBiometrics()
 
@@ -75,7 +76,7 @@ class ResetZashiUseCase(
                     homeMessageCacheRepository.reset()
                     progressStore.store(null)
                     walletWriteAccess.finishReset()
-                }.onFailure { reportPendingFailure() }.getOrThrow()
+                }.onFailure(::reportPendingFailure).getOrThrow()
             }
         } catch (_: BiometricsFailureException) {
             // Wait for another confirmation.
@@ -88,10 +89,12 @@ class ResetZashiUseCase(
         }
     }
 
-    internal class PendingResetFailure
+    internal class PendingResetFailure(val requiresRestart: Boolean)
 
-    private fun reportPendingFailure() {
-        if (isPending.value) pendingFailure.value = PendingResetFailure()
+    private fun reportPendingFailure(cause: Throwable) {
+        if (isPending.value) {
+            pendingFailure.value = PendingResetFailure(requiresRestart = cause is GiftWalletRestartRequiredException)
+        }
     }
 
     private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {

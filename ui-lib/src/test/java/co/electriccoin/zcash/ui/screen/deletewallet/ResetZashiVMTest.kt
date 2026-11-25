@@ -9,6 +9,7 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.GiftWalletRestartRequiredException
 import co.electriccoin.zcash.ui.common.model.LceError
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.LceState
@@ -16,6 +17,7 @@ import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
@@ -73,6 +75,7 @@ class ResetZashiVMTest {
     private val biometrics = mockk<BiometricRepository>(relaxed = true)
     private val contacts = mockk<AddressBookRepository>(relaxed = true)
     private val metadata = mockk<MetadataRepository>(relaxed = true)
+    private val gifts = mockk<GiftCardRepository>(relaxed = true)
     private val diagnostics = mockk<GetSupportUseCase>()
     private lateinit var reportAccess: WalletReportAccess
     private lateinit var progress: ResetProgressStore
@@ -306,6 +309,36 @@ class ResetZashiVMTest {
         coVerify(exactly = 0) { metadata.delete() }
     }
 
+    @Test
+    fun failedGiftWalletClosureRequiresRestartBeforeResetCanContinue() = runBlocking {
+        coEvery { gifts.quiesceForWalletReset() } throws GiftWalletRestartRequiredException()
+        createViewModel()
+
+        assertNotNull(vm.state.value.content).buttonState.onClick()
+        val dialog = assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
+        dialog.primaryAction.onClick()
+        val restart = awaitState { it.content?.requiresRestart == true && !it.content.buttonState.isLoading }
+
+        assertNull(restart.error)
+        assertEquals(ResetStage.ERASE_SDK, progress.getStage())
+        assertNotNull(restart.content).buttonState.onClick()
+        coVerify(exactly = 1) { gifts.quiesceForWalletReset() }
+        coVerify(exactly = 0) { sdkData() }
+
+        vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+        coEvery { gifts.quiesceForWalletReset() } returns Unit
+        coEvery { sdkData() } returns Unit
+        createViewModel()
+        val afterRestart = awaitState { it.content?.isPending == true }
+        assertFalse(assertNotNull(afterRestart.content).requiresRestart)
+        afterRestart.content.buttonState.onClick()
+        awaitState { it.content?.isPending == false }
+
+        assertNull(progress.getStage())
+        coVerify(exactly = 1) { sdkData() }
+        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
+    }
+
     private fun createViewModel() {
         val context = mockk<Context> {
             every { noBackupFilesDir } returns directory.root
@@ -330,7 +363,7 @@ class ResetZashiVMTest {
             addressBookRepository = contacts,
             metadataRepository = metadata,
             migrationAppHooks = mockk(relaxed = true),
-            giftCardRepository = mockk(relaxed = true),
+            giftCardRepository = gifts,
             progressStore = progress,
             deleteSharedQRImages = mockk(relaxed = true),
             deleteLegacySharedExports = DeleteLegacySharedExportsUseCase(context),

@@ -69,6 +69,22 @@ class ReviewScreenshotTest {
     }
 
     @Test
+    fun captureGiftResetRestart() = captureGiftResetRestart("light", 1f)
+
+    @Test
+    fun captureLargeGiftResetRestart() = captureGiftResetRestart("dark", 2f)
+
+    private fun captureGiftResetRestart(theme: String, fontScale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(fontScale) }
+        val scene = Scene("reset-restart", theme, fontScale)
+        show(mutableStateOf(scene))
+        val instructions = text(R.string.wallet_reset_restart_required)
+        compose.onNodeWithText(instructions).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.wallet_initialization_retry)).assertDoesNotExist()
+        capture(scene, "restart-required", instructions)
+    }
+
+    @Test
     fun captureNoteRetryStates() = captureNoteRetryStates(listOf("light", "dark", "oled"), 1f)
 
     @Test

@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Current publication evidence is selected by [the release procedure](RELEASE-WORKFLOW.md). Hosted releases use the verified pair in [hosted-fixture.json](hosted-fixture.json); [upgrade-baseline.json](upgrade-baseline.json) retains the local acceptance baseline. Each `release-evidence/vX.Y.Z-private.N.json` binds its original checks and artifacts. Historical receipts retain their executed baseline and scope. This document describes the covered boundaries; passing acceptance does not establish every screen, provider response or settlement case.
+Current publication evidence is selected by [the release procedure](RELEASE-WORKFLOW.md). Hosted releases use the verified pair in [hosted-fixture.json](hosted-fixture.json). For direct acceptance, [adopt the current verified pair](RELEASE-WORKFLOW.md#guarded-local-acceptance) before using the local marker. Each `release-evidence/vX.Y.Z-private.N.json` binds its original checks and artifacts. Historical receipts retain their executed baseline and scope. The coverage below records the exercised screens, provider responses and settlement cases.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|

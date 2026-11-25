@@ -37753,7 +37753,7 @@ index 437a43f3c..c92e4cd51 100644
 +                    }
 +                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSource.kt
-index cd30d81f4..21d69fa61 100644
+index cd30d81f4..4a1a47069 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSource.kt
 @@ -29,0 +30 @@ import kotlinx.coroutines.currentCoroutineContext
@@ -37779,51 +37779,72 @@ index cd30d81f4..21d69fa61 100644
 +     */
 +    suspend fun awaitPendingCloses()
 +
-@@ -144 +156 @@ class GiftCardDataSourceImpl(
+@@ -135,0 +148 @@ data class StoredCardWallet(
++@Suppress("TooManyFunctions") // Route selection and closure share ownership of the SDK gift wallet.
+@@ -144 +157 @@ class GiftCardDataSourceImpl(
 -    /** Guards [cards] and [closeJobs]. */
 +    /** Guards held cards and card-wallet closure records. */
-@@ -151,0 +164,4 @@ class GiftCardDataSourceImpl(
+@@ -151,0 +165,4 @@ class GiftCardDataSourceImpl(
 +    private val closedWallets = mutableSetOf<StoredCardWallet>()
 +    private var closeFailed = false
 +
 +    @Suppress("TooGenericExceptionCaught")
-@@ -160,2 +176,8 @@ class GiftCardDataSourceImpl(
+@@ -160,2 +177,11 @@ class GiftCardDataSourceImpl(
 -        if (card.network != wallet.network) throw GiftCardException.WrongNetwork()
 -        val redeemer = newRedeemer(card, wallet.network, wallet.endpoint)
-+        val redeemer =
++        val route =
 +            try {
 +                if (card.network != wallet.network) throw GiftCardException.WrongNetwork()
-+                newRedeemer(card, wallet.network, wallet.endpoint)
++                newRedeemer(
++                    application, card, wallet.network, wallet.endpoint,
++                    usesTor = isTorEnabledStorageProvider.get() == true
++                )
 +            } catch (e: Exception) {
 +                card.wipe()
 +                throw e
 +            }
-@@ -183 +205 @@ class GiftCardDataSourceImpl(
+@@ -164 +190 @@ class GiftCardDataSourceImpl(
+-        val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, redeemer = redeemer)
++        val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, route = route)
+@@ -166 +192 @@ class GiftCardDataSourceImpl(
+-            held.priorClose = closeJobs[redeemer.alias]
++            held.priorClose = closeJobs[route.redeemer.alias]
+@@ -178 +204 @@ class GiftCardDataSourceImpl(
+-            walletAlias = redeemer.alias
++            walletAlias = route.redeemer.alias
+@@ -183,2 +209,2 @@ class GiftCardDataSourceImpl(
 -        val held = held(handle)
+-        held.priorClose?.join()
 +        val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
-@@ -219 +241,2 @@ class GiftCardDataSourceImpl(
++        val redeemer = readyRedeemer(handle, held, allowRouteChange = true)
+@@ -187 +213 @@ class GiftCardDataSourceImpl(
+-                held.redeemer.check()
++                redeemer.check()
+@@ -219 +245,2 @@ class GiftCardDataSourceImpl(
 -        toAddress: String
 +        toAddress: String,
 +        beforeSubmission: () -> Unit,
-@@ -221 +244 @@ class GiftCardDataSourceImpl(
+@@ -221,2 +248 @@ class GiftCardDataSourceImpl(
 -        val held = held(handle)
+-        held.priorClose?.join()
 +        val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
-@@ -224,0 +248,3 @@ class GiftCardDataSourceImpl(
+@@ -224,0 +251,4 @@ class GiftCardDataSourceImpl(
++        val redeemer = readyRedeemer(handle, held, allowRouteChange = false)
 +        val destination = synchronizerProvider.synchronizer.value
 +        currentCoroutineContext().ensureActive()
 +        beforeSubmission()
-@@ -227 +253 @@ class GiftCardDataSourceImpl(
+@@ -227 +257 @@ class GiftCardDataSourceImpl(
 -                held.redeemer.redeem(recipient, memo, synchronizerProvider.synchronizer.value)
-+                held.redeemer.redeem(recipient, memo, destination)
-@@ -259 +285 @@ class GiftCardDataSourceImpl(
++                redeemer.redeem(recipient, memo, destination)
+@@ -259 +289 @@ class GiftCardDataSourceImpl(
 -            cards.remove(handle)?.let { closeLocked(it.redeemer, wipe = it.card) }
-+            cards.remove(handle)?.let { closeLocked(it.redeemer, network = it.network, wipe = it.card) }
-@@ -262,0 +289,20 @@ class GiftCardDataSourceImpl(
++            cards.remove(handle)?.let { closeLocked(it.route.redeemer, network = it.network, wipe = it.card) }
+@@ -262,0 +293,20 @@ class GiftCardDataSourceImpl(
 +    override suspend fun awaitPendingCloses() {
 +        val closed = withTimeoutOrNull(CARD_WALLET_CLOSE_TIMEOUT) {
 +            synchronized(lock) { closeJobs.values.toList() }.joinAll()
 +            val targets = synchronized(lock) {
-+                check(!closeFailed) { "Could not close a gift card wallet. Restart the app before trying reset again." }
++                if (closeFailed) throw GiftWalletRestartRequiredException()
 +                closedWallets.groupBy { it.network }
 +            }
 +            // SDK close may return while its teardown erases the helper wallet in the background.
@@ -37839,20 +37860,130 @@ index cd30d81f4..21d69fa61 100644
 +        synchronized(lock) { closedWallets.clear() }
 +    }
 +
-@@ -272,3 +317,0 @@ class GiftCardDataSourceImpl(
+@@ -272,3 +321,0 @@ class GiftCardDataSourceImpl(
 -    private fun held(handle: GiftCardHandle): HeldCard =
 -        synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
 -
-@@ -320 +363 @@ class GiftCardDataSourceImpl(
+@@ -276,2 +323,2 @@ class GiftCardDataSourceImpl(
+-     * A redeemer whose card wallet connects as the main synchronizer does: over Tor exactly when the user's Tor
+-     * setting is on (an unset setting means off, as for the main synchronizer). Read at creation, like the endpoint.
++     * Match the current Tor setting before entering the SDK. A changed route requires a fresh card check
++     * before redemption. Read again after waiting for the previous redeemer's close.
+@@ -279,4 +326,4 @@ class GiftCardDataSourceImpl(
+-    private suspend fun newRedeemer(
+-        card: GiftCard,
+-        network: ZcashNetwork,
+-        endpoint: LightWalletEndpoint
++    private suspend fun readyRedeemer(
++        handle: GiftCardHandle,
++        held: HeldCard,
++        allowRouteChange: Boolean,
+@@ -284,11 +331,17 @@ class GiftCardDataSourceImpl(
+-        val isTorEnabled = isTorEnabledStorageProvider.get() == true
+-        return try {
+-            GiftCardRedeemers.new(
+-                context = application,
+-                card = card,
+-                network = network,
+-                lightWalletEndpoint = endpoint,
+-                isTorEnabled = isTorEnabled
+-            )
+-        } catch (e: SdkGiftCardException.NetworkMismatch) {
+-            throw GiftCardException.WrongNetwork(e)
++        val usesTor = isTorEnabledStorageProvider.get() == true
++        val (route, priorClose) = synchronized(lock) {
++            if (cards[handle] !== held) {
++                null
++            } else {
++                if (allowRouteChange && held.route.usesTor != usesTor) replaceRouteLocked(held, usesTor)
++                held.route to held.priorClose
++            }
++        } ?: throw GiftCardException.UnknownHandle()
++        priorClose?.join()
++        val currentTor = isTorEnabledStorageProvider.get() == true
++        val refusal = synchronized(lock) {
++            when {
++                cards[handle] !== held -> GiftCardException.UnknownHandle()
++                held.route !== route || route.usesTor != currentTor -> GiftCardException.NotChecked()
++                else -> null
++            }
+@@ -295,0 +349,2 @@ class GiftCardDataSourceImpl(
++        if (refusal != null) throw refusal
++        return route.redeemer
+@@ -309,8 +364,4 @@ class GiftCardDataSourceImpl(
+-        val fresh =
+-            try {
+-                newRedeemer(held.card, held.network, held.endpoint)
+-            } catch (e: CancellationException) {
+-                throw e
+-            } catch (e: Exception) {
+-                Twig.error { "Replacing a gift card redeemer failed: ${e::class.simpleName}" }
+-                return
++        try {
++            val usesTor = isTorEnabledStorageProvider.get() == true
++            synchronized(lock) {
++                if (cards[handle] === held) replaceRouteLocked(held, usesTor)
+@@ -318,5 +369,4 @@ class GiftCardDataSourceImpl(
+-        synchronized(lock) {
+-            if (cards[handle] !== held) return
 -            closeLocked(held.redeemer, wipe = null)
-+            closeLocked(held.redeemer, network = held.network, wipe = null)
-@@ -332,0 +376 @@ class GiftCardDataSourceImpl(
+-            held.priorClose = closeJobs[fresh.alias]
+-            held.redeemer = fresh
++        } catch (e: CancellationException) {
++            throw e
++        } catch (e: Exception) {
++            Twig.error { "Replacing a gift card redeemer failed: ${e::class.simpleName}" }
+@@ -325,0 +376,7 @@ class GiftCardDataSourceImpl(
++    private fun replaceRouteLocked(held: HeldCard, usesTor: Boolean) {
++        val fresh = newRedeemer(application, held.card, held.network, held.endpoint, usesTor)
++        closeLocked(held.route.redeemer, network = held.network, wipe = null)
++        held.priorClose = closeJobs[fresh.redeemer.alias]
++        held.route = fresh
++    }
++
+@@ -332,0 +390 @@ class GiftCardDataSourceImpl(
 +        network: ZcashNetwork,
-@@ -335,0 +380 @@ class GiftCardDataSourceImpl(
+@@ -335,0 +394 @@ class GiftCardDataSourceImpl(
 +        closedWallets += StoredCardWallet(network, alias)
-@@ -342,0 +388 @@ class GiftCardDataSourceImpl(
+@@ -342,0 +402 @@ class GiftCardDataSourceImpl(
 +                    synchronized(lock) { closeFailed = true }
-@@ -399,0 +446,2 @@ private const val CONTINUATION_BYTE = 0x80
+@@ -353,0 +414 @@ class GiftCardDataSourceImpl(
++    /** Route and prior close are guarded by [lock]. */
+@@ -358 +419 @@ class GiftCardDataSourceImpl(
+-        @Volatile var redeemer: GiftCardRedeemer,
++        var route: RoutedRedeemer,
+@@ -360,2 +420,0 @@ class GiftCardDataSourceImpl(
+-        /** A close of this card's alias that must finish before [redeemer] touches the card wallet. */
+-        @Volatile
+@@ -365,0 +425,24 @@ class GiftCardDataSourceImpl(
++private data class RoutedRedeemer(val redeemer: GiftCardRedeemer, val usesTor: Boolean)
++
++private fun newRedeemer(
++    application: Application,
++    card: GiftCard,
++    network: ZcashNetwork,
++    endpoint: LightWalletEndpoint,
++    usesTor: Boolean,
++): RoutedRedeemer =
++    try {
++        RoutedRedeemer(
++            GiftCardRedeemers.new(
++                context = application,
++                card = card,
++                network = network,
++                lightWalletEndpoint = endpoint,
++                isTorEnabled = usesTor
++            ),
++            usesTor = usesTor
++        )
++    } catch (e: SdkGiftCardException.NetworkMismatch) {
++        throw GiftCardException.WrongNetwork(e)
++    }
++
+@@ -397,0 +481,2 @@ private fun String.truncatedToUtf8Bytes(maxBytes: Int): String {
++internal class GiftWalletRestartRequiredException : IllegalStateException("Gift card wallet close requires a restart")
++
+@@ -399,0 +485,2 @@ private const val CONTINUATION_BYTE = 0x80
 +private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
@@ -54794,47 +54925,50 @@ index 000000000..299dcc85c
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt
-index d50537e7f..b00724448 100644
+index d50537e7f..b25ce7683 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt
-@@ -11,0 +12 @@ data class ResetZashiState(
+@@ -11,0 +12,2 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
++    val requiresRestart: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..d1fc2dae6 100644
+index eb47e1885..665ade5ca 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 -import cash.z.ecc.android.sdk.CloseableSynchronizer
 -import cash.z.ecc.android.sdk.WalletCoordinator
-@@ -9 +7 @@ import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
+@@ -7,0 +6 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.GiftWalletRestartRequiredException
+@@ -9 +8 @@ import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 -import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -15 +12,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
+@@ -15 +13,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -18,0 +16,3 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+@@ -18,0 +17,3 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
 +import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
-@@ -20 +20,5 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -20 +21,5 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.withContext
-@@ -22 +25,0 @@ import kotlinx.coroutines.withTimeoutOrNull
+@@ -22 +26,0 @@ import kotlinx.coroutines.withTimeoutOrNull
 -import okhttp3.internal.closeQuietly
-@@ -26,3 +29 @@ class ResetZashiUseCase(
+@@ -26,3 +30 @@ class ResetZashiUseCase(
 -    private val walletCoordinator: WalletCoordinator,
 -    private val flexaRepository: FlexaRepository,
 -    private val synchronizerProvider: SynchronizerProvider,
 +    private val resetWalletSdkData: ResetWalletSdkDataUseCase,
-@@ -36,0 +38,4 @@ class ResetZashiUseCase(
+@@ -36,0 +39,4 @@ class ResetZashiUseCase(
 +    private val progressStore: ResetProgressStore,
 +    private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
 +    private val deleteLegacySharedExports: DeleteLegacySharedExportsUseCase,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -38 +43,10 @@ class ResetZashiUseCase(
+@@ -38 +44,10 @@ class ResetZashiUseCase(
 -    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
 +    private val resetMutex = Mutex()
 +    private val running = MutableStateFlow(false)
@@ -54846,11 +54980,11 @@ index eb47e1885..d1fc2dae6 100644
 +    internal fun dismissFailure(failure: PendingResetFailure) = pendingFailure.compareAndSet(failure, null)
 +
 +    @Suppress("TooGenericExceptionCaught", "ReturnCount")
-@@ -39,0 +54,3 @@ class ResetZashiUseCase(
+@@ -39,0 +55,3 @@ class ResetZashiUseCase(
 +        if (!resetMutex.tryLock()) return
 +        running.value = true
 +        pendingFailure.value = null
-@@ -41,12 +58,22 @@ class ResetZashiUseCase(
+@@ -41,12 +59,22 @@ class ResetZashiUseCase(
 -            requestBiometrics()
 -            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
 -            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
@@ -54864,7 +54998,7 @@ index eb47e1885..d1fc2dae6 100644
 -            clearSharedPrefs()
 -            clearInMemoryData()
 +            val stage = runCatchingRecoverable { progressStore.getStage() }
-+                .onFailure { reportPendingFailure() }
++                .onFailure(::reportPendingFailure)
 +                .getOrThrow()
 +            if (stage == null) requestBiometrics()
 +
@@ -54883,12 +55017,12 @@ index eb47e1885..d1fc2dae6 100644
 +                    homeMessageCacheRepository.reset()
 +                    progressStore.store(null)
 +                    walletWriteAccess.finishReset()
-+                }.onFailure { reportPendingFailure() }.getOrThrow()
++                }.onFailure(::reportPendingFailure).getOrThrow()
 +            }
-@@ -54 +81 @@ class ResetZashiUseCase(
+@@ -54 +82 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
-@@ -56 +83,27 @@ class ResetZashiUseCase(
+@@ -56 +84,29 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
 +        } finally {
@@ -54898,10 +55032,12 @@ index eb47e1885..d1fc2dae6 100644
 +        }
 +    }
 +
-+    internal class PendingResetFailure
++    internal class PendingResetFailure(val requiresRestart: Boolean)
 +
-+    private fun reportPendingFailure() {
-+        if (isPending.value) pendingFailure.value = PendingResetFailure()
++    private fun reportPendingFailure(cause: Throwable) {
++        if (isPending.value) {
++            pendingFailure.value = PendingResetFailure(requiresRestart = cause is GiftWalletRestartRequiredException)
++        }
 +    }
 +
 +    private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
@@ -54917,9 +55053,9 @@ index eb47e1885..d1fc2dae6 100644
 +                progressStore.store(ResetStage.ERASE_SDK)
 +            }
 +            true
-@@ -57,0 +111 @@ class ResetZashiUseCase(
+@@ -57,0 +114 @@ class ResetZashiUseCase(
 +        check(prepared == true) { "Timed out preparing wallet reset" }
-@@ -72,23 +125,0 @@ class ResetZashiUseCase(
+@@ -72,23 +128,0 @@ class ResetZashiUseCase(
 -    /**
 -     * Waits for a synchronizer to close, bounded by [CLOSE_SYNCHRONIZER_TIMEOUT]. A latched seed
 -     * mismatch ([WalletCoordinator.isSeedMismatch]) keeps [SynchronizerProvider.getSynchronizer]'s
@@ -54943,7 +55079,7 @@ index eb47e1885..d1fc2dae6 100644
 -        walletCoordinator.deleteSdkDataFlow().first()
 -    }
 -
-@@ -96,7 +127,4 @@ class ResetZashiUseCase(
+@@ -96,7 +130,4 @@ class ResetZashiUseCase(
 -        standardPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider.purgeQuarantine()
@@ -54955,11 +55091,11 @@ index eb47e1885..d1fc2dae6 100644
 +        check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
 +        check(encryptedPreferences.clearPreferences()) { "Could not clear encrypted wallet preferences" }
 +        check(standardPreferenceProvider().clearPreferences()) { "Could not clear wallet settings" }
-@@ -106 +134 @@ class ResetZashiUseCase(
+@@ -106 +137 @@ class ResetZashiUseCase(
 -        private val CLOSE_SYNCHRONIZER_TIMEOUT = 5.seconds
 +        private val PREPARE_RESET_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
-index 4d406e6c2..d7beed7ae 100644
+index 4d406e6c2..0e5ee1e99 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 @@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.component.destructive
@@ -54977,7 +55113,7 @@ index 4d406e6c2..d7beed7ae 100644
 -                isLoading = lce.loading,
 +                isLoading = lce.loading || running,
 +                isPending = pending,
-@@ -41,2 +47,31 @@ class ResetZashiVM(
+@@ -41,2 +47,37 @@ class ResetZashiVM(
 -        }.withLce(resetLce, errorStateMapper::mapToState)
 -            .stateIn(this, LceState(content = createState(isKeepFilesChecked.value, null, false)))
 +        }.withLce(resetLce) { error ->
@@ -54987,7 +55123,13 @@ index 4d406e6c2..d7beed7ae 100644
 +                supportWithoutDiagnostics = resetZashi.isPending.value,
 +            )
 +        }.combine(resetZashi.failedAttempt) { state, failure ->
-+            if (state.content?.isPending != true) state else state.copy(error = failure?.let(::pendingError))
++            val current = state.content
++            when {
++                current?.isPending != true -> state
++                failure?.requiresRestart == true ->
++                    state.copy(content = current.copy(requiresRestart = true), error = null)
++                else -> state.copy(error = failure?.let(::pendingError))
++            }
 +        }.stateIn(
 +            this,
 +            LceState(
@@ -55011,25 +55153,25 @@ index 4d406e6c2..d7beed7ae 100644
 +        message = stringRes(R.string.wallet_reset_failed),
 +        supportWithoutDiagnostics = true,
 +    )
-@@ -47,0 +83 @@ class ResetZashiVM(
+@@ -47,0 +89 @@ class ResetZashiVM(
 +        isPending: Boolean,
-@@ -49 +85 @@ class ResetZashiVM(
+@@ -49 +91 @@ class ResetZashiVM(
 -        onBack = { navigationRouter.back() },
 +        onBack = { if (!resetZashi.isRunning.value && !resetZashi.isPending.value) navigationRouter.back() },
-@@ -59 +95,5 @@ class ResetZashiVM(
+@@ -59 +101,5 @@ class ResetZashiVM(
 -                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
 +                text = if (isPending) {
 +                    stringRes(R.string.wallet_initialization_retry)
 +                } else {
 +                    stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
 +                },
-@@ -63,0 +104 @@ class ResetZashiVM(
+@@ -63,0 +110 @@ class ResetZashiVM(
 +        isPending = isPending,
-@@ -69 +110,2 @@ class ResetZashiVM(
+@@ -69 +116,2 @@ class ResetZashiVM(
 -        confirmationDialogFlow.value = createConfirmationState()
-+        if (resetZashi.isRunning.value) return
++        if (resetZashi.isRunning.value || resetZashi.failedAttempt.value?.requiresRestart == true) return
 +        if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
-@@ -88,2 +130,7 @@ class ResetZashiVM(
+@@ -88,2 +136,7 @@ class ResetZashiVM(
 -        resetLce.execute {
 -            resetZashi(keepFiles = isKeepFilesChecked.value)
 +        resetLce.guardLoading {
@@ -55040,7 +55182,7 @@ index 4d406e6c2..d7beed7ae 100644
 +                }
 +            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt
-index 88113b433..996eacc93 100644
+index 88113b433..9ffef40e6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiView.kt
 @@ -4,0 +5 @@ import androidx.compose.foundation.layout.Column
@@ -55056,7 +55198,7 @@ index 88113b433..996eacc93 100644
 -                onBack = onBack
 -            )
 +            if (onBack != null) ZashiTopAppBarBackNavigation(onBack = onBack)
-@@ -102,6 +101,16 @@ private fun ResetZashiContent(
+@@ -102,6 +101,20 @@ private fun ResetZashiContent(
 -        Text(
 -            text = stringResource(R.string.deleteWallet_title),
 -            style = ZashiTypography.header6,
@@ -55065,21 +55207,25 @@ index 88113b433..996eacc93 100644
 -        )
 +        if (state.isPending) {
 +            Text(
-+                text = stringResource(R.string.wallet_reset_pending),
++                text = stringResource(
++                    if (state.requiresRestart) R.string.wallet_reset_restart_required else R.string.wallet_reset_pending
++                ),
 +                style = ZashiTypography.textSm,
 +                color = ZashiColors.Text.textPrimary
 +            )
-+            Spacer(24.dp)
-+            ZashiButton(
-+                state = state.buttonState,
-+                modifier = Modifier.fillMaxWidth()
-+            )
++            if (!state.requiresRestart) {
++                Spacer(24.dp)
++                ZashiButton(
++                    state = state.buttonState,
++                    modifier = Modifier.fillMaxWidth()
++                )
++            }
 +        } else {
 +            ResetZashiConfirmationContent(state)
 +        }
 +    }
 +}
-@@ -109 +118,8 @@ private fun ResetZashiContent(
+@@ -109 +122,8 @@ private fun ResetZashiContent(
 -        Spacer(8.dp)
 +@Composable
 +private fun ColumnScope.ResetZashiConfirmationContent(state: ResetZashiState) {
@@ -55089,7 +55235,7 @@ index 88113b433..996eacc93 100644
 +        color = ZashiColors.Text.textPrimary,
 +        fontWeight = FontWeight.SemiBold
 +    )
-@@ -111,26 +127,27 @@ private fun ResetZashiContent(
+@@ -111,26 +131,27 @@ private fun ResetZashiContent(
 -        Text(
 -            text = stringResource(R.string.deleteWallet_message2),
 -            style = ZashiTypography.textSm,
@@ -55143,7 +55289,7 @@ index 88113b433..996eacc93 100644
 +        state = state.buttonState,
 +        modifier = Modifier.fillMaxWidth()
 +    )
-@@ -178 +195 @@ private fun ResetZashiViewPreview() =
+@@ -178 +199 @@ private fun ResetZashiViewPreview() =
 -                            subtitle = stringRes("This data cannot be recovered during Restore."),
 +                            subtitle = stringRes(R.string.deleteWallet_metadataWarn2),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/disconnect/DisconnectScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/disconnect/DisconnectScreen.kt
@@ -70945,16 +71091,17 @@ Kk$Jm+-+us)Rn*`B
 
 diff --git a/ui-lib/src/main/res/ui/common/values-es/storage_recovery_strings.xml b/ui-lib/src/main/res/ui/common/values-es/storage_recovery_strings.xml
 new file mode 100644
-index 000000000..7a22c861a
+index 000000000..f887af886
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values-es/storage_recovery_strings.xml
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,8 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="contact_error_saveFailed">No se pudo guardar el contacto. Inténtalo de nuevo.</string>
 +    <string name="contact_error_deleteFailed">No se pudo eliminar el contacto. Inténtalo de nuevo.</string>
 +    <string name="wallet_reset_failed">No se pudo completar el restablecimiento de la billetera. Inténtalo de nuevo.</string>
 +    <string name="wallet_reset_pending">Completa el restablecimiento de la billetera para continuar.</string>
++    <string name="wallet_reset_restart_required">Fuerza la detención de ZEC Private en los ajustes de Android. Después, abre la app y toca Reintentar.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values-es/wallet_initialization_strings.xml b/ui-lib/src/main/res/ui/common/values-es/wallet_initialization_strings.xml
 new file mode 100644
@@ -71043,16 +71190,17 @@ index 000000000..453516ff8
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/storage_recovery_strings.xml b/ui-lib/src/main/res/ui/common/values/storage_recovery_strings.xml
 new file mode 100644
-index 000000000..02d8bde68
+index 000000000..b7b9019c1
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values/storage_recovery_strings.xml
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,8 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="contact_error_saveFailed">Could not save the contact. Try again.</string>
 +    <string name="contact_error_deleteFailed">Could not delete the contact. Try again.</string>
 +    <string name="wallet_reset_failed">Wallet reset could not finish. Try again.</string>
 +    <string name="wallet_reset_pending">Finish resetting the wallet to continue.</string>
++    <string name="wallet_reset_restart_required">Force stop ZEC Private in Android Settings, then reopen it and tap Retry.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/transaction_note_loading_strings.xml b/ui-lib/src/main/res/ui/common/values/transaction_note_loading_strings.xml
 new file mode 100644
@@ -76051,7 +76199,7 @@ index 000000000..01f8991ed
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
-index e40bbf794..e61679a0d 100644
+index e40bbf794..f0841b1d0 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -76158,7 +76306,66 @@ index e40bbf794..e61679a0d 100644
 -    }
 -
 +class GiftCardDataSourceImplTest : GiftCardDataSourceTestFixture() {
-@@ -751,46 +696,0 @@ class GiftCardDataSourceImplTest {
+@@ -167,0 +114,58 @@ class GiftCardDataSourceImplTest {
++    @Test
++    fun enablingTorRechecksWithTheNewRouteBeforeRedemption() =
++        runTest {
++            coEvery { isTorEnabledStorageProvider.get() } returns false
++            val dataSource = dataSource(this)
++            val handle = dataSource.parse(LINK).summary.handle
++            val events = mutableListOf<String>()
++            coEvery { redeemer.close() } coAnswers { events += "old closed" }
++            coEvery { replacementRedeemer.check() } coAnswers {
++                events += "new checked"
++                GiftCardRedeemer.Status.Empty
++            }
++
++            coEvery { isTorEnabledStorageProvider.get() } returns true
++            assertFailsWith<GiftCardException.NotChecked> {
++                dataSource.redeem(handle, ADDRESS) { error("Stale route reached admission") }
++            }
++            assertEquals(GiftCardStatus.Empty, dataSource.check(handle))
++
++            assertEquals(listOf("old closed", "new checked"), events)
++            coVerify(exactly = 0) { redeemer.check() }
++            coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
++            verify(exactly = 1) {
++                GiftCardRedeemers.new(any(), any(), any(), any(), isTorEnabled = true, alias = any())
++            }
++        }
++
++    @Test
++    fun aFailedTorReconfigurationCannotCheckWithTheOldDirectRoute() =
++        runTest {
++            coEvery { isTorEnabledStorageProvider.get() } returns false
++            val dataSource = dataSource(this)
++            val handle = dataSource.parse(LINK).summary.handle
++            val cause = IllegalStateException("synthetic Tor setup failure")
++            every {
++                GiftCardRedeemers.new(any(), any(), any(), any(), isTorEnabled = true, alias = any())
++            } throws cause
++
++            coEvery { isTorEnabledStorageProvider.get() } returns true
++            assertSame(cause, assertFailsWith<IllegalStateException> { dataSource.check(handle) })
++            coVerify(exactly = 0) { redeemer.check() }
++        }
++
++    @Test
++    fun aSettingChangeWhileTheOldRouteClosesRequiresAnotherCheck() =
++        runTest {
++            var enabled = false
++            coEvery { isTorEnabledStorageProvider.get() } answers { enabled }
++            val dataSource = dataSource(this)
++            val handle = dataSource.parse(LINK).summary.handle
++            coEvery { redeemer.close() } coAnswers { enabled = false }
++            enabled = true
++
++            assertFailsWith<GiftCardException.NotChecked> { dataSource.check(handle) }
++            coVerify(exactly = 0) { redeemer.check() }
++            coVerify(exactly = 0) { replacementRedeemer.check() }
++        }
++
+@@ -751,46 +754,0 @@ class GiftCardDataSourceImplTest {
 -
 -    private fun dataSource(scope: TestScope? = null) =
 -        GiftCardDataSourceImpl(
@@ -76352,7 +76559,7 @@ index 000000000..e31b465e9
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
 new file mode 100644
-index 000000000..ef6c2cd27
+index 000000000..0329fde99
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
 @@ -0,0 +1,379 @@
@@ -76554,7 +76761,7 @@ index 000000000..ef6c2cd27
 +        val fixture = resetFixture()
 +        coEvery { redeemer.close() } throws IllegalStateException("database is locked")
 +
-+        repeat(2) { assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) } }
++        repeat(2) { assertFailsWith<GiftWalletRestartRequiredException> { fixture.reset(keepFiles = false) } }
 +
 +        coVerify(exactly = 1) { redeemer.close() }
 +        verify(exactly = 1) { parsedCard.wipe() }
@@ -96399,10 +96606,10 @@ index 000000000..51b91b89e
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..303b41ab1
+index 000000000..923b2a63c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,380 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -96414,6 +96621,7 @@ index 000000000..303b41ab1
 +import co.electriccoin.zcash.preference.api.PreferenceProvider
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.GiftWalletRestartRequiredException
 +import co.electriccoin.zcash.ui.common.model.LceError
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.LceState
@@ -96421,6 +96629,7 @@ index 000000000..303b41ab1
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.BiometricRepository
++import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 +import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
@@ -96478,6 +96687,7 @@ index 000000000..303b41ab1
 +    private val biometrics = mockk<BiometricRepository>(relaxed = true)
 +    private val contacts = mockk<AddressBookRepository>(relaxed = true)
 +    private val metadata = mockk<MetadataRepository>(relaxed = true)
++    private val gifts = mockk<GiftCardRepository>(relaxed = true)
 +    private val diagnostics = mockk<GetSupportUseCase>()
 +    private lateinit var reportAccess: WalletReportAccess
 +    private lateinit var progress: ResetProgressStore
@@ -96711,6 +96921,36 @@ index 000000000..303b41ab1
 +        coVerify(exactly = 0) { metadata.delete() }
 +    }
 +
++    @Test
++    fun failedGiftWalletClosureRequiresRestartBeforeResetCanContinue() = runBlocking {
++        coEvery { gifts.quiesceForWalletReset() } throws GiftWalletRestartRequiredException()
++        createViewModel()
++
++        assertNotNull(vm.state.value.content).buttonState.onClick()
++        val dialog = assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
++        dialog.primaryAction.onClick()
++        val restart = awaitState { it.content?.requiresRestart == true && !it.content.buttonState.isLoading }
++
++        assertNull(restart.error)
++        assertEquals(ResetStage.ERASE_SDK, progress.getStage())
++        assertNotNull(restart.content).buttonState.onClick()
++        coVerify(exactly = 1) { gifts.quiesceForWalletReset() }
++        coVerify(exactly = 0) { sdkData() }
++
++        vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
++        coEvery { gifts.quiesceForWalletReset() } returns Unit
++        coEvery { sdkData() } returns Unit
++        createViewModel()
++        val afterRestart = awaitState { it.content?.isPending == true }
++        assertFalse(assertNotNull(afterRestart.content).requiresRestart)
++        afterRestart.content.buttonState.onClick()
++        awaitState { it.content?.isPending == false }
++
++        assertNull(progress.getStage())
++        coVerify(exactly = 1) { sdkData() }
++        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
++    }
++
 +    private fun createViewModel() {
 +        val context = mockk<Context> {
 +            every { noBackupFilesDir } returns directory.root
@@ -96735,7 +96975,7 @@ index 000000000..303b41ab1
 +            addressBookRepository = contacts,
 +            metadataRepository = metadata,
 +            migrationAppHooks = mockk(relaxed = true),
-+            giftCardRepository = mockk(relaxed = true),
++            giftCardRepository = gifts,
 +            progressStore = progress,
 +            deleteSharedQRImages = mockk(relaxed = true),
 +            deleteLegacySharedExports = DeleteLegacySharedExportsUseCase(context),

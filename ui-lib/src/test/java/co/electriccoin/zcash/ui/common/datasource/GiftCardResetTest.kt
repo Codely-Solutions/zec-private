@@ -196,7 +196,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         val fixture = resetFixture()
         coEvery { redeemer.close() } throws IllegalStateException("database is locked")
 
-        repeat(2) { assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) } }
+        repeat(2) { assertFailsWith<GiftWalletRestartRequiredException> { fixture.reset(keepFiles = false) } }
 
         coVerify(exactly = 1) { redeemer.close() }
         verify(exactly = 1) { parsedCard.wipe() }

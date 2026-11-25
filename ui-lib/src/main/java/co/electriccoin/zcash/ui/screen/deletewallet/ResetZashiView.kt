@@ -100,15 +100,19 @@ private fun ResetZashiContent(
     ) {
         if (state.isPending) {
             Text(
-                text = stringResource(R.string.wallet_reset_pending),
+                text = stringResource(
+                    if (state.requiresRestart) R.string.wallet_reset_restart_required else R.string.wallet_reset_pending
+                ),
                 style = ZashiTypography.textSm,
                 color = ZashiColors.Text.textPrimary
             )
-            Spacer(24.dp)
-            ZashiButton(
-                state = state.buttonState,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (!state.requiresRestart) {
+                Spacer(24.dp)
+                ZashiButton(
+                    state = state.buttonState,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         } else {
             ResetZashiConfirmationContent(state)
         }

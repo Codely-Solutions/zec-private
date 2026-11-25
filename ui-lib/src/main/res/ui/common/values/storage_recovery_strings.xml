@@ -4,4 +4,5 @@
     <string name="contact_error_deleteFailed">Could not delete the contact. Try again.</string>
     <string name="wallet_reset_failed">Wallet reset could not finish. Try again.</string>
     <string name="wallet_reset_pending">Finish resetting the wallet to continue.</string>
+    <string name="wallet_reset_restart_required">Force stop ZEC Private in Android Settings, then reopen it and tap Retry.</string>
 </resources>

@@ -112,6 +112,64 @@ class GiftCardDataSourceImplTest : GiftCardDataSourceTestFixture() {
         }
 
     @Test
+    fun enablingTorRechecksWithTheNewRouteBeforeRedemption() =
+        runTest {
+            coEvery { isTorEnabledStorageProvider.get() } returns false
+            val dataSource = dataSource(this)
+            val handle = dataSource.parse(LINK).summary.handle
+            val events = mutableListOf<String>()
+            coEvery { redeemer.close() } coAnswers { events += "old closed" }
+            coEvery { replacementRedeemer.check() } coAnswers {
+                events += "new checked"
+                GiftCardRedeemer.Status.Empty
+            }
+
+            coEvery { isTorEnabledStorageProvider.get() } returns true
+            assertFailsWith<GiftCardException.NotChecked> {
+                dataSource.redeem(handle, ADDRESS) { error("Stale route reached admission") }
+            }
+            assertEquals(GiftCardStatus.Empty, dataSource.check(handle))
+
+            assertEquals(listOf("old closed", "new checked"), events)
+            coVerify(exactly = 0) { redeemer.check() }
+            coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
+            verify(exactly = 1) {
+                GiftCardRedeemers.new(any(), any(), any(), any(), isTorEnabled = true, alias = any())
+            }
+        }
+
+    @Test
+    fun aFailedTorReconfigurationCannotCheckWithTheOldDirectRoute() =
+        runTest {
+            coEvery { isTorEnabledStorageProvider.get() } returns false
+            val dataSource = dataSource(this)
+            val handle = dataSource.parse(LINK).summary.handle
+            val cause = IllegalStateException("synthetic Tor setup failure")
+            every {
+                GiftCardRedeemers.new(any(), any(), any(), any(), isTorEnabled = true, alias = any())
+            } throws cause
+
+            coEvery { isTorEnabledStorageProvider.get() } returns true
+            assertSame(cause, assertFailsWith<IllegalStateException> { dataSource.check(handle) })
+            coVerify(exactly = 0) { redeemer.check() }
+        }
+
+    @Test
+    fun aSettingChangeWhileTheOldRouteClosesRequiresAnotherCheck() =
+        runTest {
+            var enabled = false
+            coEvery { isTorEnabledStorageProvider.get() } answers { enabled }
+            val dataSource = dataSource(this)
+            val handle = dataSource.parse(LINK).summary.handle
+            coEvery { redeemer.close() } coAnswers { enabled = false }
+            enabled = true
+
+            assertFailsWith<GiftCardException.NotChecked> { dataSource.check(handle) }
+            coVerify(exactly = 0) { redeemer.check() }
+            coVerify(exactly = 0) { replacementRedeemer.check() }
+        }
+
+    @Test
     fun theFreshRedeemerAfterAnUnsubmittedRedeemAlsoUsesTor() =
         runTest {
             val dataSource = dataSource(this)

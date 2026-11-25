@@ -10,4 +10,5 @@ data class ResetZashiState(
     val buttonState: ButtonState,
     val confirmationDialog: ZashiConfirmationState?,
     val isPending: Boolean = false,
+    val requiresRestart: Boolean = false,
 )

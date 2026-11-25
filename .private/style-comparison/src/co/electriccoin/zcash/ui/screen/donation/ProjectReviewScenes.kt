@@ -87,8 +87,8 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                 operationError = stringRes(R.string.contact_error_saveFailed).takeIf { screen == "contact-save-error" },
             )
         )
-        "reset-pending", "reset-retention", "reset-retention-off" -> {
-            val pending = screen == "reset-pending"
+        "reset-pending", "reset-restart", "reset-retention", "reset-retention-off" -> {
+            val pending = screen == "reset-pending" || screen == "reset-restart"
             ResetZashiView(
                 ResetZashiState(
                     onBack = {},
@@ -107,6 +107,7 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                     ),
                     confirmationDialog = null,
                     isPending = pending,
+                    requiresRestart = screen == "reset-restart",
                 )
             )
         }
