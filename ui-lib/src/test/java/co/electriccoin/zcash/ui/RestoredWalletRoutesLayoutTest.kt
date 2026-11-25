@@ -119,11 +119,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 import org.koin.androidx.compose.koinViewModel
-import org.koin.compose.KoinApplication
+import org.koin.compose.KoinIsolatedContext
+import org.koin.core.KoinApplication
 import org.koin.core.module.dsl.viewModel
-import org.koin.dsl.koinConfiguration
+import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -138,7 +140,14 @@ import kotlin.test.assertNull
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w360dp-h780dp")
 class RestoredWalletRoutesLayoutTest {
-    @get:Rule
+    private val contexts = mutableListOf<KoinApplication>()
+
+    @get:Rule(order = 0)
+    val closeContexts = object : ExternalResource() {
+        override fun after() = contexts.forEach(KoinApplication::close)
+    }
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private lateinit var controller: NavHostController
@@ -540,8 +549,9 @@ class RestoredWalletRoutesLayoutTest {
                 mockk<ScanGenericAddressVM>(relaxed = true) { every { isOwned } returns MutableStateFlow(false) }
             }
         }
+        val testContext = koinApplication { modules(dependencies) }.also(contexts::add)
         compose.setContent {
-            KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
+            KoinIsolatedContext(context = testContext) {
                 ZcashTheme {
                     CompositionLocalProvider(LocalScreenSecurity provides security) {
                         when (destination.value) {
@@ -716,8 +726,9 @@ class RestoredWalletRoutesLayoutTest {
                 ScanKeystonePCZTViewModel(mockk(), get(), fresh)
             }
         }
+        val testContext = koinApplication { modules(dependencies) }.also(contexts::add)
         compose.setContent {
-            KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
+            KoinIsolatedContext(context = testContext) {
                 ZcashTheme {
                     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                         controller = rememberNavController()
