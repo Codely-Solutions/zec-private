@@ -438,7 +438,7 @@
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerSelectedDeviceRepository.kt": "fd3c49d395e6fa348b47ff1e1af51754e29e66488e58dde3448a1eafce661313",
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelLedgerSigningUseCase.kt": "00e70f31a4515f3376a7d68fdf8e919d64d4810a47c55f15a156fa81a2973284",
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/ConnectLedgerDeviceUseCase.kt": "b0495eb9030e484e49442288b47159ee0d960793b4947c86d70ce5651a66d7ac",
-  "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt": "133b96bbe98fbdce3c77451eb3de43f2774008ac6b0dcf69360d4ef4fee2f0ed",
+  "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt": "3318da3f02671b6ad593d2774edbc8c2e479abd76f3ee8278f44367ad88a3626",
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToLedgerRepairUseCase.kt": "f39e3f560b7b6a5826eea1e968bd39a16415cceec744494f21205c8ef46438fe",
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveLedgerDevicesUseCase.kt": "9e0f51a0fcd33fafe06a82d78d0e61626d1b54f249a546549ad892dc2d0a348d",
   "feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveLedgerSigningStateUseCase.kt": "964ab5d5b152c9d2d94cbcea4389f3f9d04e5be7dd99dcc1fa045302f437ee51",

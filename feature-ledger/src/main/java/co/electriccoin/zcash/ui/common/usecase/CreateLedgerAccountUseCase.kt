@@ -50,8 +50,11 @@ class CreateLedgerAccountUseCase(
             if (ledgerPairingRepository.get() !== pairing) return
             if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
             val route = walletEnrollment.complete(owner) { sync ->
-                if (ledgerPairingRepository.owner(pairing) == owner) importAndSelect(sync, pairing, birthday, owner)
-                else null
+                if (ledgerPairingRepository.owner(pairing) == owner) {
+                    importAndSelect(sync, pairing, birthday, owner)
+                } else {
+                    null
+                }
             }
             currentCoroutineContext().ensureActive()
             route?.let { destination ->

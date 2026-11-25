@@ -2584,7 +2584,7 @@ index e8193931b..2df8185a6 100644
 -        navigationRouter.back()
 +        if (navigateBack) navigationRouter.back()
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
-index 291d24903..786738fec 100644
+index 291d24903..9171a8e17 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -2612,7 +2612,7 @@ index 291d24903..786738fec 100644
 @@ -31 +45 @@ class CreateLedgerAccountUseCase(
 -    suspend operator fun invoke(birthday: BlockHeight? = null) {
 +    suspend operator fun invoke(birthday: BlockHeight? = null, sourceEntryId: String? = null) {
-@@ -33,8 +47,28 @@ class CreateLedgerAccountUseCase(
+@@ -33,8 +47,31 @@ class CreateLedgerAccountUseCase(
 -        val createdAccount = accountDataSource.importLedgerAccount(pairing, birthday)
 -        accountDataSource.selectAccount(createdAccount)
 -        ledgerPairingRepository.clear()
@@ -2627,8 +2627,11 @@ index 291d24903..786738fec 100644
 +            if (ledgerPairingRepository.get() !== pairing) return
 +            if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
 +            val route = walletEnrollment.complete(owner) { sync ->
-+                if (ledgerPairingRepository.owner(pairing) == owner) importAndSelect(sync, pairing, birthday, owner)
-+                else null
++                if (ledgerPairingRepository.owner(pairing) == owner) {
++                    importAndSelect(sync, pairing, birthday, owner)
++                } else {
++                    null
++                }
 +            }
 +            currentCoroutineContext().ensureActive()
 +            route?.let { destination ->
@@ -2649,7 +2652,7 @@ index 291d24903..786738fec 100644
 +            !ledgerPairingRepository.clear(pairing) -> null
 +            imported.birthday == null -> LedgerConnectedArgs
 +            else -> KeepOpenArgs(KeepOpenFlow.LEDGER)
-@@ -42,0 +77,26 @@ class CreateLedgerAccountUseCase(
+@@ -42,0 +80,26 @@ class CreateLedgerAccountUseCase(
 +
 +    private suspend fun selectImported(
 +        pairing: LedgerAccountPairing,
