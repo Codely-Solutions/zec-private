@@ -23,7 +23,7 @@ class FixtureDownloadTests(unittest.TestCase):
             with patch('tor_differential_driver.subprocess.run',side_effect=download):
                 self.assertEqual(fetch_baseline(root,manifest).read_bytes(),b'synthetic unsigned test bytes')
             manifest['digest']='sha256:'+'0'*64
-            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaises(AssertionError):
+            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaisesRegex(ValueError,'digest mismatch'):
                 fetch_baseline(root,manifest)
 
     def test_action_archive_still_rejects_wrong_source(self):
@@ -33,7 +33,7 @@ class FixtureDownloadTests(unittest.TestCase):
             def download(command,**kwargs):
                 self.assertTrue(command[-1].endswith('/actions/artifacts/456/zip'))
                 kwargs['stdout'].write(raw)
-            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaisesRegex(AssertionError,'source'):
+            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaisesRegex(ValueError,'source identity mismatch'):
                 fetch_baseline(root,manifest)
 
     def test_pair_archive_selects_app_or_exact_source_matched_instrumentation(self):
@@ -52,8 +52,9 @@ class FixtureDownloadTests(unittest.TestCase):
             with patch('tor_differential_driver.subprocess.run',side_effect=download):
                 self.assertEqual(app,fetch_baseline(root,{k:v for k,v in manifest.items() if k!='apk_sha256'}).read_bytes())
                 self.assertEqual(test,fetch_baseline(root,manifest,'baseline-androidTest.apk',instrumentation=True).read_bytes())
-                for change in ({'source_sha':'b'*40},{'apk_sha256':'0'*64}):
-                    with self.subTest(change=change),self.assertRaises(AssertionError):
+                for change, message in (({'source_sha':'b'*40}, 'source identity mismatch'),
+                                        ({'apk_sha256':'0'*64}, 'APK digest mismatch')):
+                    with self.subTest(change=change),self.assertRaisesRegex(ValueError, message):
                         fetch_baseline(root,dict(manifest,**change),'baseline-androidTest.apk',instrumentation=True)
             self.assertFalse((root/'baseline.zip').exists())
 
@@ -68,7 +69,7 @@ class FixtureDownloadTests(unittest.TestCase):
                     with self.assertRaises(ValueError):fetch_baseline(root,value,instrumentation=True)
                     download.assert_not_called()
             def download(command,**kwargs):kwargs['stdout'].write(raw)
-            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaisesRegex(AssertionError,'selected'):
+            with patch('tor_differential_driver.subprocess.run',side_effect=download),self.assertRaisesRegex(ValueError,'selected baseline APK'):
                 fetch_baseline(root,manifest,instrumentation=True)
             self.assertFalse((root/'baseline.zip').exists())
 
