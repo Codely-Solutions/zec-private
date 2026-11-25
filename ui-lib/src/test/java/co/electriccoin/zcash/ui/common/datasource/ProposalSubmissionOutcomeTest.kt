@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.TransactionSubmitResult
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,14 +32,15 @@ class ProposalSubmissionOutcomeTest {
     private val accepted = TransactionSubmitResult.Success(transaction.txId)
     private val synchronizer = mockk<SdkSynchronizer>(relaxed = true)
     private val broadcaster = synchronizer.broadcaster
+    private val serverSelection = mockk<WalletServerSelectionProvider> {
+        coEvery { getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic = true)
+    }
     private val source = ProposalDataSourceImpl(
         synchronizerProvider = mockk {
             coEvery { getSynchronizer() } returns this@ProposalSubmissionOutcomeTest.synchronizer
         },
         lightWalletEndpointProvider = mockk { every { getEndpoints() } returns listOf(endpoint) },
-        walletServerSelectionProvider = mockk {
-            coEvery { getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic = true)
-        },
+        walletServerSelectionProvider = serverSelection,
     )
 
     @Test
@@ -47,6 +49,19 @@ class ProposalSubmissionOutcomeTest {
             source.submitTransaction(proposal = mockk(), usk = mockk(), beforeCreation = { error("Stale review") })
         }
         coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
+    }
+
+    @Test
+    fun unreadableEndpointsRefuseSoftwareAndHardwareBeforeNativeCreation() = runBlocking {
+        coEvery { serverSelection.getServerSelection() } throws IllegalStateException("Unavailable fixture")
+        assertFailsWith<IllegalStateException> { source.submitTransaction(proposal = mockk(), usk = mockk()) }
+        assertFailsWith<IllegalStateException> {
+            source.submitTransaction(pcztWithProofs = mockk(), pcztWithSignatures = mockk())
+        }
+
+        coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
+        coVerify(exactly = 0) { broadcaster.createTransactionFromPczt(any(), any()) }
+        coVerify(exactly = 0) { broadcaster.submit(any(), any()) }
     }
 
     @Test

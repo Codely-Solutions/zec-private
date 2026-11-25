@@ -75,11 +75,12 @@ class SwapBroadcastDeadlineTest {
     }
 
     @Test
-    fun expiryDuringEndpointSelectionPreservesKnownIdsWithoutAnAppBroadcast() = runBlocking {
+    fun expiryWhileReadingEndpointsPreventsSoftwareAndPcztCreation() = runBlocking {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware, pauseEndpoints = true)
             fixture.prepare()
-            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
+            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
+            fixture.verifyNoCreation()
             fixture.verifyNoAppBroadcast()
         }
     }

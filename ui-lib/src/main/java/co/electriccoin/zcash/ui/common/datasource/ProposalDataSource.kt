@@ -316,6 +316,8 @@ class ProposalDataSourceImpl(
         withContext(Dispatchers.IO) {
             walletTransport.whileOperating { lease ->
                 val synchronizer = requireActiveSynchronizer()
+                val endpoints = getSubmissionEndpoints()
+                check(endpoints.isNotEmpty()) { "No wallet servers are available for this transaction." }
                 beforeCreation()
                 val transactions = runCatchingRecoverable { block(synchronizer) }
                     .getOrElse { return@whileOperating emptyList<CreatedTransaction>().uncertainSdkSubmission() }
@@ -329,7 +331,6 @@ class ProposalDataSourceImpl(
                 }
 
                 val result = runCatchingRecoverable {
-                    val endpoints = getSubmissionEndpoints()
                     Twig.info {
                         "$logTag Created ${transactions.size} transaction(s); " +
                             "submitting to ${endpoints.size} endpoint(s)."

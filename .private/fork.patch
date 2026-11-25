@@ -39837,7 +39837,7 @@ index 000000000..f014229ca
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..b071baae9 100644
+index bf147a8b5..8efbddb79 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -39974,7 +39974,7 @@ index bf147a8b5..b071baae9 100644
 @@ -263,0 +312,2 @@ class ProposalDataSourceImpl(
 +        beforeCreation: () -> Unit,
 +        beforeFirstSubmission: () -> Unit,
-@@ -267,27 +317,13 @@ class ProposalDataSourceImpl(
+@@ -267,27 +317,15 @@ class ProposalDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
 -            val transactions = block(synchronizer)
 -
@@ -40004,6 +40004,8 @@ index bf147a8b5..b071baae9 100644
 -            val result = submitResults.toSubmitResult()
 +            walletTransport.whileOperating { lease ->
 +                val synchronizer = requireActiveSynchronizer()
++                val endpoints = getSubmissionEndpoints()
++                check(endpoints.isNotEmpty()) { "No wallet servers are available for this transaction." }
 +                beforeCreation()
 +                val transactions = runCatchingRecoverable { block(synchronizer) }
 +                    .getOrElse { return@whileOperating emptyList<CreatedTransaction>().uncertainSdkSubmission() }
@@ -40015,12 +40017,11 @@ index bf147a8b5..b071baae9 100644
 +                        description = MULTI_SUBMIT_EMPTY_TRANSACTION_DESCRIPTION
 +                    )
 +                }
-@@ -295,3 +331,24 @@ class ProposalDataSourceImpl(
+@@ -295,3 +333,23 @@ class ProposalDataSourceImpl(
 -            if (synchronizer is SdkSynchronizer) {
 -                synchronizer.refreshTransactions()
 -                synchronizer.refreshAllBalances()
 +                val result = runCatchingRecoverable {
-+                    val endpoints = getSubmissionEndpoints()
 +                    Twig.info {
 +                        "$logTag Created ${transactions.size} transaction(s); " +
 +                            "submitting to ${endpoints.size} endpoint(s)."
@@ -40043,54 +40044,54 @@ index bf147a8b5..b071baae9 100644
 +                    }
 +                }
 +                if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
-@@ -299,3 +355,0 @@ class ProposalDataSourceImpl(
+@@ -299,3 +356,0 @@ class ProposalDataSourceImpl(
 -
 -            Twig.debug { "Transaction submit result: $result" }
 -            result
-@@ -308 +362,3 @@ class ProposalDataSourceImpl(
+@@ -308 +363,3 @@ class ProposalDataSourceImpl(
 -        logTag: String
 +        logTag: String,
 +        beforeFirstSubmission: () -> Unit,
 +        lease: WalletTransportAccess.Lease,
-@@ -310,0 +367,2 @@ class ProposalDataSourceImpl(
+@@ -310,0 +368,2 @@ class ProposalDataSourceImpl(
 +            beforeFirstSubmission = beforeFirstSubmission,
 +            onDrained = lease.retainUntilDrain(),
-@@ -329 +387 @@ class ProposalDataSourceImpl(
+@@ -329 +388 @@ class ProposalDataSourceImpl(
 -        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
 +        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
-@@ -332,2 +390,2 @@ class ProposalDataSourceImpl(
+@@ -332,2 +391,2 @@ class ProposalDataSourceImpl(
 -                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
 -                currentEndpoint = currentEndpoint,
 +                isAutomaticPreference = selection.isAutomatic,
 +                currentEndpoint = selection.endpoint,
-@@ -336 +394 @@ class ProposalDataSourceImpl(
+@@ -336 +395 @@ class ProposalDataSourceImpl(
 -        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
 +        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
-@@ -340 +398 @@ class ProposalDataSourceImpl(
+@@ -340 +399 @@ class ProposalDataSourceImpl(
 -    private suspend inline fun <T : Any> getOrThrow(block: (Synchronizer) -> T): T =
 +    private suspend fun <T : Any> getOrThrow(block: suspend (Synchronizer) -> T): T =
-@@ -342,2 +400,3 @@ class ProposalDataSourceImpl(
+@@ -342,2 +401,3 @@ class ProposalDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
 -            block(synchronizer)
 +            walletTransport.whileOperating { block(requireActiveSynchronizer()) }
 +        } catch (e: CancellationException) {
 +            throw e
-@@ -347,0 +407,2 @@ class ProposalDataSourceImpl(
+@@ -347,0 +408,2 @@ class ProposalDataSourceImpl(
 +        } catch (e: UnsupportedZip321PaymentCountException) {
 +            throw e
-@@ -351,0 +413,5 @@ class ProposalDataSourceImpl(
+@@ -351,0 +414,5 @@ class ProposalDataSourceImpl(
 +    private suspend fun requireActiveSynchronizer(): Synchronizer =
 +        checkNotNull(walletTransport.current(synchronizerProvider)) {
 +            "The wallet is connecting to the selected server. Try again when it is ready."
 +        }
 +
-@@ -361,0 +428,5 @@ class ProposalDataSourceImpl(
+@@ -361,0 +429,5 @@ class ProposalDataSourceImpl(
 +private fun List<CreatedTransaction>.uncertainSdkSubmission() = SubmitResult.GrpcFailure(
 +    txIds = map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() },
 +    reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
 +)
 +
-@@ -403,8 +473,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
+@@ -403,8 +474,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
 -        firstNonGrpcFailure != null && successCount == 0 && failures.all { !it.grpcError } -> {
 -            SubmitResult.Failure(
 -                txIds = txIds,
@@ -40099,9 +40100,9 @@ index bf147a8b5..b071baae9 100644
 -            )
 -        }
 -
-@@ -464,0 +528 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -464,0 +529 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +    val fundingAccount: WalletAccount
-@@ -472,0 +537,18 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -472,0 +538,18 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +class ShieldingApproval(
 +    val account: WalletAccount,
 +    private val hasShieldableBalance: () -> Boolean = { true },
@@ -40120,26 +40121,26 @@ index bf147a8b5..b071baae9 100644
 +    }
 +}
 +
-@@ -474,0 +557 @@ data class ShieldTransactionProposal(
+@@ -474,0 +558 @@ data class ShieldTransactionProposal(
 +    val approval: ShieldingApproval? = null,
-@@ -476,0 +560,4 @@ data class ShieldTransactionProposal(
+@@ -476,0 +561,4 @@ data class ShieldTransactionProposal(
 +fun TransactionProposal.requireCurrentShieldingApproval() {
 +    if (this is ShieldTransactionProposal) checkNotNull(approval).requireCurrent()
 +}
 +
-@@ -481 +568,2 @@ data class RegularTransactionProposal(
+@@ -481 +569,2 @@ data class RegularTransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val isDonation: Boolean = false,
-@@ -488 +576,2 @@ data class Zip321TransactionProposal(
+@@ -488 +577,2 @@ data class Zip321TransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val binaryMemoByteCount: Int? = null,
-@@ -496,0 +586 @@ data class ExactInputSwapTransactionProposal(
+@@ -496,0 +587 @@ data class ExactInputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -504,0 +595 @@ data class ExactOutputSwapTransactionProposal(
+@@ -504,0 +596 @@ data class ExactOutputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -519 +609,0 @@ data class MigrationSweepTransactionProposal(
+@@ -519 +610,0 @@ data class MigrationSweepTransactionProposal(
 -    val amount: Zatoshi,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
@@ -81440,10 +81441,10 @@ index 4c13e2085..77c2f794b 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalSubmissionOutcomeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalSubmissionOutcomeTest.kt
 new file mode 100644
-index 000000000..0d9e026c4
+index 000000000..756fb82ba
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalSubmissionOutcomeTest.kt
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,104 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.SdkSynchronizer
@@ -81453,6 +81454,7 @@ index 000000000..0d9e026c4
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 +import co.electriccoin.zcash.ui.common.model.SubmitResult
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 +import io.mockk.coEvery
 +import io.mockk.coVerify
 +import io.mockk.every
@@ -81477,14 +81479,15 @@ index 000000000..0d9e026c4
 +    private val accepted = TransactionSubmitResult.Success(transaction.txId)
 +    private val synchronizer = mockk<SdkSynchronizer>(relaxed = true)
 +    private val broadcaster = synchronizer.broadcaster
++    private val serverSelection = mockk<WalletServerSelectionProvider> {
++        coEvery { getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic = true)
++    }
 +    private val source = ProposalDataSourceImpl(
 +        synchronizerProvider = mockk {
 +            coEvery { getSynchronizer() } returns this@ProposalSubmissionOutcomeTest.synchronizer
 +        },
 +        lightWalletEndpointProvider = mockk { every { getEndpoints() } returns listOf(endpoint) },
-+        walletServerSelectionProvider = mockk {
-+            coEvery { getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic = true)
-+        },
++        walletServerSelectionProvider = serverSelection,
 +    )
 +
 +    @Test
@@ -81493,6 +81496,19 @@ index 000000000..0d9e026c4
 +            source.submitTransaction(proposal = mockk(), usk = mockk(), beforeCreation = { error("Stale review") })
 +        }
 +        coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
++    }
++
++    @Test
++    fun unreadableEndpointsRefuseSoftwareAndHardwareBeforeNativeCreation() = runBlocking {
++        coEvery { serverSelection.getServerSelection() } throws IllegalStateException("Unavailable fixture")
++        assertFailsWith<IllegalStateException> { source.submitTransaction(proposal = mockk(), usk = mockk()) }
++        assertFailsWith<IllegalStateException> {
++            source.submitTransaction(pcztWithProofs = mockk(), pcztWithSignatures = mockk())
++        }
++
++        coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
++        coVerify(exactly = 0) { broadcaster.createTransactionFromPczt(any(), any()) }
++        coVerify(exactly = 0) { broadcaster.submit(any(), any()) }
 +    }
 +
 +    @Test
@@ -81624,10 +81640,10 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..9db0ce89a
+index 000000000..fc8f04404
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,286 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -81705,11 +81721,12 @@ index 000000000..9db0ce89a
 +    }
 +
 +    @Test
-+    fun expiryDuringEndpointSelectionPreservesKnownIdsWithoutAnAppBroadcast() = runBlocking {
++    fun expiryWhileReadingEndpointsPreventsSoftwareAndPcztCreation() = runBlocking {
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware, pauseEndpoints = true)
 +            fixture.prepare()
-+            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
++            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
++            fixture.verifyNoCreation()
 +            fixture.verifyNoAppBroadcast()
 +        }
 +    }
