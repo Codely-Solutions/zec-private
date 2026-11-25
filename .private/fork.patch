@@ -42669,7 +42669,7 @@ index fa652b038..612ebcb01 100644
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..6e05b883e 100644
+index 0a5bfe73c..e6413fc0d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -42696,43 +42696,40 @@ index 0a5bfe73c..6e05b883e 100644
 @@ -30,0 +46,2 @@ interface ZashiProposalRepository {
 +    suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
 +
-@@ -37,0 +55,2 @@ interface ZashiProposalRepository {
-+    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
-+
-@@ -42 +61,5 @@ interface ZashiProposalRepository {
+@@ -42 +59,5 @@ interface ZashiProposalRepository {
 -    suspend fun createExactInputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactInputSwapTransactionProposal
 +    suspend fun createExactInputSwapProposal(
 +        zecSend: ZecSend,
 +        quote: SwapQuote,
 +        account: WalletAccount,
 +    ): ExactInputSwapTransactionProposal
-@@ -45 +68,5 @@ interface ZashiProposalRepository {
+@@ -45 +66,5 @@ interface ZashiProposalRepository {
 -    suspend fun createExactOutputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactOutputSwapTransactionProposal
 +    suspend fun createExactOutputSwapProposal(
 +        zecSend: ZecSend,
 +        quote: SwapQuote,
 +        account: WalletAccount,
 +    ): ExactOutputSwapTransactionProposal
-@@ -48 +75 @@ interface ZashiProposalRepository {
+@@ -48 +73 @@ interface ZashiProposalRepository {
 -    suspend fun createShieldProposal()
 +    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
-@@ -53,0 +81 @@ interface ZashiProposalRepository {
+@@ -53,0 +79 @@ interface ZashiProposalRepository {
 +     * Returns the exact adopted review identity for the authentication handoff.
-@@ -55 +83 @@ interface ZashiProposalRepository {
+@@ -55 +81 @@ interface ZashiProposalRepository {
 -    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
 +    fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal
-@@ -57 +85,4 @@ interface ZashiProposalRepository {
+@@ -57 +83,4 @@ interface ZashiProposalRepository {
 -    suspend fun submit(): SubmitResult
 +    suspend fun submit(
 +        expectedProposal: TransactionProposal? = null,
 +        reviewedQuote: SwapQuoteData.Success? = null,
 +    ): SubmitResult
-@@ -61 +92 @@ interface ZashiProposalRepository {
+@@ -61 +90 @@ interface ZashiProposalRepository {
 -    fun clear()
 +    fun clear(expectedProposal: TransactionProposal? = null)
-@@ -68,0 +100 @@ class ZashiProposalRepositoryImpl(
+@@ -68,0 +98 @@ class ZashiProposalRepositoryImpl(
 +    private val processSwapTransaction: ProcessSwapTransactionUseCase,
-@@ -75,0 +108,7 @@ class ZashiProposalRepositoryImpl(
+@@ -75,0 +106,7 @@ class ZashiProposalRepositoryImpl(
 +    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
 +        val previous = transactionProposal.value
 +        val proposal = proposalDataSource.preparePayment(owner, draft)
@@ -42740,29 +42737,20 @@ index 0a5bfe73c..6e05b883e 100644
 +        return proposal
 +    }
 +
-@@ -84 +123 @@ class ZashiProposalRepositoryImpl(
--    override suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal =
-+    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
-@@ -85,0 +125,8 @@ class ZashiProposalRepositoryImpl(
-+            val account = accountDataSource.getSelectedAccount()
-+            require(account is co.electriccoin.zcash.ui.common.model.ZodlAccount)
-+            require(zecSend.destination.address == DonationPolicy.recipient())
-+            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
-+        }
-+
-+    override suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal =
+@@ -85 +122 @@ class ZashiProposalRepositoryImpl(
+-        createProposalInternal {
 +        createProposalInternal(includeFailureCause = false) {
-@@ -94,0 +142 @@ class ZashiProposalRepositoryImpl(
+@@ -94,0 +132 @@ class ZashiProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -98 +146 @@ class ZashiProposalRepositoryImpl(
+@@ -98 +136 @@ class ZashiProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -106,0 +155 @@ class ZashiProposalRepositoryImpl(
+@@ -106,0 +145 @@ class ZashiProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -110 +159 @@ class ZashiProposalRepositoryImpl(
+@@ -110 +149 @@ class ZashiProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -116,6 +165,3 @@ class ZashiProposalRepositoryImpl(
+@@ -116,6 +155,3 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun createShieldProposal() {
 -        createProposalInternal {
 -            proposalDataSource.createShieldProposal(
@@ -42772,13 +42760,13 @@ index 0a5bfe73c..6e05b883e 100644
 +    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
 +        approval.requireCurrent()
 +        return proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
-@@ -124,3 +170,2 @@ class ZashiProposalRepositoryImpl(
+@@ -124,3 +160,2 @@ class ZashiProposalRepositoryImpl(
 -    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
 -        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
 -    }
 +    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
 +        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
-@@ -129 +174,6 @@ class ZashiProposalRepositoryImpl(
+@@ -129 +164,6 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun submit(): SubmitResult =
 +    override suspend fun submit(
 +        expectedProposal: TransactionProposal?,
@@ -42786,11 +42774,11 @@ index 0a5bfe73c..6e05b883e 100644
 +    ): SubmitResult = if (expectedProposal is ShieldTransactionProposal && expectedProposal.approval != null) {
 +        submitShield(expectedProposal)
 +    } else {
-@@ -132,0 +183,3 @@ class ZashiProposalRepositoryImpl(
+@@ -132,0 +173,3 @@ class ZashiProposalRepositoryImpl(
 +                check(expectedProposal == null || transactionProposal === expectedProposal) {
 +                    "The reviewed transaction changed before submission."
 +                }
-@@ -140 +193,29 @@ class ZashiProposalRepositoryImpl(
+@@ -140 +183,29 @@ class ZashiProposalRepositoryImpl(
 -                        val result =
 +                        val swapWasReviewed = transactionProposal !is SwapTransactionProposal ||
 +                            transactionProposal === expectedProposal
@@ -42821,11 +42809,11 @@ index 0a5bfe73c..6e05b883e 100644
 +                            }
 +                        }
 +                        val submit: suspend (() -> Unit) -> SubmitResult = { beforeSubmission ->
-@@ -143 +224,2 @@ class ZashiProposalRepositoryImpl(
+@@ -143 +214,2 @@ class ZashiProposalRepositoryImpl(
 -                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
 +                                usk = spendingKey,
 +                                beforeFirstSubmission = beforeSubmission,
-@@ -145 +227,8 @@ class ZashiProposalRepositoryImpl(
+@@ -145 +217,8 @@ class ZashiProposalRepositoryImpl(
 -                        submitState.update { SubmitProposalState.Result(result) }
 +                        }
 +                        val result = if (transactionProposal is SwapTransactionProposal) {
@@ -42835,10 +42823,10 @@ index 0a5bfe73c..6e05b883e 100644
 +                            submit(validateFunding)
 +                        }
 +                        publishOutcome(transactionProposal, result)
-@@ -148 +237 @@ class ZashiProposalRepositoryImpl(
+@@ -148 +227 @@ class ZashiProposalRepositoryImpl(
 -                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
 +                        publishOutcome(transactionProposal, SubmitResult.Error(e))
-@@ -152,0 +242,21 @@ class ZashiProposalRepositoryImpl(
+@@ -152,0 +232,21 @@ class ZashiProposalRepositoryImpl(
 +    }
 +
 +    private suspend fun submitShield(shield: ShieldTransactionProposal): SubmitResult =
@@ -42860,7 +42848,7 @@ index 0a5bfe73c..6e05b883e 100644
 +    private fun requireCurrentProposal(expected: TransactionProposal) {
 +        check(transactionProposal.value === expected) { "The transaction changed before submission." }
 +    }
-@@ -156,3 +266,9 @@ class ZashiProposalRepositoryImpl(
+@@ -156,3 +256,9 @@ class ZashiProposalRepositoryImpl(
 -    override fun clear() {
 -        transactionProposal.update { null }
 -        submitState.update { null }
@@ -42873,13 +42861,13 @@ index 0a5bfe73c..6e05b883e 100644
 +        ) {
 +            submitState.update { previous -> if (transactionProposal.value == null) null else previous }
 +        }
-@@ -161 +277,4 @@ class ZashiProposalRepositoryImpl(
+@@ -161 +267,4 @@ class ZashiProposalRepositoryImpl(
 -    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
 +    private suspend inline fun <T : TransactionProposal> createProposalInternal(
 +        includeFailureCause: Boolean = true,
 +        block: () -> T,
 +    ): T {
-@@ -166 +285,6 @@ class ZashiProposalRepositoryImpl(
+@@ -166 +275,6 @@ class ZashiProposalRepositoryImpl(
 -                Twig.error(e) { "Unable to create proposal" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -42887,7 +42875,7 @@ index 0a5bfe73c..6e05b883e 100644
 +                } else {
 +                    Twig.error { "Unable to create ZIP321 proposal" }
 +                }
-@@ -170 +294,6 @@ class ZashiProposalRepositoryImpl(
+@@ -170 +284,6 @@ class ZashiProposalRepositoryImpl(
 -                Twig.error(e) { "Insufficient funds" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -42895,7 +42883,7 @@ index 0a5bfe73c..6e05b883e 100644
 +                } else {
 +                    Twig.error { "Insufficient funds for ZIP321 proposal" }
 +                }
-@@ -173,0 +303 @@ class ZashiProposalRepositoryImpl(
+@@ -173,0 +293 @@ class ZashiProposalRepositoryImpl(
 +        currentCoroutineContext().ensureActive()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/serialization/NearSwapStatusSerializer.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/serialization/NearSwapStatusSerializer.kt
 index 23b452f77..32b89edb0 100644

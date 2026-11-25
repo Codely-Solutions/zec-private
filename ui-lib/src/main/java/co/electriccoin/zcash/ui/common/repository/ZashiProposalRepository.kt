@@ -52,8 +52,6 @@ interface ZashiProposalRepository {
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createProposal(zecSend: ZecSend): RegularTransactionProposal
 
-    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
-
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
 
@@ -118,14 +116,6 @@ class ZashiProposalRepositoryImpl(
                 account = accountDataSource.getSelectedAccount(),
                 send = zecSend
             )
-        }
-
-    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
-        createProposalInternal {
-            val account = accountDataSource.getSelectedAccount()
-            require(account is co.electriccoin.zcash.ui.common.model.ZodlAccount)
-            require(zecSend.destination.address == DonationPolicy.recipient())
-            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
         }
 
     override suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal =
