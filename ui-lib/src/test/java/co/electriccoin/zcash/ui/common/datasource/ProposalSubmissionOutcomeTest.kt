@@ -87,6 +87,21 @@ class ProposalSubmissionOutcomeTest {
     }
 
     @Test
+    fun aRouteThatBecomesUnreadableAfterCreationKeepsTheCreatedIdWithoutBroadcasting() = runBlocking {
+        var reads = 0
+        coEvery { serverSelection.getServerSelection() } coAnswers {
+            if (reads++ == 0) WalletServerSelection(endpoint, isAutomatic = true)
+            else error("Later route refresh failed")
+        }
+        coEvery { broadcaster.createProposedTransactions(any(), any()) } returns listOf(transaction)
+
+        val result = source.submitTransaction(proposal = mockk(), usk = mockk())
+
+        assertEquals(pending(accepted.txIdString()), result)
+        coVerify(exactly = 0) { broadcaster.submit(any(), any()) }
+    }
+
+    @Test
     fun walletRefreshFailurePreservesAcknowledgedSubmission() = runBlocking {
         coEvery { broadcaster.createProposedTransactions(any(), any()) } returns listOf(transaction)
         coEvery { broadcaster.submit(transaction, endpoint) } returns accepted

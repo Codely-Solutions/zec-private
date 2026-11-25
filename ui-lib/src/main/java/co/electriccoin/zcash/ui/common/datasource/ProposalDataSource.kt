@@ -316,8 +316,7 @@ class ProposalDataSourceImpl(
         withContext(Dispatchers.IO) {
             walletTransport.whileOperating { lease ->
                 val synchronizer = requireActiveSynchronizer()
-                val endpoints = getSubmissionEndpoints()
-                check(endpoints.isNotEmpty()) { "No wallet servers are available for this transaction." }
+                requireSubmissionEndpoints()
                 beforeCreation()
                 val transactions = runCatchingRecoverable { block(synchronizer) }
                     .getOrElse { return@whileOperating emptyList<CreatedTransaction>().uncertainSdkSubmission() }
@@ -331,6 +330,7 @@ class ProposalDataSourceImpl(
                 }
 
                 val result = runCatchingRecoverable {
+                    val endpoints = requireSubmissionEndpoints()
                     Twig.info {
                         "$logTag Created ${transactions.size} transaction(s); " +
                             "submitting to ${endpoints.size} endpoint(s)."
@@ -383,7 +383,7 @@ class ProposalDataSourceImpl(
      * and faster confirmation. Manual mode honors the user's explicit choice and submits only through
      * the selected endpoint.
      */
-    private suspend fun getSubmissionEndpoints(): List<LightWalletEndpoint> {
+    private suspend fun requireSubmissionEndpoints(): List<LightWalletEndpoint> {
         val knownEndpoints = lightWalletEndpointProvider.getEndpoints()
         val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
         val isAutomatic =
@@ -392,7 +392,9 @@ class ProposalDataSourceImpl(
                 currentEndpoint = selection.endpoint,
                 knownEndpoints = knownEndpoints
             )
-        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
+        val endpoints = if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
+        check(endpoints.isNotEmpty()) { "No wallet servers are available for this transaction." }
+        return endpoints
     }
 
     @Suppress("TooGenericExceptionCaught")
