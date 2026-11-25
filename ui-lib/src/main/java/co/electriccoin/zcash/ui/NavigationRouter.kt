@@ -90,6 +90,7 @@ internal fun NavigationRouter.forwardFrom(
     }
 }
 
+@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
 class NavigationRouterImpl : NavigationRouter {
     private var job: Job? = null
 

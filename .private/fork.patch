@@ -32402,7 +32402,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..30ac16758 100644
+index 67c1e883c..6fad2dee9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -10,0 +11,3 @@ import kotlinx.coroutines.flow.Flow
@@ -32417,7 +32417,7 @@ index 67c1e883c..30ac16758 100644
 +        override fun close() = Unit
 +    }
 +
-@@ -54,0 +65,28 @@ interface NavigationRouter {
+@@ -54,0 +65,29 @@ interface NavigationRouter {
 +data class ActiveNavigationEntry(val id: String, val route: String?)
 +
 +interface ActiveNavigationEntryObserver {
@@ -32446,7 +32446,8 @@ index 67c1e883c..30ac16758 100644
 +    }
 +}
 +
-@@ -62,0 +101,21 @@ class NavigationRouterImpl : NavigationRouter {
++@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
+@@ -62,0 +102,21 @@ class NavigationRouterImpl : NavigationRouter {
 +    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
 +    private var entryObserver: ActiveNavigationEntryObserver? = null
 +
@@ -32468,7 +32469,7 @@ index 67c1e883c..30ac16758 100644
 +            entryObserver = it
 +            entryState.value = null
 +        }
-@@ -105 +164,3 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -105 +165,3 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 -        val routes: List<Any>
 +        val routes: List<Any>,
 +        val sourceEntryId: String? = null,
@@ -32662,7 +32663,7 @@ index 36840dcc5..bae6f8984 100644
 +    if (!popBackStack(RestoreSeedArgs, inclusive = false)) {
 +        navigate(RestoreSeedArgs) { popUpTo<Onboarding>() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
-index a93926c57..376b93743 100644
+index a93926c57..b5ec246fa 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 @@ -4,0 +5 @@ import androidx.compose.runtime.Composable
@@ -32714,55 +32715,60 @@ index a93926c57..376b93743 100644
 -            flexaViewModel,
 @@ -68 +70,0 @@ fun RootNavGraph(
 -                flexaViewModel = flexaViewModel,
-@@ -75,0 +78,14 @@ fun RootNavGraph(
-+    DisposableEffect(navController, navigationRouter) {
-+        val observer = navigationRouter.registerEntryObserver()
-+        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
-+            observer.update(
-+                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
-+            )
-+        }
-+        navController.addOnDestinationChangedListener(listener)
-+        onDispose {
-+            navController.removeOnDestinationChangedListener(listener)
-+            observer.close()
-+        }
-+    }
+@@ -75,0 +78,2 @@ fun RootNavGraph(
++    TrackActiveNavigationEntry(navController, navigationRouter)
 +
-@@ -77,0 +94 @@ fun RootNavGraph(
+@@ -77,0 +82 @@ fun RootNavGraph(
 +            if (!currentAccess.value()) return@collect
-@@ -107,0 +125 @@ fun RootNavGraph(
+@@ -107,0 +113 @@ fun RootNavGraph(
 +        if (!currentAccess.value()) return@LaunchedEffect
-@@ -117,5 +134,0 @@ fun RootNavGraph(
+@@ -117,5 +122,0 @@ fun RootNavGraph(
 -            // Same pattern as MainActivity.handleMigrationIntent — Home always lands on the
 -            // back stack first, then we redirect on top of it if a migration transfer needs
 -            // attention. isSyncBlocked() (fed into the synchronizer directly) already stopped
 -            // sync regardless of whether this redirect lands — this is routing only.
 -            migrationAppHooks.checkRecovery()
-@@ -123 +136 @@ fun RootNavGraph(
+@@ -123 +124 @@ fun RootNavGraph(
 -            secretState == SecretState.NONE &&
 +            (secretState == SecretState.NONE || secretState == SecretState.INCOMPLETE) &&
-@@ -132,0 +146 @@ fun RootNavGraph(
+@@ -132,0 +134 @@ fun RootNavGraph(
 +        if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
-@@ -135,2 +149,4 @@ fun RootNavGraph(
+@@ -135,2 +137,4 @@ fun RootNavGraph(
 -    LaunchedEffect(secretState, navController) {
 -        if (secretState != SecretState.READY) return@LaunchedEffect
 +    LaunchedEffect(secretState, navController, launchNavigation) {
 +        if (secretState == SecretState.LOADING) return@LaunchedEffect
 +        val walletReady = secretState == SecretState.READY
 +        val targetGraph = if (walletReady) MainAppGraph::class else OnboardingGraph::class
-@@ -138 +154 @@ fun RootNavGraph(
+@@ -138 +142,20 @@ fun RootNavGraph(
 -            it.destination.parent?.route == MainAppGraph::class.qualifiedName
 +            it.destination.parent?.route == targetGraph.qualifiedName
-@@ -140,2 +156,6 @@ fun RootNavGraph(
--        giftCardLinkStore.isInAppScanRequested.filter { it }.collect {
--            navigateToRedeemGiftCard.openRequestedInAppScan()
++        }
 +        launchNavigation.changes.collect {
 +            launchNavigation.deliver(
 +                walletReady,
 +                hasAppAccess = { currentAccess.value() },
 +                navigate = navigator::executeLaunchCommand
 +            )
++        }
++    }
++}
++
++@Composable
++private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
++    DisposableEffect(navController, navigationRouter) {
++        val observer = navigationRouter.registerEntryObserver()
++        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
++            observer.update(
++                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
++            )
+@@ -140,2 +163,4 @@ fun RootNavGraph(
+-        giftCardLinkStore.isInAppScanRequested.filter { it }.collect {
+-            navigateToRedeemGiftCard.openRequestedInAppScan()
++        navController.addOnDestinationChangedListener(listener)
++        onDispose {
++            navController.removeOnDestinationChangedListener(listener)
++            observer.close()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
 index 4b540bea1..b471ec965 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
@@ -42702,19 +42708,20 @@ index f7385365c..f4fcf5f49 100644
 +                    mismatchArgs
 +                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt
-index eeb63a233..e384beeac 100644
+index eeb63a233..613300b11 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt
 @@ -9,0 +10 @@ import kotlinx.coroutines.flow.onSubscription
 +import kotlinx.coroutines.withTimeoutOrNull
 @@ -10,0 +12 @@ import java.math.BigDecimal
 +import kotlin.time.Duration.Companion.seconds
-@@ -120,0 +123,13 @@ val SWAP_REFUND_WARNING_THRESHOLD_USD = BigDecimal("300")
+@@ -120,0 +123,14 @@ val SWAP_REFUND_WARNING_THRESHOLD_USD = BigDecimal("300")
 +
 +internal suspend fun NavigationRouter.awaitQuoteOrigin(sourceEntryId: String?): Boolean {
 +    if (sourceEntryId == null) return true
-+    val active = activeEntry.value ?: return false
++    val active = activeEntry.value
 +    return when {
++        active == null -> false
 +        active.id == sourceEntryId -> true
 +        active.route?.substringBefore('/')?.substringBefore('?') == SwapRefundWarningArgs::class.qualifiedName ->
 +            withTimeoutOrNull(2.seconds) {

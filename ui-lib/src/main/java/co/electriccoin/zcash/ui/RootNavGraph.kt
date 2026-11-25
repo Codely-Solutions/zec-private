@@ -75,19 +75,7 @@ fun RootNavGraph(
             )
         }
 
-    DisposableEffect(navController, navigationRouter) {
-        val observer = navigationRouter.registerEntryObserver()
-        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
-            observer.update(
-                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
-            )
-        }
-        navController.addOnDestinationChangedListener(listener)
-        onDispose {
-            navController.removeOnDestinationChangedListener(listener)
-            observer.close()
-        }
-    }
+    TrackActiveNavigationEntry(navController, navigationRouter)
 
     LaunchedEffect(navigationRouter) {
         navigationRouter.observePipeline().collect {
@@ -159,6 +147,23 @@ fun RootNavGraph(
                 hasAppAccess = { currentAccess.value() },
                 navigate = navigator::executeLaunchCommand
             )
+        }
+    }
+}
+
+@Composable
+private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
+    DisposableEffect(navController, navigationRouter) {
+        val observer = navigationRouter.registerEntryObserver()
+        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
+            observer.update(
+                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
+            )
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose {
+            navController.removeOnDestinationChangedListener(listener)
+            observer.close()
         }
     }
 }

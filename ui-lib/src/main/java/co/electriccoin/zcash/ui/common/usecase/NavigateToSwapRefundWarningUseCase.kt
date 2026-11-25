@@ -123,8 +123,9 @@ val SWAP_REFUND_WARNING_THRESHOLD_USD = BigDecimal("300")
 
 internal suspend fun NavigationRouter.awaitQuoteOrigin(sourceEntryId: String?): Boolean {
     if (sourceEntryId == null) return true
-    val active = activeEntry.value ?: return false
+    val active = activeEntry.value
     return when {
+        active == null -> false
         active.id == sourceEntryId -> true
         active.route?.substringBefore('/')?.substringBefore('?') == SwapRefundWarningArgs::class.qualifiedName ->
             withTimeoutOrNull(2.seconds) {
