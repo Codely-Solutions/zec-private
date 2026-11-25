@@ -7,13 +7,14 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 
 /** Keeps automatic endpoint writes disjoint from admitted wallet operations and their broadcasts. */
 class WalletTransportAccess {
     private val endpointWrite = Mutex()
     private val activeOperations = AtomicInteger()
-    @Volatile private var retired: WeakReference<Synchronizer>? = null
+    private val retired = AtomicReference<WeakReference<Synchronizer>?>(null)
 
     internal suspend fun <T> whileOperating(block: suspend (Lease) -> T): T {
         val lease = endpointWrite.withLock { retain() }
@@ -34,19 +35,20 @@ class WalletTransportAccess {
     }
 
     internal fun retire(synchronizer: Synchronizer?) {
-        retired = synchronizer?.let(::WeakReference)
+        retired.set(synchronizer?.let(::WeakReference))
     }
 
-    internal fun isRetired(synchronizer: Synchronizer): Boolean = retired?.get() === synchronizer
+    internal fun isRetired(synchronizer: Synchronizer): Boolean = retired.get()?.get() === synchronizer
 
     internal suspend fun current(provider: SynchronizerProvider, waitForInitial: Boolean = true): Synchronizer? {
-        val old = retired?.get()
+        val retirement = retired.get()
+        val old = retirement?.get()
         return when {
             old == null && waitForInitial -> provider.getSynchronizer()
             old == null -> provider.synchronizer.value
             else -> withTimeoutOrNull(8.seconds) {
                 provider.synchronizer.first { it != null && it !== old }
-            }
+            }.also { if (it != null) retired.compareAndSet(retirement, null) }
         }
     }
 

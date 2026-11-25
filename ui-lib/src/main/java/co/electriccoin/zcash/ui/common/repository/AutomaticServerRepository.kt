@@ -181,7 +181,7 @@ class AutomaticServerRepositoryImpl(
                 candidates = candidates,
                 fetchThreshold = 5.seconds,
                 blocksToFetch = 1
-            )?.let { ServerSwitchCandidate(it, current, version) }
+            )?.let { ServerSwitchCandidate(it, current, version, synchronizer) }
         } finally {
             evaluationInterval.markAttempted()
         }
@@ -192,16 +192,18 @@ class AutomaticServerRepositoryImpl(
      * that confirmed anyway would clear the SDK's consecutive-failure count and start its cooldown, leaving
      * a wallet on a dead server to earn its way out from scratch.
      *
-     * The Synchronizer is taken before the endpoint is written, because writing it tears the current
+     * The benchmark owns the current Synchronizer because writing the endpoint tears that
      * Synchronizer down and rebuilds it. Which instance receives the confirmation does not matter - the
      * hysteresis state it updates is process-wide and outlives any single Synchronizer.
      */
     private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
         val endpoint = candidate.endpoint
         if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
-        val synchronizer: Synchronizer? = synchronizerProvider.getSynchronizerOrNull()
+        val synchronizer = candidate.synchronizer
         walletTransport.ifIdleSwitch {
-            if (isAppInTransactionState) return@ifIdleSwitch
+            if (isAppInTransactionState || synchronizerProvider.synchronizer.value !== synchronizer) {
+                return@ifIdleSwitch
+            }
             currentCoroutineContext().ensureActive()
             Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
             val applied = withContext(NonCancellable) {
@@ -211,7 +213,7 @@ class AutomaticServerRepositoryImpl(
                     expected = candidate.current,
                 ).also { if (it) walletTransport.retire(synchronizer) }
             }
-            if (applied) synchronizer?.confirmServerSwitch(endpoint)
+            if (applied) synchronizer.confirmServerSwitch(endpoint)
         }
     }
 }
@@ -220,6 +222,7 @@ internal data class ServerSwitchCandidate(
     val endpoint: LightWalletEndpoint,
     val current: WalletServerSelection,
     val version: Long,
+    val synchronizer: Synchronizer,
 )
 
 /**

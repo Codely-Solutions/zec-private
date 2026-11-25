@@ -338,6 +338,21 @@ class AutomaticServerRepositoryTest {
     }
 
     @Test
+    fun anUnrelatedRebuildInvalidatesTheBenchmarkBeforePersistence() = runTest {
+        stubSwitchDecision(balances = null)
+        val transition = async { repository.observeSwitchCandidates(flowOf(Unit)).first() }
+        runCurrent()
+        coVerify(exactly = 1) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
+
+        activeSynchronizer.value = mockk(relaxed = true)
+        localBalances.value = emptyMap()
+        assertEquals(known.last(), transition.await())
+
+        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+        coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
+    }
+
+    @Test
     fun aWalletOperationDuringPersistenceWaitsForTheReplacementSynchronizer() = runTest {
         stubSwitchDecision(balances = emptyMap())
         val writing = CompletableDeferred<Unit>()

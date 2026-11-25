@@ -44355,10 +44355,10 @@ index 000000000..7271a9cfe
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
 new file mode 100644
-index 000000000..ab49ecd79
+index 000000000..bcc69fc0a
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,71 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -44368,13 +44368,14 @@ index 000000000..ab49ecd79
 +import kotlinx.coroutines.withTimeoutOrNull
 +import java.lang.ref.WeakReference
 +import java.util.concurrent.atomic.AtomicInteger
++import java.util.concurrent.atomic.AtomicReference
 +import kotlin.time.Duration.Companion.seconds
 +
 +/** Keeps automatic endpoint writes disjoint from admitted wallet operations and their broadcasts. */
 +class WalletTransportAccess {
 +    private val endpointWrite = Mutex()
 +    private val activeOperations = AtomicInteger()
-+    @Volatile private var retired: WeakReference<Synchronizer>? = null
++    private val retired = AtomicReference<WeakReference<Synchronizer>?>(null)
 +
 +    internal suspend fun <T> whileOperating(block: suspend (Lease) -> T): T {
 +        val lease = endpointWrite.withLock { retain() }
@@ -44395,19 +44396,20 @@ index 000000000..ab49ecd79
 +    }
 +
 +    internal fun retire(synchronizer: Synchronizer?) {
-+        retired = synchronizer?.let(::WeakReference)
++        retired.set(synchronizer?.let(::WeakReference))
 +    }
 +
-+    internal fun isRetired(synchronizer: Synchronizer): Boolean = retired?.get() === synchronizer
++    internal fun isRetired(synchronizer: Synchronizer): Boolean = retired.get()?.get() === synchronizer
 +
 +    internal suspend fun current(provider: SynchronizerProvider, waitForInitial: Boolean = true): Synchronizer? {
-+        val old = retired?.get()
++        val retirement = retired.get()
++        val old = retirement?.get()
 +        return when {
 +            old == null && waitForInitial -> provider.getSynchronizer()
 +            old == null -> provider.synchronizer.value
 +            else -> withTimeoutOrNull(8.seconds) {
 +                provider.synchronizer.first { it != null && it !== old }
-+            }
++            }.also { if (it != null) retired.compareAndSet(retirement, null) }
 +        }
 +    }
 +
@@ -44690,7 +44692,7 @@ index 926e60d9c..0240ac487 100644
 +        }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
-index 322328a32..ddadc7645 100644
+index 322328a32..de476d6e5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 @@ -11 +10,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
@@ -44800,20 +44802,26 @@ index 322328a32..ddadc7645 100644
 +                current = current.endpoint,
 @@ -194 +184 @@ class AutomaticServerRepositoryImpl(
 -            )
-+            )?.let { ServerSwitchCandidate(it, current, version) }
-@@ -209,3 +199,3 @@ class AutomaticServerRepositoryImpl(
++            )?.let { ServerSwitchCandidate(it, current, version, synchronizer) }
+@@ -205 +195 @@ class AutomaticServerRepositoryImpl(
+-     * The Synchronizer is taken before the endpoint is written, because writing it tears the current
++     * The benchmark owns the current Synchronizer because writing the endpoint tears that
+@@ -209,7 +199,19 @@ class AutomaticServerRepositoryImpl(
 -    private suspend fun applyServerSwitch(candidate: LightWalletEndpoint) {
 -        if (!isServerAutomatic() || isAppInTransactionState) return
 -        if (candidate !in lightWalletEndpointProvider.getEndpoints()) return
-+    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
-+        val endpoint = candidate.endpoint
-+        if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
-@@ -213,3 +203,13 @@ class AutomaticServerRepositoryImpl(
+-        val synchronizer: Synchronizer? = synchronizerProvider.getSynchronizerOrNull()
 -        Twig.info { "Automatic server: switching to ${candidate.host}:${candidate.port}" }
 -        walletRepository.updateWalletEndpoint(candidate)
 -        synchronizer?.confirmServerSwitch(candidate)
++    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
++        val endpoint = candidate.endpoint
++        if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
++        val synchronizer = candidate.synchronizer
 +        walletTransport.ifIdleSwitch {
-+            if (isAppInTransactionState) return@ifIdleSwitch
++            if (isAppInTransactionState || synchronizerProvider.synchronizer.value !== synchronizer) {
++                return@ifIdleSwitch
++            }
 +            currentCoroutineContext().ensureActive()
 +            Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
 +            val applied = withContext(NonCancellable) {
@@ -44823,13 +44831,14 @@ index 322328a32..ddadc7645 100644
 +                    expected = candidate.current,
 +                ).also { if (it) walletTransport.retire(synchronizer) }
 +            }
-+            if (applied) synchronizer?.confirmServerSwitch(endpoint)
++            if (applied) synchronizer.confirmServerSwitch(endpoint)
 +        }
-@@ -218,0 +219,6 @@ class AutomaticServerRepositoryImpl(
+@@ -218,0 +221,7 @@ class AutomaticServerRepositoryImpl(
 +internal data class ServerSwitchCandidate(
 +    val endpoint: LightWalletEndpoint,
 +    val current: WalletServerSelection,
 +    val version: Long,
++    val synchronizer: Synchronizer,
 +)
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/BiometricRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/BiometricRepository.kt
@@ -86016,7 +86025,7 @@ index 000000000..75d60f528
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
-index bd304eb7c..9a24af8eb 100644
+index bd304eb7c..2a25e01bf 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 @@ -10 +9,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -86165,7 +86174,7 @@ index bd304eb7c..9a24af8eb 100644
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -303,0 +319,67 @@ class AutomaticServerRepositoryTest {
+@@ -303,0 +319,82 @@ class AutomaticServerRepositoryTest {
 +    @Test
 +    fun aShieldStartingAfterEvaluationPreventsApplyingThePreparedSwitch() = runTest {
 +        stubSwitchDecision(balances = null)
@@ -86183,6 +86192,21 @@ index bd304eb7c..9a24af8eb 100644
 +        runCurrent()
 +
 +        assertEquals(listOf(known.last()), processed)
++        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
++        coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
++    }
++
++    @Test
++    fun anUnrelatedRebuildInvalidatesTheBenchmarkBeforePersistence() = runTest {
++        stubSwitchDecision(balances = null)
++        val transition = async { repository.observeSwitchCandidates(flowOf(Unit)).first() }
++        runCurrent()
++        coVerify(exactly = 1) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
++
++        activeSynchronizer.value = mockk(relaxed = true)
++        localBalances.value = emptyMap()
++        assertEquals(known.last(), transition.await())
++
 +        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
 +        coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
 +    }
@@ -86233,39 +86257,39 @@ index bd304eb7c..9a24af8eb 100644
 +            coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
 +        }
 +
-@@ -318 +400 @@ class AutomaticServerRepositoryTest {
+@@ -318 +415 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -338 +420 @@ class AutomaticServerRepositoryTest {
+@@ -338 +435 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -375 +457 @@ class AutomaticServerRepositoryTest {
+@@ -375 +472 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -382 +464,5 @@ class AutomaticServerRepositoryTest {
+@@ -382 +479,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -389 +475,3 @@ class AutomaticServerRepositoryTest {
+@@ -389 +490,3 @@ class AutomaticServerRepositoryTest {
 -            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
 +            coEvery {
 +                serverSelectionProvider.storeServerSelection(any(), any(), any())
 +            } throws IllegalStateException("prefs failed")
-@@ -398 +486,5 @@ class AutomaticServerRepositoryTest {
+@@ -398 +501,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -421,2 +513 @@ class AutomaticServerRepositoryTest {
+@@ -421,2 +528 @@ class AutomaticServerRepositoryTest {
 -        coEvery { isAutomaticProvider.get() } returns true
 -        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
 +        selectServer(true)
-@@ -427,0 +519,4 @@ class AutomaticServerRepositoryTest {
+@@ -427,0 +534,4 @@ class AutomaticServerRepositoryTest {
 +    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
 +        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
 +    }
