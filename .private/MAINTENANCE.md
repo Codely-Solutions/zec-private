@@ -47,7 +47,7 @@ Use the [development session](DEVELOPMENT.md) for incremental checks and the [pr
 
 ## Build and validation
 
-Upstream changes to runtime code in the wallet UI and shared design modules require human review before candidate preparation. The gate covers Java and Kotlin production source sets, including FOSS adapters, new screen packages and shared widgets. Standalone test and documentation changes follow their existing classification.
+Upstream changes to wallet UI and shared design runtime code and resources require human review before candidate preparation. The gate covers production source sets, including FOSS adapters, new screen packages, shared widgets and localized consent or payment instructions. Standalone test and documentation changes follow their existing classification.
 
 Dependency-graph submission and hosted fixture preservation admit the exact `refs/heads/main` before entering their production concurrency queues. The permission-free admission jobs perform a case-sensitive comparison. Only an admitted job calls the reusable workflow for the complete production sequence. The fixture gate also checks the exact repository identity. GitHub's expression string equality is case-insensitive. [GitHub expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#operators)
 

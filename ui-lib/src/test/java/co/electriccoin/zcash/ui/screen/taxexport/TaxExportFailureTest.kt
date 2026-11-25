@@ -57,7 +57,7 @@ class TaxExportFailureTest {
         val approved = EditAccountFixtures.zodl()
         val selected = MutableStateFlow<WalletAccount?>(approved)
         val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selected }
-        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any(), any()) } returns Unit }
+        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any(), null, any()) } returns Unit }
         val vm = TaxExportViewModel(
             GetSelectedWalletAccountUseCase(accounts), export, mockk(relaxed = true),
             AppAccessSession().apply { unlock() }, WalletWriteAccess(),
@@ -68,7 +68,7 @@ class TaxExportFailureTest {
             val approvedCallback = vm.state.value.exportButton.onClick
             selected.value = EditAccountFixtures.keystone()
             approvedCallback()
-            coVerify(exactly = 0) { export(any(), any()) }
+            coVerify(exactly = 0) { export(any(), null, any()) }
         } finally {
             observer.cancel()
             store.clear()
@@ -144,7 +144,7 @@ class TaxExportFailureTest {
         val export = mockk<ExportTaxUseCase>()
         val entered = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
-        coEvery { export(any(), any()) } coAnswers {
+        coEvery { export(any(), null, any()) } coAnswers {
             entered.complete(Unit)
             try { awaitCancellation() } finally { cancelled.complete(Unit) }
         }
@@ -163,7 +163,7 @@ class TaxExportFailureTest {
             assertTrue(vm.state.value.exportButton.isLoading)
             assertFalse(vm.state.value.exportButton.isEnabled)
             staleClick()
-            coVerify(exactly = 1) { export(any(), any()) }
+            coVerify(exactly = 1) { export(any(), null, any()) }
             store.clear()
             cancelled.await()
             assertNull(vm.state.value.error)

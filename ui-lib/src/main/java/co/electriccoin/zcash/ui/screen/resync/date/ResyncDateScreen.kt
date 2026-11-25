@@ -12,8 +12,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun ResyncDateScreen(args: ResyncDateArgs) {
-    val vm = koinViewModel<ResyncDateVM> { parametersOf(args) }
+fun ResyncDateScreen(args: ResyncDateArgs, sourceEntryId: String) {
+    val vm = koinViewModel<ResyncDateVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     SecureScreen()
     LceRenderer(state) {

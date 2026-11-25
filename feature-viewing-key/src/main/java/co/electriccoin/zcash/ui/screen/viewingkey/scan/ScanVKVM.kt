@@ -2,7 +2,10 @@ package co.electriccoin.zcash.ui.screen.viewingkey.scan
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyResult
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyUseCase
@@ -12,6 +15,7 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 import co.electriccoin.zcash.ui.screen.connecthw.date.HWDateArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import co.electriccoin.zcash.ui.screen.scan.ImageToQrCodeResult
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
@@ -46,7 +50,13 @@ internal class ScanVKVM(
     private val submitViewOnlyKey: SubmitViewOnlyKeyUseCase,
     private val navigationRouter: NavigationRouter,
     private val navigateToError: NavigateToErrorUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private val validation = MutableStateFlow(ScanValidationState.NONE)
 
     private val isInvalidQrSheetVisible = MutableStateFlow(false)
@@ -99,20 +109,24 @@ internal class ScanVKVM(
                     submitViewOnlyKey(text)
                 } catch (e: ViewOnlyKeyCheckException) {
                     hasCheckFailed = true
-                    navigationRouter.back()
-                    navigateToError(ErrorArgs.General(e))
+                    if (sourceEntryId == null) navigationRouter.back()
+                    navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e), replace = true)
                     return@withLock
                 }
             when (result) {
                 SubmitViewOnlyKeyResult.Accepted -> {
                     hasBeenScannedSuccessfully = true
                     setValidation(ScanValidationState.VALID)
-                    navigationRouter.replace(HWDateArgs(HWWalletEnrollment.ViewOnly))
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Replace(listOf(HWDateArgs(HWWalletEnrollment.ViewOnly)))
+                    }
                 }
 
                 SubmitViewOnlyKeyResult.AlreadyImported -> {
                     hasBeenScannedSuccessfully = true
-                    navigationRouter.replace(AlreadyImportedVKArgs)
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Replace(listOf(AlreadyImportedVKArgs))
+                    }
                 }
 
                 SubmitViewOnlyKeyResult.Invalid -> {
@@ -133,7 +147,7 @@ internal class ScanVKVM(
             viewModelScope.launch {
                 hideInvalidQrSheet()
                 delay(350.milliseconds)
-                navigationRouter.back()
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
             }
     }
 

@@ -8,11 +8,12 @@ import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.design.component.ZashiConfirmationBottomSheet
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun ImportVKScreen() {
+internal fun ImportVKScreen(sourceEntryId: String) {
     SecureScreen()
-    val vm = koinViewModel<ImportVKVM>()
+    val vm = koinViewModel<ImportVKVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val invalidKeySheet by vm.invalidKeySheet.collectAsStateWithLifecycle()
     BackHandler { state.onBack() }

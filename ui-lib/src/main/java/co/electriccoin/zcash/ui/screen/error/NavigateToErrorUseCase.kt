@@ -2,7 +2,9 @@ package co.electriccoin.zcash.ui.screen.error
 
 import co.electriccoin.lightwallet.client.model.ResponseException
 import co.electriccoin.lightwallet.client.model.UninitializedTorClientException
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.repository.HomeMessageData
@@ -80,6 +82,18 @@ class NavigateToErrorUseCase(
 
     private companion object {
         const val MAX_PENDING_ERRORS = 16
+    }
+}
+
+fun NavigateToErrorUseCase.showFrom(sourceEntryId: String?, args: ErrorArgs, replace: Boolean = false) {
+    if (sourceEntryId == null) {
+        invoke(args)
+    } else {
+        invoke(args) { route ->
+            stageResultFrom(sourceEntryId) {
+                if (replace) NavigationCommand.Replace(listOf(route)) else NavigationCommand.Forward(listOf(route))
+            }
+        }
     }
 }
 

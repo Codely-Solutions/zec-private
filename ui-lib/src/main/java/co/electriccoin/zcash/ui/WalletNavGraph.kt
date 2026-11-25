@@ -260,7 +260,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
         composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute(), it.id) }
-        composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+        composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen(it.id) }
         composable<AccountListArgs> { AccountListScreen(it.id) }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
         composable<EditAccountArgs> { EditAccountScreen(it.toRoute()) }
@@ -301,7 +301,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<TransactionFiltersArgs> { TransactionFiltersScreen() }
         composable<TransactionDetailArgs> { TransactionDetailScreen(it.toRoute()) }
         dialogComposable<TransactionNote> { AndroidTransactionNote(it.toRoute()) }
-        composable<TaxExport> { AndroidTaxExport() }
+        composable<TaxExport> { AndroidTaxExport(it.id) }
         composable<ReceiveArgs> { ReceiveScreen() }
         composable<Send> { WrapSend(it.toRoute(), it.id) }
         dialogComposable<TEXUnsupportedArgs> { AndroidTEXUnsupported(it.toRoute()) }
@@ -363,7 +363,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<DebugOrchardBalanceArgs> { DebugOrchardBalanceScreen() }
         dialogComposable<DebugTextArgs> { DebugTextScreen(it.toRoute()) }
         composable<ResyncConfirmArgs> { ResyncConfirmScreen() }
-        composable<ResyncDateArgs> { ResyncDateScreen(it.toRoute()) }
+        composable<ResyncDateArgs> { ResyncDateScreen(it.toRoute(), it.id) }
         composable<ResyncEstimationArgs> { ResyncEstimationScreen(it.toRoute()) }
         composable<ResyncHeightArgs> { ResyncHeightScreen() }
         composable<DisconnectArgs> { DisconnectScreen(it.toRoute()) }

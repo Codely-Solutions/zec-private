@@ -140,8 +140,8 @@ internal class ViewOnlyNavContributorImpl : ViewOnlyNavContributor {
     override fun contribute(navGraphBuilder: NavGraphBuilder) {
         with(navGraphBuilder) {
             dialogComposable<AddVKAccountArgs> { AddVKAccountScreen() }
-            composable<ImportVKArgs> { ImportVKScreen() }
-            composable<ScanVKArgs> { ScanVKScreen() }
+            composable<ImportVKArgs> { ImportVKScreen(it.id) }
+            composable<ScanVKArgs> { ScanVKScreen(it.id) }
             composable<NameVKArgs> { NameVKScreen(it.id) }
             composable<ImportedVKArgs> { ImportedVKScreen() }
             dialogComposable<AlreadyImportedVKArgs> { AlreadyImportedVKScreen() }

@@ -35,6 +35,7 @@ import co.electriccoin.zcash.ui.screen.connectledger.handshake.LedgerHandshakeAr
 import co.electriccoin.zcash.ui.screen.connectledger.openapp.LedgerOpenAppArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -426,7 +427,7 @@ class LedgerDeviceScanVM(
             showIssue(e.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT_PAIRING))
         } catch (e: Exception) {
             internalState.update { it.copy(phase = LedgerScanPhase.IDLE) }
-            navigateToError(ErrorArgs.General(e))
+            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
         }
     }
 
@@ -530,7 +531,7 @@ class LedgerDeviceScanVM(
         } catch (e: Exception) {
             stopScan()
             internalState.update { it.copy(phase = LedgerScanPhase.IDLE) }
-            navigateToError(ErrorArgs.General(e))
+            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
         }
     }
 

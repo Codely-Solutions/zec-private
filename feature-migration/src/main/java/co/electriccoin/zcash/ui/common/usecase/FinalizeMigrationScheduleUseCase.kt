@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.seconds
  * drive loop here either: they store/sign the schedule, call a lightweight `reconcile()` (a
  * state/gate read, no proving), and return; whatever background driver iOS has picks up proving on
  * its own normal cadence. Both `MigrationScheduledVM` (post-Keystone-scan) and `MigrationReviewVM`
- * (hot-wallet confirm) pass `false` to match: the `migrationScheduler.schedule(...)` call above
+ * (hot-wallet confirm) pass `false` to match: the `migrationScheduler.scheduleAndAwait(...)` call above
  * already arms the WorkManager job for whenever the plan's first step is actually due, so
  * proving+broadcasting still happens — just not forced to start synchronously in the same breath
  * as the commit/ceremony finishing. The `true` default remains only for
@@ -68,7 +68,7 @@ class FinalizeMigrationScheduleUseCase(
         val tipHeight =
             sched.transfers.minOfOrNull { it.anchorHeight }
                 ?: (sched.preparations.minOfOrNull { it.broadcastHeight } ?: 0L)
-        migrationScheduler.schedule(
+        migrationScheduler.scheduleAndAwait(
             accountKeyId,
             delayUntilFirstStep(
                 sched = sched,

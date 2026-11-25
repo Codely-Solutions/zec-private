@@ -52,8 +52,8 @@ def critical(path):
         return True
     if any(part in path for part in ('/design/theme/', '/res/ui/about/', '/res/ui/theme/')):
         return True
-    # Retained app and shared design code can own sensitive actions in any runtime variant.
-    ui_source = re.fullmatch(r'ui-(?:design-)?lib/src/([^/]+)/(?:java|kotlin)/.+', path)
+    # Retained app and design sources own sensitive actions and their consent text in each variant.
+    ui_source = re.fullmatch(r'ui-(?:design-)?lib/src/([^/]+)/(?:java|kotlin|res)/.+', path)
     if ui_source and not re.fullmatch(r'(?:test|androidTest|testFixtures)(?:[A-Z].*)?', ui_source[1]):
         return True
     return (path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',

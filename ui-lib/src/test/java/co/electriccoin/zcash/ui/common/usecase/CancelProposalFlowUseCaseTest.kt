@@ -8,10 +8,12 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -23,14 +25,18 @@ import co.electriccoin.zcash.ui.screen.donation.DonationArgs
 import co.electriccoin.zcash.ui.screen.send.Send
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CancelProposalFlowUseCaseTest {
@@ -174,6 +180,34 @@ class CancelProposalFlowUseCaseTest {
             assertEquals(Send::class, router.backToCalls.single())
             assertEquals(0, router.backCalls)
         }
+
+    @Test
+    fun keystoneRejectionLeavesAnUnrelatedDraftAndCannotClearAReplacement() {
+        val rendered = ShieldTransactionProposal(mockk())
+        val replacement = ShieldTransactionProposal(mockk())
+        val wallet = EditAccountFixtures.keystone(isSelected = true)
+        val proposals = MutableStateFlow<TransactionProposal?>(rendered)
+        val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
+            every { transactionProposal } returns proposals
+        }
+        val zodl = mockk<ZashiProposalRepository>(relaxed = true)
+        val ledger = mockk<LedgerProposalPipeline>(relaxed = true)
+        val queue = PendingNavigation()
+        val router = mockk<NavigationRouter> { every { pendingNavigation } returns queue }
+        val accounts = mockk<AccountDataSource> { every { allAccounts } returns MutableStateFlow(listOf(wallet)) }
+        val useCase = CancelProposalFlowUseCase(zodl, keystone, ledger, router, mockk(), accounts, mockk())
+
+        useCase.rejectKeystone(rendered, wallet.sdkAccount.accountUuid, "signing")
+        proposals.value = replacement
+        assertNull(queue.commands.value.getValue("signing").buildCommand())
+        verify(exactly = 0) { keystone.clear() }
+
+        useCase.rejectKeystone(replacement, wallet.sdkAccount.accountUuid, "signing")
+        assertEquals(NavigationCommand.Back, queue.commands.value.getValue("signing").buildCommand())
+        verify(exactly = 1) { keystone.clear() }
+        verify(exactly = 0) { zodl.clear() }
+        verify(exactly = 0) { ledger.clear() }
+    }
 
     private class FakeNavigationRouter : NavigationRouter {
         val backToCalls = mutableListOf<KClass<*>>()

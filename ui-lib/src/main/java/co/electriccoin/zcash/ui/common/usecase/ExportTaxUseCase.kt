@@ -4,7 +4,10 @@ import android.content.Context
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -46,7 +49,11 @@ class ExportTaxUseCase(
         DeleteDiagnosticExportWorker.scheduleTax(context, it).result.get()
     }
 
-    suspend operator fun invoke(approvedAccount: WalletAccount, isAllowed: () -> Boolean) =
+    suspend operator fun invoke(
+        approvedAccount: WalletAccount,
+        sourceEntryId: String? = null,
+        isAllowed: () -> Boolean,
+    ) =
         withContext(Dispatchers.IO) {
             if (!isAllowed()) return@withContext
             val previousYear =
@@ -101,14 +108,14 @@ class ExportTaxUseCase(
                     )
 
                 withContext(Dispatchers.Main.immediate) handoff@{
-                    if (!isAllowed()) return@handoff
+                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
                     check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==
                         approvedAccount.sdkAccount.accountUuid)
-                    if (!isAllowed()) return@handoff
+                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
                     currentCoroutineContext().ensureActive()
                     context.startActivity(intent)
                     shared = true
-                    navigationRouter.back()
+                    navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
                 }
             } finally {
                 if (!shared) {

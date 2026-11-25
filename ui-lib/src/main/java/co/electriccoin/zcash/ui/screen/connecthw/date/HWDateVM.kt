@@ -3,7 +3,9 @@ package co.electriccoin.zcash.ui.screen.connecthw.date
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.SdkSynchronizer
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
@@ -121,12 +123,9 @@ class HWDateVM(
                 network = VersionInfo.NETWORK,
             )
         if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return
-        navigationRouter.forward(
-            HWEstimationArgs(
-                enrollment = args.enrollment,
-                blockHeight = bday.value,
-            )
-        )
+        navigationRouter.stageResultFrom(sourceEntryId) {
+            NavigationCommand.Forward(listOf(HWEstimationArgs(args.enrollment, bday.value)))
+        }
     }
 
     private fun onEnterBlockHeightClick() =

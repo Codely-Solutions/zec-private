@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.SdkSynchronizer
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.groupLce
@@ -33,7 +36,13 @@ class ResyncDateVM(
     private val application: Application,
     private val getResyncDataFromHeight: GetResyncDataFromHeightUseCase,
     private val errorStateMapper: ResyncErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private val initLce = mutableLce<YearMonth>()
     private val estimateLce = mutableLce<Unit>()
     private val selectionOverride = MutableStateFlow<YearMonth?>(null)
@@ -98,7 +107,9 @@ class ResyncDateVM(
                     date = instant,
                     network = VersionInfo.NETWORK
                 )
-            navigationRouter.forward(ResyncEstimationArgs(uuid = args.uuid, blockHeight = height.value))
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(ResyncEstimationArgs(uuid = args.uuid, blockHeight = height.value)))
+            }
         }
 
     private fun onBack() = navigationRouter.back()

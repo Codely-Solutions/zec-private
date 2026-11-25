@@ -3,7 +3,10 @@ package co.electriccoin.zcash.ui.screen.restore.date
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.SdkSynchronizer
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.VersionInfo
@@ -31,7 +34,13 @@ class RestoreDateVM(
     private val navigationRouter: NavigationRouter,
     private val application: Application,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     @Suppress("MagicNumber")
     private val selection = MutableStateFlow(WalletFixture.SAPLING_ACTIVATION_YEAR_MONTH)
     private val estimateLce = mutableLce<Unit>()
@@ -79,7 +88,11 @@ class RestoreDateVM(
                     date = instant,
                     network = VersionInfo.NETWORK
                 )
-            navigationRouter.forward(RestoreEstimationArgs(sessionId = args.sessionId, blockHeight = bday.value))
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(
+                    listOf(RestoreEstimationArgs(sessionId = args.sessionId, blockHeight = bday.value))
+                )
+            }
         }
 
     private fun onBack() = navigationRouter.back()

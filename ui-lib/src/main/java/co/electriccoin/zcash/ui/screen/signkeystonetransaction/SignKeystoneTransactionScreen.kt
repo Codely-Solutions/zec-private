@@ -11,11 +11,12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SignKeystoneTransactionScreen() {
-    val vm = koinViewModel<SignKeystoneTransactionVM>()
+fun SignKeystoneTransactionScreen(sourceEntryId: String) {
+    val vm = koinViewModel<SignKeystoneTransactionVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val bottomSheetState by vm.bottomSheetState.collectAsStateWithLifecycle()
     val current = state

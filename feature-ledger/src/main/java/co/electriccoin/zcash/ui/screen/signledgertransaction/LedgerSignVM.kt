@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ledger.R
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.LedgerIssue
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
@@ -113,7 +115,7 @@ class LedgerSignVM(
             val isPresent = observeProposal.observeNullable().first() != null
             hasProposal.complete(isPresent)
             if (!isPresent) {
-                navigationRouter.backToRoot()
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
             }
         }
         viewModelScope.launch {

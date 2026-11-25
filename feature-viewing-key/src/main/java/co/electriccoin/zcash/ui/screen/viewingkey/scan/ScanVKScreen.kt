@@ -16,11 +16,12 @@ import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun ScanVKScreen() {
+internal fun ScanVKScreen(sourceEntryId: String) {
     SecureScreen()
-    val vm = koinViewModel<ScanVKVM>()
+    val vm = koinViewModel<ScanVKVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val invalidQrSheet by vm.invalidQrSheet.collectAsStateWithLifecycle()
     val context = LocalContext.current

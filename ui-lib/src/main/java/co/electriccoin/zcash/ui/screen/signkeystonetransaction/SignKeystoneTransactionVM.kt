@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -44,8 +45,14 @@ class SignKeystoneTransactionVM(
     private val navigationRouter: NavigationRouter,
     private val createKeystoneProposalPCZTEncoder: CreateKeystoneProposalPCZTEncoderUseCase,
     private val cancelKeystoneProposalFlow: CancelProposalFlowUseCase,
-    private val sharePCZT: SharePCZTUseCase
+    private val sharePCZT: SharePCZTUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private val retryRequests = MutableStateFlow(0)
     private val preparation = MutableStateFlow<Preparation?>(null)
     private val proposals = keystoneProposalRepository.transactionProposal
@@ -210,7 +217,9 @@ class SignKeystoneTransactionVM(
         preparation.value = Preparation(attempt, isRejecting = true)
         viewModelScope.launch {
             delay(350.milliseconds)
-            if (isCurrent(attempt)) cancelKeystoneProposalFlow()
+            if (isCurrent(attempt)) {
+                cancelKeystoneProposalFlow.rejectKeystone(attempt.proposal, attempt.account, sourceEntryId)
+            }
         }
     }
 

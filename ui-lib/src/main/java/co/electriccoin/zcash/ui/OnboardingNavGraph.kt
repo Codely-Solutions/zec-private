@@ -106,7 +106,7 @@ private fun NavGraphBuilder.restoreScreens() {
     }
     composable<RestoreDateArgs> { entry ->
         val args = entry.toRoute<RestoreDateArgs>()
-        WithRestoreSession(entry, args.sessionId) { RestoreDateScreen(args) }
+        WithRestoreSession(entry, args.sessionId) { RestoreDateScreen(args, entry.id) }
     }
     composable<RestoreEstimationArgs> { entry ->
         val args = entry.toRoute<RestoreEstimationArgs>()

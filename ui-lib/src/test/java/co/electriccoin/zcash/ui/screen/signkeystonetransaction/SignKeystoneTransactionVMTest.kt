@@ -208,7 +208,7 @@ class SignKeystoneTransactionVMTest {
         h.proposals.value = ShieldTransactionProposal(mockk())
         advanceTimeBy(400)
         runCurrent()
-        coVerify(exactly = 0) { h.cancel() }
+        verify(exactly = 0) { h.cancel.rejectKeystone(any(), any(), null) }
 
         assertNotNull(h.vm.state.value).negativeButton.onClick()
         runCurrent()
@@ -218,7 +218,7 @@ class SignKeystoneTransactionVMTest {
         current.negativeButton.onClick()
         advanceTimeBy(400)
         runCurrent()
-        coVerify(exactly = 1) { h.cancel() }
+        verify(exactly = 1) { h.cancel.rejectKeystone(checkNotNull(h.proposals.value), any(), null) }
     }
 
     private fun TestScope.start(vm: SignKeystoneTransactionVM) {

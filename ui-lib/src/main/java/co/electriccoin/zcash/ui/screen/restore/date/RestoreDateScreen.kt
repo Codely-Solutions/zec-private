@@ -12,8 +12,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun RestoreDateScreen(args: RestoreDateArgs) {
-    val vm = koinViewModel<RestoreDateVM> { parametersOf(args) }
+fun RestoreDateScreen(args: RestoreDateArgs, sourceEntryId: String) {
+    val vm = koinViewModel<RestoreDateVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     SecureScreen()
     LceRenderer(state) {

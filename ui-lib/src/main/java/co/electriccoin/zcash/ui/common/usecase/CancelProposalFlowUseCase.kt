@@ -1,12 +1,16 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -42,19 +46,37 @@ class CancelProposalFlowUseCase(
         zashiProposalRepository.clear()
         keystoneProposalRepository.clear()
         ledgerProposalPipeline.clear()
+        navigationRouter.stageResultFrom(null) { cancelRoute(proposal, clearSendForm) }
+    }
 
+    fun rejectKeystone(proposal: TransactionProposal, account: AccountUuid, sourceEntryId: String?) {
+        fun isOwner(): Boolean = accountDataSource.allAccounts.value
+            ?.any { it is KeystoneAccount && it.isSelected && it.sdkAccount.accountUuid == account } == true
+
+        if (!isOwner() || keystoneProposalRepository.transactionProposal.value !== proposal) return
+        navigationRouter.stageResultFrom(sourceEntryId, isStillAllowed = ::isOwner) {
+            if (keystoneProposalRepository.transactionProposal.value !== proposal) {
+                null
+            } else {
+                keystoneProposalRepository.clear()
+                cancelRoute(proposal, clearSendForm = true)
+            }
+        }
+    }
+
+    private fun cancelRoute(proposal: TransactionProposal?, clearSendForm: Boolean): NavigationCommand =
         when (proposal) {
             is ExactInputSwapTransactionProposal -> {
                 swapRepository.clearQuote()
-                navigationRouter.backTo(SwapArgs::class)
+                NavigationCommand.BackTo(SwapArgs::class)
             }
 
             is ExactOutputSwapTransactionProposal -> {
                 swapRepository.clearQuote()
-                navigationRouter.backTo(PayArgs::class)
+                NavigationCommand.BackTo(PayArgs::class)
             }
 
-            is MigrationSweepTransactionProposal -> navigationRouter.back()
+            is MigrationSweepTransactionProposal -> NavigationCommand.Back
 
             is ShieldTransactionProposal -> {
                 // Reached via ShieldFundsUseCase's Keystone branch, which (unlike the Zashi
@@ -64,28 +86,27 @@ class CancelProposalFlowUseCase(
                 // through to the `else` branch's `backTo(Send::class)` would silently no-op
                 // (Send was never pushed for this flow), leaving the user stuck on the
                 // Sign/reject sheet. A plain back() pops the Sign screen and reveals it again.
-                navigationRouter.back()
+                NavigationCommand.Back
             }
 
             is Zip321TransactionProposal -> {
                 if (proposal.binaryMemoByteCount != null) {
                     // The review replaced the scanner without creating a Send draft.
-                    navigationRouter.back()
+                    NavigationCommand.Back
                 } else {
                     backToSend(clearSendForm)
                 }
             }
 
             is RegularTransactionProposal -> {
-                if (proposal.isDonation) navigationRouter.backTo(DonationArgs::class) else backToSend(clearSendForm)
+                if (proposal.isDonation) NavigationCommand.BackTo(DonationArgs::class) else backToSend(clearSendForm)
             }
 
             else -> backToSend(clearSendForm)
         }
-    }
 
-    private fun backToSend(clearSendForm: Boolean) {
+    private fun backToSend(clearSendForm: Boolean): NavigationCommand {
         if (clearSendForm) observeClearSend.requestClear()
-        navigationRouter.backTo(Send::class)
+        return NavigationCommand.BackTo(Send::class)
     }
 }

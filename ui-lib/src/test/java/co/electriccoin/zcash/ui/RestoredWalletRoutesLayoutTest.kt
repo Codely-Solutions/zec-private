@@ -663,8 +663,10 @@ class RestoredWalletRoutesLayoutTest {
                     swaps, cancelQuote, mockk(), router, mockk(), mockk(), AppAccessSession(), parameters.get(),
                 )
             }
-            viewModel {
-                SignKeystoneTransactionVM(GetWalletAccountsUseCase(accounts), keys, router, mockk(), mockk(), mockk())
+            viewModel { parameters ->
+                SignKeystoneTransactionVM(
+                    GetWalletAccountsUseCase(accounts), keys, router, mockk(), mockk(), mockk(), parameters.get(),
+                )
             }
             viewModel {
                 val fresh = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
@@ -694,7 +696,7 @@ class RestoredWalletRoutesLayoutTest {
                             composable("${NavigationTargets.QR_CODE}/{addressType}") {
                                 QrCodeScreenContent(QrCodeState.Loading(loadingBack))
                             }
-                            composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+                            composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen(it.id) }
                             composable<FixtureMigrationProgress> { Text("Migration progress") }
                             composable<ScanGiftCardArgs> { Text("External scan") }
                             composable<ScanGenericAddressArgs> { Text("Generic scan") }

@@ -33,6 +33,7 @@ import co.electriccoin.zcash.ui.screen.connectledger.common.toEnrollmentIssue
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -300,7 +301,7 @@ class LedgerHandshakeVM(
                         isSheetShown = false,
                     )
                 }
-                navigateToError(ErrorArgs.General(failure))
+                navigateToError.showFrom(sourceEntryId, ErrorArgs.General(failure))
             }
         }
     }

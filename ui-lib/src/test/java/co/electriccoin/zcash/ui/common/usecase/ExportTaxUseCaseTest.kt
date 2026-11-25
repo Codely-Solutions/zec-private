@@ -4,6 +4,8 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import android.net.Uri
 import androidx.core.content.FileProvider
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
@@ -16,8 +18,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -167,6 +171,48 @@ class ExportTaxUseCaseTest {
         assertFailsWith<IllegalStateException> { useCase(account) { true } }
         assertFalse(staging.exists())
         assertNull(shadowOf(context).nextStartedActivity)
+    }
+
+    @Test
+    fun stagedTaxReportCannotOpenTheChooserOverAnotherScreen() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val account = EditAccountFixtures.zodl()
+        val transactions = mockk<TransactionRepository> {
+            coEvery { getTransactions(any()) } returns emptyList()
+        }
+        val versions = mockk<GetVersionInfoProvider> {
+            every { invoke() } returns mockk {
+                every { network } returns ZcashNetwork.Mainnet
+                every { distribution } returns DistributionDimension.FOSS
+                every { isDebuggable } returns true
+            }
+        }
+        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("tax", null))
+        val router = mockk<NavigationRouter>(relaxed = true) {
+            every { activeEntry } returns entry
+        }
+        lateinit var staged: File
+        mockkStatic(FileProvider::class)
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            every { FileProvider.getUriForFile(context, any(), any()) } answers {
+                staged = thirdArg()
+                assertTrue(staged.isFile)
+                entry.value = ActiveNavigationEntry("scanner", null)
+                Uri.parse("content://synthetic/tax.csv")
+            }
+            ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk())
+                .apply { scheduleCleanup = {} }(account, sourceEntryId = "tax") { true }
+        } finally {
+            Dispatchers.resetMain()
+            unmockkStatic(FileProvider::class)
+        }
+
+        assertNull(shadowOf(context).nextStartedActivity)
+        assertFalse(staged.exists())
+        assertFalse(staged.parentFile?.exists() ?: false)
+        verify(exactly = 0) { router.back() }
+        verify(exactly = 0) { router.custom(any()) }
     }
 
     @Test

@@ -2,7 +2,10 @@ package co.electriccoin.zcash.ui.screen.viewingkey.importvk
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
@@ -17,6 +20,7 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 import co.electriccoin.zcash.ui.screen.connecthw.date.HWDateArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.scan.ScanVKArgs
 import kotlinx.coroutines.Job
@@ -47,6 +51,7 @@ internal class ImportVKVM(
     private val pendingImportRepository: ViewOnlyPendingImportRepository,
     private val navigationRouter: NavigationRouter,
     private val navigateToError: NavigateToErrorUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val text = MutableStateFlow("")
 
@@ -81,6 +86,7 @@ internal class ImportVKVM(
      * flow has left the back stack. The pending key goes with it, whichever way the flow ended.
      */
     override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
         pastedClipboardText = null
         pendingImportRepository.clear()
         super.onCleared()
@@ -121,12 +127,16 @@ internal class ImportVKVM(
                     when (submitViewOnlyKey(text.value)) {
                         SubmitViewOnlyKeyResult.Accepted -> {
                             clearPasted()
-                            navigationRouter.forward(HWDateArgs(HWWalletEnrollment.ViewOnly))
+                            navigationRouter.stageResultFrom(sourceEntryId) {
+                                NavigationCommand.Forward(listOf(HWDateArgs(HWWalletEnrollment.ViewOnly)))
+                            }
                         }
 
                         SubmitViewOnlyKeyResult.AlreadyImported -> {
                             clearPasted()
-                            navigationRouter.forward(AlreadyImportedVKArgs)
+                            navigationRouter.stageResultFrom(sourceEntryId) {
+                                NavigationCommand.Forward(listOf(AlreadyImportedVKArgs))
+                            }
                         }
 
                         SubmitViewOnlyKeyResult.Invalid -> {
@@ -134,7 +144,7 @@ internal class ImportVKVM(
                         }
                     }
                 } catch (e: ViewOnlyKeyCheckException) {
-                    navigateToError(ErrorArgs.General(e))
+                    navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
                 } finally {
                     isSubmitting.update { false }
                 }
@@ -152,7 +162,7 @@ internal class ImportVKVM(
             viewModelScope.launch {
                 hideInvalidKeySheet()
                 delay(350.milliseconds)
-                navigationRouter.forward(ScanVKArgs)
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(ScanVKArgs)) }
             }
     }
 

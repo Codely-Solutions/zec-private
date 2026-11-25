@@ -185,6 +185,7 @@ class SyncTests(unittest.TestCase):
                 self.assertTrue(sync.critical(ui_root+path))
         self.assertFalse(sync.critical((ui_root+'fixture/UiPreview.kt').replace('/src/main/', '/src/testFixtures/')))
         self.assertFalse(sync.critical('ui-design-lib/src/testRelease/kotlin/LayoutFixture.kt'))
+        self.assertFalse(sync.critical('ui-design-lib/src/testFixtures/res/values/fixtures.xml'))
         self.assertFalse(sync.critical('docs/review-notes.md'))
         for path in ('ui-design-lib/src/main/res/ui/common/drawable-night-v35/app_logo.png',
                      'ui-lib/src/main/res/ui/about/values/strings.xml',
@@ -256,6 +257,9 @@ class SyncTests(unittest.TestCase):
             ui_root.replace('/main/', '/foss/') + 'common/provider/CrashReportingStorageProviderImpl.kt',
             ui_root.replace('/java/', '/kotlin/') + 'screen/newflow/NewFlowVM.kt',
             'ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt',
+            'ui-design-lib/src/main/res/ui/common/values/strings.xml',
+            'ui-design-lib/src/main/res/ui/common/values-es/strings.xml',
+            'ui-lib/src/foss/res/values/strings.xml',
         )
         for path in tuple(ui_root+relative for relative in protected) + active_sources:
             with self.subTest(path=path), \
@@ -391,7 +395,12 @@ class SyncTests(unittest.TestCase):
                     return original(*args,**kwargs)
                 with runner_temp(temp),patch.object(sync,'gh',
                         return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
-                    with self.assertRaises(subprocess.CalledProcessError):sync.main()
+                    with self.assertRaisesRegex(RuntimeError, 'Critical upstream changes'):
+                        sync.main()
+                    # Exercise the separate branding guard as it would run after trusted review.
+                    with patch.object(sync, 'critical', return_value=False), \
+                            self.assertRaises(subprocess.CalledProcessError):
+                        sync.main()
                 self.assertEqual([],writes)
             finally:
                 original('git','worktree','remove','--force',str(upstream))

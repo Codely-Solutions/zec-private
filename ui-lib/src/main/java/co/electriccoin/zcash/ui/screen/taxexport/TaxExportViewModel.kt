@@ -34,6 +34,7 @@ class TaxExportViewModel(
     private val navigationRouter: NavigationRouter,
     private val appAccessSession: AppAccessSession,
     private val walletWriteAccess: WalletWriteAccess,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val exporting = MutableStateFlow(false)
     private val failed = MutableStateFlow(false)
@@ -93,7 +94,7 @@ class TaxExportViewModel(
         failed.value = false
         exportJob = viewModelScope.launch {
             try {
-                exportTax(selectedAccount, isAllowed)
+                exportTax(selectedAccount, sourceEntryId, isAllowed)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

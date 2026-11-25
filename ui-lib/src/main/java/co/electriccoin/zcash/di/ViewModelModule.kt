@@ -149,7 +149,7 @@ val viewModelModule =
         viewModelOf(::AddressBookVM)
         viewModelOf(::SelectABRecipientVM)
         viewModelOf(::TransactionNoteViewModel)
-        viewModelOf(::TaxExportViewModel)
+        viewModel { parameters -> TaxExportViewModel(get(), get(), get(), get(), get(), parameters.get()) }
         viewModelOf(::CrashReportingViewModel)
         viewModelOf(::BalanceWidgetVM)
         viewModelOf(::HomeVM)

@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
@@ -88,7 +89,8 @@ class SubmitProposalUseCase(
             )
             val account = accountDataSource.getSelectedAccount()
             if (!account.isSpendable) {
-                navigateToError(
+                navigateToError.showFrom(
+                    sourceEntryId,
                     ErrorArgs.General(
                         AccountOperationUnsupportedException.viewOnly()
                     )
@@ -135,7 +137,7 @@ class SubmitProposalUseCase(
         } catch (_: BiometricsCancelledException) {
             // do nothing
         } catch (e: IllegalStateException) {
-            navigateToError(ErrorArgs.General(e))
+            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
         } finally {
             submissionMutex.unlock()
         }

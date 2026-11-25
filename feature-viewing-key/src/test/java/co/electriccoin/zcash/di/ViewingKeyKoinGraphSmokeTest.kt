@@ -121,8 +121,8 @@ class ViewingKeyKoinGraphSmokeTest {
     @Test
     fun viewModels_resolveFromKoin() {
         koin.koin.get<AddVKAccountVM>()
-        koin.koin.get<ImportVKVM>()
-        koin.koin.get<ScanVKVM>()
+        koin.koin.get<ImportVKVM> { parametersOf("fixture-entry") }
+        koin.koin.get<ScanVKVM> { parametersOf("fixture-entry") }
         koin.koin.get<NameVKVM> { parametersOf("fixture-entry") }
         koin.koin.get<ImportedVKVM>()
         koin.koin.get<AlreadyImportedVKVM>()

@@ -1,17 +1,33 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import android.content.Context
+import androidx.work.ExistingWorkPolicy
+import androidx.work.Operation
+import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.PreparationStep
 import cash.z.ecc.android.sdk.TransferProposal
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.work.MigrationScheduler
+import com.google.common.util.concurrent.SettableFuture
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.time.Duration.Companion.seconds
 
 class FinalizeMigrationScheduleUseCaseTest {
@@ -51,8 +67,46 @@ class FinalizeMigrationScheduleUseCaseTest {
 
             useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC, "fixture-owner")
 
-            verify(exactly = 1) { scheduler.schedule("fixture-owner", any()) }
+            coVerify(exactly = 1) { scheduler.scheduleAndAwait("fixture-owner", any()) }
         }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aFailedEnqueueCannotAcknowledgeACommittedSchedule() = runTest {
+        val account = "fixture-owner"
+        val context = mockk<Context> {
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns mockk {
+                every { edit() } returns mockk(relaxed = true)
+            }
+        }
+        val acknowledgement = SettableFuture.create<Operation.State.SUCCESS>()
+        val manager = mockk<WorkManager> {
+            every { enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any()) } returns
+                mockk { every { result } returns acknowledgement }
+        }
+        mockkObject(WorkManager.Companion)
+        try {
+            every { WorkManager.getInstance(context) } returns manager
+            supervisorScope {
+                val result = async {
+                    useCase(MigrationScheduler(context))(schedule(), MigrationMode.AUTOMATIC, account)
+                }
+                runCurrent()
+                verify(exactly = 1) {
+                    manager.enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any())
+                }
+                assertFalse(result.isCompleted)
+
+                val failure = IllegalStateException("synthetic enqueue failure")
+                acknowledgement.setException(failure)
+                assertSame(failure, assertFailsWith<IllegalStateException> { result.await() })
+            }
+        } finally {
+            acknowledgement.cancel(false)
+            unmockkObject(WorkManager.Companion)
+        }
+    }
 
     @Test
     fun `delay targets earliest step including preparations`() {

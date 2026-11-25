@@ -43,6 +43,11 @@ class MigrationScheduler(
         enqueue(accountKeyId, delay)
     }
 
+    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
+        val operation = checkNotNull(enqueue(accountKeyId, delay)) { "Migration scheduling is paused" }
+        operation.result.await()
+    }
+
     internal suspend fun runNotificationStep(accountKeyId: String) {
         if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
             enqueue(accountKeyId, Duration.ZERO)?.result?.await()
