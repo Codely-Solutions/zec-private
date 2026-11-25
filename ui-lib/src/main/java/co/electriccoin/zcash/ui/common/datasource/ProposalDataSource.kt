@@ -32,6 +32,7 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import java.math.BigDecimal
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.zecdev.zip321.ZIP321
@@ -323,13 +324,12 @@ class ProposalDataSourceImpl(
                 )
             }
 
-            val endpoints = getSubmissionEndpoints()
-            Twig.info {
-                "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
-            }
-
-            val result =
-                submitCreatedTransactions(
+            try {
+                val endpoints = getSubmissionEndpoints()
+                Twig.info {
+                    "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
+                }
+                val result = submitCreatedTransactions(
                     synchronizer = synchronizer,
                     transactions = transactions,
                     endpoints = endpoints,
@@ -337,12 +337,17 @@ class ProposalDataSourceImpl(
                     beforeFirstSubmission = beforeFirstSubmission
                 ).toSubmitResult()
 
-            if (synchronizer is SdkSynchronizer) {
-                synchronizer.refreshTransactions()
-                synchronizer.refreshAllBalances()
+                if (synchronizer is SdkSynchronizer) {
+                    synchronizer.refreshTransactions()
+                    synchronizer.refreshAllBalances()
+                }
+                result
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val ids = transactions.map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() }
+                throw SdkCreatedTransactionsException(ids, e)
             }
-
-            result
         }
 
     private suspend fun submitCreatedTransactions(
@@ -406,6 +411,11 @@ class ProposalDataSourceImpl(
             is AddressType.Invalid -> error("Invalid address type")
         }
 }
+
+internal class SdkCreatedTransactionsException(
+    val txIds: List<String>,
+    cause: Exception,
+) : IllegalStateException("Submission state is unknown after SDK transaction creation", cause)
 
 internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
     if (isEmpty()) {

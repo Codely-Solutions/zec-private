@@ -30,9 +30,15 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
     private val sdkErased = MutableStateFlow(
         pending.value && runCatchingRecoverable { readStage() }.getOrNull() == ResetStage.CLEAR_PREFERENCES
     )
+    private val sdkInputSuppressed = MutableStateFlow(pending.value)
 
     val isPending = pending.asStateFlow()
-    val isSdkErased = sdkErased.asStateFlow()
+    val isSdkInputSuppressed = sdkInputSuppressed.asStateFlow()
+
+    internal fun suppressSdkInput() {
+        check(pending.value) { "SDK input suppression requires a pending wallet reset" }
+        sdkInputSuppressed.value = true
+    }
 
     suspend fun getStage(): ResetStage? =
         withContext(Dispatchers.IO) {
@@ -40,7 +46,10 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
         }
 
     suspend fun store(stage: ResetStage?) {
-        if (stage == ResetStage.CLEAR_PREFERENCES) sdkErased.value = true
+        if (stage == ResetStage.CLEAR_PREFERENCES) {
+            sdkErased.value = true
+            sdkInputSuppressed.value = true
+        }
         withContext(Dispatchers.IO) {
             val directory = checkNotNull(file.parentFile)
             if (stage == null) {
@@ -62,7 +71,10 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
             }
             directorySync.sync(directory)
             lastStage = stage
-            if (stage == null) sdkErased.value = false
+            if (stage == null) {
+                sdkErased.value = false
+                sdkInputSuppressed.value = false
+            }
             pending.value = stage != null
         }
     }

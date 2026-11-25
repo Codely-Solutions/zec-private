@@ -129,6 +129,8 @@ A manual dispatch of `hosted-core.yml` runs a testnet-only rehearsal from the se
 
 If fixture upload succeeded and recording was interrupted, dispatch `preserve-hosted-fixture.yml` on main with the exact `release_tag` and the `recovery_oci` digest from the original store job summary. The read-only verifier pulls the bounded archive by digest from the private registry and checks both original APK hashes against the accepted pair. Recording verifies the latest public release and writes only the fixture binding against current protected main. The original Actions archive is optional for this recovery path.
 
+Registry-only recovery deliberately skips storage. Recording requires a successful verifier and an active run. The direct main release path also skips hosted admission. Its signing smoke uses the successful exact-main admission, preflight result and wiring decision. Optional skipped jobs do not determine those gates. [GitHub dependency semantics](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs#defining-prerequisite-jobs)
+
 The Tor outage test requires parsed updater metadata before the interruption, a blocked updater request during it, and a real response after Tor recovers. The test retries the initial read once on an I/O error through the same app Tor path. Phase markers identify the last successful readiness step. A confirmed GitHub quota response proves reachability only. Independent publication verification still checks actual release discovery.
 
 ## Guarded local acceptance

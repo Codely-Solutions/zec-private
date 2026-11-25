@@ -7,7 +7,7 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-import co.electriccoin.zcash.global.hideErasedWallet
+import co.electriccoin.zcash.global.hideResetWallet
 import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
@@ -104,7 +104,7 @@ class WalletSdkInputCommitTest {
         val resetProgress = ResetProgressStore(context, DirectorySync {})
         val sdkWallets = mutableListOf<PersistableWallet?>()
         backgroundScope.launch {
-            walletProvider.persistableWallet.hideErasedWallet(resetProgress).collect { sdkWallets += it }
+            walletProvider.persistableWallet.hideResetWallet(resetProgress).collect { sdkWallets += it }
         }
         runCurrent()
         assertEquals(listOf<PersistableWallet?>(null), sdkWallets)

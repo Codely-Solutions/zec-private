@@ -8,14 +8,10 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
-internal suspend fun eraseWalletlessSdkData(context: Context, network: ZcashNetwork) {
+internal suspend fun eraseInactiveSdkData(context: Context, network: ZcashNetwork) {
     // Slipstream guards the active wallet and acknowledges its data and submit-plan erasure.
     check(SlipstreamSynchronizer.erase(context, network)) { "Could not erase Slipstream wallet data" }
     Synchronizer.erase(context, network)
-    requireClassicWalletFilesErased(context, network)
-}
-
-internal fun requireClassicWalletFilesErased(context: Context, network: ZcashNetwork) {
     check(classicWalletFiles(context, network).all { Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }) {
         "Could not confirm classic wallet data erasure"
     }

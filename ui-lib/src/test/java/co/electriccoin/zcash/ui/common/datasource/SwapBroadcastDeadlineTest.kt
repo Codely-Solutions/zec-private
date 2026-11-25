@@ -39,6 +39,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import java.math.BigDecimal
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -56,41 +57,40 @@ class SwapBroadcastDeadlineTest {
             fixture.prepare()
             assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
             fixture.verifyNoCreation()
-            fixture.verifyNoBroadcast()
+            fixture.verifyNoAppBroadcast()
         }
     }
 
     @Test
-    fun expiryDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
+    fun expiryDuringCreationLeavesSoftwareAndPcztFundingUncertain() = runBlocking {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware)
             fixture.prepare()
-            val result = fixture.whileSuspended { fixture.expire() }
-            assertIs<IllegalStateException>(result.exceptionOrNull())
-            fixture.verifyNoBroadcast()
+            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
+            fixture.verifyNoAppBroadcast()
             // The durable reference remains reserved, so repeating approval cannot create a second funding.
             assertTrue(runCatching { fixture.submit() }.isFailure)
-            fixture.verifyNoBroadcast()
+            fixture.verifyNoAppBroadcast()
         }
     }
 
     @Test
-    fun expiryDuringEndpointSelectionPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
+    fun expiryDuringEndpointSelectionPreservesKnownIdsWithoutAnAppBroadcast() = runBlocking {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware, pauseEndpoints = true)
             fixture.prepare()
-            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
-            fixture.verifyNoBroadcast()
+            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
+            fixture.verifyNoAppBroadcast()
         }
     }
 
     @Test
-    fun replacementDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
+    fun replacementDuringCreationKeepsUncertainTrackingAndPreventsAppBroadcast() = runBlocking {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware)
             fixture.prepare()
-            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.clear() }.exceptionOrNull())
-            fixture.verifyNoBroadcast()
+            fixture.verifyUncertain(fixture.whileSuspended { fixture.clear() })
+            fixture.verifyNoAppBroadcast()
         }
     }
 
@@ -270,7 +270,13 @@ class SwapBroadcastDeadlineTest {
             coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
             coVerify(exactly = 0) { broadcaster.createTransactionFromPczt(any(), any()) }
         }
-        fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
+        fun verifyUncertain(result: Result<SubmitResult>) {
+            val pending = assertIs<SubmitResult.GrpcFailure>(result.getOrThrow())
+            assertEquals(SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN, pending.reason)
+            assertEquals(transactions.map { TransactionSubmitResult.Success(it.txId).txIdString() }, pending.txIds)
+            coVerify(exactly = 0) { metadata.markSwapFundingNotSubmitted(any(), any(), any(), any(), any()) }
+        }
+        fun verifyNoAppBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
         private suspend fun pause() {
             entered.complete(Unit)
             released.await()

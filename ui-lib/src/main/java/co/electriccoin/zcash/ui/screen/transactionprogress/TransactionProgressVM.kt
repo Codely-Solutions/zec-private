@@ -521,6 +521,10 @@ internal fun SubmitResult.GrpcFailure.pendingDescription(): StyledStringResource
             stringRes(R.string.send_pendingTimeoutInfo).withStyle()
         }
 
+        SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN -> {
+            stringRes(R.string.send_pendingSdkStateInfo).withStyle()
+        }
+
         null -> {
             description
                 ?.takeIf { it.isNotBlank() }

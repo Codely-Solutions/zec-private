@@ -329,7 +329,7 @@ jobs:
             -Pkotlin.compiler.execution.strategy=in-process help detektAll
   signing_smoke:
     needs: [preflight, admit]
-    if: needs.admit.outputs.main == 'true' && (!inputs.validation_only || vars.PRODUCTION_SIGNING_READY == 'true') && needs.preflight.outputs.signing_changed == 'true'
+    if: ${{ !cancelled() && needs.admit.result == 'success' && needs.preflight.result == 'success' && needs.admit.outputs.main == 'true' && (!inputs.validation_only || vars.PRODUCTION_SIGNING_READY == 'true') && needs.preflight.outputs.signing_changed == 'true' }}
     concurrency:
       group: zec-private-release
       queue: max

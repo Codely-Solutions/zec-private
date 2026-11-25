@@ -756,7 +756,7 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
-    fun aRefusedFirstBroadcastPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
+    fun refusalBeforeSdkCreationPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
         val quote = fundingQuote(SwapType.EXACT_INPUT)
         val address = WalletAddress.Unified.new("deposit")
         val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
@@ -772,9 +772,9 @@ class MetadataDataSourceFileTest {
         var approved = true
         var broadcast = false
         assertFailsWith<IllegalStateException> {
-            tracking.submitReservedFunding(proposal, { check(approved) }) { _, firstEntry ->
+            tracking.submitReservedFunding(proposal, { check(approved) }) { enterSdk, _ ->
                 approved = false
-                firstEntry()
+                enterSdk()
                 broadcast = true
                 error("fixture reached broadcaster")
             }

@@ -74,10 +74,8 @@ private class MultiEndpointTransactionSubmitterImpl(
         var completedNormally = false
 
         try {
-            // Submit every created transaction even after an earlier one fails. The SDK only records a
-            // retry plan (and keeps rebroadcasting in the background until the transaction mines or expires)
-            // for transactions it was asked to submit; skipping later transactions on a failure would strand
-            // them forever. Matches the iOS Broadcaster integration.
+            // Explicitly attempt every leg after admission even if an earlier endpoint refused. The SDK
+            // can independently retry stored transactions. App endpoint admission only controls these calls.
             val results =
                 transactions.mapIndexed { index, transaction ->
                     val result =

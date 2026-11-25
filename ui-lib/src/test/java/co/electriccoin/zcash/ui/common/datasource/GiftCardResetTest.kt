@@ -1,9 +1,7 @@
 package co.electriccoin.zcash.ui.common.datasource
 
-import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.GiftCardRedeemer
 import cash.z.ecc.android.sdk.GiftCardRedeemers
-import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.GiftCard
 import cash.z.ecc.android.sdk.model.RecipientAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -26,7 +24,7 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
-import co.electriccoin.zcash.ui.screen.deletewallet.sdkDataResetFixture
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetWalletSdkDataUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -44,20 +42,15 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.Rule
-import org.junit.rules.TemporaryFolder
 
 /** Verifies wallet reset against the production gift repository and data source. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class GiftCardResetTest : GiftCardDataSourceTestFixture() {
-    @get:Rule val resetFiles = TemporaryFolder()
-
     @Test
     fun resetWaitsForTheStartedRedemptionAndNativeCloseBeforeErasingTheWallet() = runTest {
         val submission = CompletableDeferred<Unit>()
@@ -75,7 +68,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         val reset = launch { fixture.reset(keepFiles = true) }
         runCurrent()
 
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         coVerify(exactly = 0) { redeemer.close() }
         fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 
@@ -83,13 +76,13 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         runCurrent()
 
         coVerify(exactly = 1) { redeemer.close() }
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 
         close.complete(Unit)
         reset.join()
 
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         verify(exactly = 1) { parsedCard.wipe() }
         coVerify(exactly = 1) { fixture.progressStore.store(ResetStage.ERASE_SDK) }
         assertFalse(fixture.reset.isPending.value)
@@ -113,7 +106,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
         coVerify(exactly = 1) { redeemer.close() }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
     }
 
     @Test
@@ -130,12 +123,12 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         coVerify(exactly = 1) { redeemer.close() }
         coVerify(exactly = 0) { GiftCardRedeemers.erase(any(), any(), any()) }
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         aliases -= ALIAS
         reset.join()
 
         coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Mainnet, OTHER_ALIAS) }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
     }
 
     @Test
@@ -180,7 +173,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         advanceTimeBy(31.seconds)
         assertIs<IllegalStateException>(first.await().exceptionOrNull())
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
         val stoppedAt = lookups
         advanceTimeBy(31.seconds)
@@ -195,7 +188,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         assertEquals(stoppedAt + 2, lookups)
         coVerify(exactly = 1) { redeemer.close() }
         coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
     }
 
     @Test
@@ -208,7 +201,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         coVerify(exactly = 1) { redeemer.close() }
         verify(exactly = 1) { parsedCard.wipe() }
         fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES, attempts = 2)
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
     }
 
     @Test
@@ -228,7 +221,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             "Timed out preparing wallet reset",
             assertIs<IllegalStateException>(first.await().exceptionOrNull()).message,
         )
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         fixture.assertPreparationPending(ResetStage.ERASE_SDK)
         coVerify(exactly = 0) { redeemer.close() }
 
@@ -238,13 +231,13 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         val retry = launch { fixture.reset(keepFiles = true) }
         runCurrent()
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         submission.complete(Unit)
         retry.join()
 
         coVerify(exactly = 1) { redeemer.redeem(recipient, any(), any()) }
         coVerify(exactly = 0) { replacementRedeemer.redeem(any(), any(), any()) }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
     }
 
     @Test
@@ -274,13 +267,13 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) }
         fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         assertEquals(2, eraseCalls)
         assertEquals(listOf(StoredCardWallet(network, ALIAS)), dataSource.findStoredCardWallets())
 
         fixture.reset(keepFiles = false)
         assertFalse(fixture.reset.isPending.value)
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         assertEquals(3, eraseCalls)
         assertTrue(dataSource.findStoredCardWallets().isEmpty())
     }
@@ -305,11 +298,11 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         repository.sweepOrphanedCardWallets()
         assertFailsWith<java.io.IOException> { fixture.reset(keepFiles = false) }
         fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
 
         fixture.reset(keepFiles = false)
         coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Testnet, ALIAS) }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         assertFalse(fixture.reset.isPending.value)
     }
 
@@ -328,14 +321,12 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         return ResetFixture(repository, store, id)
     }
 
-    private inner class ResetFixture(
+    private class ResetFixture(
         val repository: GiftCardRepositoryImpl,
         val store: GiftCardLinkStoreImpl,
         val id: String,
     ) {
-        val walletCoordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flowOf(true)
-        }
+        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
         private val stage = MutableStateFlow<ResetStage?>(null)
         private val pending = MutableStateFlow(false)
         private val addressBook = mockk<AddressBookRepository>(relaxed = true)
@@ -349,10 +340,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             coEvery { store(null) } coAnswers { recordStage(null) }
         }
         val reset = ResetZashiUseCase(
-            resetWalletSdkData = sdkDataResetFixture(resetFiles.root, walletCoordinator),
-            synchronizerProvider = mockk {
-                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-            },
+            resetWalletSdkData = sdkData,
             standardPreferenceProvider = mockk<StandardPreferenceProvider> {
                 coEvery { this@mockk.invoke() } returns standardPrefs
             },

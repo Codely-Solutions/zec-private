@@ -2974,34 +2974,38 @@ index 48b59db8e..60a94c2fc 100644
 +    <string name="ledger_error_unknown_message">ZEC Private couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
 +    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
-index af5bff4d4..05ff89e7c 100644
+index af5bff4d4..04ba68db8 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
-@@ -20,0 +21 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
+@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -20,0 +22 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
-@@ -29,0 +31 @@ import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignVM
+@@ -29,0 +32 @@ import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignVM
 +import io.mockk.every
-@@ -32,0 +35 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -32,0 +36 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -36,0 +40 @@ import org.koin.core.KoinApplication
+@@ -36,0 +41 @@ import org.koin.core.KoinApplication
 +import org.koin.core.parameter.parametersOf
-@@ -62 +66,3 @@ class LedgerKoinGraphSmokeTest {
+@@ -62 +67,3 @@ class LedgerKoinGraphSmokeTest {
 -                single<NavigationRouter> { mockk(relaxed = true) }
 +                single<NavigationRouter> {
 +                    mockk(relaxed = true) { every { activeEntry } returns MutableStateFlow(null) }
 +                }
-@@ -70,0 +77 @@ class LedgerKoinGraphSmokeTest {
+@@ -70,0 +78 @@ class LedgerKoinGraphSmokeTest {
 +                single<SubmissionProgressStore> { mockk(relaxed = true) }
-@@ -105 +112 @@ class LedgerKoinGraphSmokeTest {
+@@ -76,0 +85 @@ class LedgerKoinGraphSmokeTest {
++                single { WalletWriteAccess() }
+@@ -105 +114 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerDeviceScanVM>()
 +        koin.koin.get<LedgerDeviceScanVM> { parametersOf("fixture-entry") }
-@@ -110 +117 @@ class LedgerKoinGraphSmokeTest {
+@@ -110 +119 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerOpenAppVM>()
 +        koin.koin.get<LedgerOpenAppVM> { parametersOf(LedgerOpenAppArgs(), "fixture-entry") }
-@@ -115 +122 @@ class LedgerKoinGraphSmokeTest {
+@@ -115 +124 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerHandshakeVM>()
 +        koin.koin.get<LedgerHandshakeVM> { parametersOf("fixture-entry") }
-@@ -125 +132 @@ class LedgerKoinGraphSmokeTest {
+@@ -125 +134 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerSignVM>()
 +        koin.koin.get<LedgerSignVM> { parametersOf("fixture-sign-entry") }
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt
@@ -32272,7 +32276,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..8c82d8f8b 100644
+index 7b9af8bf7..d9d667e55 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -52,0 +53 @@
@@ -32545,145 +32549,147 @@ index 7b9af8bf7..8c82d8f8b 100644
 @@ -742 +745 @@
 -    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
 +    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
-@@ -810 +813 @@
+@@ -770,0 +774 @@
++    <string name="send_pendingSdkStateInfo">Es posible que se haya enviado tu transacción. Comprueba su estado antes de volver a intentarlo.</string>
+@@ -810 +814 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
-@@ -816 +819 @@
+@@ -816 +820 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -846 +849 @@
+@@ -846 +850 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
-@@ -853,2 +856,2 @@
+@@ -853,2 +857,2 @@
 -    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
-@@ -884 +887 @@
+@@ -884 +888 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
 +    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
-@@ -894,2 +897,2 @@
+@@ -894,2 +898,2 @@
 -    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
 -    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
 +    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
 +    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
-@@ -897,2 +900,2 @@
+@@ -897,2 +901,2 @@
 -    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
 -    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
 +    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
 +    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
-@@ -948 +951 @@
+@@ -948 +952 @@
 -    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
 +    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
-@@ -951 +954 @@
+@@ -951 +955 @@
 -    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
 +    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
-@@ -953 +956 @@
+@@ -953 +957 @@
 -    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
 +    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
-@@ -957 +960,3 @@
+@@ -957 +961,3 @@
 -    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
 +    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
 +    <string name="reportSwap_shareQuote">Compartir cotización original</string>
 +    <string name="reportSwap_shareQuoteDescription">Comparte la cotización firmada por el proveedor con alguien de confianza. Incluye el importe del swap y las direcciones de destino y de reembolso.</string>
-@@ -962 +967 @@
+@@ -962 +968 @@
 -    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
 +    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
-@@ -965,2 +970,2 @@
+@@ -965,2 +971,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
-@@ -985,0 +991,2 @@
+@@ -985,0 +992,2 @@
 +    <string name="private_swap_incomplete_check_support">Consulta con soporte antes de enviar más.</string>
 +    <string name="private_swap_check_status">Consultar estado</string>
-@@ -996 +1003 @@
+@@ -996 +1004 @@
 -    <string name="transaction_detail_info_incomplete_deposit_message">Deposita %1$s adicionales para completar este swap antes del %2$s, o tu depósito será reembolsado.</string>
 +    <string name="transaction_detail_info_incomplete_deposit_message">Envía %1$s antes del %2$s para alcanzar el depósito requerido.</string>
-@@ -1051 +1058 @@
+@@ -1051 +1059 @@
 -    <string name="update_title_available">Zodl aquí.</string>
 +    <string name="update_title_available">ZEC Private aquí.</string>
-@@ -1054 +1061 @@
+@@ -1054 +1062 @@
 -        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
 +        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
-@@ -1057 +1064 @@
+@@ -1057 +1065 @@
 -        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
 +        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
-@@ -1069 +1076 @@
+@@ -1069 +1077 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1098 @@
+@@ -1091 +1099 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1100,3 @@
+@@ -1093,2 +1101,3 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
 +    <string name="migration_notification_checkStatusText">Abre la aplicación para comprobar el estado de la migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1114 @@
+@@ -1106 +1115 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1132 +1140 @@
+@@ -1132 +1141 @@
 -    <string name="migrationPrivacy_bodyImmediate">Si Tor está disponible en tu región, te recomendamos encarecidamente activarlo para evitar vincular tu saldo con tu dirección IP. También puedes usar una VPN de confianza si Tor no está disponible en tu región.</string>
 +    <string name="migrationPrivacy_bodyImmediate">La migración inmediata usa el ajuste de Tor de tu monedero. Activa Tor en Ajustes para usarlo.</string>
-@@ -1140 +1148 @@
+@@ -1140 +1149 @@
 -    <string name="migrationSuccess_subtitle">Tus ZEC se migraron\ncorrectamente a Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migración enviada. Consulta Actividad para ver la confirmación.</string>
-@@ -1160 +1168 @@
+@@ -1160 +1169 @@
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Un monto tan específico puede identificarte en la red. Para proteger tu privacidad, te recomendamos bloquear este saldo en lugar de migrarlo.</string>
 +    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
-@@ -1165,2 +1173,2 @@
+@@ -1165,2 +1174,2 @@
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Saldo de Orchard bloqueado</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s ahora está bloqueado en Orchard. El bloqueo hace que este monto no se pueda gastar para proteger tu privacidad.</string>
 +    <string name="migrationComplete_lockRequestFailed">No se pudieron bloquear los fondos de Orchard. Inténtalo de nuevo.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Solicitud de bloqueo completada.</string>
-@@ -1172 +1180 @@
+@@ -1172 +1181 @@
 -    <string name="migrationComplete_residueTitle">Te has movido a Ironwood</string>
 +    <string name="migrationComplete_residueTitle">Saldo pequeño en Orchard</string>
-@@ -1176 +1184 @@
+@@ -1176 +1185 @@
 -    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
-@@ -1179 +1187 @@
+@@ -1179 +1188 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1194 @@
+@@ -1186 +1195 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1212 +1220 @@
+@@ -1212 +1221 @@
 -    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca este saldo como </string>
 +    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca todos los fondos disponibles de Orchard de esta cuenta como </string>
-@@ -1215 +1223 @@
+@@ -1215 +1224 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1256 @@
+@@ -1248 +1257 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1256 +1264 @@
+@@ -1256 +1265 @@
 -    <string name="migrationReview_immediateBody">Todo tu saldo de Orchard se transferirá a Ironwood en una sola transferencia en cadena. Una vez confirmada, esta transferencia no se puede cancelar.</string>
 +    <string name="migrationReview_immediateBody">La transferencia mueve los fondos elegibles de Orchard a Ironwood. Una vez confirmada, esta transferencia no se puede cancelar.</string>
-@@ -1257,0 +1266 @@
+@@ -1257,0 +1267 @@
 +    <string name="migrationReview_eligibleOrchardFunds">Fondos elegibles de Orchard</string>
-@@ -1262 +1271 @@
+@@ -1262 +1272 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1286 @@
+@@ -1277 +1287 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1288 @@
+@@ -1279 +1289 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1292,2 @@
+@@ -1283,2 +1293,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1294,0 +1304,2 @@
+@@ -1294,0 +1305,2 @@
 +    <string name="migrationHome_finishScheduling">Termina de programar la migración</string>
 +    <string name="migrationScheduled_signatureRequired">Vuelve a Inicio para terminar de firmar con Keystone.</string>
-@@ -1306 +1316,0 @@
+@@ -1306 +1317,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1322,2 @@
+@@ -1312,2 +1323,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -32728,7 +32734,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..bf2431a9f 100644
+index f41234151..0515954eb 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -33013,91 +33019,93 @@ index f41234151..bf2431a9f 100644
 @@ -786 +786 @@
 -    <string name="send_confirmation_multiple_report_text">Hi, Zodl Team.\n\nWhile sending a transaction to a TEX
 +    <string name="send_confirmation_multiple_report_text">Hi, ZEC Private Team.\n\nWhile sending a transaction to a TEX
-@@ -849,3 +848,0 @@
+@@ -816,0 +817 @@
++    <string name="send_pendingSdkStateInfo">Your transaction may have been sent. Check its status before trying again.</string>
+@@ -849,3 +849,0 @@
 -    <string name="coinVote_common_confirmation" tools:ignore="MissingTranslation">Confirmation</string>
 -    <string name="coinVote_delegationSigning_instruction" tools:ignore="MissingTranslation" translatable="false">After you have signed with Keystone, tap on the Scan Signature button below.</string>
 -    <string name="coinVote_delegationSigning_scanSignature" tools:ignore="MissingTranslation" translatable="false">Scan Signature</string>
-@@ -857,2 +853,0 @@
+@@ -857,2 +854,0 @@
 -    <string name="coinVote_delegationSigning_duplicateSignature" tools:ignore="MissingTranslation" translatable="false">That Keystone signature was already scanned for bundle %1$d of %2$d. Sign the current bundle on Keystone, then scan the new QR.</string>
 -    <string name="coinVote_delegationSigning_wrongSignature" tools:ignore="MissingTranslation" translatable="false">That signature is for a different bundle. Sign bundle %1$d of %2$d on Keystone, then scan the new QR.</string>
-@@ -864,2 +858,0 @@
+@@ -864,2 +859,0 @@
 -    <string name="coinVote_delegationSigning_title" tools:ignore="MissingTranslation" translatable="false">Authorize Vote</string>
 -    <string name="coinVote_delegationSigning_currentBundleProgress" tools:ignore="MissingTranslation" translatable="false">Signature %1$d of %2$d</string>
-@@ -869 +861,0 @@
+@@ -869 +862,0 @@
 -    <string name="coinVote_delegationSigning_useSignedBundlesOnly" tools:ignore="MissingTranslation" translatable="false">Use signed bundles only</string>
-@@ -871 +862,0 @@
+@@ -871 +863,0 @@
 -    <string name="coinVote_delegationSigning_memo" tools:ignore="MissingTranslation" translatable="false">Memo</string>
-@@ -880 +871 @@
+@@ -880 +872 @@
 -    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of Zodl\'s control.</string>
 +    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of ZEC Private\'s control.</string>
-@@ -886 +877 @@
+@@ -886 +878 @@
 -    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
 +    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
-@@ -916 +907 @@
+@@ -916 +908 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %s less based on the %s slippage you set.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %1$s less based on the %2$s slippage you set.</string>
-@@ -923,2 +914,2 @@
+@@ -923,2 +915,2 @@
 -    <string name="swapToZec_info2">%s on %s</string>
 -    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in Zodl</string>
 +    <string name="swapToZec_info2">%1$s on %2$s</string>
 +    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
-@@ -954 +945 @@
+@@ -954 +946 @@
 -    <string name="taxExport_desc">Download your <xliff:g example="Zodl" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
 +    <string name="taxExport_desc">Download your <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
-@@ -955,0 +947,6 @@
+@@ -955,0 +948,6 @@
 +    <string name="taxExport_error">Could not export transaction history. Try again.</string>
 +    <string name="request_amount_minimum">Enter at least 0.00000001 ZEC.</string>
 +    <string name="request_amount_fiat_minimum">Enter the equivalent of at least 0.00005 ZEC.</string>
 +    <string name="request_amount_rate_loading">Refreshing exchange rate…</string>
 +    <string name="request_amount_rate_stale">The exchange rate is out of date.</string>
 +    <string name="request_amount_rate_unavailable">Exchange rate unavailable.</string>
-@@ -964,2 +961,2 @@
+@@ -964,2 +962,2 @@
 -    <string name="texKeystone_step1_title">Send to Zodl first</string>
 -    <string name="texKeystone_step1_desc">Transfer ZEC to your Zodl shielded address</string>
 +    <string name="texKeystone_step1_title">Send to ZEC Private first</string>
 +    <string name="texKeystone_step1_desc">Transfer ZEC to your ZEC Private shielded address</string>
-@@ -967,2 +964,2 @@
+@@ -967,2 +965,2 @@
 -    <string name="texKeystone_step2_title">Send from Zodl to TEX address</string>
 -    <string name="texKeystone_step2_desc">Once received in Zodl, send the tokens to your final TEX destination address</string>
 +    <string name="texKeystone_step2_title">Send from ZEC Private to TEX address</string>
 +    <string name="texKeystone_step2_desc">Once received in ZEC Private, send the tokens to your final TEX destination address</string>
-@@ -1019 +1016 @@
+@@ -1019 +1017 @@
 -    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. Your funds have been returned, minus transaction fees. If you haven\'t received them, contact the Zodl support team.</string>
 +    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. The provider reports a refund, minus transaction fees. If it has not arrived, preserve the swap details and check its status with the provider.</string>
-@@ -1022 +1019 @@
+@@ -1022 +1020 @@
 -    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds and didn\'t receive your swap, contact support so we can help resolve it.</string>
 +    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds, preserve the swap details and inspect its status or refund with the provider before sending again.</string>
-@@ -1024 +1021 @@
+@@ -1024 +1022 @@
 -    <string name="swapAndPay_expiredMsg">This swap expired after its 24-hour validity window. If you didn\'t send funds, no action is needed. If you did send funds, contact support so we can help.</string>
 +    <string name="swapAndPay_expiredMsg">This swap expired. If you did not send funds, no action is needed. If you did, preserve the swap details and inspect its status or refund with the provider.</string>
-@@ -1028 +1025,3 @@
+@@ -1028 +1026,3 @@
 -    <string name="reportSwap_msg">Tapping the button below will send details about this swap (like the deposit address and target asset) to the Zodl support team so they can help resolve your issue. The transaction info is included automatically.</string>
 +    <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
 +    <string name="reportSwap_shareQuote">Share original quote</string>
 +    <string name="reportSwap_shareQuoteDescription">Share the provider-signed quote with a recipient you trust. It includes the swap amount, recipient address and refund address.</string>
-@@ -1033 +1032 @@
+@@ -1033 +1033 @@
 -    <string name="swap_mismatch_msg_2">We\’d appreciate you reporting this to us so we can investigate it with the swap provider.</string>
 +    <string name="swap_mismatch_msg_2">You can export diagnostic details for investigation. Review them before choosing a recipient.</string>
-@@ -1036,2 +1035,2 @@
+@@ -1036,2 +1036,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: API mismatch</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detected the following error in the API response from the swap provider. Providing these details allows us to raise it with them to investigate. We won\’t relay your personal details to the swap provider. You can send this as-is, or include a note to us. Thanks in advance.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: API mismatch</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rejected a swap-provider response that did not match the request. Review these diagnostic details before sharing.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
-@@ -1056,0 +1056 @@
+@@ -1056,0 +1057 @@
 +    <string name="private_swap_incomplete_check_support">Check with support before sending more.</string>
-@@ -1067 +1067 @@
+@@ -1067 +1068 @@
 -    <string name="transaction_detail_info_incomplete_deposit_message">Deposit an additional %1$s to complete this swap before %2$s, or your deposit will be refunded.</string>
 +    <string name="transaction_detail_info_incomplete_deposit_message">Send %1$s by %2$s to reach the required deposit.</string>
-@@ -1122 +1122 @@
+@@ -1122 +1123 @@
 -    <string name="update_title_available">Zodl here.</string>
 +    <string name="update_title_available">ZEC Private here.</string>
-@@ -1125 +1125 @@
+@@ -1125 +1126 @@
 -        There is a required update\nfor Zodl that makes major improvements to\nperformance and/or security.
 +        There is a required update\nfor ZEC Private that makes major improvements to\nperformance and/or security.
-@@ -1128 +1128 @@
+@@ -1128 +1129 @@
 -        There is a new version of Zodl that makes minor updates to
 +        There is a new version of ZEC Private that makes minor updates to
-@@ -1140,7 +1139,0 @@
+@@ -1140,7 +1140,0 @@
 -    <string name="coinVote_common_continue" tools:ignore="MissingTranslation">Continue</string>
 -    <string name="coinVote_pollsList_chainConfigAccessibility" tools:ignore="MissingTranslation">Voting chain config</string>
 -    <string name="coinVote_configSettings_screenTitle" tools:ignore="MissingTranslation">Select Data Source</string>
@@ -33105,7 +33113,7 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_configSettings_sectionSubtitle" tools:ignore="MissingTranslation">Pick a poll source, or add your own.</string>
 -    <string name="coinVote_configSettings_bundledName" tools:ignore="MissingTranslation">Coinholder Poll</string>
 -    <string name="coinVote_configSettings_defaultBadge" tools:ignore="MissingTranslation">Default</string>
-@@ -1149,15 +1141,0 @@
+@@ -1149,15 +1142,0 @@
 -    <string name="coinVote_configSettings_addCustomSource" tools:ignore="MissingTranslation">Add custom source</string>
 -    <string name="coinVote_configSettings_edit" tools:ignore="MissingTranslation">Edit</string>
 -    <string name="coinVote_configSettings_delete" tools:ignore="MissingTranslation">Delete</string>
@@ -33121,13 +33129,13 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_configSettings_titleField" tools:ignore="MissingTranslation">Title</string>
 -    <string name="coinVote_configSettings_urlField" tools:ignore="MissingTranslation">URL</string>
 -    <string name="coinVote_configSettings_urlPlaceholder" tools:ignore="MissingTranslation">Enter...</string>
-@@ -1166 +1143,0 @@
+@@ -1166 +1144,0 @@
 -    <string name="coinVote_configSettings_errorTitleTooLong" tools:ignore="MissingTranslation">Title must be 15 characters or less, including spaces.</string>
-@@ -1168 +1144,0 @@
+@@ -1168 +1145,0 @@
 -    <string name="coinVote_configSettings_errorInvalidUrl" tools:ignore="MissingTranslation">Please enter a valid URL (e.g. https://zodl.com/polls)</string>
-@@ -1170 +1145,0 @@
+@@ -1170 +1146,0 @@
 -    <string name="coinVote_configSettings_errorDuplicateUrl" tools:ignore="MissingTranslation">This source URL is already added.</string>
-@@ -1172,24 +1146,0 @@
+@@ -1172,24 +1147,0 @@
 -    <string name="coinVote_howToVote_titleZodl" tools:ignore="MissingTranslation">How to vote with %1$s</string>
 -    <string name="coinVote_howToVote_subtitle" tools:ignore="MissingTranslation">Your ZEC gives you a voice. Shape the future of the Zcash network by voting on active proposals.</string>
 -    <string name="coinVote_howToVote_stepVotingTitle" tools:ignore="MissingTranslation">Voting on Proposals</string>
@@ -33152,11 +33160,11 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_common_viewResults" tools:ignore="MissingTranslation">View Results</string>
 -    <string name="coinVote_delegationSigning_signedProgress" tools:ignore="MissingTranslation">%1$d of %2$d voted</string>
 -    <string name="coinVote_pollsList_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load polls</string>
-@@ -1201 +1151,0 @@
+@@ -1201 +1152,0 @@
 -    <string name="coinVote_error_configUnavailableTitle" tools:ignore="MissingTranslation">Voting unavailable</string>
-@@ -1203 +1152,0 @@
+@@ -1203 +1153,0 @@
 -    <string name="coinVote_results_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load results</string>
-@@ -1210,15 +1158,0 @@
+@@ -1210,15 +1159,0 @@
 -    <string name="coinVote_common_goBack" tools:ignore="MissingTranslation">Go Back</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedTitle" tools:ignore="MissingTranslation">Authorization Failed</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedMessage" tools:ignore="MissingTranslation">We couldn\'t authorize your vote. Check your connection and try again.</string>
@@ -33172,11 +33180,11 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_common_close" tools:ignore="MissingTranslation">Close</string>
 -    <string name="coinVote_confirmSubmission_confirmWithKeystone" tools:ignore="MissingTranslation">Confirm with Keystone</string>
 -    <string name="coinVote_common_confirm" tools:ignore="MissingTranslation">Confirm</string>
-@@ -1228,3 +1161,0 @@ Your vote can no longer be submitted.</string>
+@@ -1228,3 +1162,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_bundleProgress" tools:ignore="MissingTranslation">Sign bundle %1$d/%2$d</string>
 -    <string name="coinVote_submission_continuedProcessingTitle" tools:ignore="MissingTranslation">Submitting votes</string>
 -    <string name="coinVote_confirmSubmission_progressAuthorizing" tools:ignore="MissingTranslation">Authorizing...</string>
-@@ -1232,14 +1162,0 @@ Your vote can no longer be submitted.</string>
+@@ -1232,14 +1163,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_store_submissionAuthorizingVote" tools:ignore="MissingTranslation">Authorizing vote...</string>
 -    <string name="coinVote_confirmSubmission_progressSubmittingVoteCount" tools:ignore="MissingTranslation">Submitting vote %1$d of %2$d...</string>
 -    <string name="coinVote_confirmSubmission_progressRetrying" tools:ignore="MissingTranslation">Reconnecting...</string>
@@ -33191,29 +33199,29 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_confirmSubmission_headerSubtitleSubmitting" tools:ignore="MissingTranslation">Vote submission is in progress, please don\'t leave this screen until it is finished.</string>
 -    <string name="coinVote_confirmSubmission_headerSubtitleCompleted" tools:ignore="MissingTranslation">Your vote was successfully published and cannot be changed.</string>
 -    <string name="coinVote_confirmSubmission_submissionFailedMessage" tools:ignore="MissingTranslation">Your vote couldn\'t be submitted. Check your connection and try again.</string>
-@@ -1252 +1168,0 @@ Your vote can no longer be submitted.</string>
+@@ -1252 +1169,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_memoMessage" tools:ignore="MissingTranslation">I am authorizing this hotkey managed by my wallet to vote on %1$s with %2$s.</string>
-@@ -1254,5 +1169,0 @@ Your vote can no longer be submitted.</string>
+@@ -1254,5 +1170,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_confirmSubmission_detailPoll" tools:ignore="MissingTranslation">Poll</string>
 -    <string name="coinVote_confirmSubmission_detailVotingPower" tools:ignore="MissingTranslation">Voting power</string>
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluded from this vote</string>
 -    <string name="coinVote_confirmSubmission_detailVotingHotkey" tools:ignore="MissingTranslation">Voting hotkey</string>
 -    <string name="coinVote_confirmSubmission_detailMemo" tools:ignore="MissingTranslation">Memo</string>
-@@ -1266,2 +1176,0 @@ Your vote can no longer be submitted.</string>
+@@ -1266,2 +1177,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_ineligible_titleNoVote" tools:ignore="MissingTranslation">Not Eligible for This Round</string>
 -    <string name="coinVote_ineligible_noNotesMessage" tools:ignore="MissingTranslation">Your wallet has no shielded notes from before the snapshot block. Only funds that existed at block #%@ are eligible for this voting round.</string>
-@@ -1271,5 +1179,0 @@ Your vote can no longer be submitted.</string>
+@@ -1271,5 +1180,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalDetail_position" tools:ignore="MissingTranslation">%1$d OF %2$d</string>
 -    <string name="coinVote_proposalList_ctaConfirmSubmit" tools:ignore="MissingTranslation">Confirm &amp; Submit</string>
 -    <string name="coinVote_proposalList_ctaStartVoting" tools:ignore="MissingTranslation">Start Voting</string>
 -    <string name="coinVote_proposalList_ctaContinueVoting" tools:ignore="MissingTranslation">Continue Voting</string>
 -    <string name="coinVote_proposalList_reviewTitle" tools:ignore="MissingTranslation">Review and submit vote</string>
-@@ -1277,4 +1180,0 @@ Your vote can no longer be submitted.</string>
+@@ -1277,4 +1181,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_headerEndsAt" tools:ignore="MissingTranslation">Ends %1$s</string>
 -    <string name="coinVote_common_votedDate" tools:ignore="MissingTranslation">Voted %1$s</string>
 -    <string name="coinVote_proposalList_votingPower" tools:ignore="MissingTranslation">Voting Power %1$s</string>
 -    <string name="coinVote_tallying_detailEnded" tools:ignore="MissingTranslation">Ended</string>
-@@ -1285,13 +1184,0 @@ Your vote can no longer be submitted.</string>
+@@ -1285,13 +1185,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_viewMore" tools:ignore="MissingTranslation">View more</string>
 -    <string name="coinVote_common_viewLess" tools:ignore="MissingTranslation">View less</string>
 -    <string name="coinVote_proposalList_viewForumDiscussions" tools:ignore="MissingTranslation">View Forum Discussions</string>
@@ -33227,13 +33235,13 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_proposalDetail_unansweredTitle" tools:ignore="MissingTranslation">Unanswered Questions</string>
 -    <string name="coinVote_proposalDetail_skippedMessageSingle" tools:ignore="MissingTranslation">You have not responded to 1 question. Confirm to skip this question or go back to respond.</string>
 -    <string name="coinVote_proposalDetail_skippedMessageMultiple" tools:ignore="MissingTranslation">You have not responded to %1$d questions. Confirm to skip these questions or go back to respond.</string>
-@@ -1299,5 +1185,0 @@ Your vote can no longer be submitted.</string>
+@@ -1299,5 +1186,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_reviewSubtitle" tools:ignore="MissingTranslation">Tap on the question to edit any of your answers. After you review your answers, tap on Confirm &amp; Submit.</string>
 -    <string name="coinVote_proposalList_yourVote" tools:ignore="MissingTranslation">Your vote:</string>
 -    <string name="coinVote_results_title" tools:ignore="MissingTranslation">Results</string>
 -    <string name="coinVote_common_zecValue" tools:ignore="MissingTranslation">%1$.3f ZEC</string>
 -    <string name="coinVote_results_total" tools:ignore="MissingTranslation">Total: %1$.3f ZEC</string>
-@@ -1306,30 +1187,0 @@ Your vote can no longer be submitted.</string>
+@@ -1306,30 +1188,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_votingPower" tools:ignore="MissingTranslation">Voting Power %1$.3f ZEC</string>
 -    <string name="coinVote_results_metaLine" tools:ignore="MissingTranslation">%1$s  &#8226;  %2$s</string>
 -    <string name="coinVote_results_votedLine" tools:ignore="MissingTranslation">Voted: %1$s</string>
@@ -33264,46 +33272,46 @@ index f41234151..bf2431a9f 100644
 -    <string name="coinVote_store_userError_recoveredVoteMismatch" tools:ignore="MissingTranslation">The network reported an existing vote for this wallet that does not match this submission. If you voted from another device, check that device\'s voting status.</string>
 -    <string name="coinVote_store_userError_recoveredVoteUnverified" tools:ignore="MissingTranslation">An earlier vote transaction may already be on the network, but it could not be verified with the vote servers. Please try again in a moment.</string>
 -    <string name="coinVote_store_userError_roundNotPrepared" tools:ignore="MissingTranslation">This voting round\'s prepared data is missing on this device. Reopen the round to prepare it again.</string>
-@@ -1338 +1189,0 @@ Your vote can no longer be submitted.</string>
+@@ -1338 +1190,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegation_insufficientSnapshotBalance" tools:ignore="MissingTranslation">Your shielded balance at the snapshot (%1$s ZEC) is below the minimum required to vote (%2$s ZEC).</string>
-@@ -1343,2 +1193,0 @@ Your vote can no longer be submitted.</string>
+@@ -1343,2 +1194,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_walletSyncing_title" tools:ignore="MissingTranslation">Wallet Syncing</string>
 -    <string name="coinVote_walletSyncing_subtitle" tools:ignore="MissingTranslation">Your wallet needs to sync to the snapshot block height before you can participate in voting.</string>
-@@ -1355 +1204 @@ Your vote can no longer be submitted.</string>
+@@ -1355 +1205 @@ Your vote can no longer be submitted.</string>
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
-@@ -1377 +1226 @@ Your vote can no longer be submitted.</string>
+@@ -1377 +1227 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
 +    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1228,3 @@ Your vote can no longer be submitted.</string>
+@@ -1379,2 +1229,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
 +    <string name="migration_notification_checkStatusText">Open the app to check migration status.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
-@@ -1392 +1242 @@ Your vote can no longer be submitted.</string>
+@@ -1392 +1243 @@ Your vote can no longer be submitted.</string>
 -    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to Zodl Support via Send Feedback.</string>
 +    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
-@@ -1403,0 +1254 @@ Your vote can no longer be submitted.</string>
+@@ -1403,0 +1255 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_migration_finish_scheduling">Migration saved. Try again to finish scheduling.</string>
-@@ -1406,0 +1258 @@ Your vote can no longer be submitted.</string>
+@@ -1406,0 +1259 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationProgress_unavailable">Migration progress unavailable</string>
-@@ -1425 +1277,2 @@ Your vote can no longer be submitted.</string>
+@@ -1425 +1278,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationPrivacy_bodyImmediate">If Tor is available in your region, we strongly recommend enabling it to prevent linking your balance to your IP address. You can also use a trusted VPN if Tor is unavailable in your region.</string>
 +    <string name="migrationPrivacy_bodyImmediate">Immediate migration uses your wallet’s Tor setting. Enable Tor in Settings to use it.</string>
 +    <string name="migrationReview_privateSplitUnavailable">This plan needs a preparation transaction that can only be sent without Tor. To keep Tor on, choose immediate migration with wallet Tor enabled.</string>
-@@ -1433 +1286 @@ Your vote can no longer be submitted.</string>
+@@ -1433 +1287 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationSuccess_subtitle">Your ZEC was successfully\nmigrated to Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migration submitted. Check Activity for confirmation.</string>
-@@ -1453 +1306 @@ Your vote can no longer be submitted.</string>
+@@ -1453 +1307 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. An amount this specific can identify you on the network. To protect your privacy, we recommend locking this balance rather than migrating it.</string>
 +    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
-@@ -1458,2 +1311,2 @@ Your vote can no longer be submitted.</string>
+@@ -1458,2 +1312,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Orchard balance locked</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
 +    <string name="migrationComplete_lockRequestFailed">Couldn\'t lock Orchard funds. Try again.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Lock request completed.</string>
-@@ -1462,4 +1315,4 @@ Your vote can no longer be submitted.</string>
+@@ -1462,4 +1316,4 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
@@ -33312,52 +33320,52 @@ index f41234151..bf2431a9f 100644
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_residueTitle">Small Orchard balance</string>
-@@ -1469 +1322 @@ Your vote can no longer be submitted.</string>
+@@ -1469 +1323 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving an amount this specific would link your Ironwood funds back to your Orchard history. We recommend locking it instead.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
-@@ -1472 +1325 @@ Your vote can no longer be submitted.</string>
+@@ -1472 +1326 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
-@@ -1479 +1332 @@ Your vote can no longer be submitted.</string>
+@@ -1479 +1333 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening Zodl at every step to send each transfer.</string>
 +    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening ZEC Private at every step to send each transfer.</string>
-@@ -1507,2 +1360,2 @@ Your vote can no longer be submitted.</string>
+@@ -1507,2 +1361,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationTipUnavailable_title">Zodl is still syncing</string>
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
-@@ -1511 +1364 @@ Your vote can no longer be submitted.</string>
+@@ -1511 +1365 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet1Prefix">Locking marks this balance as </string>
 +    <string name="migrationLockExplainer_bullet1Prefix">Locking marks all available Orchard funds in this account as </string>
-@@ -1514 +1367 @@ Your vote can no longer be submitted.</string>
+@@ -1514 +1368 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
-@@ -1547 +1400 @@ Your vote can no longer be submitted.</string>
+@@ -1547 +1401 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1555 +1408 @@ Your vote can no longer be submitted.</string>
+@@ -1555 +1409 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_immediateBody">Your full Orchard balance will be transferred to Ironwood in a single on-chain transfer. Once confirmed, this transfer cannot be cancelled.</string>
 +    <string name="migrationReview_immediateBody">The transfer moves eligible Orchard funds to Ironwood. Once confirmed, this transfer cannot be cancelled.</string>
-@@ -1556,0 +1410 @@ Your vote can no longer be submitted.</string>
+@@ -1556,0 +1411 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationReview_eligibleOrchardFunds">Eligible Orchard funds</string>
-@@ -1561 +1415 @@ Your vote can no longer be submitted.</string>
+@@ -1561 +1416 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1430 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1431 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1432 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1433 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1436,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1437,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1593,0 +1448,2 @@ Your vote can no longer be submitted.</string>
+@@ -1593,0 +1449,2 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationHome_finishScheduling">Finish scheduling migration</string>
 +    <string name="migrationScheduled_signatureRequired">Return to Home to finish signing with Keystone.</string>
-@@ -1629,0 +1486,8 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1487,8 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
 +    <string name="private_swap_funding_status">Funding status</string>
 +    <string name="private_swap_status_unavailable">Unavailable</string>
@@ -34577,7 +34585,7 @@ index 50bcc0da8..72da86ccc 100644
 +            )
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
-index 7ae52a552..aa5028fda 100644
+index 7ae52a552..4199533e2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 @@ -5,0 +6 @@ import cash.z.ecc.android.sdk.WalletCoordinator
@@ -34587,23 +34595,36 @@ index 7ae52a552..aa5028fda 100644
 @@ -10,0 +13,2 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.buffer
-@@ -18,0 +23 @@ internal operator fun WalletCoordinator.Companion.invoke(
+@@ -19,2 +23,4 @@ internal operator fun WalletCoordinator.Companion.invoke(
+-): WalletCoordinator =
+-    WalletCoordinator(
 +    resetProgressStore: ResetProgressStore,
-@@ -22 +27 @@ internal operator fun WalletCoordinator.Companion.invoke(
++): WalletCoordinator {
++    val sdkWallet = persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore)
++    return WalletCoordinator(
+@@ -22 +28 @@ internal operator fun WalletCoordinator.Companion.invoke(
 -        persistableWallet = persistableWalletProvider.persistableWallet,
-+        persistableWallet = persistableWalletProvider.persistableWallet.hideErasedWallet(resetProgressStore),
-@@ -29,0 +35,11 @@ internal operator fun WalletCoordinator.Companion.invoke(
++        persistableWallet = sdkWallet,
+@@ -27 +33 @@ internal operator fun WalletCoordinator.Companion.invoke(
+-        isSyncBlocked = isSyncBlocked(context, persistableWalletProvider),
++        isSyncBlocked = isSyncBlocked(context, sdkWallet),
+@@ -28,0 +35,11 @@ internal operator fun WalletCoordinator.Companion.invoke(
++}
++
 +/**
-+ * Erasure needs the current network. Once verified, keep the SDK closed until preferences are
-+ * cleared, including when a pending reset is resumed after process death. Reopen the cold wallet
-+ * flow after clearing so the SDK reads the current store even if a prior observer missed an update.
++ * Reset withdraws wallet input after draining admitted recovery. During a cold resume, keep it out
++ * of the SDK from initialization. Reopen the cold flow after clearing to read the current store.
 + */
 +@OptIn(ExperimentalCoroutinesApi::class)
-+internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: ResetProgressStore) =
-+    resetProgressStore.isSdkErased
-+        .flatMapLatest { sdkErased -> if (sdkErased) flowOf(null) else this }
++internal fun Flow<PersistableWallet?>.hideResetWallet(resetProgressStore: ResetProgressStore) =
++    resetProgressStore.isSdkInputSuppressed
++        .flatMapLatest { suppressed -> if (suppressed) flowOf(null) else this }
 +        .buffer(0)
-+
+@@ -41,2 +58,2 @@ internal operator fun WalletCoordinator.Companion.invoke(
+-private fun isSyncBlocked(context: Context, persistableWalletProvider: PersistableWalletProvider) =
+-    persistableWalletProvider.persistableWallet.flatMapLatest { wallet ->
++private fun isSyncBlocked(context: Context, sdkWallet: Flow<PersistableWallet?>) =
++    sdkWallet.flatMapLatest { wallet ->
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/HWEnrollmentNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/HWEnrollmentNavGraph.kt
 new file mode 100644
 index 000000000..61358bc6b
@@ -36678,7 +36699,7 @@ index abf14322d..0431cbab9 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
-index c38424cc6..52be8a5ce 100644
+index c38424cc6..80a6ff4dc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
 @@ -35,0 +36 @@ internal interface MultiEndpointTransactionSubmitter {
@@ -36695,19 +36716,26 @@ index c38424cc6..52be8a5ce 100644
 +        runCatching(beforeFirstSubmission)
 +    }
 +
-@@ -149,0 +160,6 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -67,4 +77,2 @@ private class MultiEndpointTransactionSubmitterImpl(
+-            // Submit every created transaction even after an earlier one fails. The SDK only records a
+-            // retry plan (and keeps rebroadcasting in the background until the transaction mines or expires)
+-            // for transactions it was asked to submit; skipping later transactions on a failure would strand
+-            // them forever. Matches the iOS Broadcaster integration.
++            // Explicitly attempt every leg after admission even if an earlier endpoint refused. The SDK
++            // can independently retry stored transactions. App endpoint admission only controls these calls.
+@@ -149,0 +158,6 @@ private class MultiEndpointTransactionSubmitterImpl(
 +                        firstSubmission.value.exceptionOrNull()?.let { cause ->
 +                            completion.completeExceptionally(cause)
 +                            return@async EndpointSubmission(
 +                                endpointLabel, TransactionSubmitResult.NotAttempted(transaction.txId)
 +                            )
 +                        }
-@@ -242 +258 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -242 +256 @@ private class MultiEndpointTransactionSubmitterImpl(
 -                        "$logTag $transactionLabel rejected by all $endpointCount endpoint(s)."
 +                        "$logTag $transactionLabel had no confirmed acceptance from $endpointCount endpoint(s)."
-@@ -305,0 +322 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -305,0 +320 @@ private class MultiEndpointTransactionSubmitterImpl(
 +        // A completed transport failure may still have delivered the transaction to its endpoint.
-@@ -307 +324 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -307 +322 @@ private class MultiEndpointTransactionSubmitterImpl(
 -            .firstOrNull { !it.grpcError }
 +            .firstOrNull { it.grpcError }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
@@ -36907,7 +36935,7 @@ index 000000000..f014229ca
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..a63388f95 100644
+index bf147a8b5..28cee42a3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -36921,11 +36949,12 @@ index bf147a8b5..a63388f95 100644
 @@ -29 +32 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 -import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
-@@ -30,0 +34 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -30,0 +34,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import java.math.BigDecimal
-@@ -35 +38,0 @@ import org.zecdev.zip321.parser.ParserContext
++import kotlinx.coroutines.CancellationException
+@@ -35 +39,0 @@ import org.zecdev.zip321.parser.ParserContext
 -import java.math.BigDecimal
-@@ -76,3 +79,15 @@ interface ProposalDataSource {
+@@ -76,3 +80,15 @@ interface ProposalDataSource {
 -    suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult
 -
 -    suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult
@@ -36944,21 +36973,21 @@ index bf147a8b5..a63388f95 100644
 +        beforeCreation: () -> Unit = {},
 +        beforeFirstSubmission: () -> Unit = {},
 +    ): SubmitResult
-@@ -93,0 +109,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
+@@ -93,0 +110,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
 +class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must contain exactly one payment")
 +
-@@ -103,2 +120 @@ class ProposalDataSourceImpl(
+@@ -103,2 +121 @@ class ProposalDataSourceImpl(
 -    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
 -    private val persistableWalletProvider: PersistableWalletProvider,
 +    private val walletServerSelectionProvider: WalletServerSelectionProvider,
-@@ -114 +130,5 @@ class ProposalDataSourceImpl(
+@@ -114 +131,5 @@ class ProposalDataSourceImpl(
 -                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send),
 +                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send).also { proposal ->
 +                        if (send.destination.address == DonationPolicy.recipient()) {
 +                            DonationPolicy.requireShielded(proposal, send)
 +                        }
 +                    },
-@@ -137 +157,7 @@ class ProposalDataSourceImpl(
+@@ -137 +158,7 @@ class ProposalDataSourceImpl(
 -                        is ZIP321.ParserResult.Request -> request.paymentRequest.payments[0]
 +                        is ZIP321.ParserResult.Request -> {
 +                            // Review shows one payment; the SDK fulfills the entire URI.
@@ -36967,10 +36996,10 @@ index bf147a8b5..a63388f95 100644
 +                            }
 +                            request.paymentRequest.payments.single()
 +                        }
-@@ -160 +186 @@ class ProposalDataSourceImpl(
+@@ -160 +187 @@ class ProposalDataSourceImpl(
 -                    memo = Memo(payment.memo?.data?.decodeToString() ?: ""),
 +                    memo = Memo(payment.memo?.data?.zip321MemoTextOrNull().orEmpty()),
-@@ -162 +188,8 @@ class ProposalDataSourceImpl(
+@@ -162 +189,8 @@ class ProposalDataSourceImpl(
 -                )
 +                    binaryMemoByteCount = payment.memo?.data?.takeIf { it.zip321MemoTextOrNull() == null }?.size,
 +                ).also { reviewed ->
@@ -36980,11 +37009,11 @@ index bf147a8b5..a63388f95 100644
 +                        )
 +                    }
 +                }
-@@ -179,0 +213 @@ class ProposalDataSourceImpl(
+@@ -179,0 +214 @@ class ProposalDataSourceImpl(
 +                    fundingAccount = account,
-@@ -197,0 +232 @@ class ProposalDataSourceImpl(
+@@ -197,0 +233 @@ class ProposalDataSourceImpl(
 +                    fundingAccount = account,
-@@ -238,2 +273,7 @@ class ProposalDataSourceImpl(
+@@ -238,2 +274,7 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG) {
 +    override suspend fun submitTransaction(
@@ -36994,7 +37023,7 @@ index bf147a8b5..a63388f95 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeCreation, beforeFirstSubmission) {
-@@ -246,2 +286,7 @@ class ProposalDataSourceImpl(
+@@ -246,2 +287,7 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_TAG) {
 +    override suspend fun submitTransaction(
@@ -37004,47 +37033,80 @@ index bf147a8b5..a63388f95 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeCreation, beforeFirstSubmission) {
-@@ -263,0 +309,2 @@ class ProposalDataSourceImpl(
+@@ -263,0 +310,2 @@ class ProposalDataSourceImpl(
 +        beforeCreation: () -> Unit,
 +        beforeFirstSubmission: () -> Unit,
-@@ -267,0 +315 @@ class ProposalDataSourceImpl(
+@@ -267,0 +316 @@ class ProposalDataSourceImpl(
 +            beforeCreation()
-@@ -283 +331 @@ class ProposalDataSourceImpl(
+@@ -278,7 +327,6 @@ class ProposalDataSourceImpl(
+-            val endpoints = getSubmissionEndpoints()
+-            Twig.info {
+-                "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
+-            }
+-
 -            val submitResults =
-+            val result =
-@@ -288,6 +336,3 @@ class ProposalDataSourceImpl(
+-                submitCreatedTransactions(
++            try {
++                val endpoints = getSubmissionEndpoints()
++                Twig.info {
++                    "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
++                }
++                val result = submitCreatedTransactions(
+@@ -288,4 +336,3 @@ class ProposalDataSourceImpl(
 -                    logTag = logTag
 -                )
 -
 -            Twig.debug { "Internal transaction submit results: $submitResults" }
--
--            val result = submitResults.toSubmitResult()
 +                    logTag = logTag,
 +                    beforeFirstSubmission = beforeFirstSubmission
 +                ).toSubmitResult()
-@@ -300 +344,0 @@ class ProposalDataSourceImpl(
+@@ -293,5 +340,10 @@ class ProposalDataSourceImpl(
+-            val result = submitResults.toSubmitResult()
+-
+-            if (synchronizer is SdkSynchronizer) {
+-                synchronizer.refreshTransactions()
+-                synchronizer.refreshAllBalances()
++                if (synchronizer is SdkSynchronizer) {
++                    synchronizer.refreshTransactions()
++                    synchronizer.refreshAllBalances()
++                }
++                result
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                val ids = transactions.map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() }
++                throw SdkCreatedTransactionsException(ids, e)
+@@ -299,3 +350,0 @@ class ProposalDataSourceImpl(
+-
 -            Twig.debug { "Transaction submit result: $result" }
-@@ -308 +352,2 @@ class ProposalDataSourceImpl(
+-            result
+@@ -308 +357,2 @@ class ProposalDataSourceImpl(
 -        logTag: String
 +        logTag: String,
 +        beforeFirstSubmission: () -> Unit,
-@@ -310,0 +356 @@ class ProposalDataSourceImpl(
+@@ -310,0 +361 @@ class ProposalDataSourceImpl(
 +            beforeFirstSubmission = beforeFirstSubmission,
-@@ -329 +375 @@ class ProposalDataSourceImpl(
+@@ -329 +380 @@ class ProposalDataSourceImpl(
 -        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
 +        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
-@@ -332,2 +378,2 @@ class ProposalDataSourceImpl(
+@@ -332,2 +383,2 @@ class ProposalDataSourceImpl(
 -                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
 -                currentEndpoint = currentEndpoint,
 +                isAutomaticPreference = selection.isAutomatic,
 +                currentEndpoint = selection.endpoint,
-@@ -336 +382 @@ class ProposalDataSourceImpl(
+@@ -336 +387 @@ class ProposalDataSourceImpl(
 -        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
 +        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
-@@ -347,0 +394,2 @@ class ProposalDataSourceImpl(
+@@ -347,0 +399,2 @@ class ProposalDataSourceImpl(
 +        } catch (e: UnsupportedZip321PaymentCountException) {
 +            throw e
-@@ -403,8 +450,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
+@@ -361,0 +415,5 @@ class ProposalDataSourceImpl(
++internal class SdkCreatedTransactionsException(
++    val txIds: List<String>,
++    cause: Exception,
++) : IllegalStateException("Submission state is unknown after SDK transaction creation", cause)
++
+@@ -403,8 +460,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
 -        firstNonGrpcFailure != null && successCount == 0 && failures.all { !it.grpcError } -> {
 -            SubmitResult.Failure(
 -                txIds = txIds,
@@ -37053,9 +37115,9 @@ index bf147a8b5..a63388f95 100644
 -            )
 -        }
 -
-@@ -464,0 +505 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -464,0 +515 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +    val fundingAccount: WalletAccount
-@@ -472,0 +514,8 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -472,0 +524,8 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +class ShieldingApproval(val account: WalletAccount, private val remainsCurrent: () -> Boolean) {
 +    fun isCurrent(): Boolean = remainsCurrent()
 +
@@ -37064,26 +37126,26 @@ index bf147a8b5..a63388f95 100644
 +    }
 +}
 +
-@@ -474,0 +524 @@ data class ShieldTransactionProposal(
+@@ -474,0 +534 @@ data class ShieldTransactionProposal(
 +    val approval: ShieldingApproval? = null,
-@@ -476,0 +527,4 @@ data class ShieldTransactionProposal(
+@@ -476,0 +537,4 @@ data class ShieldTransactionProposal(
 +fun TransactionProposal.requireCurrentShieldingApproval() {
 +    if (this is ShieldTransactionProposal) checkNotNull(approval).requireCurrent()
 +}
 +
-@@ -481 +535,2 @@ data class RegularTransactionProposal(
+@@ -481 +545,2 @@ data class RegularTransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val isDonation: Boolean = false,
-@@ -488 +543,2 @@ data class Zip321TransactionProposal(
+@@ -488 +553,2 @@ data class Zip321TransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val binaryMemoByteCount: Int? = null,
-@@ -496,0 +553 @@ data class ExactInputSwapTransactionProposal(
+@@ -496,0 +563 @@ data class ExactInputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -504,0 +562 @@ data class ExactOutputSwapTransactionProposal(
+@@ -504,0 +572 @@ data class ExactOutputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -519 +576,0 @@ data class MigrationSweepTransactionProposal(
+@@ -519 +586,0 @@ data class MigrationSweepTransactionProposal(
 -    val amount: Zatoshi,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
@@ -38048,6 +38110,14 @@ index 000000000..410204663
 +        revealedGrant.value = null
 +    }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SubmitResult.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SubmitResult.kt
+index 824587029..62e2eee7a 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SubmitResult.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SubmitResult.kt
+@@ -22 +22,2 @@ sealed interface SubmitResult {
+-            TIMEOUT
++            TIMEOUT,
++            SDK_STATE_UNCERTAIN,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt
 index f57f2066d..24dfec2dc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt
@@ -40853,10 +40923,10 @@ index 000000000..f5083ca4c
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletlessSdkData.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletlessSdkData.kt
 new file mode 100644
-index 000000000..644476e3d
+index 000000000..5f1ee66fd
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletlessSdkData.kt
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,36 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import android.content.Context
@@ -40867,14 +40937,10 @@ index 000000000..644476e3d
 +import java.nio.file.Files
 +import java.nio.file.LinkOption
 +
-+internal suspend fun eraseWalletlessSdkData(context: Context, network: ZcashNetwork) {
++internal suspend fun eraseInactiveSdkData(context: Context, network: ZcashNetwork) {
 +    // Slipstream guards the active wallet and acknowledges its data and submit-plan erasure.
 +    check(SlipstreamSynchronizer.erase(context, network)) { "Could not erase Slipstream wallet data" }
 +    Synchronizer.erase(context, network)
-+    requireClassicWalletFilesErased(context, network)
-+}
-+
-+internal fun requireClassicWalletFilesErased(context: Context, network: ZcashNetwork) {
 +    check(classicWalletFiles(context, network).all { Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }) {
 +        "Could not confirm classic wallet data erasure"
 +    }
@@ -43384,7 +43450,7 @@ index 26bf877f4..d7cb1f713 100644
 +    } == true
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..612ebcb01 100644
+index fa652b038..d6a78daf5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -6 +5,0 @@ import androidx.annotation.VisibleForTesting
@@ -43393,29 +43459,30 @@ index fa652b038..612ebcb01 100644
 -import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 @@ -23,0 +22 @@ import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStora
 +import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
-@@ -29,0 +29 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
-+import co.electriccoin.zcash.ui.common.provider.eraseWalletlessSdkData
-@@ -31,0 +32,2 @@ import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
+@@ -29,0 +29,2 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
++import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -31,0 +33,2 @@ import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -32,0 +35 @@ import kotlinx.coroutines.CoroutineScope
+@@ -32,0 +36 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Deferred
-@@ -35,0 +39,2 @@ import kotlinx.coroutines.SupervisorJob
+@@ -35,0 +40,2 @@ import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -37,0 +43 @@ import kotlinx.coroutines.flow.MutableSharedFlow
+@@ -37,0 +44 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -43 +48,0 @@ import kotlinx.coroutines.flow.emitAll
+@@ -43 +49,0 @@ import kotlinx.coroutines.flow.emitAll
 -import kotlinx.coroutines.flow.first
-@@ -57,0 +63,2 @@ interface WalletRepository {
+@@ -57,0 +64,2 @@ interface WalletRepository {
 +    val walletInitialization: StateFlow<WalletInitializationState>
 +
-@@ -67,0 +75,4 @@ interface WalletRepository {
+@@ -67,0 +76,4 @@ interface WalletRepository {
 +    fun continueWalletSetup()
 +
 +    fun retryWalletInitialization()
 +
-@@ -73,4 +84,3 @@ interface WalletRepository {
+@@ -73,4 +85,3 @@ interface WalletRepository {
 -        birthday: BlockHeight
 -    )
 -
@@ -43423,17 +43490,18 @@ index fa652b038..612ebcb01 100644
 +        birthday: BlockHeight,
 +        enableTor: Boolean = false
 +    ): Deferred<Unit>
-@@ -82,0 +93,2 @@ interface WalletRepository {
+@@ -82,0 +94,2 @@ interface WalletRepository {
 +// Initialization admission and interrupted-setup recovery share the same wallet mutation boundary.
 +@Suppress("TooManyFunctions")
-@@ -94,0 +107 @@ class WalletRepositoryImpl(
+@@ -94,0 +108,2 @@ class WalletRepositoryImpl(
 +    private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
-@@ -105,3 +118 @@ class WalletRepositoryImpl(
++    private val resetProgressStore: ResetProgressStore,
+@@ -105,3 +120 @@ class WalletRepositoryImpl(
 -     * Serializes the startup self-heal ([init]) against wallet creation and restore, so the erase
 -     * in [resetOnboardingIfWalletMissing] can never interleave with a wallet those paths are in
 -     * the middle of storing.
 +     * Serializes startup repair with wallet creation and restore.
-@@ -110,0 +122,8 @@ class WalletRepositoryImpl(
+@@ -110,0 +124,8 @@ class WalletRepositoryImpl(
 +    private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
 +    private val startupRecovery = MutableStateFlow(WalletInitializationState.CHECKING)
 +
@@ -43442,16 +43510,16 @@ index fa652b038..612ebcb01 100644
 +    private var acceptedInitialization: WalletInitializationOperation? = null
 +    private var activeInitialization: Deferred<Unit>? = null
 +
-@@ -120,0 +140,4 @@ class WalletRepositoryImpl(
+@@ -120,0 +142,4 @@ class WalletRepositoryImpl(
 +    // Android can publish a preference value before the disk write finishes.
 +    private val onboardingStateBeforeCommit = MutableStateFlow<OnboardingState?>(null)
 +    private val storedByCurrentSetup = MutableStateFlow(false)
 +
-@@ -128,0 +152,3 @@ class WalletRepositoryImpl(
+@@ -128,0 +154,3 @@ class WalletRepositoryImpl(
 +            .combine(onboardingStateBeforeCommit) { state, _ ->
 +                onboardingStateBeforeCommit.value ?: state
 +            }
-@@ -130,13 +156,16 @@ class WalletRepositoryImpl(
+@@ -130,13 +158,16 @@ class WalletRepositoryImpl(
 -    /**
 -     * The encrypted wallet store is only awaited when [onboardingState] already claims a wallet
 -     * exists; a fresh install with the flag at its default has nothing to read there, so its
@@ -43481,42 +43549,42 @@ index fa652b038..612ebcb01 100644
 +                    recovery.takeUnless { it == WalletInitializationState.IDLE } ?: WalletInitializationState.CHECKING
 +                hasWallet && state != OnboardingState.READY -> WalletInitializationState.INCOMPLETE
 +                else -> WalletInitializationState.IDLE
-@@ -144 +173 @@ class WalletRepositoryImpl(
+@@ -144 +175 @@ class WalletRepositoryImpl(
 -        }
 +        }.stateIn(sharingScope, SharingStarted.Eagerly, WalletInitializationState.CHECKING)
-@@ -158,2 +187,3 @@ class WalletRepositoryImpl(
+@@ -158,2 +189,3 @@ class WalletRepositoryImpl(
 -            onboardingWithWallet
 -        ) { config, (onboardingState, hasWallet) ->
 +            onboardingWithWallet,
 +            storedByCurrentSetup
 +        ) { config, (onboardingState, hasWallet), _ ->
-@@ -163 +193,2 @@ class WalletRepositoryImpl(
+@@ -163 +195,2 @@ class WalletRepositoryImpl(
 -                hasWallet = hasWallet
 +                hasWallet = hasWallet,
 +                storedByCurrentSetup = storedByCurrentSetup.value
-@@ -257,0 +289 @@ class WalletRepositoryImpl(
+@@ -257,0 +291 @@ class WalletRepositoryImpl(
 +                    val version = persistableWalletProvider.writeVersion
-@@ -259,3 +291,3 @@ class WalletRepositoryImpl(
+@@ -259,3 +293,3 @@ class WalletRepositoryImpl(
 -                    val onboarding = onboardingState.first()
 -                    migrateDecommissionedEndpointIfNeeded(wallet)
 -                    resetOnboardingIfWalletMissing(wallet = wallet, onboardingState = onboarding)
 +                    val onboarding = readOnboardingState()
 +                    migrateDecommissionedEndpointIfNeeded(wallet, version)
 +                    recoverMissingWalletIfNeeded(wallet, onboarding)
-@@ -262,0 +295,2 @@ class WalletRepositoryImpl(
+@@ -262,0 +297,2 @@ class WalletRepositoryImpl(
 +            } catch (e: CancellationException) {
 +                throw e
-@@ -264 +298 @@ class WalletRepositoryImpl(
+@@ -264 +300 @@ class WalletRepositoryImpl(
 -                Twig.error(e) { "Startup wallet consistency checks failed; will retry on next launch" }
 +                Twig.error { "Startup wallet consistency checks failed: ${e::class.simpleName}" }
-@@ -269 +303 @@ class WalletRepositoryImpl(
+@@ -269 +305 @@ class WalletRepositoryImpl(
 -    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?) {
 +    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?, version: Long) {
-@@ -272 +306,2 @@ class WalletRepositoryImpl(
+@@ -272 +308,2 @@ class WalletRepositoryImpl(
 -            persistWalletInternal(wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint()))
 +            val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
 +            persistableWalletProvider.storeIfCurrent(wallet, replacement, version)
-@@ -276,22 +311,3 @@ class WalletRepositoryImpl(
+@@ -276,22 +313,3 @@ class WalletRepositoryImpl(
 -    /**
 -     * Self-heals a wallet-less READY state (MOB-1836): the onboarding flag and the encrypted
 -     * wallet store live in separate preference files and can diverge when the encrypted store is
@@ -43542,7 +43610,7 @@ index fa652b038..612ebcb01 100644
 +    /** Called under [walletMutation] before setup can store a replacement wallet. */
 +    @Suppress("TooGenericExceptionCaught")
 +    private suspend fun recoverMissingWalletIfNeeded(
-@@ -301,17 +317,8 @@ class WalletRepositoryImpl(
+@@ -301,17 +319,8 @@ class WalletRepositoryImpl(
 -        if (wallet != null || onboardingState != OnboardingState.READY) return
 -
 -        Twig.warn { "Onboarding state is READY but no wallet is stored; returning to onboarding" }
@@ -43560,7 +43628,7 @@ index fa652b038..612ebcb01 100644
 -            .onFailure {
 -                Twig.error(it) { "Erasing stale wallet data failed; continuing" }
 -                GlobalCrashReporter.reportCaughtException(it)
-+        if (!onboardingState.requiresWalletlessRecovery() ||
++        if (resetProgressStore.isPending.value || !onboardingState.requiresWalletlessRecovery() ||
 +            (onboardingState == OnboardingState.READY && wallet != null)
 +        ) return
 +
@@ -43568,7 +43636,7 @@ index fa652b038..612ebcb01 100644
 +        try {
 +            if (onboardingState != OnboardingState.CLEARING_STALE_DATA) {
 +                persistOnboardingStateInternal(OnboardingState.CLEARING_STALE_DATA)
-@@ -319,7 +326,18 @@ class WalletRepositoryImpl(
+@@ -319,7 +328,18 @@ class WalletRepositoryImpl(
 -    }
 -
 -    override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
@@ -43580,7 +43648,7 @@ index fa652b038..612ebcb01 100644
 +                sdkEncryptedPreferenceRecoveryProvider.ensureReadable()
 +                // Recheck after Keystore repair in case an external wallet writer won the race.
 +                if (persistableWalletProvider.getPersistableWallet() == null) {
-+                    eraseWalletlessSdkData(application, ZcashNetwork.fromResources(application))
++                    eraseInactiveSdkData(application, ZcashNetwork.fromResources(application))
 +                }
 +            }
 +            currentCoroutineContext().ensureActive()
@@ -43594,9 +43662,9 @@ index fa652b038..612ebcb01 100644
 +            GlobalCrashReporter.reportCaughtException(IllegalStateException("Wallet data recovery failed"))
 +            throw e
 +        }
-@@ -328,0 +347 @@ class WalletRepositoryImpl(
+@@ -328,0 +349 @@ class WalletRepositoryImpl(
 +        storedByCurrentSetup.value = true
-@@ -333,13 +352,35 @@ class WalletRepositoryImpl(
+@@ -333,13 +354,35 @@ class WalletRepositoryImpl(
 -        scope.launch {
 -            walletMutation.withLock {
 -                val zcashNetwork = ZcashNetwork.fromResources(application)
@@ -43645,22 +43713,22 @@ index fa652b038..612ebcb01 100644
 +                startWalletInitialization(accepted)
 +            } else if (startupRecovery.value == WalletInitializationState.FAILED) {
 +                init()
-@@ -354,0 +396,6 @@ class WalletRepositoryImpl(
+@@ -354,0 +398,6 @@ class WalletRepositoryImpl(
 +        onboardingStateBeforeCommit.value = when (onboardingState) {
 +            OnboardingState.READY -> OnboardingState.NONE
 +            OnboardingState.NONE -> OnboardingState.CLEARING_STALE_DATA
 +            OnboardingState.CLEARING_STALE_DATA -> OnboardingState.READY
 +            else -> null
 +        }
-@@ -358,0 +406 @@ class WalletRepositoryImpl(
+@@ -358,0 +408 @@ class WalletRepositoryImpl(
 +        onboardingStateBeforeCommit.value = null
-@@ -360,0 +409,5 @@ class WalletRepositoryImpl(
+@@ -360,0 +411,5 @@ class WalletRepositoryImpl(
 +    private suspend fun readOnboardingState(): OnboardingState =
 +        onboardingStateBeforeCommit.value ?: OnboardingState.fromNumber(
 +            StandardPreferenceKeys.ONBOARDING_STATE.getValue(standardPreferenceProvider())
 +        )
 +
-@@ -372,2 +425,62 @@ class WalletRepositoryImpl(
+@@ -372,2 +427,62 @@ class WalletRepositoryImpl(
 -        birthday: BlockHeight
 -    ) {
 +        birthday: BlockHeight,
@@ -43725,7 +43793,7 @@ index fa652b038..612ebcb01 100644
 +        activeInitialization = result
 +        initialization.value = WalletInitializationState.RUNNING
 +        var failure: Exception? = null
-@@ -375,14 +488,32 @@ class WalletRepositoryImpl(
+@@ -375,14 +490,32 @@ class WalletRepositoryImpl(
 -            walletMutation.withLock {
 -                val restoredWallet =
 -                    PersistableWallet(
@@ -43772,7 +43840,7 @@ index fa652b038..612ebcb01 100644
 +                activeInitialization = null
 +                initialization.value =
 +                    if (canRetry) WalletInitializationState.FAILED else WalletInitializationState.IDLE
-@@ -389,0 +521,25 @@ class WalletRepositoryImpl(
+@@ -389,0 +523,25 @@ class WalletRepositoryImpl(
 +            if (error == null) result.complete(Unit) else result.completeExceptionally(error)
 +        }
 +        return result
@@ -43798,7 +43866,7 @@ index fa652b038..612ebcb01 100644
 +                network == wallet.network && seedPhrase == wallet.seedPhrase && birthday == wallet.birthday
 +
 +            override fun toString() = "Restore"
-@@ -393,0 +550,14 @@ class WalletRepositoryImpl(
+@@ -393,0 +552,14 @@ class WalletRepositoryImpl(
 +private fun PersistableWallet.hasSameIdentityAs(other: PersistableWallet): Boolean =
 +    network == other.network && seedPhrase == other.seedPhrase && birthday == other.birthday
 +
@@ -43813,7 +43881,7 @@ index fa652b038..612ebcb01 100644
 +    FAILED
 +}
 +
-@@ -399,5 +569,2 @@ class WalletRepositoryImpl(
+@@ -399,5 +571,2 @@ class WalletRepositoryImpl(
 - * Every other [OnboardingState] resolves to [SecretState.NONE], a stored wallet notwithstanding.
 - * [OnboardingState.NEEDS_WARN] and [OnboardingState.NEEDS_BACKUP] are ordinals of an earlier
 - * onboarding flow that nothing writes any more — [WalletRepositoryImpl] only ever persists
@@ -43821,11 +43889,11 @@ index fa652b038..612ebcb01 100644
 - * completion, so routing a wallet found under them back to onboarding is the intended outcome.
 + * A stored wallet from an earlier setup must pass app-access authentication before onboarding
 + * continues. A wallet stored by the current setup retains the first-run onboarding grant.
-@@ -408,0 +576 @@ internal fun resolveSecretState(
+@@ -408,0 +578 @@ internal fun resolveSecretState(
 +    storedByCurrentSetup: Boolean = false,
-@@ -412,0 +581 @@ internal fun resolveSecretState(
+@@ -412,0 +583 @@ internal fun resolveSecretState(
 +        hasWallet && !storedByCurrentSetup -> SecretState.INCOMPLETE
-@@ -414,0 +584,3 @@ internal fun resolveSecretState(
+@@ -414,0 +586,3 @@ internal fun resolveSecretState(
 +
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
@@ -47620,27 +47688,30 @@ index 000000000..1f1b6e9cd
 +    private fun selectedAccount() = accounts.allAccounts.value?.firstOrNull { it.isSelected }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-index db95c0420..5b5747967 100644
+index db95c0420..34a54108a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-@@ -6,0 +7,4 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
+@@ -3,0 +4 @@ import co.electriccoin.zcash.spackle.Twig
++import co.electriccoin.zcash.ui.common.datasource.SdkCreatedTransactionsException
+@@ -6,0 +8,4 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 +import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -8,0 +13,6 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -8,0 +14,7 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.withContext
-@@ -9,0 +20,2 @@ import kotlinx.coroutines.yield
+@@ -9,0 +22,2 @@ import kotlinx.coroutines.yield
 +import java.time.Instant
-+import java.util.concurrent.atomic.AtomicBoolean
-@@ -13,0 +26 @@ class ProcessSwapTransactionUseCase(
++import java.util.concurrent.atomic.AtomicReference
+@@ -13,0 +28 @@ class ProcessSwapTransactionUseCase(
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -15,0 +29,105 @@ class ProcessSwapTransactionUseCase(
+@@ -15,0 +31,127 @@ class ProcessSwapTransactionUseCase(
 +    private val fundingMutex = Mutex()
 +    // Keep successful reservations in memory for the lifetime of the funding pipeline.
 +    private val reservedReferences = mutableSetOf<String>()
@@ -47682,10 +47753,11 @@ index db95c0420..5b5747967 100644
 +        createdAt
 +    }
 +
++    @Suppress("TooGenericExceptionCaught")
 +    suspend fun submitReservedFunding(
 +        proposal: SwapTransactionProposal,
 +        validateFunding: () -> Unit,
-+        submit: suspend (validate: () -> Unit, enterEndpoint: () -> Unit) -> SubmitResult,
++        submit: suspend (enterSdk: () -> Unit, enterEndpoint: () -> Unit) -> SubmitResult,
 +    ): SubmitResult {
 +        val generation = walletWriteAccess.token()
 +        val validate = {
@@ -47693,20 +47765,41 @@ index db95c0420..5b5747967 100644
 +            validateFunding()
 +        }
 +        val createdAt = reserveFunding(proposal, generation, validate)
-+        val entryResolved = AtomicBoolean(false)
++        val admission = AtomicReference(FundingAdmission.RESERVED)
 +        try {
 +            validate()
-+            return submit(validate) {
-+                validate()
-+                check(entryResolved.compareAndSet(false, true)) { "Swap funding is no longer active" }
++            val result = submit(
++                {
++                    validate()
++                    check(admission.compareAndSet(FundingAdmission.RESERVED, FundingAdmission.SDK_ENTERED))
++                },
++                {
++                    validate()
++                    check(admission.compareAndSet(FundingAdmission.SDK_ENTERED, FundingAdmission.ENDPOINT_ENTERED))
++                },
++            )
++            return if (admission.get() != FundingAdmission.RESERVED && result is SubmitResult.NonResubmittableError) {
++                uncertainSdkSubmission(result.txIds)
++            } else {
++                result
 +            }
++        } catch (e: CancellationException) {
++            throw e
++        } catch (e: Exception) {
++            if (admission.get() == FundingAdmission.RESERVED) throw e
++            return uncertainSdkSubmission((e as? SdkCreatedTransactionsException)?.txIds.orEmpty())
 +        } finally {
-+            if (entryResolved.compareAndSet(false, true)) {
-+                // Only a still-closed gate proves that no SDK endpoint was entered.
++            if (admission.getAndSet(FundingAdmission.CLOSED) == FundingAdmission.RESERVED) {
++                // After SDK entry a signed transaction can be stored for SDK background submission.
 +                recordUnsubmittedFundingSafely(proposal, generation, createdAt)
 +            }
 +        }
 +    }
++
++    private fun uncertainSdkSubmission(txIds: List<String>) =
++        SubmitResult.GrpcFailure(txIds, reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN)
++
++    private enum class FundingAdmission { RESERVED, SDK_ENTERED, ENDPOINT_ENTERED, CLOSED }
 +
 +    private suspend fun writeFundingReservation(
 +        proposal: SwapTransactionProposal,
@@ -47746,7 +47839,7 @@ index db95c0420..5b5747967 100644
 +        Twig.warn { "Unable to confirm the unsubmitted swap funding outcome was saved" }
 +    }
 +
-@@ -17 +135,8 @@ class ProcessSwapTransactionUseCase(
+@@ -17 +159,8 @@ class ProcessSwapTransactionUseCase(
 -        saveSwapToMetadata(transactionProposal)
 +        fundingMutex.withLock {
 +            val reference = transactionProposal.destination.address
@@ -47756,7 +47849,7 @@ index db95c0420..5b5747967 100644
 +                writePendingTracking(transactionProposal)
 +            }
 +        }
-@@ -34,2 +159,6 @@ class ProcessSwapTransactionUseCase(
+@@ -34,2 +183,6 @@ class ProcessSwapTransactionUseCase(
 -    private suspend fun saveSwapToMetadata(transactionProposal: SwapTransactionProposal) {
 -        metadataRepository.markTxAsSwap(
 +    private suspend fun writePendingTracking(
@@ -47765,7 +47858,7 @@ index db95c0420..5b5747967 100644
 +        reservationCreatedAt: Instant? = null,
 +    ) {
 +        check(metadataRepository.markTxAsSwap(
-@@ -44,2 +173,7 @@ class ProcessSwapTransactionUseCase(
+@@ -44,2 +197,7 @@ class ProcessSwapTransactionUseCase(
 -            status = SwapStatus.PENDING
 -        )
 +            status = SwapStatus.PENDING,
@@ -47775,9 +47868,9 @@ index db95c0420..5b5747967 100644
 +            walletWriteToken = walletWriteToken,
 +            reservationCreatedAt = reservationCreatedAt,
 +        )) { "Unable to save swap tracking before funding" }
-@@ -48 +181,0 @@ class ProcessSwapTransactionUseCase(
+@@ -48 +205,0 @@ class ProcessSwapTransactionUseCase(
 -    @Suppress("TooGenericExceptionCaught")
-@@ -50,11 +182,0 @@ class ProcessSwapTransactionUseCase(
+@@ -50,11 +206,0 @@ class ProcessSwapTransactionUseCase(
 -        suspend fun submit(txId: String, transactionProposal: SwapTransactionProposal) {
 -            try {
 -                swapRepository.submitDepositTransaction(
@@ -47789,7 +47882,7 @@ index db95c0420..5b5747967 100644
 -            }
 -        }
 -
-@@ -63,2 +185,6 @@ class ProcessSwapTransactionUseCase(
+@@ -63,2 +209,6 @@ class ProcessSwapTransactionUseCase(
 -            .forEach {
 -                submit(it, transactionProposal)
 +            .forEach { txId ->
@@ -47798,7 +47891,7 @@ index db95c0420..5b5747967 100644
 +                }.onFailure {
 +                    Twig.warn { "Unable to notify swap provider of deposit" }
 +                }
-@@ -68,0 +195,2 @@ class ProcessSwapTransactionUseCase(
+@@ -68,0 +219,2 @@ class ProcessSwapTransactionUseCase(
 +
 +private const val OUTCOME_WRITE_ATTEMPTS = 3
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt
@@ -51887,10 +51980,10 @@ index cf8c8cf1c..0fe34e81a 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
 new file mode 100644
-index 000000000..4d51174d9
+index 000000000..d0bab075a
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,84 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -51923,9 +52016,15 @@ index 000000000..4d51174d9
 +    private val sdkErased = MutableStateFlow(
 +        pending.value && runCatchingRecoverable { readStage() }.getOrNull() == ResetStage.CLEAR_PREFERENCES
 +    )
++    private val sdkInputSuppressed = MutableStateFlow(pending.value)
 +
 +    val isPending = pending.asStateFlow()
-+    val isSdkErased = sdkErased.asStateFlow()
++    val isSdkInputSuppressed = sdkInputSuppressed.asStateFlow()
++
++    internal fun suppressSdkInput() {
++        check(pending.value) { "SDK input suppression requires a pending wallet reset" }
++        sdkInputSuppressed.value = true
++    }
 +
 +    suspend fun getStage(): ResetStage? =
 +        withContext(Dispatchers.IO) {
@@ -51933,7 +52032,10 @@ index 000000000..4d51174d9
 +        }
 +
 +    suspend fun store(stage: ResetStage?) {
-+        if (stage == ResetStage.CLEAR_PREFERENCES) sdkErased.value = true
++        if (stage == ResetStage.CLEAR_PREFERENCES) {
++            sdkErased.value = true
++            sdkInputSuppressed.value = true
++        }
 +        withContext(Dispatchers.IO) {
 +            val directory = checkNotNull(file.parentFile)
 +            if (stage == null) {
@@ -51955,7 +52057,10 @@ index 000000000..4d51174d9
 +            }
 +            directorySync.sync(directory)
 +            lastStage = stage
-+            if (stage == null) sdkErased.value = false
++            if (stage == null) {
++                sdkErased.value = false
++                sdkInputSuppressed.value = false
++            }
 +            pending.value = stage != null
 +        }
 +    }
@@ -51965,10 +52070,10 @@ index 000000000..4d51174d9
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt
 new file mode 100644
-index 000000000..a33b91313
+index 000000000..186140b06
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,35 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -51976,14 +52081,8 @@ index 000000000..a33b91313
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import cash.z.ecc.sdk.type.fromResources
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-+import co.electriccoin.zcash.ui.common.provider.eraseWalletlessSdkData
-+import co.electriccoin.zcash.ui.common.provider.requireClassicWalletFilesErased
-+import kotlinx.coroutines.CoroutineScope
-+import kotlinx.coroutines.CoroutineStart
-+import kotlinx.coroutines.Deferred
++import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
 +import kotlinx.coroutines.Dispatchers
-+import kotlinx.coroutines.SupervisorJob
-+import kotlinx.coroutines.async
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.withContext
 +import kotlinx.coroutines.withTimeoutOrNull
@@ -51995,29 +52094,19 @@ index 000000000..a33b91313
 +    private val coordinator: WalletCoordinator,
 +    private val walletProvider: PersistableWalletProvider,
 +) {
-+    internal var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-+    private var pending: Deferred<Pair<ZcashNetwork, Boolean>>? = null
-+
 +    suspend operator fun invoke() {
-+        val erase = pending ?: startErase() ?: return
-+        val (network, erased) = checkNotNull(withTimeoutOrNull(30.seconds) { erase.await() }) {
-+            "Still waiting for SDK wallet data erasure"
++        val network = walletProvider.getPersistableWallet()?.network ?: ZcashNetwork.fromResources(context)
++        val ready = withTimeoutOrNull(5.seconds) {
++            coordinator.synchronizer.first { it == null }
++            true
 +        }
-+        pending = null
-+        check(erased) { "Could not erase SDK wallet data" }
-+        // The SDK's Boolean follows both erases. Classic SDK success can still leave a database or sidecar.
-+        withContext(Dispatchers.IO) { requireClassicWalletFilesErased(context, network) }
-+    }
-+
-+    private suspend fun startErase(): Deferred<Pair<ZcashNetwork, Boolean>>? {
-+        val walletNetwork = walletProvider.getPersistableWallet()?.network
-+        if (walletNetwork == null) {
-+            withContext(Dispatchers.IO) { eraseWalletlessSdkData(context, ZcashNetwork.fromResources(context)) }
-+            return null
++        check(ready == true) { "Still waiting for the wallet SDK to close" }
++        // The public erasers enforce native instance ownership even if the flow was already null.
++        val erased = withTimeoutOrNull(30.seconds) {
++            withContext(Dispatchers.IO) { eraseInactiveSdkData(context, network) }
++            true
 +        }
-+        return scope.async(start = CoroutineStart.UNDISPATCHED) {
-+            walletNetwork to coordinator.deleteSdkDataFlow().first()
-+        }.also { pending = it }
++        check(erased == true) { "Could not confirm SDK wallet data erasure" }
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt
@@ -52027,34 +52116,41 @@ index d50537e7f..b00724448 100644
 @@ -11,0 +12 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..cc5380d59 100644
+index eb47e1885..5b3e804bb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.deletewallet
+-import cash.z.ecc.android.sdk.CloseableSynchronizer
+-import cash.z.ecc.android.sdk.WalletCoordinator
+@@ -9 +7 @@ import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
+-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -15 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
+@@ -15 +12,0 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -18,0 +19,3 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+@@ -18,0 +16,3 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
 +import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
-@@ -20 +23,5 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -20 +20,5 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.withContext
-@@ -26,2 +33 @@ class ResetZashiUseCase(
+@@ -22 +25,0 @@ import kotlinx.coroutines.withTimeoutOrNull
+-import okhttp3.internal.closeQuietly
+@@ -26,3 +29 @@ class ResetZashiUseCase(
 -    private val walletCoordinator: WalletCoordinator,
 -    private val flexaRepository: FlexaRepository,
+-    private val synchronizerProvider: SynchronizerProvider,
 +    private val resetWalletSdkData: ResetWalletSdkDataUseCase,
-@@ -36,0 +43,4 @@ class ResetZashiUseCase(
+@@ -36,0 +38,4 @@ class ResetZashiUseCase(
 +    private val progressStore: ResetProgressStore,
 +    private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
 +    private val deleteLegacySharedExports: DeleteLegacySharedExportsUseCase,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -38 +48,10 @@ class ResetZashiUseCase(
+@@ -38 +43,10 @@ class ResetZashiUseCase(
 -    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
 +    private val resetMutex = Mutex()
 +    private val running = MutableStateFlow(false)
@@ -52066,11 +52162,11 @@ index eb47e1885..cc5380d59 100644
 +    internal fun dismissFailure(failure: PendingResetFailure) = pendingFailure.compareAndSet(failure, null)
 +
 +    @Suppress("TooGenericExceptionCaught", "ReturnCount")
-@@ -39,0 +59,3 @@ class ResetZashiUseCase(
+@@ -39,0 +54,3 @@ class ResetZashiUseCase(
 +        if (!resetMutex.tryLock()) return
 +        running.value = true
 +        pendingFailure.value = null
-@@ -41,12 +63,22 @@ class ResetZashiUseCase(
+@@ -41,12 +58,22 @@ class ResetZashiUseCase(
 -            requestBiometrics()
 -            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
 -            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
@@ -52095,7 +52191,7 @@ index eb47e1885..cc5380d59 100644
 +                    progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
 +                    prepareReset(keepFiles, stage)
 +                    if (stage != ResetStage.CLEAR_PREFERENCES) {
-+                        closeSynchronizer()
++                        progressStore.suppressSdkInput()
 +                        resetWalletSdkData()
 +                    }
 +                    progressStore.store(ResetStage.CLEAR_PREFERENCES)
@@ -52105,10 +52201,10 @@ index eb47e1885..cc5380d59 100644
 +                    walletWriteAccess.finishReset()
 +                }.onFailure { reportPendingFailure() }.getOrThrow()
 +            }
-@@ -54 +86 @@ class ResetZashiUseCase(
+@@ -54 +81 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
-@@ -56 +88,27 @@ class ResetZashiUseCase(
+@@ -56 +83,27 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
 +        } finally {
@@ -52137,14 +52233,21 @@ index eb47e1885..cc5380d59 100644
 +                progressStore.store(ResetStage.ERASE_SDK)
 +            }
 +            true
-@@ -57,0 +116 @@ class ResetZashiUseCase(
+@@ -57,0 +111 @@ class ResetZashiUseCase(
 +        check(prepared == true) { "Timed out preparing wallet reset" }
-@@ -76,2 +135,2 @@ class ResetZashiUseCase(
+@@ -72,23 +125,0 @@ class ResetZashiUseCase(
+-    /**
+-     * Waits for a synchronizer to close, bounded by [CLOSE_SYNCHRONIZER_TIMEOUT]. A latched seed
+-     * mismatch ([WalletCoordinator.isSeedMismatch]) keeps [SynchronizerProvider.getSynchronizer]'s
+-     * underlying flow null forever, which would otherwise hang this step indefinitely after
 -     * [deleteLocalFiles] already ran. When no synchronizer materializes in time, this is a no-op —
 -     * [clearSDK]'s lockout-aware erase still handles teardown of any lingering SDK state.
-+     * local files were already removed. When no synchronizer materializes in time, this is a no-op —
-+     * the lockout-aware erase still handles teardown of any lingering SDK state.
-@@ -84,11 +142,0 @@ class ResetZashiUseCase(
+-     */
+-    private suspend fun closeSynchronizer() {
+-        withTimeoutOrNull(CLOSE_SYNCHRONIZER_TIMEOUT) { synchronizerProvider.getSynchronizer() }
+-            ?.let { (it as CloseableSynchronizer).closeQuietly() }
+-    }
+-
 -    private fun deleteLocalFiles(keepFiles: Boolean) {
 -        if (!keepFiles) {
 -            addressBookRepository.delete()
@@ -52156,7 +52259,7 @@ index eb47e1885..cc5380d59 100644
 -        walletCoordinator.deleteSdkDataFlow().first()
 -    }
 -
-@@ -96,7 +144,4 @@ class ResetZashiUseCase(
+@@ -96,7 +127,4 @@ class ResetZashiUseCase(
 -        standardPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider().clearPreferences()
 -        encryptedPreferenceProvider.purgeQuarantine()
@@ -52168,7 +52271,8 @@ index eb47e1885..cc5380d59 100644
 +        val encryptedPreferences = encryptedPreferenceProvider()
 +        check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
 +        check(encryptedPreferences.clearPreferences()) { "Could not clear encrypted wallet preferences" }
-@@ -105,0 +151 @@ class ResetZashiUseCase(
+@@ -106 +134 @@ class ResetZashiUseCase(
+-        private val CLOSE_SYNCHRONIZER_TIMEOUT = 5.seconds
 +        private val PREPARE_RESET_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVM.kt
 index 4d406e6c2..d7beed7ae 100644
@@ -63385,7 +63489,7 @@ index b93adcca4..cb8939cf2 100644
 +@Serializable
 +data class BoundTransactionProgressArgs(val submissionId: String?)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
-index 14718462c..3f9686eff 100644
+index 14718462c..ec44504a2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressVM.kt
 @@ -6,0 +7,2 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
@@ -63573,12 +63677,13 @@ index 14718462c..3f9686eff 100644
 +    private suspend fun getAddressAbbreviated(proposal: TransactionProposal?): StyledStringResource {
 +        val original = if (progressArgs == null) getTransactionProposal() else proposal
 +        val address = (original as? SendTransactionProposal)?.destination?.address
-@@ -441 +490,15 @@ class TransactionProgressVM(
+@@ -441 +490,3 @@ class TransactionProgressVM(
 -    private fun onCloseClick() = viewTransactionsAfterSuccessfulProposal()
 +    private fun canUseOutcome(): Boolean =
 +        navigationRouter.isAtEntry(sourceEntryId) &&
 +            (progressArgs == null || submissionProgress?.canShow(progressArgs.submissionId) == true)
-+
+@@ -443 +494,16 @@ class TransactionProgressVM(
+-    private fun onViewTransactionDetailClick(txId: String) = viewTransactionDetailAfterSuccessfulProposal(txId)
 +    private fun onCloseClick() {
 +        if (canUseOutcome()) viewTransactionsAfterSuccessfulProposal() else onOpenActivity()
 +    }
@@ -63590,12 +63695,16 @@ index 14718462c..3f9686eff 100644
 +    private fun openSwapDetails(proposal: SwapTransactionProposal, txId: String?) {
 +        if (canUseOutcome()) viewTransactionDetailAfterSuccessfulProposal(proposal, txId)
 +    }
-@@ -443 +506,4 @@ class TransactionProgressVM(
--    private fun onViewTransactionDetailClick(txId: String) = viewTransactionDetailAfterSuccessfulProposal(txId)
++
 +    override fun onCleared() {
 +        submissionProgress?.discard(progressArgs?.submissionId)
 +        super.onCleared()
 +    }
+@@ -457,0 +524,4 @@ internal fun SubmitResult.GrpcFailure.pendingDescription(): StyledStringResource
++        SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN -> {
++            stringRes(R.string.send_pendingSdkStateInfo).withStyle()
++        }
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt
 new file mode 100644
 index 000000000..ddf3cb10f
@@ -72408,16 +72517,14 @@ index 000000000..e31b465e9
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
 new file mode 100644
-index 000000000..bf8edeacb
+index 000000000..ef6c2cd27
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
-@@ -0,0 +1,391 @@
+@@ -0,0 +1,379 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
-+import cash.z.ecc.android.sdk.CloseableSynchronizer
 +import cash.z.ecc.android.sdk.GiftCardRedeemer
 +import cash.z.ecc.android.sdk.GiftCardRedeemers
-+import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.model.GiftCard
 +import cash.z.ecc.android.sdk.model.RecipientAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -72440,7 +72547,7 @@ index 000000000..bf8edeacb
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
-+import co.electriccoin.zcash.ui.screen.deletewallet.sdkDataResetFixture
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetWalletSdkDataUseCase
 +import io.mockk.coEvery
 +import io.mockk.coVerify
 +import io.mockk.every
@@ -72458,20 +72565,15 @@ index 000000000..bf8edeacb
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
-+import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.TestScope
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
-+import org.junit.Rule
-+import org.junit.rules.TemporaryFolder
 +
 +/** Verifies wallet reset against the production gift repository and data source. */
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class GiftCardResetTest : GiftCardDataSourceTestFixture() {
-+    @get:Rule val resetFiles = TemporaryFolder()
-+
 +    @Test
 +    fun resetWaitsForTheStartedRedemptionAndNativeCloseBeforeErasingTheWallet() = runTest {
 +        val submission = CompletableDeferred<Unit>()
@@ -72489,7 +72591,7 @@ index 000000000..bf8edeacb
 +        val reset = launch { fixture.reset(keepFiles = true) }
 +        runCurrent()
 +
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        coVerify(exactly = 0) { redeemer.close() }
 +        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 +
@@ -72497,13 +72599,13 @@ index 000000000..bf8edeacb
 +        runCurrent()
 +
 +        coVerify(exactly = 1) { redeemer.close() }
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 +
 +        close.complete(Unit)
 +        reset.join()
 +
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        verify(exactly = 1) { parsedCard.wipe() }
 +        coVerify(exactly = 1) { fixture.progressStore.store(ResetStage.ERASE_SDK) }
 +        assertFalse(fixture.reset.isPending.value)
@@ -72527,7 +72629,7 @@ index 000000000..bf8edeacb
 +
 +        coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
 +        coVerify(exactly = 1) { redeemer.close() }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +    }
 +
 +    @Test
@@ -72544,12 +72646,12 @@ index 000000000..bf8edeacb
 +
 +        coVerify(exactly = 1) { redeemer.close() }
 +        coVerify(exactly = 0) { GiftCardRedeemers.erase(any(), any(), any()) }
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        aliases -= ALIAS
 +        reset.join()
 +
 +        coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Mainnet, OTHER_ALIAS) }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +    }
 +
 +    @Test
@@ -72594,7 +72696,7 @@ index 000000000..bf8edeacb
 +
 +        advanceTimeBy(31.seconds)
 +        assertIs<IllegalStateException>(first.await().exceptionOrNull())
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
 +        val stoppedAt = lookups
 +        advanceTimeBy(31.seconds)
@@ -72609,7 +72711,7 @@ index 000000000..bf8edeacb
 +        assertEquals(stoppedAt + 2, lookups)
 +        coVerify(exactly = 1) { redeemer.close() }
 +        coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +    }
 +
 +    @Test
@@ -72622,7 +72724,7 @@ index 000000000..bf8edeacb
 +        coVerify(exactly = 1) { redeemer.close() }
 +        verify(exactly = 1) { parsedCard.wipe() }
 +        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES, attempts = 2)
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +    }
 +
 +    @Test
@@ -72642,7 +72744,7 @@ index 000000000..bf8edeacb
 +            "Timed out preparing wallet reset",
 +            assertIs<IllegalStateException>(first.await().exceptionOrNull()).message,
 +        )
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 +        coVerify(exactly = 0) { redeemer.close() }
 +
@@ -72652,13 +72754,13 @@ index 000000000..bf8edeacb
 +
 +        val retry = launch { fixture.reset(keepFiles = true) }
 +        runCurrent()
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        submission.complete(Unit)
 +        retry.join()
 +
 +        coVerify(exactly = 1) { redeemer.redeem(recipient, any(), any()) }
 +        coVerify(exactly = 0) { replacementRedeemer.redeem(any(), any(), any()) }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +    }
 +
 +    @Test
@@ -72688,13 +72790,13 @@ index 000000000..bf8edeacb
 +
 +        assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) }
 +        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        assertEquals(2, eraseCalls)
 +        assertEquals(listOf(StoredCardWallet(network, ALIAS)), dataSource.findStoredCardWallets())
 +
 +        fixture.reset(keepFiles = false)
 +        assertFalse(fixture.reset.isPending.value)
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        assertEquals(3, eraseCalls)
 +        assertTrue(dataSource.findStoredCardWallets().isEmpty())
 +    }
@@ -72719,11 +72821,11 @@ index 000000000..bf8edeacb
 +        repository.sweepOrphanedCardWallets()
 +        assertFailsWith<java.io.IOException> { fixture.reset(keepFiles = false) }
 +        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +
 +        fixture.reset(keepFiles = false)
 +        coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Testnet, ALIAS) }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        assertFalse(fixture.reset.isPending.value)
 +    }
 +
@@ -72742,14 +72844,12 @@ index 000000000..bf8edeacb
 +        return ResetFixture(repository, store, id)
 +    }
 +
-+    private inner class ResetFixture(
++    private class ResetFixture(
 +        val repository: GiftCardRepositoryImpl,
 +        val store: GiftCardLinkStoreImpl,
 +        val id: String,
 +    ) {
-+        val walletCoordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flowOf(true)
-+        }
++        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
 +        private val stage = MutableStateFlow<ResetStage?>(null)
 +        private val pending = MutableStateFlow(false)
 +        private val addressBook = mockk<AddressBookRepository>(relaxed = true)
@@ -72763,10 +72863,7 @@ index 000000000..bf8edeacb
 +            coEvery { store(null) } coAnswers { recordStage(null) }
 +        }
 +        val reset = ResetZashiUseCase(
-+            resetWalletSdkData = sdkDataResetFixture(resetFiles.root, walletCoordinator),
-+            synchronizerProvider = mockk {
-+                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-+            },
++            resetWalletSdkData = sdkData,
 +            standardPreferenceProvider = mockk<StandardPreferenceProvider> {
 +                coEvery { this@mockk.invoke() } returns standardPrefs
 +            },
@@ -72859,7 +72956,7 @@ index 000000000..cd3bbbf96
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..f1fd7238e 100644
+index aa5a81f8c..93d0e7a9e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,13 @@ import android.content.Context
@@ -73565,7 +73662,7 @@ index aa5a81f8c..f1fd7238e 100644
 +    }
 +
 +    @Test
-+    fun aRefusedFirstBroadcastPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
++    fun refusalBeforeSdkCreationPersistsTheKnownOutcomeAndKeepsTheReferenceReserved() = runTest {
 +        val quote = fundingQuote(SwapType.EXACT_INPUT)
 +        val address = WalletAddress.Unified.new("deposit")
 +        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
@@ -73581,9 +73678,9 @@ index aa5a81f8c..f1fd7238e 100644
 +        var approved = true
 +        var broadcast = false
 +        assertFailsWith<IllegalStateException> {
-+            tracking.submitReservedFunding(proposal, { check(approved) }) { _, firstEntry ->
++            tracking.submitReservedFunding(proposal, { check(approved) }) { enterSdk, _ ->
 +                approved = false
-+                firstEntry()
++                enterSdk()
 +                broadcast = true
 +                error("fixture reached broadcaster")
 +            }
@@ -75214,10 +75311,10 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..a9a8cf0b5
+index 000000000..9db0ce89a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,285 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -75259,6 +75356,7 @@ index 000000000..a9a8cf0b5
 +import org.robolectric.shadows.ShadowLog
 +import java.math.BigDecimal
 +import kotlin.test.Test
++import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertIs
 +import kotlin.test.assertTrue
@@ -75276,41 +75374,40 @@ index 000000000..a9a8cf0b5
 +            fixture.prepare()
 +            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
 +            fixture.verifyNoCreation()
-+            fixture.verifyNoBroadcast()
++            fixture.verifyNoAppBroadcast()
 +        }
 +    }
 +
 +    @Test
-+    fun expiryDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
++    fun expiryDuringCreationLeavesSoftwareAndPcztFundingUncertain() = runBlocking {
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware)
 +            fixture.prepare()
-+            val result = fixture.whileSuspended { fixture.expire() }
-+            assertIs<IllegalStateException>(result.exceptionOrNull())
-+            fixture.verifyNoBroadcast()
++            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
++            fixture.verifyNoAppBroadcast()
 +            // The durable reference remains reserved, so repeating approval cannot create a second funding.
 +            assertTrue(runCatching { fixture.submit() }.isFailure)
-+            fixture.verifyNoBroadcast()
++            fixture.verifyNoAppBroadcast()
 +        }
 +    }
 +
 +    @Test
-+    fun expiryDuringEndpointSelectionPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
++    fun expiryDuringEndpointSelectionPreservesKnownIdsWithoutAnAppBroadcast() = runBlocking {
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware, pauseEndpoints = true)
 +            fixture.prepare()
-+            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
-+            fixture.verifyNoBroadcast()
++            fixture.verifyUncertain(fixture.whileSuspended { fixture.expire() })
++            fixture.verifyNoAppBroadcast()
 +        }
 +    }
 +
 +    @Test
-+    fun replacementDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
++    fun replacementDuringCreationKeepsUncertainTrackingAndPreventsAppBroadcast() = runBlocking {
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware)
 +            fixture.prepare()
-+            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.clear() }.exceptionOrNull())
-+            fixture.verifyNoBroadcast()
++            fixture.verifyUncertain(fixture.whileSuspended { fixture.clear() })
++            fixture.verifyNoAppBroadcast()
 +        }
 +    }
 +
@@ -75490,7 +75587,13 @@ index 000000000..a9a8cf0b5
 +            coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
 +            coVerify(exactly = 0) { broadcaster.createTransactionFromPczt(any(), any()) }
 +        }
-+        fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
++        fun verifyUncertain(result: Result<SubmitResult>) {
++            val pending = assertIs<SubmitResult.GrpcFailure>(result.getOrThrow())
++            assertEquals(SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN, pending.reason)
++            assertEquals(transactions.map { TransactionSubmitResult.Success(it.txId).txIdString() }, pending.txIds)
++            coVerify(exactly = 0) { metadata.markSwapFundingNotSubmitted(any(), any(), any(), any(), any()) }
++        }
++        fun verifyNoAppBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
 +        private suspend fun pause() {
 +            entered.complete(Unit)
 +            released.await()
@@ -80958,7 +81061,7 @@ index 70f0929ad..1cc4daef3 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..0d0ca40b4 100644
+index 0bc7a1124..cdaf7ba1c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,3 @@ import android.app.Application
@@ -81010,22 +81113,24 @@ index 0bc7a1124..0d0ca40b4 100644
 +import java.io.File
 +import org.junit.Rule
 +import org.junit.rules.TemporaryFolder
-@@ -47,0 +82,3 @@ import kotlin.test.assertEquals
+@@ -46,0 +81 @@ import kotlin.test.Test
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -47,0 +83,3 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -55,0 +93 @@ import kotlin.test.assertEquals
+@@ -55,0 +94 @@ import kotlin.test.assertEquals
 +@Suppress("LargeClass") // Keep interrupted setup transitions with the shared persistence/reconstruction fixture.
-@@ -58,0 +97,2 @@ class WalletRepositoryImplTest {
+@@ -58,0 +98,2 @@ class WalletRepositoryImplTest {
 +    @get:Rule val directory = TemporaryFolder()
 +
-@@ -64,0 +105,3 @@ class WalletRepositoryImplTest {
+@@ -64,0 +106,3 @@ class WalletRepositoryImplTest {
 +        mockkObject(SlipstreamSynchronizer.Companion)
 +        mockkObject(GlobalCrashReporter)
 +        every { GlobalCrashReporter.reportCaughtException(any()) } returns Unit
-@@ -70,0 +114 @@ class WalletRepositoryImplTest {
+@@ -70,0 +115 @@ class WalletRepositoryImplTest {
 +        Dispatchers.resetMain()
-@@ -79,3 +123,7 @@ class WalletRepositoryImplTest {
+@@ -79,3 +124,7 @@ class WalletRepositoryImplTest {
 -        assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.NONE, true))
 -        assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.NEEDS_WARN, true))
 -        assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.NEEDS_BACKUP, true))
@@ -81036,20 +81141,20 @@ index 0bc7a1124..0d0ca40b4 100644
 +            SecretState.NONE,
 +            resolveSecretState(true, OnboardingState.NONE, true, storedByCurrentSetup = true)
 +        )
-@@ -103 +151 @@ class WalletRepositoryImplTest {
+@@ -103 +152 @@ class WalletRepositoryImplTest {
 -    fun secretStateDoesNotWaitOnTheWalletStoreWhenFlagIsNotReady() =
 +    fun secretStateWaitsForEncryptedWalletPresenceBeforeGrantingFirstRunAccess() =
-@@ -104,0 +153 @@ class WalletRepositoryImplTest {
+@@ -104,0 +154 @@ class WalletRepositoryImplTest {
 +            val loaded = CompletableDeferred<PersistableWallet?>()
-@@ -107 +156 @@ class WalletRepositoryImplTest {
+@@ -107 +157 @@ class WalletRepositoryImplTest {
 -                    every { persistableWallet } returns MutableSharedFlow()
 +                    every { persistableWallet } returns flow { emit(loaded.await()) }
-@@ -117 +166,3 @@ class WalletRepositoryImplTest {
+@@ -117 +167,3 @@ class WalletRepositoryImplTest {
 -            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
 +            assertEquals(SecretState.LOADING, repository.secretState.value)
 +            loaded.complete(fixtureWallet())
 +            assertEquals(SecretState.INCOMPLETE, repository.secretState.first { it != SecretState.LOADING })
-@@ -131,0 +183,666 @@ class WalletRepositoryImplTest {
+@@ -131,0 +184,666 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun repeatedCreateTriggersKeepTheFirstAcceptedWallet() =
 +        runTest {
@@ -81716,26 +81821,38 @@ index 0bc7a1124..0d0ca40b4 100644
 +            enableTor = enableTor
 +        )
 +
-@@ -141 +858,4 @@ class WalletRepositoryImplTest {
+@@ -141 +859,4 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair", "erase"), harness.events)
 +            assertEquals(
 +                listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"),
 +                harness.events
 +            )
-@@ -186 +906 @@ class WalletRepositoryImplTest {
+@@ -143,0 +865,11 @@ class WalletRepositoryImplTest {
++    @Test
++    fun startupLeavesWalletlessErasureToAPendingReset() = runTest {
++        val (repository, harness) = newRepository(OnboardingState.READY, null, resetPending = true)
++        repository.useTestScope(testScheduler)
++        repository.init()
++        advanceUntilIdle()
++
++        assertEquals(emptyList<String>(), harness.events)
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any(), any()) }
++    }
++
+@@ -186 +918 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair"), harness.events)
 +            assertEquals(listOf("onboarding=4", "sdkRepair", "onboarding=0"), harness.events)
-@@ -202,0 +923 @@ class WalletRepositoryImplTest {
+@@ -202,0 +935 @@ class WalletRepositoryImplTest {
 +                    every { writeVersion } returns 0L
-@@ -223,4 +943,0 @@ class WalletRepositoryImplTest {
+@@ -223,4 +955,0 @@ class WalletRepositoryImplTest {
 -    /**
 -     * "The erase failed and we carried on anyway" is the half-reset state MOB-1836 was reported
 -     * for, so it has to reach crash reporting rather than only a log line on the user's device.
 -     */
-@@ -228 +945 @@ class WalletRepositoryImplTest {
+@@ -228 +957 @@ class WalletRepositoryImplTest {
 -    fun initReportsAFailedEraseToCrashReporting() =
 +    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
-@@ -230,2 +947,60 @@ class WalletRepositoryImplTest {
+@@ -230,2 +959,60 @@ class WalletRepositoryImplTest {
 -            mockkObject(GlobalCrashReporter)
 -            every { GlobalCrashReporter.reportCaughtException(any()) } returns Unit
 +            val torPreferences = RecordingPreferenceProvider(mutableListOf())
@@ -81798,7 +81915,7 @@ index 0bc7a1124..0d0ca40b4 100644
 +            assertFailsWith<WalletInitializationConflictException> {
 +                repository.restoreFixture(enableTor = false).await()
 +            }
-@@ -232,0 +1008,10 @@ class WalletRepositoryImplTest {
+@@ -232,0 +1020,10 @@ class WalletRepositoryImplTest {
 +            torPreferences.beforeStringCommit = { _, _ -> }
 +            repository.restoreFixture(enableTor = true).await()
 +            repository.secretState.first { it == SecretState.READY }
@@ -81809,7 +81926,7 @@ index 0bc7a1124..0d0ca40b4 100644
 +    @Test
 +    fun initReportsAFailedEraseWithoutExposingSdkErrorDetails() =
 +        runTest {
-@@ -241,2 +1026,6 @@ class WalletRepositoryImplTest {
+@@ -241,2 +1038,6 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair"), harness.events)
 -            verify(exactly = 1) { GlobalCrashReporter.reportCaughtException(eraseFailure) }
 +            assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream"), harness.events)
@@ -81818,43 +81935,45 @@ index 0bc7a1124..0d0ca40b4 100644
 +                    it.message == "Wallet data recovery failed" && it.cause == null
 +                })
 +            }
-@@ -256,0 +1046 @@ class WalletRepositoryImplTest {
+@@ -256,0 +1058,2 @@ class WalletRepositoryImplTest {
 +        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -259,0 +1050,4 @@ class WalletRepositoryImplTest {
++        resetPending: Boolean = false,
+@@ -259,0 +1063,4 @@ class WalletRepositoryImplTest {
 +        coEvery { SlipstreamSynchronizer.erase(any(), any(), any()) } coAnswers {
 +            events += "eraseSlipstream"
 +            true
 +        }
-@@ -270 +1064,5 @@ class WalletRepositoryImplTest {
+@@ -270 +1077,5 @@ class WalletRepositoryImplTest {
 -        val application = mockk<Application>(relaxed = true)
 +        val application = mockk<Application>(relaxed = true) {
 +            every { noBackupFilesDir } returns directory.root
 +            every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
 +            every { resources.getBoolean(any()) } returns true
 +        }
-@@ -286,0 +1085 @@ class WalletRepositoryImplTest {
+@@ -286,0 +1098 @@ class WalletRepositoryImplTest {
 +        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
-@@ -303 +1102,2 @@ class WalletRepositoryImplTest {
+@@ -303 +1115,2 @@ class WalletRepositoryImplTest {
 -        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
 +        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
 +        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-@@ -317,0 +1118 @@ class WalletRepositoryImplTest {
+@@ -317,0 +1131,2 @@ class WalletRepositoryImplTest {
 +                isTorEnabledStorageProvider = torPreference,
-@@ -320,2 +1120,0 @@ class WalletRepositoryImplTest {
++                resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
+@@ -320,2 +1134,0 @@ class WalletRepositoryImplTest {
 -        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 -
-@@ -325 +1124,4 @@ class WalletRepositoryImplTest {
+@@ -325 +1138,4 @@ class WalletRepositoryImplTest {
 -        return repository to TestHarness(events, fakePrefs)
 +        return repository to TestHarness(
 +            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
 +            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
 +        )
-@@ -330,0 +1133,4 @@ class WalletRepositoryImplTest {
+@@ -330,0 +1147,4 @@ class WalletRepositoryImplTest {
 +        val walletProvider: PersistableWalletProvider,
 +        val restoringProvider: WalletRestoringStateProvider,
 +        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
 +        val backupProvider: WalletBackupFlagStorageProvider,
-@@ -334,12 +1139,0 @@ class WalletRepositoryImplTest {
+@@ -334,12 +1153,0 @@ class WalletRepositoryImplTest {
 -/**
 - * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
 - * store repair lands relative to the onboarding-flag write and the SDK data erase.
@@ -81867,11 +81986,11 @@ index 0bc7a1124..0d0ca40b4 100644
 -    }
 -}
 -
-@@ -356,0 +1151,3 @@ private class FakePersistableWalletProvider(
+@@ -356,0 +1165,3 @@ private class FakePersistableWalletProvider(
 +    private val writeAccess = WalletWriteAccess()
 +    var failWrites = false
 +    var failWritesBeforePublishing = false
-@@ -359,5 +1156,18 @@ private class FakePersistableWalletProvider(
+@@ -359,5 +1170,18 @@ private class FakePersistableWalletProvider(
 -
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
@@ -81895,7 +82014,7 @@ index 0bc7a1124..0d0ca40b4 100644
 +            true
 +        }
 +    } ?: false
-@@ -367,0 +1178,8 @@ private class FakePersistableWalletProvider(
+@@ -367,0 +1192,8 @@ private class FakePersistableWalletProvider(
 +
 +    private fun write(wallet: PersistableWallet) {
 +        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
@@ -81904,19 +82023,19 @@ index 0bc7a1124..0d0ca40b4 100644
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 +        events += "wallet"
 +    }
-@@ -385,0 +1204,6 @@ private class WalletStoredAfterFirstReadProvider(
+@@ -385,0 +1218,6 @@ private class WalletStoredAfterFirstReadProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
 +        version: Long,
 +    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 +
-@@ -402,0 +1227,2 @@ private class RecordingPreferenceProvider(
+@@ -402,0 +1241,2 @@ private class RecordingPreferenceProvider(
 +    private val committedValues = mutableMapOf<String, String?>()
 +    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
-@@ -416,0 +1243 @@ private class RecordingPreferenceProvider(
+@@ -416,0 +1257 @@ private class RecordingPreferenceProvider(
 +        committedValues[key.key] = value
-@@ -418,0 +1246,7 @@ private class RecordingPreferenceProvider(
+@@ -418,0 +1260,7 @@ private class RecordingPreferenceProvider(
 +    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
 +
 +    fun reopen(): RecordingPreferenceProvider =
@@ -81924,12 +82043,12 @@ index 0bc7a1124..0d0ca40b4 100644
 +            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
 +        }
 +
-@@ -429,0 +1264,2 @@ private class RecordingPreferenceProvider(
+@@ -429,0 +1278,2 @@ private class RecordingPreferenceProvider(
 +        beforeStringCommit(key, value)
 +        committedValues[key.key] = value
-@@ -451,0 +1288 @@ private class RecordingPreferenceProvider(
+@@ -451,0 +1302 @@ private class RecordingPreferenceProvider(
 +        committedValues.remove(key.key)
-@@ -455,0 +1293 @@ private class RecordingPreferenceProvider(
+@@ -455,0 +1307 @@ private class RecordingPreferenceProvider(
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
@@ -89566,15 +89685,13 @@ index 514e2b2bc..23da3fe6b 100644
 +            verify(exactly = 1) { navigationRouter.back() }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt
 new file mode 100644
-index 000000000..5d288fad9
+index 000000000..db3cc8d55
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,297 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
-+import cash.z.ecc.android.sdk.CloseableSynchronizer
-+import cash.z.ecc.android.sdk.WalletCoordinator
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 +import co.electriccoin.zcash.preference.StandardPreferenceProvider
 +import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -89585,7 +89702,6 @@ index 000000000..5d288fad9
 +import co.electriccoin.zcash.ui.common.provider.AddressBookProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
-+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
@@ -89603,7 +89719,6 @@ index 000000000..5d288fad9
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.flow.flowOf
@@ -89627,14 +89742,14 @@ index 000000000..5d288fad9
 +    @Test
 +    fun failedSdkErasePreservesPreferencesAndRetrySkipsDeletedFiles() = runBlocking {
 +        val fixture = Fixture()
-+        every { fixture.walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
++        coEvery { fixture.sdkData() } throws IllegalStateException("Synthetic erase failure")
 +
 +        assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) }
 +        assertEquals(ResetStage.ERASE_SDK, fixture.progressStore().getStage())
 +        coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
 +        coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 +
-+        every { fixture.walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
++        coEvery { fixture.sdkData() } returns Unit
 +        fixture.newReset()(keepFiles = true)
 +
 +        coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
@@ -89658,7 +89773,7 @@ index 000000000..5d288fad9
 +        try {
 +            withTimeout(10.seconds) { metadataStarted.await() }
 +            coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
-+            verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++            coVerify(exactly = 0) { fixture.sdkData() }
 +            coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 +        } finally {
 +            allowDeletion.complete(Unit)
@@ -89674,7 +89789,7 @@ index 000000000..5d288fad9
 +        coEvery { fixture.metadataRepository.delete() } throws IOException("Synthetic deletion failure")
 +
 +        assertFailsWith<IOException> { fixture.reset(keepFiles = false) }
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progressStore().getStage())
 +        coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 +
@@ -89682,7 +89797,7 @@ index 000000000..5d288fad9
 +        val resumed = fixture.newReset()
 +        assertTrue(resumed.isPending.value)
 +        resumed(keepFiles = true)
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        coVerify(exactly = 2) { fixture.addressBookRepository.delete() }
 +        coVerify(exactly = 2) { fixture.metadataRepository.delete() }
 +        assertNull(fixture.progressStore().getStage())
@@ -89705,7 +89820,7 @@ index 000000000..5d288fad9
 +        coEvery { fixture.encryptedPrefs.clearPreferences() } returns true
 +        resumed(keepFiles = false)
 +
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        coVerify(exactly = 0) { fixture.addressBookRepository.delete() }
 +        coVerify(exactly = 0) { fixture.metadataRepository.delete() }
 +        assertNull(fixture.progressStore().getStage())
@@ -89733,12 +89848,12 @@ index 000000000..5d288fad9
 +
 +        listOf(first, current, temporary, legacy).forEach { assertFalse(it.exists(), it.name) }
 +        assertEquals("keep", unrelated.readText())
-+        verify(exactly = 2) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 2) { fixture.sdkData() }
 +    }
 +
 +    @Test
 +    fun optOutWithoutASynchronizerCachedKeyOrAccountStillErasesSdkAndPreferences() = runBlocking {
-+        val fixture = Fixture(synchronizerAvailable = false)
++        val fixture = Fixture()
 +        val unavailableAccount = mockk<AccountDataSource> {
 +            every { zashiAccount } returns flowOf(null)
 +            coEvery { getZashiAccount() } coAnswers { awaitCancellation() }
@@ -89752,7 +89867,7 @@ index 000000000..5d288fad9
 +
 +        coVerify(exactly = 0) { unavailableAccount.getZashiAccount() }
 +        coVerify(exactly = 0) { keys.getAddressBookKey() }
-+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { fixture.sdkData() }
 +        coVerify(exactly = 1) { fixture.encryptedPrefs.clearPreferences() }
 +        assertNull(fixture.progressStore().getStage())
 +    }
@@ -89792,7 +89907,7 @@ index 000000000..5d288fad9
 +
 +        assertFailsWith<IOException> { fixture.reset(keepFiles = true) }
 +        assertEquals(ResetStage.ERASE_SDK, fixture.progressStore().getStage())
-+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
 +
 +        assertTrue(blocker.delete())
@@ -89811,15 +89926,8 @@ index 000000000..5d288fad9
 +        return AddressBookDataSourceImpl(storage, provider, sync)
 +    }
 +
-+    private inner class Fixture(synchronizerAvailable: Boolean = true) {
-+        val walletCoordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flowOf(true)
-+        }
-+        private val synchronizerProvider = mockk<SynchronizerProvider> {
-+            coEvery { getSynchronizer() } coAnswers {
-+                if (synchronizerAvailable) mockk<CloseableSynchronizer>(relaxed = true) else awaitCancellation()
-+            }
-+        }
++    private inner class Fixture {
++        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
 +        val standardPrefs = mockk<PreferenceProvider> {
 +            coEvery { clearPreferences() } returns true
 +        }
@@ -89862,8 +89970,7 @@ index 000000000..5d288fad9
 +        val reset = newReset()
 +
 +        fun newReset(repository: AddressBookRepository = addressBookRepository) = ResetZashiUseCase(
-+            resetWalletSdkData = sdkDataResetFixture(directory.root, walletCoordinator),
-+            synchronizerProvider = synchronizerProvider,
++            resetWalletSdkData = sdkData,
 +            standardPreferenceProvider = standardProvider,
 +            encryptedPreferenceProvider = encryptedProvider,
 +            homeMessageCacheRepository = mockk(relaxed = true),
@@ -89881,27 +89988,32 @@ index 000000000..5d288fad9
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCaseTest.kt
 new file mode 100644
-index 000000000..db14ebdec
+index 000000000..f95907e13
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCaseTest.kt
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,107 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
++import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
++import com.zodl.slipstream.SlipstreamSynchronizer
 +import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.verify
-+import kotlinx.coroutines.CompletableDeferred
-+import kotlinx.coroutines.flow.flow
-+import kotlinx.coroutines.flow.flowOf
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.test.runTest
 +import org.junit.Rule
 +import org.junit.rules.TemporaryFolder
 +import java.io.File
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
 +import kotlin.test.Test
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertTrue
@@ -89909,57 +90021,93 @@ index 000000000..db14ebdec
 +class ResetWalletSdkDataUseCaseTest {
 +    @get:Rule val directory = TemporaryFolder()
 +
-+    @Test
-+    fun delayedResultSurvivesTimeoutAndRetryJoinsTheSameErase() = runTest {
-+        val result = CompletableDeferred<Boolean>()
-+        val coordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flow { emit(result.await()) }
-+        }
-+        val reset = sdkDataResetFixture(directory.root, coordinator).also { it.scope = backgroundScope }
++    private val network = ZcashNetwork.Testnet
++    private val synchronizer = MutableStateFlow<Synchronizer?>(null)
++    private val coordinator = mockk<WalletCoordinator> {
++        every { synchronizer } returns this@ResetWalletSdkDataUseCaseTest.synchronizer
++    }
++    private val walletProvider = mockk<PersistableWalletProvider> {
++        coEvery { getPersistableWallet() } returns mockk { every { network } returns ZcashNetwork.Testnet }
++    }
 +
-+        assertFailsWith<IllegalStateException> { reset() }
-+        assertFailsWith<IllegalStateException> { reset() }
-+        result.complete(true)
-+        reset()
++    @BeforeTest
++    fun setUp() {
++        mockkObject(Synchronizer.Companion)
++        mockkObject(SlipstreamSynchronizer.Companion)
++    }
 +
-+        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
++    @AfterTest
++    fun tearDown() {
++        unmockkObject(Synchronizer.Companion)
++        unmockkObject(SlipstreamSynchronizer.Companion)
 +    }
 +
 +    @Test
-+    fun completedEraseWithAClassicSidecarCanBeRetried() = runTest {
-+        val coordinator = mockk<WalletCoordinator> { every { deleteSdkDataFlow() } returns flowOf(true) }
-+        val reset = sdkDataResetFixture(directory.root, coordinator)
-+        val sidecar = File(directory.root, "ZcashSdk_${ZcashNetwork.Testnet.networkName}_Data.db-wal")
++    fun resetAcceptsAlreadyAbsentClassicFilesAfterEngineErasure() = runBlocking {
++        val context = fileContext()
++        coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
++        coEvery { Synchronizer.erase(context, network) } returns false
++
++        ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
++
++        coVerify(exactly = 1) { Synchronizer.erase(context, network) }
++    }
++
++    @Test
++    fun absentClassicFilesCannotMaskEngineFailure() = runBlocking {
++        val context = fileContext()
++        coEvery { SlipstreamSynchronizer.erase(context, network) } returns false
++
++        assertFailsWith<IllegalStateException> {
++            ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
++        }
++
++        coVerify(exactly = 0) { Synchronizer.erase(context, network) }
++    }
++
++    @Test
++    fun resetWaitsForAnActiveSynchronizerToCloseBeforeErasing() = runTest {
++        synchronizer.value = mockk()
++        val context = fileContext()
++
++        assertFailsWith<IllegalStateException> {
++            ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
++        }
++
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(context, network) }
++        coVerify(exactly = 0) { Synchronizer.erase(context, network) }
++    }
++
++    @Test
++    fun survivingClassicSidecarBlocksCompletionAndRetryCanRecheck() = runBlocking {
++        val context = fileContext()
++        coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
++        coEvery { Synchronizer.erase(context, network) } returns true
++        val reset = ResetWalletSdkDataUseCase(context, coordinator, walletProvider)
++        val sidecar = File(directory.root, "ZcashSdk_${network.networkName}_Data.db-wal")
 +        sidecar.writeText("synthetic residue")
 +
 +        assertFailsWith<IllegalStateException> { reset() }
 +        assertTrue(sidecar.delete())
 +        reset()
 +
-+        verify(exactly = 2) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 2) { Synchronizer.erase(context, network) }
 +    }
-+}
 +
-+internal fun sdkDataResetFixture(directory: File, coordinator: WalletCoordinator): ResetWalletSdkDataUseCase {
-+    val context = mockk<Context> {
-+        every { noBackupFilesDir } returns directory
-+        every { getDatabasePath(any()) } answers { File(directory, firstArg<String>()) }
++    private fun fileContext(): Context = mockk {
++        every { noBackupFilesDir } returns directory.root
++        every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
 +    }
-+    val walletProvider = mockk<PersistableWalletProvider> {
-+        coEvery { getPersistableWallet() } returns mockk { every { network } returns ZcashNetwork.Testnet }
-+    }
-+    return ResetWalletSdkDataUseCase(context, coordinator, walletProvider)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..eafbaa8ab
+index 000000000..9451d89e3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,487 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
-+import cash.z.ecc.android.sdk.CloseableSynchronizer
 +import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.WalletInitMode
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
@@ -90006,6 +90154,7 @@ index 000000000..eafbaa8ab
 +import com.google.crypto.tink.InsecureSecretKeyAccess
 +import com.google.crypto.tink.util.SecretBytes
 +import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.verify
@@ -90060,10 +90209,9 @@ index 000000000..eafbaa8ab
 +        assertEquals(1, storage.getStorageFiles(key).size)
 +        val sdkEraseEntered = CompletableDeferred<Unit>()
 +        val finishSdkErase = CompletableDeferred<Unit>()
-+        every { fixture.resetCoordinator.deleteSdkDataFlow() } returns flow {
++        coEvery { fixture.sdkData() } coAnswers {
 +            sdkEraseEntered.complete(Unit)
 +            finishSdkErase.await()
-+            emit(true)
 +        }
 +        val reset = fixture.reset(metadata, contacts)
 +        val operation = launch { reset(keepFiles = false) }
@@ -90138,7 +90286,8 @@ index 000000000..eafbaa8ab
 +            val reset = launch(start = CoroutineStart.UNDISPATCHED) { doReset(keepFiles = true) }
 +            withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
 +            assertFalse(reset.isCompleted)
-+            verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
++            assertFalse(fixture.progress.isSdkInputSuppressed.value)
++            coVerify(exactly = 0) { fixture.sdkData() }
 +            erase.finish.complete(Unit)
 +            withTimeout(10.seconds) { reset.join() }
 +        } finally {
@@ -90227,7 +90376,7 @@ index 000000000..eafbaa8ab
 +            launch { reset(keepFiles = false) }
 +            withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
 +            assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progress.getStage())
-+            verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
++            coVerify(exactly = 0) { fixture.sdkData() }
 +        } finally {
 +            finishRecoveryWrite.complete(Unit)
 +        }
@@ -90274,7 +90423,7 @@ index 000000000..eafbaa8ab
 +
 +        assertFailsWith<IOException> { fixture.reset()(keepFiles = false) }
 +        assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progress.getStage())
-+        verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { fixture.sdkData() }
 +        assertFailsWith<IllegalStateException> { fixture.walletProvider.store(original) }
 +        assertFalse(fixture.walletProvider.storeIfCurrent(original, original, oldVersion))
 +
@@ -90381,9 +90530,7 @@ index 000000000..eafbaa8ab
 +            writeAccess,
 +        )
 +        val giftRepository = mockk<GiftCardRepository>(relaxed = true)
-+        val resetCoordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flowOf(true)
-+        }
++        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
 +
 +        fun metadataRepository(
 +            account: WalletAccount,
@@ -90426,10 +90573,7 @@ index 000000000..eafbaa8ab
 +            metadata: MetadataRepository = mockk(relaxed = true),
 +            contacts: AddressBookRepository = mockk(relaxed = true),
 +        ) = ResetZashiUseCase(
-+            resetWalletSdkData = sdkDataResetFixture(directory.root, resetCoordinator),
-+            synchronizerProvider = mockk {
-+                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-+            },
++            resetWalletSdkData = sdkData,
 +            standardPreferenceProvider = mockk<StandardPreferenceProvider> {
 +                val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
 +                coEvery { this@mockk.invoke() } returns preferences
@@ -90450,7 +90594,7 @@ index 000000000..eafbaa8ab
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..f95e0dc3f
+index 000000000..303b41ab1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 @@ -0,0 +1,347 @@
@@ -90460,8 +90604,6 @@ index 000000000..f95e0dc3f
 +import android.content.Intent
 +import android.content.res.Configuration
 +import androidx.lifecycle.viewModelScope
-+import cash.z.ecc.android.sdk.CloseableSynchronizer
-+import cash.z.ecc.android.sdk.WalletCoordinator
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 +import co.electriccoin.zcash.preference.StandardPreferenceProvider
 +import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -90494,8 +90636,6 @@ index 000000000..f95e0dc3f
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.cancelAndJoin
 +import kotlinx.coroutines.flow.first
-+import kotlinx.coroutines.flow.flow
-+import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
 +import kotlinx.coroutines.test.resetMain
@@ -90529,7 +90669,7 @@ index 000000000..f95e0dc3f
 +    @get:Rule val directory = TemporaryFolder()
 +
 +    private val navigation = mockk<NavigationRouter>(relaxed = true)
-+    private val coordinator = mockk<WalletCoordinator>()
++    private val sdkData = mockk<ResetWalletSdkDataUseCase>()
 +    private val biometrics = mockk<BiometricRepository>(relaxed = true)
 +    private val contacts = mockk<AddressBookRepository>(relaxed = true)
 +    private val metadata = mockk<MetadataRepository>(relaxed = true)
@@ -90580,7 +90720,7 @@ index 000000000..f95e0dc3f
 +    @Test
 +    fun confirmingWithTheDefaultCheckboxPreservesLocalFiles() = runBlocking {
 +        val erase = CompletableDeferred<Boolean>()
-+        every { coordinator.deleteSdkDataFlow() } returns flow { emit(erase.await()) }
++        coEvery { sdkData() } coAnswers { check(erase.await()) }
 +        createViewModel()
 +        val legacy = File(directory.root, "tax_exports/Zodl_Transaction_History_2025.csv").apply {
 +            parentFile?.mkdirs()
@@ -90617,7 +90757,7 @@ index 000000000..f95e0dc3f
 +        assertEquals("current", newPczt.readText())
 +        assertEquals("current", staged.readText())
 +        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
-+        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { sdkData() }
 +        coVerify(exactly = 0) { contacts.delete() }
 +        coVerify(exactly = 0) { metadata.delete() }
 +    }
@@ -90625,8 +90765,14 @@ index 000000000..f95e0dc3f
 +    @Test
 +    fun cancelDoesNotResetAndPendingRetriesContinueTheConfirmedDeletion() = runBlocking {
 +        val retryErase = CompletableDeferred<Boolean>()
-+        every { coordinator.deleteSdkDataFlow() } returnsMany
-+            listOf(flowOf(false), flow { emit(retryErase.await()) }, flowOf(true))
++        var eraseAttempts = 0
++        coEvery { sdkData() } coAnswers {
++            when (eraseAttempts++) {
++                0 -> error("Synthetic erase failure")
++                1 -> check(retryErase.await())
++                else -> Unit
++            }
++        }
 +        createViewModel()
 +
 +        val initial = assertNotNull(vm.state.value.content)
@@ -90645,7 +90791,7 @@ index 000000000..f95e0dc3f
 +        assertFalse(cancelled.isPending)
 +        assertNull(progress.getStage())
 +        coVerify(exactly = 0) { biometrics.requestBiometrics(any()) }
-+        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { sdkData() }
 +
 +        cancelled.buttonState.onClick()
 +        assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
@@ -90669,7 +90815,7 @@ index 000000000..f95e0dc3f
 +            retryErase.complete(false)
 +        }
 +        val retried = awaitState { it.error != null }
-+        verify(exactly = 2) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 2) { sdkData() }
 +        assertFalse(reportAccess.captureWallet()())
 +        assertNotNull(assertIs<LceError.BottomSheet>(retried.error).state.secondaryAction).onClick()
 +        val application = RuntimeEnvironment.getApplication()
@@ -90685,7 +90831,7 @@ index 000000000..f95e0dc3f
 +        assertNull(completed.content?.confirmationDialog)
 +        assertNull(completed.error)
 +        assertNull(progress.getStage())
-+        verify(exactly = 3) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 3) { sdkData() }
 +        coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
 +        coVerify(exactly = 1) { contacts.delete() }
 +        coVerify(exactly = 1) { metadata.delete() }
@@ -90695,13 +90841,14 @@ index 000000000..f95e0dc3f
 +    fun pendingRootOwnerReceivesFirstFailureAfterSettingsOwnerIsReplaced(): Unit = runBlocking {
 +        val enteredErase = CompletableDeferred<Unit>()
 +        val firstResult = CompletableDeferred<Boolean>()
-+        every { coordinator.deleteSdkDataFlow() } returnsMany listOf(
-+            flow {
++        var firstAttempt = true
++        coEvery { sdkData() } coAnswers {
++            if (firstAttempt) {
++                firstAttempt = false
 +                enteredErase.complete(Unit)
-+                emit(firstResult.await())
-+            },
-+            flowOf(true),
-+        )
++                check(firstResult.await())
++            }
++        }
 +        createViewModel()
 +        val settingsOwner = vm
 +        assertNotNull(vm.state.value.content).buttonState.onClick()
@@ -90733,7 +90880,7 @@ index 000000000..f95e0dc3f
 +
 +    @Test
 +    fun pendingStageReadFailureOffersPrivateSupportAndRetriesTheOriginalStage(): Unit = runBlocking {
-+        every { coordinator.deleteSdkDataFlow() } returns flowOf(true)
++        coEvery { sdkData() } returns Unit
 +        createViewModel()
 +        progress.store(ResetStage.ERASE_SDK)
 +        val marker = File(directory.root, "wallet-reset-progress")
@@ -90743,7 +90890,7 @@ index 000000000..f95e0dc3f
 +        val failure = awaitState { it.error != null && it.content?.buttonState?.isLoading == false }
 +        val sheet = assertIs<LceError.BottomSheet>(failure.error).state
 +        assertEquals(stringRes(R.string.wallet_reset_failed), sheet.message)
-+        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { sdkData() }
 +        assertNotNull(sheet.secondaryAction).onClick()
 +        val chooser = assertNotNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
 +        val draft = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
@@ -90753,7 +90900,7 @@ index 000000000..f95e0dc3f
 +        marker.writeText(ResetStage.ERASE_SDK.name)
 +        assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content).buttonState.onClick()
 +        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
-+        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { sdkData() }
 +        coVerify(exactly = 0) { biometrics.requestBiometrics(any()) }
 +        coVerify(exactly = 0) { contacts.delete() }
 +        coVerify(exactly = 0) { metadata.delete() }
@@ -90770,10 +90917,7 @@ index 000000000..f95e0dc3f
 +        assertTrue(reportAccess.captureWallet()())
 +        val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
 +        val reset = ResetZashiUseCase(
-+            resetWalletSdkData = sdkDataResetFixture(directory.root, coordinator),
-+            synchronizerProvider = mockk {
-+                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-+            },
++            resetWalletSdkData = sdkData,
 +            standardPreferenceProvider = mockk<StandardPreferenceProvider> {
 +                coEvery { this@mockk.invoke() } returns preferences
 +            },
@@ -90803,15 +90947,15 @@ index 000000000..f95e0dc3f
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt
 new file mode 100644
-index 000000000..040b01863
+index 000000000..1272587b1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,109 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
 +import cash.z.ecc.android.sdk.model.PersistableWallet
-+import co.electriccoin.zcash.global.hideErasedWallet
++import co.electriccoin.zcash.global.hideResetWallet
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
 +import io.mockk.every
 +import io.mockk.mockk
@@ -90839,15 +90983,20 @@ index 000000000..040b01863
 +        val preferences = MutableStateFlow<PersistableWallet?>(mockk())
 +        val wallet = preferences.value
 +        val store = progressStore()
-+        val sdkWallet = preferences.hideErasedWallet(store)
++        val sdkWallet = preferences.hideResetWallet(store)
 +
 +        store.store(ResetStage.ERASE_SDK)
 +        assertEquals(wallet, sdkWallet.first())
++        assertNull(preferences.hideResetWallet(progressStore()).first())
++
++        store.suppressSdkInput()
++        assertNull(sdkWallet.first())
++        assertEquals(ResetStage.ERASE_SDK, store.getStage())
 +        store.store(ResetStage.CLEAR_PREFERENCES)
 +        assertNull(sdkWallet.first())
 +
 +        val resumed = progressStore()
-+        val resumedSdkWallet = preferences.hideErasedWallet(resumed)
++        val resumedSdkWallet = preferences.hideResetWallet(resumed)
 +        assertTrue(resumed.isPending.value)
 +        assertNull(resumedSdkWallet.first())
 +
@@ -90865,7 +91014,7 @@ index 000000000..040b01863
 +            if (!allowSync) throw IOException("Synthetic reset marker flush failure")
 +        }
 +        val preferences = MutableStateFlow<PersistableWallet?>(mockk())
-+        val sdkWallet = preferences.hideErasedWallet(store)
++        val sdkWallet = preferences.hideResetWallet(store)
 +        store.store(ResetStage.ERASE_SDK)
 +        allowSync = false
 +
@@ -90877,7 +91026,7 @@ index 000000000..040b01863
 +        allowSync = true
 +        store.store(ResetStage.CLEAR_PREFERENCES)
 +        assertEquals(ResetStage.CLEAR_PREFERENCES, progressStore().getStage())
-+        assertNull(preferences.hideErasedWallet(progressStore()).first())
++        assertNull(preferences.hideResetWallet(progressStore()).first())
 +    }
 +
 +    @Test
@@ -90888,7 +91037,7 @@ index 000000000..040b01863
 +        val revision = MutableStateFlow(0)
 +        val preferences = flow { revision.collect { emit(storedWallet) } }
 +        val observed = Channel<PersistableWallet?>(Channel.UNLIMITED)
-+        backgroundScope.launch { preferences.hideErasedWallet(store).collect { observed.send(it) } }
++        backgroundScope.launch { preferences.hideResetWallet(store).collect { observed.send(it) } }
 +
 +        assertSame(original, observed.receive())
 +        store.store(ResetStage.CLEAR_PREFERENCES)
@@ -90913,7 +91062,7 @@ index 000000000..040b01863
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
 new file mode 100644
-index 000000000..08d654033
+index 000000000..c788d4ff2
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
 @@ -0,0 +1,152 @@
@@ -90926,7 +91075,7 @@ index 000000000..08d654033
 +import cash.z.ecc.android.sdk.model.SeedPhrase
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-+import co.electriccoin.zcash.global.hideErasedWallet
++import co.electriccoin.zcash.global.hideResetWallet
 +import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
@@ -91023,7 +91172,7 @@ index 000000000..08d654033
 +        val resetProgress = ResetProgressStore(context, DirectorySync {})
 +        val sdkWallets = mutableListOf<PersistableWallet?>()
 +        backgroundScope.launch {
-+            walletProvider.persistableWallet.hideErasedWallet(resetProgress).collect { sdkWallets += it }
++            walletProvider.persistableWallet.hideResetWallet(resetProgress).collect { sdkWallets += it }
 +        }
 +        runCurrent()
 +        assertEquals(listOf<PersistableWallet?>(null), sdkWallets)
@@ -103033,6 +103182,20 @@ index 39dd717c7..805b282ea 100644
 +        )
 @@ -150 +294,0 @@ class TransactionNoteViewModelTest {
 -        requireNotNull(vm.state().secondaryButton) { "The found note should show the save button" }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt
+index 73d5078f8..521192b47 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt
+@@ -26,0 +27,9 @@ class TransactionProgressPendingDescriptionTest {
++    @Test
++    fun uncertainSdkSubmissionUsesStatusCheckCopy() {
++        assertEquals(
++            stringRes(R.string.send_pendingSdkStateInfo).withStyle(),
++            SubmitResult.GrpcFailure(emptyList(), reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN)
++                .pendingDescription()
++        )
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
 index 000000000..d69763b6b

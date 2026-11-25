@@ -814,6 +814,7 @@
     <string name="send_pendingTitle">Transaction Pending</string>
     <string name="send_pendingInfo">Your transaction is being processed.</string>
     <string name="send_pendingTimeoutInfo">Timed out waiting for a server response. Your transaction may still have been broadcast.</string>
+    <string name="send_pendingSdkStateInfo">Your transaction may have been sent. Check its status before trying again.</string>
     <string name="swapAndPay_pendingSwapTitle">Swap Pending</string>
     <string name="swapAndPay_pendingSwapInfo">Your swap is being processed. Follow its status on the transaction screen.</string>
     <string name="swapAndPay_pendingPayTitle">Payment Pending</string>

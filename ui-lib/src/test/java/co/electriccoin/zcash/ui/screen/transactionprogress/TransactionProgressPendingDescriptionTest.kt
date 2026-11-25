@@ -25,6 +25,15 @@ class TransactionProgressPendingDescriptionTest {
     }
 
     @Test
+    fun uncertainSdkSubmissionUsesStatusCheckCopy() {
+        assertEquals(
+            stringRes(R.string.send_pendingSdkStateInfo).withStyle(),
+            SubmitResult.GrpcFailure(emptyList(), reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN)
+                .pendingDescription()
+        )
+    }
+
+    @Test
     fun nonTimeoutWithDescriptionUsesDescription() {
         assertEquals(
             stringRes("boom").withStyle(),

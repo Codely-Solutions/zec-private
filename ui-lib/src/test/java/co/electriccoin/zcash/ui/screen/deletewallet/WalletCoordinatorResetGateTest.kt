@@ -2,7 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
 import cash.z.ecc.android.sdk.model.PersistableWallet
-import co.electriccoin.zcash.global.hideErasedWallet
+import co.electriccoin.zcash.global.hideResetWallet
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import io.mockk.every
 import io.mockk.mockk
@@ -30,15 +30,20 @@ class WalletCoordinatorResetGateTest {
         val preferences = MutableStateFlow<PersistableWallet?>(mockk())
         val wallet = preferences.value
         val store = progressStore()
-        val sdkWallet = preferences.hideErasedWallet(store)
+        val sdkWallet = preferences.hideResetWallet(store)
 
         store.store(ResetStage.ERASE_SDK)
         assertEquals(wallet, sdkWallet.first())
+        assertNull(preferences.hideResetWallet(progressStore()).first())
+
+        store.suppressSdkInput()
+        assertNull(sdkWallet.first())
+        assertEquals(ResetStage.ERASE_SDK, store.getStage())
         store.store(ResetStage.CLEAR_PREFERENCES)
         assertNull(sdkWallet.first())
 
         val resumed = progressStore()
-        val resumedSdkWallet = preferences.hideErasedWallet(resumed)
+        val resumedSdkWallet = preferences.hideResetWallet(resumed)
         assertTrue(resumed.isPending.value)
         assertNull(resumedSdkWallet.first())
 
@@ -56,7 +61,7 @@ class WalletCoordinatorResetGateTest {
             if (!allowSync) throw IOException("Synthetic reset marker flush failure")
         }
         val preferences = MutableStateFlow<PersistableWallet?>(mockk())
-        val sdkWallet = preferences.hideErasedWallet(store)
+        val sdkWallet = preferences.hideResetWallet(store)
         store.store(ResetStage.ERASE_SDK)
         allowSync = false
 
@@ -68,7 +73,7 @@ class WalletCoordinatorResetGateTest {
         allowSync = true
         store.store(ResetStage.CLEAR_PREFERENCES)
         assertEquals(ResetStage.CLEAR_PREFERENCES, progressStore().getStage())
-        assertNull(preferences.hideErasedWallet(progressStore()).first())
+        assertNull(preferences.hideResetWallet(progressStore()).first())
     }
 
     @Test
@@ -79,7 +84,7 @@ class WalletCoordinatorResetGateTest {
         val revision = MutableStateFlow(0)
         val preferences = flow { revision.collect { emit(storedWallet) } }
         val observed = Channel<PersistableWallet?>(Channel.UNLIMITED)
-        backgroundScope.launch { preferences.hideErasedWallet(store).collect { observed.send(it) } }
+        backgroundScope.launch { preferences.hideResetWallet(store).collect { observed.send(it) } }
 
         assertSame(original, observed.receive())
         store.store(ResetStage.CLEAR_PREFERENCES)

@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import androidx.lifecycle.viewModelScope
-import cash.z.ecc.android.sdk.CloseableSynchronizer
-import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -38,8 +36,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -73,7 +69,7 @@ class ResetZashiVMTest {
     @get:Rule val directory = TemporaryFolder()
 
     private val navigation = mockk<NavigationRouter>(relaxed = true)
-    private val coordinator = mockk<WalletCoordinator>()
+    private val sdkData = mockk<ResetWalletSdkDataUseCase>()
     private val biometrics = mockk<BiometricRepository>(relaxed = true)
     private val contacts = mockk<AddressBookRepository>(relaxed = true)
     private val metadata = mockk<MetadataRepository>(relaxed = true)
@@ -124,7 +120,7 @@ class ResetZashiVMTest {
     @Test
     fun confirmingWithTheDefaultCheckboxPreservesLocalFiles() = runBlocking {
         val erase = CompletableDeferred<Boolean>()
-        every { coordinator.deleteSdkDataFlow() } returns flow { emit(erase.await()) }
+        coEvery { sdkData() } coAnswers { check(erase.await()) }
         createViewModel()
         val legacy = File(directory.root, "tax_exports/Zodl_Transaction_History_2025.csv").apply {
             parentFile?.mkdirs()
@@ -161,7 +157,7 @@ class ResetZashiVMTest {
         assertEquals("current", newPczt.readText())
         assertEquals("current", staged.readText())
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
-        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { sdkData() }
         coVerify(exactly = 0) { contacts.delete() }
         coVerify(exactly = 0) { metadata.delete() }
     }
@@ -169,8 +165,14 @@ class ResetZashiVMTest {
     @Test
     fun cancelDoesNotResetAndPendingRetriesContinueTheConfirmedDeletion() = runBlocking {
         val retryErase = CompletableDeferred<Boolean>()
-        every { coordinator.deleteSdkDataFlow() } returnsMany
-            listOf(flowOf(false), flow { emit(retryErase.await()) }, flowOf(true))
+        var eraseAttempts = 0
+        coEvery { sdkData() } coAnswers {
+            when (eraseAttempts++) {
+                0 -> error("Synthetic erase failure")
+                1 -> check(retryErase.await())
+                else -> Unit
+            }
+        }
         createViewModel()
 
         val initial = assertNotNull(vm.state.value.content)
@@ -189,7 +191,7 @@ class ResetZashiVMTest {
         assertFalse(cancelled.isPending)
         assertNull(progress.getStage())
         coVerify(exactly = 0) { biometrics.requestBiometrics(any()) }
-        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { sdkData() }
 
         cancelled.buttonState.onClick()
         assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
@@ -213,7 +215,7 @@ class ResetZashiVMTest {
             retryErase.complete(false)
         }
         val retried = awaitState { it.error != null }
-        verify(exactly = 2) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 2) { sdkData() }
         assertFalse(reportAccess.captureWallet()())
         assertNotNull(assertIs<LceError.BottomSheet>(retried.error).state.secondaryAction).onClick()
         val application = RuntimeEnvironment.getApplication()
@@ -229,7 +231,7 @@ class ResetZashiVMTest {
         assertNull(completed.content?.confirmationDialog)
         assertNull(completed.error)
         assertNull(progress.getStage())
-        verify(exactly = 3) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 3) { sdkData() }
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
         coVerify(exactly = 1) { contacts.delete() }
         coVerify(exactly = 1) { metadata.delete() }
@@ -239,13 +241,14 @@ class ResetZashiVMTest {
     fun pendingRootOwnerReceivesFirstFailureAfterSettingsOwnerIsReplaced(): Unit = runBlocking {
         val enteredErase = CompletableDeferred<Unit>()
         val firstResult = CompletableDeferred<Boolean>()
-        every { coordinator.deleteSdkDataFlow() } returnsMany listOf(
-            flow {
+        var firstAttempt = true
+        coEvery { sdkData() } coAnswers {
+            if (firstAttempt) {
+                firstAttempt = false
                 enteredErase.complete(Unit)
-                emit(firstResult.await())
-            },
-            flowOf(true),
-        )
+                check(firstResult.await())
+            }
+        }
         createViewModel()
         val settingsOwner = vm
         assertNotNull(vm.state.value.content).buttonState.onClick()
@@ -277,7 +280,7 @@ class ResetZashiVMTest {
 
     @Test
     fun pendingStageReadFailureOffersPrivateSupportAndRetriesTheOriginalStage(): Unit = runBlocking {
-        every { coordinator.deleteSdkDataFlow() } returns flowOf(true)
+        coEvery { sdkData() } returns Unit
         createViewModel()
         progress.store(ResetStage.ERASE_SDK)
         val marker = File(directory.root, "wallet-reset-progress")
@@ -287,7 +290,7 @@ class ResetZashiVMTest {
         val failure = awaitState { it.error != null && it.content?.buttonState?.isLoading == false }
         val sheet = assertIs<LceError.BottomSheet>(failure.error).state
         assertEquals(stringRes(R.string.wallet_reset_failed), sheet.message)
-        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { sdkData() }
         assertNotNull(sheet.secondaryAction).onClick()
         val chooser = assertNotNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
         val draft = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
@@ -297,7 +300,7 @@ class ResetZashiVMTest {
         marker.writeText(ResetStage.ERASE_SDK.name)
         assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content).buttonState.onClick()
         awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
-        verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { sdkData() }
         coVerify(exactly = 0) { biometrics.requestBiometrics(any()) }
         coVerify(exactly = 0) { contacts.delete() }
         coVerify(exactly = 0) { metadata.delete() }
@@ -314,10 +317,7 @@ class ResetZashiVMTest {
         assertTrue(reportAccess.captureWallet()())
         val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val reset = ResetZashiUseCase(
-            resetWalletSdkData = sdkDataResetFixture(directory.root, coordinator),
-            synchronizerProvider = mockk {
-                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-            },
+            resetWalletSdkData = sdkData,
             standardPreferenceProvider = mockk<StandardPreferenceProvider> {
                 coEvery { this@mockk.invoke() } returns preferences
             },

@@ -78,6 +78,7 @@ import org.junit.rules.TemporaryFolder
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
@@ -862,6 +863,17 @@ class WalletRepositoryImplTest {
         }
 
     @Test
+    fun startupLeavesWalletlessErasureToAPendingReset() = runTest {
+        val (repository, harness) = newRepository(OnboardingState.READY, null, resetPending = true)
+        repository.useTestScope(testScheduler)
+        repository.init()
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), harness.events)
+        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any(), any()) }
+    }
+
+    @Test
     fun initKeepsOnboardingWhenWalletIsPresent() =
         runTest {
             val (repository, harness) =
@@ -1044,6 +1056,7 @@ class WalletRepositoryImplTest {
         initialWallet: PersistableWallet?,
         persistableWalletProviderOverride: PersistableWalletProvider? = null,
         torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
+        resetPending: Boolean = false,
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()
 
@@ -1116,6 +1129,7 @@ class WalletRepositoryImplTest {
                 isIronwoodAnnouncementShownStorageProvider = isIronwoodAnnouncementShownStorageProvider,
                 sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
                 isTorEnabledStorageProvider = torPreference,
+                resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
             )
 
         scopes += repository.scope

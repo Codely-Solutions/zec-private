@@ -19,7 +19,8 @@ sealed interface SubmitResult {
         val reason: Reason? = null
     ) : SubmitResult {
         enum class Reason {
-            TIMEOUT
+            TIMEOUT,
+            SDK_STATE_UNCERTAIN,
         }
     }
 

@@ -26,7 +26,8 @@ import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryPr
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
-import co.electriccoin.zcash.ui.common.provider.eraseWalletlessSdkData
+import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import kotlinx.coroutines.CancellationException
@@ -105,6 +106,7 @@ class WalletRepositoryImpl(
     private val isIronwoodAnnouncementShownStorageProvider: IsIronwoodAnnouncementShownStorageProvider,
     private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
+    private val resetProgressStore: ResetProgressStore,
 ) : WalletRepository {
     /**
      * Scope the repository's `stateIn`-shared flows run on. Captured by those flows at
@@ -314,7 +316,7 @@ class WalletRepositoryImpl(
         wallet: PersistableWallet?,
         onboardingState: OnboardingState
     ) {
-        if (!onboardingState.requiresWalletlessRecovery() ||
+        if (resetProgressStore.isPending.value || !onboardingState.requiresWalletlessRecovery() ||
             (onboardingState == OnboardingState.READY && wallet != null)
         ) return
 
@@ -327,7 +329,7 @@ class WalletRepositoryImpl(
                 sdkEncryptedPreferenceRecoveryProvider.ensureReadable()
                 // Recheck after Keystore repair in case an external wallet writer won the race.
                 if (persistableWalletProvider.getPersistableWallet() == null) {
-                    eraseWalletlessSdkData(application, ZcashNetwork.fromResources(application))
+                    eraseInactiveSdkData(application, ZcashNetwork.fromResources(application))
                 }
             }
             currentCoroutineContext().ensureActive()

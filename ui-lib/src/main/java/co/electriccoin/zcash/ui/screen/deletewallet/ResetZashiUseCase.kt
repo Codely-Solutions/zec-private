@@ -1,12 +1,9 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
-import cash.z.ecc.android.sdk.CloseableSynchronizer
-import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
@@ -26,12 +23,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.internal.closeQuietly
 import kotlin.time.Duration.Companion.seconds
 
 class ResetZashiUseCase(
     private val resetWalletSdkData: ResetWalletSdkDataUseCase,
-    private val synchronizerProvider: SynchronizerProvider,
     private val standardPreferenceProvider: StandardPreferenceProvider,
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider,
     private val homeMessageCacheRepository: HomeMessageCacheRepository,
@@ -72,7 +67,7 @@ class ResetZashiUseCase(
                     progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
                     prepareReset(keepFiles, stage)
                     if (stage != ResetStage.CLEAR_PREFERENCES) {
-                        closeSynchronizer()
+                        progressStore.suppressSdkInput()
                         resetWalletSdkData()
                     }
                     progressStore.store(ResetStage.CLEAR_PREFERENCES)
@@ -128,18 +123,6 @@ class ResetZashiUseCase(
         )
     }
 
-    /**
-     * Waits for a synchronizer to close, bounded by [CLOSE_SYNCHRONIZER_TIMEOUT]. A latched seed
-     * mismatch ([WalletCoordinator.isSeedMismatch]) keeps [SynchronizerProvider.getSynchronizer]'s
-     * underlying flow null forever, which would otherwise hang this step indefinitely after
-     * local files were already removed. When no synchronizer materializes in time, this is a no-op —
-     * the lockout-aware erase still handles teardown of any lingering SDK state.
-     */
-    private suspend fun closeSynchronizer() {
-        withTimeoutOrNull(CLOSE_SYNCHRONIZER_TIMEOUT) { synchronizerProvider.getSynchronizer() }
-            ?.let { (it as CloseableSynchronizer).closeQuietly() }
-    }
-
     private suspend fun clearSharedPrefs() {
         check(standardPreferenceProvider().clearPreferences()) { "Could not clear wallet settings" }
         val encryptedPreferences = encryptedPreferenceProvider()
@@ -149,6 +132,5 @@ class ResetZashiUseCase(
 
     companion object {
         private val PREPARE_RESET_TIMEOUT = 30.seconds
-        private val CLOSE_SYNCHRONIZER_TIMEOUT = 5.seconds
     }
 }

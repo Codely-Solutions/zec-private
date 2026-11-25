@@ -771,6 +771,7 @@
     <string name="send_pendingTitle">Transacción Pendiente</string>
     <string name="send_pendingInfo">Tu transacción se está procesando.</string>
     <string name="send_pendingTimeoutInfo">Se agotó el tiempo de espera de la respuesta del servidor. Es posible que tu transacción aún se haya transmitido.</string>
+    <string name="send_pendingSdkStateInfo">Es posible que se haya enviado tu transacción. Comprueba su estado antes de volver a intentarlo.</string>
     <string name="swapAndPay_pendingSwapTitle">Swap Pendiente</string>
     <string name="swapAndPay_pendingSwapInfo">Tu swap se está procesando. Siga el estado en la pantalla de transacción.</string>
     <string name="swapAndPay_pendingPayTitle">Pago Pendiente</string>

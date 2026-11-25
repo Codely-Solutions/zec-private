@@ -1,8 +1,6 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
-import cash.z.ecc.android.sdk.CloseableSynchronizer
-import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -13,7 +11,6 @@ import co.electriccoin.zcash.ui.common.provider.AddressBookKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookProviderImpl
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
@@ -31,7 +28,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flowOf
@@ -55,14 +51,14 @@ class ResetWalletReviewProbesTest {
     @Test
     fun failedSdkErasePreservesPreferencesAndRetrySkipsDeletedFiles() = runBlocking {
         val fixture = Fixture()
-        every { fixture.walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        coEvery { fixture.sdkData() } throws IllegalStateException("Synthetic erase failure")
 
         assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) }
         assertEquals(ResetStage.ERASE_SDK, fixture.progressStore().getStage())
         coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
         coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 
-        every { fixture.walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+        coEvery { fixture.sdkData() } returns Unit
         fixture.newReset()(keepFiles = true)
 
         coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
@@ -86,7 +82,7 @@ class ResetWalletReviewProbesTest {
         try {
             withTimeout(10.seconds) { metadataStarted.await() }
             coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
-            verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+            coVerify(exactly = 0) { fixture.sdkData() }
             coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
         } finally {
             allowDeletion.complete(Unit)
@@ -102,7 +98,7 @@ class ResetWalletReviewProbesTest {
         coEvery { fixture.metadataRepository.delete() } throws IOException("Synthetic deletion failure")
 
         assertFailsWith<IOException> { fixture.reset(keepFiles = false) }
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progressStore().getStage())
         coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 
@@ -110,7 +106,7 @@ class ResetWalletReviewProbesTest {
         val resumed = fixture.newReset()
         assertTrue(resumed.isPending.value)
         resumed(keepFiles = true)
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         coVerify(exactly = 2) { fixture.addressBookRepository.delete() }
         coVerify(exactly = 2) { fixture.metadataRepository.delete() }
         assertNull(fixture.progressStore().getStage())
@@ -133,7 +129,7 @@ class ResetWalletReviewProbesTest {
         coEvery { fixture.encryptedPrefs.clearPreferences() } returns true
         resumed(keepFiles = false)
 
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         coVerify(exactly = 0) { fixture.addressBookRepository.delete() }
         coVerify(exactly = 0) { fixture.metadataRepository.delete() }
         assertNull(fixture.progressStore().getStage())
@@ -161,12 +157,12 @@ class ResetWalletReviewProbesTest {
 
         listOf(first, current, temporary, legacy).forEach { assertFalse(it.exists(), it.name) }
         assertEquals("keep", unrelated.readText())
-        verify(exactly = 2) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 2) { fixture.sdkData() }
     }
 
     @Test
     fun optOutWithoutASynchronizerCachedKeyOrAccountStillErasesSdkAndPreferences() = runBlocking {
-        val fixture = Fixture(synchronizerAvailable = false)
+        val fixture = Fixture()
         val unavailableAccount = mockk<AccountDataSource> {
             every { zashiAccount } returns flowOf(null)
             coEvery { getZashiAccount() } coAnswers { awaitCancellation() }
@@ -180,7 +176,7 @@ class ResetWalletReviewProbesTest {
 
         coVerify(exactly = 0) { unavailableAccount.getZashiAccount() }
         coVerify(exactly = 0) { keys.getAddressBookKey() }
-        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.sdkData() }
         coVerify(exactly = 1) { fixture.encryptedPrefs.clearPreferences() }
         assertNull(fixture.progressStore().getStage())
     }
@@ -220,7 +216,7 @@ class ResetWalletReviewProbesTest {
 
         assertFailsWith<IOException> { fixture.reset(keepFiles = true) }
         assertEquals(ResetStage.ERASE_SDK, fixture.progressStore().getStage())
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
 
         assertTrue(blocker.delete())
@@ -239,15 +235,8 @@ class ResetWalletReviewProbesTest {
         return AddressBookDataSourceImpl(storage, provider, sync)
     }
 
-    private inner class Fixture(synchronizerAvailable: Boolean = true) {
-        val walletCoordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flowOf(true)
-        }
-        private val synchronizerProvider = mockk<SynchronizerProvider> {
-            coEvery { getSynchronizer() } coAnswers {
-                if (synchronizerAvailable) mockk<CloseableSynchronizer>(relaxed = true) else awaitCancellation()
-            }
-        }
+    private inner class Fixture {
+        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
         val standardPrefs = mockk<PreferenceProvider> {
             coEvery { clearPreferences() } returns true
         }
@@ -290,8 +279,7 @@ class ResetWalletReviewProbesTest {
         val reset = newReset()
 
         fun newReset(repository: AddressBookRepository = addressBookRepository) = ResetZashiUseCase(
-            resetWalletSdkData = sdkDataResetFixture(directory.root, walletCoordinator),
-            synchronizerProvider = synchronizerProvider,
+            resetWalletSdkData = sdkData,
             standardPreferenceProvider = standardProvider,
             encryptedPreferenceProvider = encryptedProvider,
             homeMessageCacheRepository = mockk(relaxed = true),

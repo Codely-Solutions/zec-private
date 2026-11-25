@@ -21,26 +21,27 @@ internal operator fun WalletCoordinator.Companion.invoke(
     isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     resetProgressStore: ResetProgressStore,
-): WalletCoordinator =
-    WalletCoordinator(
+): WalletCoordinator {
+    val sdkWallet = persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore)
+    return WalletCoordinator(
         context = context,
-        persistableWallet = persistableWalletProvider.persistableWallet.hideErasedWallet(resetProgressStore),
+        persistableWallet = sdkWallet,
         accountName = context.getString(R.string.accounts_zashi),
         keySource = "zashi",
         isTorEnabled = isTorEnabledStorageProvider.observe(),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
-        isSyncBlocked = isSyncBlocked(context, persistableWalletProvider),
+        isSyncBlocked = isSyncBlocked(context, sdkWallet),
     )
+}
 
 /**
- * Erasure needs the current network. Once verified, keep the SDK closed until preferences are
- * cleared, including when a pending reset is resumed after process death. Reopen the cold wallet
- * flow after clearing so the SDK reads the current store even if a prior observer missed an update.
+ * Reset withdraws wallet input after draining admitted recovery. During a cold resume, keep it out
+ * of the SDK from initialization. Reopen the cold flow after clearing to read the current store.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: ResetProgressStore) =
-    resetProgressStore.isSdkErased
-        .flatMapLatest { sdkErased -> if (sdkErased) flowOf(null) else this }
+internal fun Flow<PersistableWallet?>.hideResetWallet(resetProgressStore: ResetProgressStore) =
+    resetProgressStore.isSdkInputSuppressed
+        .flatMapLatest { suppressed -> if (suppressed) flowOf(null) else this }
         .buffer(0)
 
 /**
@@ -54,8 +55,8 @@ internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: Reset
  * every account in the wallet rather than assuming one.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-private fun isSyncBlocked(context: Context, persistableWalletProvider: PersistableWalletProvider) =
-    persistableWalletProvider.persistableWallet.flatMapLatest { wallet ->
+private fun isSyncBlocked(context: Context, sdkWallet: Flow<PersistableWallet?>) =
+    sdkWallet.flatMapLatest { wallet ->
         if (wallet == null) {
             flowOf(false)
         } else {

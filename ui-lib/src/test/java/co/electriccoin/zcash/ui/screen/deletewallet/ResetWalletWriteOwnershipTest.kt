@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
-import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.fixture.WalletFixture
@@ -48,6 +47,7 @@ import co.electriccoin.zcash.ui.common.usecase.RecoverFromSeedMismatchUseCase
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -102,10 +102,9 @@ class ResetWalletWriteOwnershipTest {
         assertEquals(1, storage.getStorageFiles(key).size)
         val sdkEraseEntered = CompletableDeferred<Unit>()
         val finishSdkErase = CompletableDeferred<Unit>()
-        every { fixture.resetCoordinator.deleteSdkDataFlow() } returns flow {
+        coEvery { fixture.sdkData() } coAnswers {
             sdkEraseEntered.complete(Unit)
             finishSdkErase.await()
-            emit(true)
         }
         val reset = fixture.reset(metadata, contacts)
         val operation = launch { reset(keepFiles = false) }
@@ -180,7 +179,8 @@ class ResetWalletWriteOwnershipTest {
             val reset = launch(start = CoroutineStart.UNDISPATCHED) { doReset(keepFiles = true) }
             withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
             assertFalse(reset.isCompleted)
-            verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
+            assertFalse(fixture.progress.isSdkInputSuppressed.value)
+            coVerify(exactly = 0) { fixture.sdkData() }
             erase.finish.complete(Unit)
             withTimeout(10.seconds) { reset.join() }
         } finally {
@@ -269,7 +269,7 @@ class ResetWalletWriteOwnershipTest {
             launch { reset(keepFiles = false) }
             withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
             assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progress.getStage())
-            verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
+            coVerify(exactly = 0) { fixture.sdkData() }
         } finally {
             finishRecoveryWrite.complete(Unit)
         }
@@ -316,7 +316,7 @@ class ResetWalletWriteOwnershipTest {
 
         assertFailsWith<IOException> { fixture.reset()(keepFiles = false) }
         assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progress.getStage())
-        verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.sdkData() }
         assertFailsWith<IllegalStateException> { fixture.walletProvider.store(original) }
         assertFalse(fixture.walletProvider.storeIfCurrent(original, original, oldVersion))
 
@@ -423,9 +423,7 @@ class ResetWalletWriteOwnershipTest {
             writeAccess,
         )
         val giftRepository = mockk<GiftCardRepository>(relaxed = true)
-        val resetCoordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flowOf(true)
-        }
+        val sdkData = mockk<ResetWalletSdkDataUseCase>(relaxUnitFun = true)
 
         fun metadataRepository(
             account: WalletAccount,
@@ -468,10 +466,7 @@ class ResetWalletWriteOwnershipTest {
             metadata: MetadataRepository = mockk(relaxed = true),
             contacts: AddressBookRepository = mockk(relaxed = true),
         ) = ResetZashiUseCase(
-            resetWalletSdkData = sdkDataResetFixture(directory.root, resetCoordinator),
-            synchronizerProvider = mockk {
-                coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
-            },
+            resetWalletSdkData = sdkData,
             standardPreferenceProvider = mockk<StandardPreferenceProvider> {
                 val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
                 coEvery { this@mockk.invoke() } returns preferences

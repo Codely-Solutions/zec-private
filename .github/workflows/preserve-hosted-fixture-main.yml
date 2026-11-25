@@ -135,6 +135,7 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/zec-fixture"
   record:
     needs: verify
+    if: ${{ !cancelled() && needs.verify.result == 'success' }}
     environment: maintenance-integration
     runs-on: ubuntu-24.04
     timeout-minutes: 5

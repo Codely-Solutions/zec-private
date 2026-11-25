@@ -5,14 +5,8 @@ import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-import co.electriccoin.zcash.ui.common.provider.eraseWalletlessSdkData
-import co.electriccoin.zcash.ui.common.provider.requireClassicWalletFilesErased
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Deferred
+import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -24,28 +18,18 @@ class ResetWalletSdkDataUseCase(
     private val coordinator: WalletCoordinator,
     private val walletProvider: PersistableWalletProvider,
 ) {
-    internal var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var pending: Deferred<Pair<ZcashNetwork, Boolean>>? = null
-
     suspend operator fun invoke() {
-        val erase = pending ?: startErase() ?: return
-        val (network, erased) = checkNotNull(withTimeoutOrNull(30.seconds) { erase.await() }) {
-            "Still waiting for SDK wallet data erasure"
+        val network = walletProvider.getPersistableWallet()?.network ?: ZcashNetwork.fromResources(context)
+        val ready = withTimeoutOrNull(5.seconds) {
+            coordinator.synchronizer.first { it == null }
+            true
         }
-        pending = null
-        check(erased) { "Could not erase SDK wallet data" }
-        // The SDK's Boolean follows both erases. Classic SDK success can still leave a database or sidecar.
-        withContext(Dispatchers.IO) { requireClassicWalletFilesErased(context, network) }
-    }
-
-    private suspend fun startErase(): Deferred<Pair<ZcashNetwork, Boolean>>? {
-        val walletNetwork = walletProvider.getPersistableWallet()?.network
-        if (walletNetwork == null) {
-            withContext(Dispatchers.IO) { eraseWalletlessSdkData(context, ZcashNetwork.fromResources(context)) }
-            return null
+        check(ready == true) { "Still waiting for the wallet SDK to close" }
+        // The public erasers enforce native instance ownership even if the flow was already null.
+        val erased = withTimeoutOrNull(30.seconds) {
+            withContext(Dispatchers.IO) { eraseInactiveSdkData(context, network) }
+            true
         }
-        return scope.async(start = CoroutineStart.UNDISPATCHED) {
-            walletNetwork to coordinator.deleteSdkDataFlow().first()
-        }.also { pending = it }
+        check(erased == true) { "Could not confirm SDK wallet data erasure" }
     }
 }

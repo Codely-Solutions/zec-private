@@ -98,6 +98,17 @@ def concurrency_settings(block, indent=0):
 
 
 class MaintenanceWatchTest(unittest.TestCase):
+    def test_hosted_fixture_records_a_verified_recovery_with_no_store_job(self):
+        record = workflow_job('preserve-hosted-fixture-main.yml', 'record')
+        self.assertEqual(record['needs'], ['verify'])
+        for store in ('success', 'skipped'):
+            with self.subTest(store=store):
+                self.assertTrue(job_activates(record, {'store': store, 'verify': 'success'}))
+                self.assertFalse(job_activates(record, {'store': store, 'verify': 'success'}, workflow_cancelled=True))
+        for verify in ('skipped', 'failure', 'cancelled'):
+            with self.subTest(verify=verify):
+                self.assertFalse(job_activates(record, {'store': 'skipped', 'verify': verify}))
+
     def test_each_release_prerequisite_failure_and_independent_cancellation_notifies(self):
         failed = workflow_job('build-release.yml', 'failed')
         self.assertIn('reserve_quote_retry', failed['needs'])
@@ -203,7 +214,7 @@ class MaintenanceWatchTest(unittest.TestCase):
                             'needs.admit_hosted.outputs.core_receipt_id': '72',
                         }
                         for job in jobs:
-                            statuses = dict(preflight='success', signing_smoke='success', emulator='failure')
+                            statuses = dict(admit='success', preflight='success', signing_smoke='success', emulator='failure')
                             self.assertEqual(job_activates(workflow_job(workflow, job), statuses, **values), allowed)
 
     def test_graph_and_fixture_dispatches_leave_the_main_pending_slot_available(self):
@@ -515,7 +526,7 @@ class MaintenanceWatchTest(unittest.TestCase):
         preflight = workflow_job(workflow, 'preflight')
         wiring = re.search(r'Select signing smoke from trusted wiring\n        if: (.+)', preflight['block'])[1]
         smoke = workflow_job(workflow, 'signing_smoke')
-        jobs = dict(admit='success', preflight='success')
+        jobs = dict(admit='success', preflight='success', admit_hosted='skipped')
         values = {'inputs.validation_only': True, 'inputs.hosted': False, 'inputs.recover_run': '',
                   'inputs.candidate_run': '', 'inputs.build_emulator': True,
                   'needs.admit.outputs.main': 'true', 'needs.preflight.outputs.signing_changed': 'true'}
@@ -524,6 +535,10 @@ class MaintenanceWatchTest(unittest.TestCase):
                 current = dict(values, **{'vars.PRODUCTION_SIGNING_READY': readiness})
                 self.assertEqual(evaluate_expression(wiring, current), readiness == 'true')
                 self.assertEqual(job_activates(smoke, jobs, **current), readiness == 'true')
+                self.assertIn('!cancelled()', smoke['if'])
+                self.assertFalse(job_activates(smoke, dict(jobs, preflight='failure'), **current))
+                self.assertFalse(job_activates(smoke, dict(jobs, admit='failure'), **current))
+                self.assertFalse(job_activates(smoke, jobs, workflow_cancelled=True, **current))
                 if readiness != 'true':
                     unsigned = dict(current, **{'needs.preflight.outputs.signing_changed': ''})
                     available = dict(jobs, signing_smoke='skipped')

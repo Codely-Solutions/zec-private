@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.spackle.Twig
+import co.electriccoin.zcash.ui.common.datasource.SdkCreatedTransactionsException
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -11,6 +12,7 @@ import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -18,7 +20,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class ProcessSwapTransactionUseCase(
     private val metadataRepository: MetadataRepository,
@@ -67,10 +69,11 @@ class ProcessSwapTransactionUseCase(
         createdAt
     }
 
+    @Suppress("TooGenericExceptionCaught")
     suspend fun submitReservedFunding(
         proposal: SwapTransactionProposal,
         validateFunding: () -> Unit,
-        submit: suspend (validate: () -> Unit, enterEndpoint: () -> Unit) -> SubmitResult,
+        submit: suspend (enterSdk: () -> Unit, enterEndpoint: () -> Unit) -> SubmitResult,
     ): SubmitResult {
         val generation = walletWriteAccess.token()
         val validate = {
@@ -78,20 +81,41 @@ class ProcessSwapTransactionUseCase(
             validateFunding()
         }
         val createdAt = reserveFunding(proposal, generation, validate)
-        val entryResolved = AtomicBoolean(false)
+        val admission = AtomicReference(FundingAdmission.RESERVED)
         try {
             validate()
-            return submit(validate) {
-                validate()
-                check(entryResolved.compareAndSet(false, true)) { "Swap funding is no longer active" }
+            val result = submit(
+                {
+                    validate()
+                    check(admission.compareAndSet(FundingAdmission.RESERVED, FundingAdmission.SDK_ENTERED))
+                },
+                {
+                    validate()
+                    check(admission.compareAndSet(FundingAdmission.SDK_ENTERED, FundingAdmission.ENDPOINT_ENTERED))
+                },
+            )
+            return if (admission.get() != FundingAdmission.RESERVED && result is SubmitResult.NonResubmittableError) {
+                uncertainSdkSubmission(result.txIds)
+            } else {
+                result
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (admission.get() == FundingAdmission.RESERVED) throw e
+            return uncertainSdkSubmission((e as? SdkCreatedTransactionsException)?.txIds.orEmpty())
         } finally {
-            if (entryResolved.compareAndSet(false, true)) {
-                // Only a still-closed gate proves that no SDK endpoint was entered.
+            if (admission.getAndSet(FundingAdmission.CLOSED) == FundingAdmission.RESERVED) {
+                // After SDK entry a signed transaction can be stored for SDK background submission.
                 recordUnsubmittedFundingSafely(proposal, generation, createdAt)
             }
         }
     }
+
+    private fun uncertainSdkSubmission(txIds: List<String>) =
+        SubmitResult.GrpcFailure(txIds, reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN)
+
+    private enum class FundingAdmission { RESERVED, SDK_ENTERED, ENDPOINT_ENTERED, CLOSED }
 
     private suspend fun writeFundingReservation(
         proposal: SwapTransactionProposal,
