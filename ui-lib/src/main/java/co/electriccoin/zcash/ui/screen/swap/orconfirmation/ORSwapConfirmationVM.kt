@@ -5,7 +5,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -29,11 +28,11 @@ import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.styledStringResource
 import co.electriccoin.zcash.ui.screen.error.ErrorState
 import co.electriccoin.zcash.ui.screen.swap.info.DepositSwapInfoArgs
+import co.electriccoin.zcash.ui.screen.swap.quote.quoteFiatAmount
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.CancellationException
@@ -135,7 +134,7 @@ class ORSwapConfirmationVM(
                     bigIcon = quote.originAsset.tokenIcon,
                     smallIcon = quote.originAsset.chainIcon,
                     amount = stringResByNumber(quote.amountInFormatted),
-                    amountFiat = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
+                    amountFiat = quoteFiatAmount(quote.amountInUsd),
                     onAmountClick = {
                         if (canFund(publication)) copyToClipboard(quote.amountInFormatted.toPlainString())
                     },

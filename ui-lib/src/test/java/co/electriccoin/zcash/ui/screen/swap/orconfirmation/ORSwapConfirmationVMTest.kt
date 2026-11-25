@@ -143,6 +143,16 @@ class ORSwapConfirmationVMTest {
         }
 
     @Test
+    fun depositInstructionsKeepTheExactAmountWhenQuoteFiatIsUnavailable() = runTest(dispatcher) {
+        val quote = depositQuote(Instant.parse("2100-01-01T00:00:00Z"), amountInUsd = BigDecimal.ZERO)
+        val quotes = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Success(quote))
+        val confirmation = checkNotNull(startedVm(quotes = quotes).state.value)
+        assertEquals(stringResByNumber(AMOUNT_IN), confirmation.amount)
+        assertEquals(stringRes(R.string.private_quote_estimate_unavailable), confirmation.amountFiat)
+        assertTrue(confirmation.fundingEnabled)
+    }
+
+    @Test
     fun sentReusesOnlyTheAcknowledgedNearPublicationAndOpensActivity() = runTest(dispatcher) {
         val quote = SwapOutputProvenanceFixture.status(
             origin = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
@@ -368,13 +378,14 @@ class ORSwapConfirmationVMTest {
         } returnsMany results.toList()
     }
 
-    private fun depositQuote(deadline: Instant) =
+    private fun depositQuote(deadline: Instant, amountInUsd: BigDecimal = BigDecimal.ONE) =
             FakeSwapQuote(
                 originAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
                 destinationAsset = SwapAssetTestFixture.zecAsset(),
                 mode = SwapMode.FLEX_INPUT,
                 amountIn = AMOUNT_IN,
                 amountInFormatted = AMOUNT_IN,
+                amountInUsd = amountInUsd,
                 amountOutFormatted = BigDecimal.ONE,
                 depositAddress = DEPOSIT_ADDRESS,
                 destinationAddress = "u1destination",

@@ -118,6 +118,26 @@ class NearSwapQuoteStatusTest {
     }
 
     @Test
+    fun detailDoesNotPresentUnavailableQuotedFiatAsZeroDollars() {
+        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val quoteResponse = original.response.quoteResponse
+        val quoteWithoutFiat = quoteResponse.copy(
+            quote = quoteResponse.quote.copy(amountInUsd = BigDecimal.ZERO, amountOutUsd = BigDecimal.ZERO),
+        )
+        val status = original.copy(response = original.response.copy(quoteResponse = quoteWithoutFiat))
+        assertEquals(null, status.amountInUsd)
+        assertEquals(null, status.amountOutUsd)
+        val header = CommonTransactionDetailMapper()
+            .createTransactionDetailQuoteHeaderState(status, status.originAsset, status.destinationAsset)
+        val input = assertNotNull(header.from)
+        val output = assertNotNull(header.to)
+        assertEquals(stringResByNumber(status.quotedAmountIn), input.amount)
+        assertEquals(stringResByNumber(status.quotedAmountOut), output.amount)
+        assertEquals(stringRes(""), input.fiatAmount)
+        assertEquals(stringRes(""), output.fiatAmount)
+    }
+
+    @Test
     fun detailKeepsOutputAmountsAndUsdFromTheSameObservation() {
         mockkObject(FiatCurrency.USD)
         every { FiatCurrency.USD.symbol } returns "$"

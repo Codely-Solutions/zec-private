@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.hotfix.ephemeral
 
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.PendingNavigation
@@ -22,7 +23,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlin.test.Test
@@ -35,7 +38,12 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EphemeralHotfixVMTest {
     @Test
-    fun completionFromARevokedGrantDisappearsFromTheRetainedDialog() {
+    fun completionFromARevokedGrantDisappearsFromTheRetainedDialog() = completeThenWithdraw(false)
+
+    @Test
+    fun returningAfterObservationStopsDoesNotReplayRevokedCompletion() = completeThenWithdraw(true)
+
+    private fun completeThenWithdraw(pauseObservation: Boolean) {
         val dispatcher = UnconfinedTestDispatcher()
         Dispatchers.setMain(dispatcher)
         try {
@@ -54,7 +62,7 @@ class EphemeralHotfixVMTest {
                 val vm = EphemeralHotfixVM(
                     EphemeralHotfixArgs("synthetic-address"), tor, navigation, recover, "discover",
                 )
-                backgroundScope.launch { vm.state.collect { } }
+                val collector = backgroundScope.launch { vm.state.collect { } }
                 assertNotNull(vm.state.value).button.onClick()
                 val completed = assertNotNull(vm.state.value)
                 assertEquals(stringRes(R.string.ephemeral_recovery_success), completed.info)
@@ -63,7 +71,16 @@ class EphemeralHotfixVMTest {
                 assertNotNull(pending.commands.value["discover"])
                 verify(exactly = 0) { navigation.back() }
 
+                if (pauseObservation) {
+                    collector.cancel()
+                    runCurrent()
+                    advanceTimeBy(ANDROID_STATE_FLOW_TIMEOUT.inWholeMilliseconds + 1)
+                }
                 owner.value = false
+                if (pauseObservation) {
+                    assertNull(vm.state.value)
+                    backgroundScope.launch { vm.state.collect { } }
+                }
                 val reopened = assertNotNull(vm.state.value)
                 assertNull(reopened.info)
                 assertTrue(reopened.address.isEnabled)

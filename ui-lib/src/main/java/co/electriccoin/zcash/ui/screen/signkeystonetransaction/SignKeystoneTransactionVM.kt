@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class SignKeystoneTransactionVM(
@@ -86,7 +87,7 @@ class SignKeystoneTransactionVM(
             )
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
             initialValue = null
         )
 
@@ -169,7 +170,7 @@ class SignKeystoneTransactionVM(
             )
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
             initialValue = null
         )
 

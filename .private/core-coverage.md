@@ -252,6 +252,8 @@ Keystone QR presentation, the shared hardware approval and Ledger device admissi
 
 Discover Funds verifies revocation before and after scan completion. The retained dialog discards stale success, and Close uses the originating entry. The exact-output quote mapper displays the actual ZEC wallet fee and marks its fiat estimate unavailable when the provider supplies no input USD valuation.
 
+Inactive-dialog checks with virtual time cover Discover Funds completion and Keystone QR and rejection state after relock. The balance breakdown preserves each exact ZEC value when the conversion is stale. Incoming deposit and Activity details distinguish an unavailable quoted fiat valuation from an execution amount and keep the original token values.
+
 Shield preparation and outcomes keep their display entry and wallet. A detached software Shield never owns the Send draft. The migration review fixture retries scheduling after a confirmed SDK commit without signing again. Enrollment, pairing and account-selection consumers deliver their results through the same resumed-entry gate.
 
 ## Historical funded coverage

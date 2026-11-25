@@ -221,10 +221,11 @@ internal class SwapQuoteVMMapper {
         )
     }
 
-    private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
-        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
-        else stringRes(R.string.private_quote_estimate_unavailable)
 }
+
+internal fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
+    if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
+    else stringRes(R.string.private_quote_estimate_unavailable)
 
 internal fun mapPriceCheck(check: IndependentPriceCheck): PriceCheckNoticeState = when (check) {
     IndependentPriceCheck.Checking -> PriceCheckNoticeState(

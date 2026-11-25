@@ -40574,7 +40574,7 @@ index e5b3ebffe..357acab18 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
-index b2c6505ad..b3e6f3943 100644
+index b2c6505ad..83a7cc129 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -40661,7 +40661,7 @@ index b2c6505ad..b3e6f3943 100644
 +
 +    override val executedAmountIn: BigDecimal? =
 +        response.swapDetails?.amountInFormatted ?: response.swapDetails?.amountIn?.movePointLeft(origin.decimals)
-@@ -102,6 +135,11 @@ data class NearSwapQuoteStatus(
+@@ -102,6 +135,12 @@ data class NearSwapQuoteStatus(
 -    override val amountInFee: BigDecimal =
 -        amountInFormatted
 -            .multiply(
@@ -40675,25 +40675,27 @@ index b2c6505ad..b3e6f3943 100644
 +    override val amountInFormatted: BigDecimal = executedAmountIn ?: quotedAmountIn
 +
 +    override val amountInUsd: BigDecimal? =
-+        if (executedAmountIn != null) response.swapDetails?.amountInUsd else quote.amountInUsd
++        if (executedAmountIn != null) response.swapDetails?.amountInUsd
++        else quote.amountInUsd.takeIf { it.signum() > 0 }
 +
 +    override val originTransactionIds: List<String> =
 +        response.swapDetails?.originChainTxHashes?.map { it.hash }.orEmpty()
-@@ -109 +147,2 @@ data class NearSwapQuoteStatus(
+@@ -109 +148,2 @@ data class NearSwapQuoteStatus(
 -    override val amountInUsd: BigDecimal = response.swapDetails?.amountInUsd ?: quote.amountInUsd
 +    override val destinationTransactionIds: List<String> =
 +        response.swapDetails?.destinationChainTxHashes?.map { it.hash }.orEmpty()
-@@ -111,2 +150 @@ data class NearSwapQuoteStatus(
+@@ -111,2 +151 @@ data class NearSwapQuoteStatus(
 -    override val amountOutFormatted: BigDecimal =
 -        response.swapDetails?.amountOutFormatted ?: quote.amountOutFormatted
 +    override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
-@@ -114 +152,2 @@ data class NearSwapQuoteStatus(
+@@ -114 +153,3 @@ data class NearSwapQuoteStatus(
 -    override val amountOutUsd: BigDecimal = response.swapDetails?.amountOutUsd ?: quote.amountOutUsd
 +    override val amountOutUsd: BigDecimal? =
-+        if (executedAmountOut != null) response.swapDetails?.amountOutUsd else quote.amountOutUsd
-@@ -116,0 +156 @@ data class NearSwapQuoteStatus(
++        if (executedAmountOut != null) response.swapDetails?.amountOutUsd
++        else quote.amountOutUsd.takeIf { it.signum() > 0 }
+@@ -116,0 +158 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)
-@@ -118,0 +159 @@ data class NearSwapQuoteStatus(
+@@ -118,0 +161 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.refundedAmount?.movePointLeft(origin.decimals)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapReviewedIdentity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapReviewedIdentity.kt
 new file mode 100644
@@ -53345,6 +53347,27 @@ index ead94ba5d..f85fb254b 100644
 -    val onClick: () -> Unit
 +    val onClick: () -> Unit,
 +    val isEnabled: Boolean = true,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVM.kt
+index d9d2b9f3d..6d78d2103 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVM.kt
+@@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+@@ -26,0 +28 @@ import java.math.MathContext
++import kotlin.time.Duration
+@@ -41 +43 @@ class BalanceBreakdownVM(
+-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
++            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
+@@ -45,2 +47 @@ class BalanceBreakdownVM(
+-    private fun createState(pools: BalancePools?, exchangeRate: ExchangeRateState): BalanceBreakdownState? {
+-        if (pools == null) return null
++    private fun createState(pools: BalancePools, exchangeRate: ExchangeRateState): BalanceBreakdownState {
+@@ -84 +85 @@ class BalanceBreakdownVM(
+-        val conversion = data?.currencyConversion ?: return null
++        val conversion = data?.eligibleConversion() ?: return null
+@@ -93 +94 @@ class BalanceBreakdownVM(
+-            ticker = data.expectedCurrency.symbol,
++            ticker = conversion.fiatCurrency.symbol,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceScreen.kt
 index ac3108ba9..1bcf54bed 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceScreen.kt
@@ -56375,69 +56398,72 @@ index 1ff687453..363beb343 100644
 +                contentDescription = null,
 +                colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
-index dca6d245c..2fd0f69b9 100644
+index dca6d245c..768d07818 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
 @@ -5 +4,0 @@ package co.electriccoin.zcash.ui.screen.exchangerate.widget
 -import androidx.compose.foundation.BorderStroke
-@@ -6,0 +6 @@ import androidx.compose.foundation.Image
+@@ -6,0 +6,2 @@ import androidx.compose.foundation.Image
++import androidx.compose.foundation.layout.Arrangement
 +import androidx.compose.foundation.layout.Box
-@@ -9 +9 @@ import androidx.compose.foundation.layout.PaddingValues
+@@ -7,0 +9 @@ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.FlowRow
+@@ -9 +11 @@ import androidx.compose.foundation.layout.PaddingValues
 -import androidx.compose.foundation.layout.RowScope
 +import androidx.compose.foundation.layout.Row
-@@ -11 +10,0 @@ import androidx.compose.foundation.layout.Spacer
+@@ -11 +12,0 @@ import androidx.compose.foundation.layout.Spacer
 -import androidx.compose.foundation.layout.height
-@@ -14 +12,0 @@ import androidx.compose.foundation.layout.width
+@@ -14 +14,0 @@ import androidx.compose.foundation.layout.width
 -import androidx.compose.foundation.shape.RoundedCornerShape
-@@ -16 +13,0 @@ import androidx.compose.material3.ButtonDefaults
+@@ -16 +15,0 @@ import androidx.compose.material3.ButtonDefaults
 -import androidx.compose.material3.ElevatedButton
-@@ -17,0 +15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
+@@ -17,0 +17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 +import androidx.compose.material3.IconButton
-@@ -18,0 +17 @@ import androidx.compose.material3.Text
+@@ -18,0 +19 @@ import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
-@@ -22 +21 @@ import androidx.compose.runtime.rememberCoroutineScope
+@@ -22 +23 @@ import androidx.compose.runtime.rememberCoroutineScope
 -import androidx.compose.ui.Alignment.Companion.CenterVertically
 +import androidx.compose.ui.Alignment
-@@ -48 +46,0 @@ import co.electriccoin.zcash.ui.design.util.getValue
+@@ -48 +48,0 @@ import co.electriccoin.zcash.ui.design.util.getValue
 -import co.electriccoin.zcash.ui.design.util.orDark
-@@ -71,5 +69,8 @@ fun StyledExchangeBalance(
+@@ -71,5 +71,8 @@ fun StyledExchangeBalance(
 -                ExchangeRateUnavailableButton(
 -                    textColor = textColor,
 -                    style = style,
 -                    modifier = modifier
 -                )
-+                Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-+                    ExchangeRateUnavailableButton(
-+                        textColor = textColor,
-+                        style = style,
-+                        modifier = if (state.isRefreshEnabled) Modifier.weight(1f, fill = false) else Modifier,
-+                    )
++                FlowRow(
++                    modifier = modifier,
++                    horizontalArrangement = Arrangement.Center,
++                    itemVerticalAlignment = Alignment.CenterVertically,
++                ) {
++                    ExchangeRateUnavailableButton(textColor = textColor, style = style)
 +                    if (state.isRefreshEnabled) ExchangeRateRefreshButton(state, textColor)
 +                }
-@@ -83 +84,2 @@ fun StyledExchangeBalance(
+@@ -83 +86,2 @@ fun StyledExchangeBalance(
 -                    isHideBalance = LocalBalancesAvailable.current.not()
 +                    isHideBalance = LocalBalancesAvailable.current.not(),
 +                    modifier = modifier
-@@ -109,3 +111 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -109,3 +113 @@ private fun ExchangeAvailableRateLabelInternal(
 -    val isEnabled = !state.isLoading && state.isRefreshEnabled && zatoshi != null
 -
 -    ExchangeRateButton(
 +    Row(
-@@ -113,3 +113 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -113,3 +115 @@ private fun ExchangeAvailableRateLabelInternal(
 -        onClick = state.onRefresh,
 -        isEnabled = isEnabled,
 -        textColor = textColor,
 +        verticalAlignment = Alignment.CenterVertically,
-@@ -128,2 +126 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -128,2 +128 @@ private fun ExchangeAvailableRateLabelInternal(
 -        Spacer(modifier = Modifier.width(12.dp))
 -
 +        val refreshTargetSize = 48.dp
-@@ -131 +128,3 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -131 +130,3 @@ private fun ExchangeAvailableRateLabelInternal(
 -            LottieProgress(modifier = Modifier.align(CenterVertically))
 +            Box(modifier = Modifier.size(refreshTargetSize), contentAlignment = Alignment.Center) {
 +                LottieProgress()
 +            }
-@@ -133,16 +132 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -133,16 +134 @@ private fun ExchangeAvailableRateLabelInternal(
 -            Image(
 -                modifier =
 -                    Modifier
@@ -56455,7 +56481,7 @@ index dca6d245c..2fd0f69b9 100644
 -                    )
 -            )
 +            ExchangeRateRefreshButton(state, textColor)
-@@ -152,0 +137,18 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -152,0 +139,18 @@ private fun ExchangeAvailableRateLabelInternal(
 +@Composable
 +private fun ExchangeRateRefreshButton(state: ExchangeRateState.Data, textColor: Color) {
 +    IconButton(
@@ -56474,8 +56500,8 @@ index dca6d245c..2fd0f69b9 100644
 +    }
 +}
 +
-@@ -191,0 +194 @@ private fun ExchangeRateUnavailableButton(
-+        modifier = modifier,
+@@ -187 +190,0 @@ private fun ExchangeRateUnavailableButton(
+-    modifier: Modifier = Modifier,
 @@ -203,2 +206 @@ private fun ExchangeRateUnavailableButton(
 -        ExchangeRateButton(
 -            modifier = modifier,
@@ -57671,7 +57697,7 @@ index 5d228be72..e103d1c31 100644
 +fun EphemeralHotfixScreen(args: EphemeralHotfixArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<EphemeralHotfixVM> { parametersOf(args, sourceEntryId) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVM.kt
-index 17abc0b59..60644d109 100644
+index 17abc0b59..3d3b66f54 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVM.kt
 @@ -5,0 +6 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
@@ -57690,11 +57716,12 @@ index 17abc0b59..60644d109 100644
 @@ -16,0 +25,2 @@ import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.flatMapLatest
 +import kotlinx.coroutines.flow.flowOf
-@@ -18,0 +29 @@ import kotlinx.coroutines.flow.update
+@@ -18,0 +29,2 @@ import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.launch
-@@ -24,0 +36 @@ class EphemeralHotfixVM(
++import kotlin.time.Duration
+@@ -24,0 +37 @@ class EphemeralHotfixVM(
 +    private val sourceEntryId: String? = null,
-@@ -28,0 +41,15 @@ class EphemeralHotfixVM(
+@@ -28,0 +42,15 @@ class EphemeralHotfixVM(
 +    private val isLoading = MutableStateFlow(false)
 +    private val completion = MutableStateFlow<DiscoveryOutcome.Confirmed?>(null)
 +    private val torReadAttempts = MutableStateFlow(0L)
@@ -57710,10 +57737,10 @@ index 17abc0b59..60644d109 100644
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    private val isComplete = completion.flatMapLatest { it?.ownership ?: flowOf(false) }
-@@ -33 +60 @@ class EphemeralHotfixVM(
+@@ -33 +61 @@ class EphemeralHotfixVM(
 -            fixEphemeralAddressUseCase.observeIsLoading(),
 +            isLoading,
-@@ -35,30 +62,4 @@ class EphemeralHotfixVM(
+@@ -35,30 +63,4 @@ class EphemeralHotfixVM(
 -            isTorEnabledStorageProvider.observe()
 -        ) { text, isLoading, isError, isTorEnabled ->
 -            EphemeralHotfixState(
@@ -57748,7 +57775,10 @@ index 17abc0b59..60644d109 100644
 +            torPreference,
 +        ) { text, isLoading, isError, isComplete, tor ->
 +            createState(text, isLoading, isError, isComplete, tor)
-@@ -71 +72,68 @@ class EphemeralHotfixVM(
+@@ -67 +69 @@ class EphemeralHotfixVM(
+-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
++            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
+@@ -71 +73,68 @@ class EphemeralHotfixVM(
 -    private fun onBack() = navigationRouter.back()
 +    private fun createState(
 +        text: String?,
@@ -57818,7 +57848,7 @@ index 17abc0b59..60644d109 100644
 +            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
 +        }
 +    }
-@@ -73 +141,15 @@ class EphemeralHotfixVM(
+@@ -73 +142,15 @@ class EphemeralHotfixVM(
 -    private fun onRecoverFundsClick() = fixEphemeralAddressUseCase(text.value.orEmpty())
 +    private fun onRecoverFundsClick() {
 +        if (completion.value?.isCurrent?.invoke() == true || !isLoading.compareAndSet(false, true)) return
@@ -62033,7 +62063,7 @@ index 2fa3791c5..be13a88b9 100644
 +enum class KeystoneQrPreparation { LOADING, ERROR, READY }
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
-index 285d9d850..8e1d1d55a 100644
+index 285d9d850..51967bb60 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
 @@ -4,0 +5 @@ import androidx.lifecycle.viewModelScope
@@ -62063,16 +62093,18 @@ index 285d9d850..8e1d1d55a 100644
 +import kotlinx.coroutines.flow.flowOf
 @@ -28,0 +42 @@ import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.isActive
-@@ -33,2 +47,2 @@ class SignKeystoneTransactionVM(
+@@ -29,0 +44 @@ import kotlinx.coroutines.launch
++import kotlin.time.Duration
+@@ -33,2 +48,2 @@ class SignKeystoneTransactionVM(
 -    observeSelectedWalletAccount: ObserveSelectedWalletAccountUseCase,
 -    observeProposalUseCase: ObserveProposalUseCase,
 +    getWalletAccounts: GetWalletAccountsUseCase,
 +    private val keystoneProposalRepository: KeystoneProposalRepository,
-@@ -38 +52,2 @@ class SignKeystoneTransactionVM(
+@@ -38 +53,2 @@ class SignKeystoneTransactionVM(
 -    private val sharePCZT: SharePCZTUseCase
 +    private val sharePCZT: SharePCZTUseCase,
 +    private val sourceEntryId: String? = null,
-@@ -40,5 +55,15 @@ class SignKeystoneTransactionVM(
+@@ -40,5 +56,15 @@ class SignKeystoneTransactionVM(
 -    private var encoder: UREncoder? = null
 -
 -    private val isBottomSheetVisible = MutableStateFlow(false)
@@ -62093,7 +62125,7 @@ index 285d9d850..8e1d1d55a 100644
 +            flowOf(true)
 +        }
 +    }
-@@ -47,23 +72,14 @@ class SignKeystoneTransactionVM(
+@@ -47,23 +73,14 @@ class SignKeystoneTransactionVM(
 -        isBottomSheetVisible
 -            .map { isVisible ->
 -                if (isVisible) {
@@ -62131,13 +62163,13 @@ index 285d9d850..8e1d1d55a 100644
 +                        text = stringRes(R.string.keystoneTransactionReject_rejectSig),
 +                        onClick = { confirmRejection(attempt) }
 +                    ),
-@@ -70,0 +87,5 @@ class SignKeystoneTransactionVM(
+@@ -70,0 +88,5 @@ class SignKeystoneTransactionVM(
 +        }.stateIn(
 +            scope = viewModelScope,
-+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
++            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
 +            initialValue = null
 +        )
-@@ -74,4 +95,16 @@ class SignKeystoneTransactionVM(
+@@ -74,4 +96,16 @@ class SignKeystoneTransactionVM(
 -            observeProposalUseCase(),
 -            observeSelectedWalletAccount.require(),
 -            currentQrPart
@@ -62158,7 +62190,7 @@ index 285d9d850..8e1d1d55a 100644
 +            val attempt = current?.attempt
 +            val phase = current?.phase ?: KeystoneQrPreparation.LOADING
 +            val ready = phase == KeystoneQrPreparation.READY
-@@ -94,2 +127,9 @@ class SignKeystoneTransactionVM(
+@@ -94,2 +128,9 @@ class SignKeystoneTransactionVM(
 -                generateNextQrCode = { currentQrPart.update { encoder?.nextPart() } },
 -                qrData = qrData,
 +                generateNextQrCode = { if (attempt != null && ready) generateNextQrCode(attempt) },
@@ -62170,7 +62202,7 @@ index 285d9d850..8e1d1d55a 100644
 +                        onClick = { retryPreparation(it) }
 +                    )
 +                },
-@@ -99 +139,8 @@ class SignKeystoneTransactionVM(
+@@ -99 +140,8 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onSignTransactionClick
 +                        onClick = {
 +                            if (attempt != null && ready && isReady(attempt)) {
@@ -62180,10 +62212,10 @@ index 285d9d850..8e1d1d55a 100644
 +                            }
 +                        },
 +                        isEnabled = ready
-@@ -104 +151 @@ class SignKeystoneTransactionVM(
+@@ -104 +152 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onRejectClick
 +                        onClick = { reject(attempt) }
-@@ -109 +156,11 @@ class SignKeystoneTransactionVM(
+@@ -109 +157,11 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onSharePCZTClick
 +                        onClick = {
 +                            if (attempt != null && ready) {
@@ -62196,12 +62228,15 @@ index 285d9d850..8e1d1d55a 100644
 +                            }
 +                        },
 +                        isEnabled = ready
-@@ -111 +168 @@ class SignKeystoneTransactionVM(
+@@ -111 +169 @@ class SignKeystoneTransactionVM(
 -                onBack = ::onBack,
 +                onBack = { reject(attempt) },
-@@ -119,0 +177 @@ class SignKeystoneTransactionVM(
+@@ -115 +173 @@ class SignKeystoneTransactionVM(
+-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
++            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
+@@ -119,0 +178 @@ class SignKeystoneTransactionVM(
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -121,6 +179,23 @@ class SignKeystoneTransactionVM(
+@@ -121,6 +180,23 @@ class SignKeystoneTransactionVM(
 -            try {
 -                encoder = createKeystoneProposalPCZTEncoder()
 -                currentQrPart.update { encoder?.nextPart() }
@@ -62231,7 +62266,7 @@ index 285d9d850..8e1d1d55a 100644
 +                        if (isCurrent(attempt)) preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
 +                    }
 +                }
-@@ -130,5 +205,4 @@ class SignKeystoneTransactionVM(
+@@ -130,5 +206,4 @@ class SignKeystoneTransactionVM(
 -    private fun onRejectBottomSheetClick() {
 -        viewModelScope.launch {
 -            isBottomSheetVisible.update { false }
@@ -62241,7 +62276,7 @@ index 285d9d850..8e1d1d55a 100644
 +        if (isCurrent(attempt) && preparation.value?.phase == KeystoneQrPreparation.ERROR) {
 +            preparation.value = Preparation(attempt)
 +            retryRequests.update { it + 1 }
-@@ -138,2 +212,9 @@ class SignKeystoneTransactionVM(
+@@ -138,2 +213,9 @@ class SignKeystoneTransactionVM(
 -    private fun onCloseBottomSheetClick() {
 -        isBottomSheetVisible.update { false }
 +    private fun generateNextQrCode(attempt: Attempt) {
@@ -62253,18 +62288,18 @@ index 285d9d850..8e1d1d55a 100644
 +        } catch (_: Exception) {
 +            preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
 +        }
-@@ -142,3 +223,3 @@ class SignKeystoneTransactionVM(
+@@ -142,3 +224,3 @@ class SignKeystoneTransactionVM(
 -    private fun onSharePCZTClick() =
 -        viewModelScope.launch {
 -            sharePCZT()
 +    private fun reject(attempt: Attempt?) {
 +        if (attempt != null && isCurrent(attempt) && preparation.value?.isRejecting == false) {
 +            rejection.value = attempt
-@@ -146,3 +226,0 @@ class SignKeystoneTransactionVM(
+@@ -146,3 +227,0 @@ class SignKeystoneTransactionVM(
 -
 -    private fun onBack() {
 -        isBottomSheetVisible.update { !it }
-@@ -151,2 +229,12 @@ class SignKeystoneTransactionVM(
+@@ -151,2 +230,12 @@ class SignKeystoneTransactionVM(
 -    private fun onRejectClick() {
 -        isBottomSheetVisible.update { true }
 +    internal fun leaveSigning() = navigationRouter.back()
@@ -62279,12 +62314,12 @@ index 285d9d850..8e1d1d55a 100644
 +                cancelKeystoneProposalFlow.rejectKeystone(attempt.proposal, attempt.account, sourceEntryId)
 +            }
 +        }
-@@ -155,2 +243,2 @@ class SignKeystoneTransactionVM(
+@@ -155,2 +244,2 @@ class SignKeystoneTransactionVM(
 -    private fun onSignTransactionClick() {
 -        navigationRouter.forward(ScanKeystonePCZTRequest)
 +    private fun closeRejection(attempt: Attempt) {
 +        if (rejection.value === attempt) rejection.value = null
-@@ -157,0 +246,27 @@ class SignKeystoneTransactionVM(
+@@ -157,0 +247,27 @@ class SignKeystoneTransactionVM(
 +
 +    private fun isCurrent(attempt: Attempt): Boolean =
 +        isActiveSigningAccount(attempt.account) && preparation.value?.attempt === attempt &&
@@ -63793,56 +63828,61 @@ index 0a91712e5..6e28fc906 100644
 +    val expiryMessage: StringResource? = null,
 +    val freshQuoteButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
-index f13816997..698afbbc9 100644
+index f13816997..52c0572b8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.swap.orconfirmation
 +import android.os.SystemClock
-@@ -8,0 +10 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+@@ -7 +7,0 @@ import androidx.lifecycle.viewModelScope
+-import cash.z.ecc.android.sdk.model.FiatCurrency
+@@ -8,0 +9 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -9,0 +12,5 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -9,0 +11,5 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.isAtEntry
 +import co.electriccoin.zcash.ui.isForegroundAtEntry
 +import co.electriccoin.zcash.ui.discardResultFrom
 +import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.forwardFrom
-@@ -10,0 +18,2 @@ import co.electriccoin.zcash.ui.R
+@@ -10,0 +17,2 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.SwapMode
-@@ -18,0 +28 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
+@@ -18,0 +27 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
-@@ -20 +29,0 @@ import co.electriccoin.zcash.ui.design.component.IconButtonState
+@@ -20 +28,0 @@ import co.electriccoin.zcash.ui.design.component.IconButtonState
 -import co.electriccoin.zcash.ui.design.util.StringResource
-@@ -27,0 +37 @@ import co.electriccoin.zcash.ui.screen.swap.info.DepositSwapInfoArgs
+@@ -23 +30,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
+-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+@@ -27,0 +35,2 @@ import co.electriccoin.zcash.ui.screen.swap.info.DepositSwapInfoArgs
++import co.electriccoin.zcash.ui.screen.swap.quote.quoteFiatAmount
 +import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
-@@ -29 +39,4 @@ import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
+@@ -29 +38,4 @@ import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 -import kotlinx.coroutines.Job
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.flow
-@@ -35 +48,2 @@ import kotlinx.coroutines.flow.asStateFlow
+@@ -35 +47,2 @@ import kotlinx.coroutines.flow.asStateFlow
 -import kotlinx.coroutines.flow.filterIsInstance
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.transformLatest
-@@ -39 +53,3 @@ import kotlinx.coroutines.launch
+@@ -39 +52,3 @@ import kotlinx.coroutines.launch
 -import java.math.BigDecimal
 +import kotlin.time.Clock
 +import kotlin.time.Duration
 +import co.electriccoin.zcash.ui.design.R as DesignR
-@@ -42 +58 @@ class ORSwapConfirmationVM(
+@@ -42 +57 @@ class ORSwapConfirmationVM(
 -    swapRepository: SwapRepository,
 +    private val swapRepository: SwapRepository,
-@@ -47,0 +64,2 @@ class ORSwapConfirmationVM(
+@@ -47,0 +63,2 @@ class ORSwapConfirmationVM(
 +    private val appAccessSession: AppAccessSession,
 +    private val sourceEntryId: String? = null,
-@@ -48,0 +67,5 @@ class ORSwapConfirmationVM(
+@@ -48,0 +66,5 @@ class ORSwapConfirmationVM(
 +    override fun onCleared() {
 +        navigationRouter.discardResultFrom(sourceEntryId)
 +        super.onCleared()
 +    }
 +
-@@ -51,0 +75,10 @@ class ORSwapConfirmationVM(
+@@ -51,0 +74,10 @@ class ORSwapConfirmationVM(
 +    private val retryTracking = MutableStateFlow(0)
 +    private val _saving = MutableStateFlow(
 +        (swapRepository.quote.value as? SwapQuoteData.Success)?.let(::isCurrent) == true
@@ -63853,7 +63893,7 @@ index f13816997..698afbbc9 100644
 +    internal var elapsedRealtime: () -> Long = SystemClock::elapsedRealtime
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -53,4 +86,35 @@ class ORSwapConfirmationVM(
+@@ -53,4 +85,35 @@ class ORSwapConfirmationVM(
 -        swapRepository.quote
 -            .filterIsInstance<SwapQuoteData.Success>()
 -            .map { it.quote }
@@ -63893,7 +63933,7 @@ index f13816997..698afbbc9 100644
 +                if (!isCurrent(publication)) return@map null
 +                val quote = publication.quote
 +                val fundingEnabled = canFund(publication)
-@@ -58 +122,7 @@ class ORSwapConfirmationVM(
+@@ -58 +121,7 @@ class ORSwapConfirmationVM(
 -                    onBack = ::onBack,
 +                    fundingEnabled = fundingEnabled,
 +                    expiryMessage = if (fundingEnabled) null else stringRes(R.string.private_swap_funding_expired),
@@ -63902,17 +63942,19 @@ index f13816997..698afbbc9 100644
 +                        onClick = { onCancelSwapClick(publication) },
 +                    ),
 +                    onBack = { onBack(acknowledgement) },
-@@ -61,0 +132 @@ class ORSwapConfirmationVM(
+@@ -61,0 +131 @@ class ORSwapConfirmationVM(
 +                            contentDescription = stringRes(DesignR.string.accessibility_swap_deposit_help),
-@@ -68 +139,3 @@ class ORSwapConfirmationVM(
+@@ -67,2 +137,4 @@ class ORSwapConfirmationVM(
+-                    amountFiat = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 -                    onAmountClick = { onAmountClick(quote.amountInFormatted) },
++                    amountFiat = quoteFiatAmount(quote.amountInUsd),
 +                    onAmountClick = {
 +                        if (canFund(publication)) copyToClipboard(quote.amountInFormatted.toPlainString())
 +                    },
-@@ -75 +148 @@ class ORSwapConfirmationVM(
+@@ -75 +147 @@ class ORSwapConfirmationVM(
 -                            onClick = { onCopyAddressClick(quote.depositAddress.address) }
 +                            onClick = { if (canFund(publication)) copyToClipboard(quote.depositAddress.address) }
-@@ -81,8 +154 @@ class ORSwapConfirmationVM(
+@@ -81,8 +153 @@ class ORSwapConfirmationVM(
 -                            onClick = {
 -                                onShareClick(
 -                                    qrData = quote.depositAddress.address,
@@ -63922,18 +63964,18 @@ index f13816997..698afbbc9 100644
 -                                )
 -                            }
 +                            onClick = { onShareClick(publication, grant) }
-@@ -102,0 +169 @@ class ORSwapConfirmationVM(
+@@ -102,0 +168 @@ class ORSwapConfirmationVM(
 +                            style = if (fundingEnabled) ButtonStyle.PRIMARY else ButtonStyle.SECONDARY,
-@@ -104 +171 @@ class ORSwapConfirmationVM(
+@@ -104 +170 @@ class ORSwapConfirmationVM(
 -                            onClick = ::onSentFundsClick
 +                            onClick = { onSentFundsClick(acknowledgement) }
-@@ -109 +176,4 @@ class ORSwapConfirmationVM(
+@@ -109 +175,4 @@ class ORSwapConfirmationVM(
 -                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
 +                started = SharingStarted.WhileSubscribed(
 +                    stopTimeout = ANDROID_STATE_FLOW_TIMEOUT,
 +                    replayExpiration = Duration.ZERO,
 +                ),
-@@ -113 +183,15 @@ class ORSwapConfirmationVM(
+@@ -113 +182,15 @@ class ORSwapConfirmationVM(
 -    private var onSentFundsClickJob: Job? = null
 +    private fun showTrackingError(publication: SwapQuoteData.Success) {
 +        _dialogState.value = ErrorState(
@@ -63950,18 +63992,18 @@ index f13816997..698afbbc9 100644
 +            onBack = { onCancelSwapClick(publication) },
 +        )
 +    }
-@@ -115 +199,2 @@ class ORSwapConfirmationVM(
+@@ -115 +198,2 @@ class ORSwapConfirmationVM(
 -    private fun onAmountClick(amountInFormatted: BigDecimal) = copyToClipboard(amountInFormatted.toPlainString())
 +    private fun canFund(publication: SwapQuoteData.Success): Boolean =
 +        isCurrent(publication) && publication.canFund(clock.now(), elapsedRealtime())
-@@ -117 +202,5 @@ class ORSwapConfirmationVM(
+@@ -117 +201,5 @@ class ORSwapConfirmationVM(
 -    private fun onCopyAddressClick(depositAddress: String) = copyToClipboard(depositAddress)
 +    internal fun openActivity() {
 +        viewModelScope.launch {
 +            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.ReplaceAll(listOf(ActivityHistoryArgs)) }
 +        }
 +    }
-@@ -119,2 +208,6 @@ class ORSwapConfirmationVM(
+@@ -119,2 +207,6 @@ class ORSwapConfirmationVM(
 -    private fun onBack() {
 -        if (onSentFundsClickJob?.isActive == true) return
 +    private fun isCurrent(publication: SwapQuoteData.Success): Boolean =
@@ -63970,68 +64012,68 @@ index f13816997..698afbbc9 100644
 +
 +    private fun onBack(acknowledgement: SaveORSwapUseCase.FundingAcknowledgement) {
 +        if (!isCurrent(acknowledgement.publication)) return
-@@ -131 +224 @@ class ORSwapConfirmationVM(
+@@ -131 +223 @@ class ORSwapConfirmationVM(
 -                            onClick = ::onSentFundsClick
 +                            onClick = { onSentFundsClick(acknowledgement) }
-@@ -136 +229 @@ class ORSwapConfirmationVM(
+@@ -136 +228 @@ class ORSwapConfirmationVM(
 -                            onClick = ::onCancelSwapClick
 +                            onClick = { onCancelSwapClick(acknowledgement.publication) }
-@@ -143 +236,2 @@ class ORSwapConfirmationVM(
+@@ -143 +235,2 @@ class ORSwapConfirmationVM(
 -    private fun onCancelSwapClick() {
 +    private fun onCancelSwapClick(publication: SwapQuoteData.Success) {
 +        if (!isCurrent(publication)) return
-@@ -145 +239,5 @@ class ORSwapConfirmationVM(
+@@ -145 +238,5 @@ class ORSwapConfirmationVM(
 -        cancelSwapQuote()
 +        if (sourceEntryId == null) {
 +            cancelSwapQuote()
 +        } else {
 +            viewModelScope.launch { cancelSwapQuote.cancelFrom(sourceEntryId) { isCurrent(publication) } }
 +        }
-@@ -148,2 +246,2 @@ class ORSwapConfirmationVM(
+@@ -148,2 +245,2 @@ class ORSwapConfirmationVM(
 -    private fun onSentFundsClick() {
 -        if (onSentFundsClickJob?.isActive == true) return
 +    private fun onSentFundsClick(acknowledgement: SaveORSwapUseCase.FundingAcknowledgement) {
 +        if (!isCurrent(acknowledgement.publication)) return
-@@ -151 +249,5 @@ class ORSwapConfirmationVM(
+@@ -151 +248,5 @@ class ORSwapConfirmationVM(
 -        onSentFundsClickJob = viewModelScope.launch { saveORSwap() }
 +        if (sourceEntryId == null) {
 +            saveORSwap.finishFunding(acknowledgement)
 +        } else {
 +            viewModelScope.launch { saveORSwap.finishFunding(acknowledgement, sourceEntryId) }
 +        }
-@@ -154 +256 @@ class ORSwapConfirmationVM(
+@@ -154 +255 @@ class ORSwapConfirmationVM(
 -    private fun onInfoClick() = navigationRouter.forward(DepositSwapInfoArgs)
 +    private fun onInfoClick() = navigationRouter.forwardFrom(sourceEntryId, { true }) { DepositSwapInfoArgs }
-@@ -157,4 +259,2 @@ class ORSwapConfirmationVM(
+@@ -157,4 +258,2 @@ class ORSwapConfirmationVM(
 -        qrData: String,
 -        amount: BigDecimal,
 -        tokenTicker: String,
 -        chainName: StringResource
 +        publication: SwapQuoteData.Success,
 +        grant: AppAccessSession.Grant?,
-@@ -161,0 +262,5 @@ class ORSwapConfirmationVM(
+@@ -161,0 +261,5 @@ class ORSwapConfirmationVM(
 +        val isAllowed = {
 +            navigationRouter.isAtEntry(sourceEntryId) && appAccessSession.permits(grant) && canFund(publication)
 +        }
 +        if (!isAllowed()) return@launch
 +        val quote = publication.quote
-@@ -163 +268 @@ class ORSwapConfirmationVM(
+@@ -163 +267 @@ class ORSwapConfirmationVM(
 -            qrData = qrData,
 +            qrData = quote.depositAddress.address,
-@@ -167,3 +272,3 @@ class ORSwapConfirmationVM(
+@@ -167,3 +271,3 @@ class ORSwapConfirmationVM(
 -                    stringResByNumber(amount),
 -                    tokenTicker.uppercase(),
 -                    chainName,
 +                    stringResByNumber(quote.amountInFormatted),
 +                    quote.originAsset.tokenTicker.uppercase(),
 +                    quote.originAsset.chainName,
-@@ -173 +278,4 @@ class ORSwapConfirmationVM(
+@@ -173 +277,4 @@ class ORSwapConfirmationVM(
 -            filenamePrefix = "swap_deposit_address_"
 +            filenamePrefix = "swap_deposit_address_",
 +            isAllowed = {
 +                navigationRouter.isForegroundAtEntry(sourceEntryId) && isAllowed()
 +            },
-@@ -176,0 +285,2 @@ class ORSwapConfirmationVM(
+@@ -176,0 +284,2 @@ class ORSwapConfirmationVM(
 +
 +private const val FUNDING_CLOCK_INTERVAL_MILLIS = 1_000L
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt
@@ -64709,7 +64751,7 @@ index 9f37c1d93..b1b165ec6 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..809a75480 100644
+index 717411935..f31e1cac4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -64875,13 +64917,14 @@ index 717411935..809a75480 100644
 +            percentage = stringRes(signed),
 +            explanation = stringRes(scope),
 +            isNegative = rounded.signum() < 0,
-@@ -162,0 +222,54 @@ internal class SwapQuoteVMMapper {
+@@ -162,0 +222,55 @@ internal class SwapQuoteVMMapper {
 +    }
 +
-+    private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
-+        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
-+        else stringRes(R.string.private_quote_estimate_unavailable)
 +}
++
++internal fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
++    if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
++    else stringRes(R.string.private_quote_estimate_unavailable)
 +
 +internal fun mapPriceCheck(check: IndependentPriceCheck): PriceCheckNoticeState = when (check) {
 +    IndependentPriceCheck.Checking -> PriceCheckNoticeState(
@@ -79740,25 +79783,27 @@ index 000000000..5cd283dbc
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
-index 3f54429cb..4c5470daa 100644
+index 3f54429cb..bf7fbe00e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.common.model
 -import cash.z.ecc.android.sdk.model.Proposal
 -import cash.z.ecc.android.sdk.model.Zatoshi
-@@ -25 +23,3 @@ class FakeSwapQuote(
+@@ -25 +23,4 @@ class FakeSwapQuote(
 -    refundAddress: String
 +    refundAddress: String,
 +    override val provider: String = "near",
-+    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z")
-@@ -30,2 +29,0 @@ class FakeSwapQuote(
++    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z"),
++    override val amountInUsd: BigDecimal = BigDecimal.ONE,
+@@ -30,3 +30,0 @@ class FakeSwapQuote(
 -    override val provider: String = "test"
 -    override val zecExchangeRate: BigDecimal = BigDecimal.ONE
+-    override val amountInUsd: BigDecimal = BigDecimal.ONE
 @@ -36 +33,0 @@ class FakeSwapQuote(
 -    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(0)
 @@ -39 +35,0 @@ class FakeSwapQuote(
 -    override val deadline: Instant = Instant.fromEpochMilliseconds(0)
-@@ -42,8 +38 @@ class FakeSwapQuote(
+@@ -42,7 +37,0 @@ class FakeSwapQuote(
 -    override fun getTotal(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
 -
 -    override fun getTotalUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
@@ -79766,9 +79811,6 @@ index 3f54429cb..4c5470daa 100644
 -    override fun getTotalFeesUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
 -
 -    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = Zatoshi(0)
--}
-+}
-\ No newline at end of file
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
 new file mode 100644
 index 000000000..75be961cf
@@ -80919,7 +80961,7 @@ index 000000000..c376ed493
 +    }
 +""".trimIndent()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
-index 1f1b3f2c9..0b24227ae 100644
+index 1f1b3f2c9..63935cb41 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -80981,7 +81023,7 @@ index 1f1b3f2c9..0b24227ae 100644
 @@ -58,2 +80,0 @@ class NearSwapQuoteStatusTest {
 -        // Synthesis only kicks in for PENDING_DEPOSIT — a server-reported SUCCESS passes through
 -        // unchanged regardless of the deadline.
-@@ -87,0 +109,175 @@ class NearSwapQuoteStatusTest {
+@@ -87,0 +109,195 @@ class NearSwapQuoteStatusTest {
 +    @Test
 +    fun executedOutputUsesRawBaseUnitsWhenFormattedFieldIsMissing() {
 +        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
@@ -80991,6 +81033,26 @@ index 1f1b3f2c9..0b24227ae 100644
 +        assertEquals(BigDecimal("2.300001"), swap.executedAmountOut)
 +        assertEquals(BigDecimal("2.300001"), swap.amountOutFormatted)
 +        assertEquals(BigDecimal("2"), swap.quotedAmountOut)
++    }
++
++    @Test
++    fun detailDoesNotPresentUnavailableQuotedFiatAsZeroDollars() {
++        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
++        val quoteResponse = original.response.quoteResponse
++        val quoteWithoutFiat = quoteResponse.copy(
++            quote = quoteResponse.quote.copy(amountInUsd = BigDecimal.ZERO, amountOutUsd = BigDecimal.ZERO),
++        )
++        val status = original.copy(response = original.response.copy(quoteResponse = quoteWithoutFiat))
++        assertEquals(null, status.amountInUsd)
++        assertEquals(null, status.amountOutUsd)
++        val header = CommonTransactionDetailMapper()
++            .createTransactionDetailQuoteHeaderState(status, status.originAsset, status.destinationAsset)
++        val input = assertNotNull(header.from)
++        val output = assertNotNull(header.to)
++        assertEquals(stringResByNumber(status.quotedAmountIn), input.amount)
++        assertEquals(stringResByNumber(status.quotedAmountOut), output.amount)
++        assertEquals(stringRes(""), input.fiatAmount)
++        assertEquals(stringRes(""), output.fiatAmount)
 +    }
 +
 +    @Test
@@ -94141,6 +94203,91 @@ index 1f92edd40..db23e806e 100644
 -            navigateToExportPrivateData = mockk(relaxed = true),
 @@ -106,0 +126 @@ class AdvancedSettingsViewOnlyVMTest {
 +            sourceEntryId = "advanced-settings",
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVMTest.kt
+new file mode 100644
+index 000000000..a12f6c1c3
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/breakdown/BalanceBreakdownVMTest.kt
+@@ -0,0 +1,79 @@
++package co.electriccoin.zcash.ui.screen.balances.breakdown
++
++import androidx.lifecycle.viewModelScope
++import cash.z.ecc.android.sdk.model.FiatCurrency
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
++import co.electriccoin.zcash.ui.common.usecase.BalancePools
++import co.electriccoin.zcash.ui.common.usecase.GetBalancePoolsUseCase
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.filterNotNull
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.job
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.test.setMain
++import kotlinx.coroutines.withTimeout
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertNotNull
++import kotlin.test.assertNull
++import kotlin.time.Clock
++import kotlin.time.Duration.Companion.minutes
++import kotlin.time.Instant
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class BalanceBreakdownVMTest {
++    @Test
++    fun expiredRefreshKeepsZecBalancesWithoutStaleFiat() = runTest {
++        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
++        mockkObject(FiatCurrency.USD)
++        try {
++            every { FiatCurrency.USD.symbol } returns "$"
++            val now = Instant.parse("2026-11-25T00:00:00Z")
++            val clock = object : Clock { override fun now() = now }
++            val quote = FiatCurrencyConversion(now, 100.0, FiatCurrency.USD)
++            val fresh = ExchangeRateState.Data(isLoading = false, currencyConversion = quote, clock = clock) {}
++            val rate = MutableStateFlow<ExchangeRateState>(fresh)
++            val rates = mockk<ExchangeRateRepository> { every { state } returns rate }
++            val balances = BalancePools(Zatoshi(100), Zatoshi(10), Zatoshi(20), Zatoshi(30), Zatoshi(40))
++            val pools = mockk<GetBalancePoolsUseCase> { every { observe() } returns flowOf(balances) }
++            val vm = BalanceBreakdownVM(pools, rates, mockk())
++            val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
++            try {
++                val published = vm.state.filterNotNull()
++                val initial = withTimeout(1_000) { published.first() }
++                assertNotNull(initial.total.fiat)
++                initial.pools.forEach { assertNotNull(it.fiat) }
++
++                rate.value = fresh.copy(
++                    currencyConversion = FiatCurrencyConversion(now - 16.minutes, 100.0, FiatCurrency.USD),
++                )
++                val expired = withTimeout(1_000) { published.first { it.total.fiat == null } }
++                assertEquals(initial.total.amount, expired.total.amount)
++                assertEquals(initial.pools.map { it.amount }, expired.pools.map { it.amount })
++                assertNull(expired.total.fiat)
++                expired.pools.forEach { assertNull(it.fiat) }
++            } finally {
++                collector.cancelAndJoin()
++                vm.viewModelScope.coroutineContext.job.cancelAndJoin()
++            }
++        } finally {
++            unmockkObject(FiatCurrency.USD)
++            Dispatchers.resetMain()
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
 index 32d01648d..a9e4d875e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
@@ -98140,13 +98287,14 @@ index 32b7d3625..fd4353dd8 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVMTest.kt
 new file mode 100644
-index 000000000..5ccf0b2b5
+index 000000000..c86104c42
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/hotfix/ephemeral/EphemeralHotfixVMTest.kt
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,128 @@
 +package co.electriccoin.zcash.ui.screen.hotfix.ephemeral
 +
 +import androidx.lifecycle.viewModelScope
++import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.PendingNavigation
@@ -98168,7 +98316,9 @@ index 000000000..5ccf0b2b5
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.test.setMain
 +import kotlin.test.Test
@@ -98181,7 +98331,12 @@ index 000000000..5ccf0b2b5
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class EphemeralHotfixVMTest {
 +    @Test
-+    fun completionFromARevokedGrantDisappearsFromTheRetainedDialog() {
++    fun completionFromARevokedGrantDisappearsFromTheRetainedDialog() = completeThenWithdraw(false)
++
++    @Test
++    fun returningAfterObservationStopsDoesNotReplayRevokedCompletion() = completeThenWithdraw(true)
++
++    private fun completeThenWithdraw(pauseObservation: Boolean) {
 +        val dispatcher = UnconfinedTestDispatcher()
 +        Dispatchers.setMain(dispatcher)
 +        try {
@@ -98200,7 +98355,7 @@ index 000000000..5ccf0b2b5
 +                val vm = EphemeralHotfixVM(
 +                    EphemeralHotfixArgs("synthetic-address"), tor, navigation, recover, "discover",
 +                )
-+                backgroundScope.launch { vm.state.collect { } }
++                val collector = backgroundScope.launch { vm.state.collect { } }
 +                assertNotNull(vm.state.value).button.onClick()
 +                val completed = assertNotNull(vm.state.value)
 +                assertEquals(stringRes(R.string.ephemeral_recovery_success), completed.info)
@@ -98209,7 +98364,16 @@ index 000000000..5ccf0b2b5
 +                assertNotNull(pending.commands.value["discover"])
 +                verify(exactly = 0) { navigation.back() }
 +
++                if (pauseObservation) {
++                    collector.cancel()
++                    runCurrent()
++                    advanceTimeBy(ANDROID_STATE_FLOW_TIMEOUT.inWholeMilliseconds + 1)
++                }
 +                owner.value = false
++                if (pauseObservation) {
++                    assertNull(vm.state.value)
++                    backgroundScope.launch { vm.state.collect { } }
++                }
 +                val reopened = assertNotNull(vm.state.value)
 +                assertNull(reopened.info)
 +                assertTrue(reopened.address.isEnabled)
@@ -103576,70 +103740,72 @@ index 57fcc6f0e..dd71c9e9c 100644
 +        const val ORIGINAL_ADDRESS = "synthetic-original"
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt
-index 4970e1ee1..d996514de 100644
+index 4970e1ee1..311dbc19d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt
-@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.screen.signkeystonetransaction
+@@ -2,0 +3,4 @@ package co.electriccoin.zcash.ui.screen.signkeystonetransaction
 +import androidx.lifecycle.viewModelScope
++import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -3,0 +7,6 @@ import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+@@ -3,0 +8,6 @@ import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
 +import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneProposalPCZTEncoderUseCase
-@@ -5,2 +14 @@ import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
+@@ -5,2 +15 @@ import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 -import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
-@@ -7,0 +16,5 @@ import co.electriccoin.zcash.ui.design.R
+@@ -7,0 +17,5 @@ import co.electriccoin.zcash.ui.design.R
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 +import com.sparrowwallet.hummingbird.UR
 +import com.sparrowwallet.hummingbird.UREncoder
 +import io.mockk.coEvery
 +import io.mockk.coVerify
-@@ -9,0 +23,3 @@ import io.mockk.mockk
+@@ -9,0 +24,3 @@ import io.mockk.mockk
 +import io.mockk.verify
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -12,3 +28,5 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -12,3 +29,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 -import kotlinx.coroutines.flow.filterNotNull
 -import kotlinx.coroutines.flow.first
 -import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.Job
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.collect
 +import kotlinx.coroutines.launch
-@@ -15,0 +34,3 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -15,0 +36,3 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.TestScope
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
 +import kotlinx.coroutines.test.advanceTimeBy
-@@ -16,0 +38 @@ import kotlinx.coroutines.test.resetMain
+@@ -16,0 +40 @@ import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runCurrent
-@@ -18,0 +41 @@ import kotlinx.coroutines.test.setMain
+@@ -18,0 +43 @@ import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.withContext
-@@ -22,0 +46,4 @@ import kotlin.test.assertEquals
+@@ -22,0 +48,4 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -24 +51 @@ import kotlin.test.assertEquals
+@@ -24 +53 @@ import kotlin.test.assertEquals
 -/** The signing account's row shows the Keystone account's own icon, not the generic info icon. */
 +/** The real signing VM/use case owns encoder readiness; device encoding is the external port. */
-@@ -26,0 +54,2 @@ class SignKeystoneTransactionVMTest {
+@@ -26,0 +56,2 @@ class SignKeystoneTransactionVMTest {
 +    private val models = mutableListOf<SignKeystoneTransactionVM>()
 +
-@@ -28,3 +57 @@ class SignKeystoneTransactionVMTest {
+@@ -28,3 +59 @@ class SignKeystoneTransactionVMTest {
 -    fun setUp() {
 -        Dispatchers.setMain(StandardTestDispatcher())
 -    }
 +    fun setUp() = Dispatchers.setMain(StandardTestDispatcher())
-@@ -33,0 +61 @@ class SignKeystoneTransactionVMTest {
+@@ -33,0 +63 @@ class SignKeystoneTransactionVMTest {
 +        models.forEach { it.viewModelScope.cancel() }
-@@ -38,25 +66,66 @@ class SignKeystoneTransactionVMTest {
+@@ -38,25 +68,220 @@ class SignKeystoneTransactionVMTest {
 -    fun aKeystoneAccountSignsWithItsOwnIcon() =
 -        runTest {
 -            val vm =
@@ -103731,7 +103897,7 @@ index 4970e1ee1..d996514de 100644
 +        coEvery { h.repository.createPCZTEncoder() } coAnswers {
 +            entered.complete(Unit)
 +            try { kotlinx.coroutines.awaitCancellation() } finally { cancelled = true }
-@@ -63,0 +133,157 @@ class SignKeystoneTransactionVMTest {
++        }
 +        assertNotNull(failed.retryButton).onClick()
 +        runCurrent()
 +        entered.await()
@@ -103844,10 +104010,37 @@ index 4970e1ee1..d996514de 100644
 +        verify(exactly = 1) { h.router.back() }
 +    }
 +
-+    private fun TestScope.start(vm: SignKeystoneTransactionVM) {
-+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
-+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.bottomSheetState.collect() }
++    @Test
++    fun returningAfterRelockCannotReadACachedQrOrRejectionSheet() = runTest {
++        val h = harness()
++        var approved = true
++        h.proposals.value = approvedShield { approved }
++        coEvery { h.repository.createPCZTEncoder() } returns encoder()
++        val collectors = start(h.vm)
++        val ready = assertNotNull(h.vm.state.value)
++        assertNotNull(ready.qrData)
++        ready.negativeButton.onClick()
 +        runCurrent()
++        assertNotNull(h.vm.bottomSheetState.value)
++
++        collectors.forEach { it.cancel() }
++        runCurrent()
++        advanceTimeBy(ANDROID_STATE_FLOW_TIMEOUT.inWholeMilliseconds + 1)
++        approved = false
++        h.preparationIds.value = null
++        assertNull(h.vm.state.value)
++        assertNull(h.vm.bottomSheetState.value)
++        start(h.vm)
++        assertNull(h.vm.state.value)
++    }
++
++    private fun TestScope.start(vm: SignKeystoneTransactionVM): List<Job> {
++        val screen = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
++        val rejection = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
++            vm.bottomSheetState.collect()
++        }
++        runCurrent()
++        return listOf(screen, rejection)
 +    }
 +
 +    private fun harness(): Harness {
@@ -103858,7 +104051,7 @@ index 4970e1ee1..d996514de 100644
 +            every { transactionProposal } returns proposals
 +            every { signingPreparationId() } returns "prepared"
 +            every { signingPreparationIds } returns preparationIds
-+        }
+@@ -63,0 +289,30 @@ class SignKeystoneTransactionVMTest {
 +        val router = mockk<NavigationRouter>(relaxed = true)
 +        val cancel = mockk<CancelProposalFlowUseCase>(relaxed = true)
 +        val vm = SignKeystoneTransactionVM(
@@ -105816,7 +106009,7 @@ index c7e01026d..71c5cd849 100644
 +            appAccessSession = AppAccessSession().apply { unlock() },
 +            walletWriteAccess = WalletWriteAccess(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVMTest.kt
-index 5d715d6d1..d2133b9d8 100644
+index 5d715d6d1..04da42d17 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVMTest.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.screen.swap.orconfirmation
@@ -105870,7 +106063,17 @@ index 5d715d6d1..d2133b9d8 100644
 -                    centerIcon = null
 +                    centerIcon = null,
 +                    isAllowed = any()
-@@ -111,0 +145,180 @@ class ORSwapConfirmationVMTest {
+@@ -111,0 +145,190 @@ class ORSwapConfirmationVMTest {
++    @Test
++    fun depositInstructionsKeepTheExactAmountWhenQuoteFiatIsUnavailable() = runTest(dispatcher) {
++        val quote = depositQuote(Instant.parse("2100-01-01T00:00:00Z"), amountInUsd = BigDecimal.ZERO)
++        val quotes = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Success(quote))
++        val confirmation = checkNotNull(startedVm(quotes = quotes).state.value)
++        assertEquals(stringResByNumber(AMOUNT_IN), confirmation.amount)
++        assertEquals(stringRes(R.string.private_quote_estimate_unavailable), confirmation.amountFiat)
++        assertTrue(confirmation.fundingEnabled)
++    }
++
 +    @Test
 +    fun sentReusesOnlyTheAcknowledgedNearPublicationAndOpensActivity() = runTest(dispatcher) {
 +        val quote = SwapOutputProvenanceFixture.status(
@@ -106051,7 +106254,7 @@ index 5d715d6d1..d2133b9d8 100644
 +        }
 +    }
 +
-@@ -115 +328,8 @@ class ORSwapConfirmationVMTest {
+@@ -115 +338,8 @@ class ORSwapConfirmationVMTest {
 -        router: FakeNavigationRouter = FakeNavigationRouter(),
 +        router: co.electriccoin.zcash.ui.NavigationRouter = FakeNavigationRouter(),
 +        metadata: MetadataRepository = trackingStorage(true),
@@ -106061,7 +106264,7 @@ index 5d715d6d1..d2133b9d8 100644
 +        access: AppAccessSession = AppAccessSession().apply { unlock() },
 +        elapsed: () -> Long = { 0L },
 +        walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -117,12 +337 @@ class ORSwapConfirmationVMTest {
+@@ -117,12 +347 @@ class ORSwapConfirmationVMTest {
 -        val quote =
 -            FakeSwapQuote(
 -                originAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
@@ -106075,24 +106278,24 @@ index 5d715d6d1..d2133b9d8 100644
 -                refundAddress = "bc1refund"
 -            )
 +        if (quotes.value == null) quotes.value = SwapQuoteData.Success(depositQuote(deadline))
-@@ -131 +340,5 @@ class ORSwapConfirmationVMTest {
+@@ -131 +350,5 @@ class ORSwapConfirmationVMTest {
 -                every { this@mockk.quote } returns MutableStateFlow(SwapQuoteData.Success(quote))
 +                every { this@mockk.quote } returns quotes
 +                every { clearIfCurrent(any()) } answers {
 +                    val expected = firstArg<SwapQuoteData.Success>()
 +                    quotes.value === expected && quotes.compareAndSet(expected, null)
 +                }
-@@ -139 +352 @@ class ORSwapConfirmationVMTest {
+@@ -139 +362 @@ class ORSwapConfirmationVMTest {
 -                saveORSwap = mockk<SaveORSwapUseCase>(relaxed = true),
 +                saveORSwap = SaveORSwapUseCase(swapRepository, metadata, router, walletWriteAccess),
-@@ -141 +354,2 @@ class ORSwapConfirmationVMTest {
+@@ -141 +364,2 @@ class ORSwapConfirmationVMTest {
 -            )
 +                appAccessSession = access,
 +            ).also { it.clock = clock; it.elapsedRealtime = elapsed }
-@@ -143 +357 @@ class ORSwapConfirmationVMTest {
+@@ -143 +367 @@ class ORSwapConfirmationVMTest {
 -        advanceUntilIdle()
 +        runCurrent()
-@@ -145,0 +360,24 @@ class ORSwapConfirmationVMTest {
+@@ -145,0 +370,25 @@ class ORSwapConfirmationVMTest {
 +
 +    private enum class StageChange { CLEAR, REPLACE, EXPIRE, RELOCK, NONE }
 +
@@ -106104,13 +106307,14 @@ index 5d715d6d1..d2133b9d8 100644
 +        } returnsMany results.toList()
 +    }
 +
-+    private fun depositQuote(deadline: Instant) =
++    private fun depositQuote(deadline: Instant, amountInUsd: BigDecimal = BigDecimal.ONE) =
 +            FakeSwapQuote(
 +                originAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
 +                destinationAsset = SwapAssetTestFixture.zecAsset(),
 +                mode = SwapMode.FLEX_INPUT,
 +                amountIn = AMOUNT_IN,
 +                amountInFormatted = AMOUNT_IN,
++                amountInUsd = amountInUsd,
 +                amountOutFormatted = BigDecimal.ONE,
 +                depositAddress = DEPOSIT_ADDRESS,
 +                destinationAddress = "u1destination",

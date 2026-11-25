@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.signkeystonetransaction
 
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
@@ -25,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -242,10 +244,37 @@ class SignKeystoneTransactionVMTest {
         verify(exactly = 1) { h.router.back() }
     }
 
-    private fun TestScope.start(vm: SignKeystoneTransactionVM) {
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.bottomSheetState.collect() }
+    @Test
+    fun returningAfterRelockCannotReadACachedQrOrRejectionSheet() = runTest {
+        val h = harness()
+        var approved = true
+        h.proposals.value = approvedShield { approved }
+        coEvery { h.repository.createPCZTEncoder() } returns encoder()
+        val collectors = start(h.vm)
+        val ready = assertNotNull(h.vm.state.value)
+        assertNotNull(ready.qrData)
+        ready.negativeButton.onClick()
         runCurrent()
+        assertNotNull(h.vm.bottomSheetState.value)
+
+        collectors.forEach { it.cancel() }
+        runCurrent()
+        advanceTimeBy(ANDROID_STATE_FLOW_TIMEOUT.inWholeMilliseconds + 1)
+        approved = false
+        h.preparationIds.value = null
+        assertNull(h.vm.state.value)
+        assertNull(h.vm.bottomSheetState.value)
+        start(h.vm)
+        assertNull(h.vm.state.value)
+    }
+
+    private fun TestScope.start(vm: SignKeystoneTransactionVM): List<Job> {
+        val screen = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
+        val rejection = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            vm.bottomSheetState.collect()
+        }
+        runCurrent()
+        return listOf(screen, rejection)
     }
 
     private fun harness(): Harness {

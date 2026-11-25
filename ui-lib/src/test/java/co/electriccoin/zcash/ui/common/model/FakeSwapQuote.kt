@@ -22,12 +22,12 @@ class FakeSwapQuote(
     destinationAddress: String,
     refundAddress: String,
     override val provider: String = "near",
-    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z")
+    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z"),
+    override val amountInUsd: BigDecimal = BigDecimal.ONE,
 ) : SwapQuote {
     override val depositAddress: SwapAddress = DynamicSwapAddress(depositAddress)
     override val destinationAddress: SwapAddress = DynamicSwapAddress(destinationAddress)
     override val refundAddress: SwapAddress = DynamicSwapAddress(refundAddress)
-    override val amountInUsd: BigDecimal = BigDecimal.ONE
     override val amountOut: BigDecimal = BigDecimal.ONE
     override val amountOutUsd: BigDecimal = BigDecimal.ONE
     override val affiliateFee: BigDecimal = BigDecimal.ZERO

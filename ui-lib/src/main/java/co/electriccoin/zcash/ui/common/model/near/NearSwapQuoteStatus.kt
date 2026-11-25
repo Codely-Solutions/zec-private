@@ -139,7 +139,8 @@ data class NearSwapQuoteStatus(
     override val amountInFormatted: BigDecimal = executedAmountIn ?: quotedAmountIn
 
     override val amountInUsd: BigDecimal? =
-        if (executedAmountIn != null) response.swapDetails?.amountInUsd else quote.amountInUsd
+        if (executedAmountIn != null) response.swapDetails?.amountInUsd
+        else quote.amountInUsd.takeIf { it.signum() > 0 }
 
     override val originTransactionIds: List<String> =
         response.swapDetails?.originChainTxHashes?.map { it.hash }.orEmpty()
@@ -150,7 +151,8 @@ data class NearSwapQuoteStatus(
     override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
 
     override val amountOutUsd: BigDecimal? =
-        if (executedAmountOut != null) response.swapDetails?.amountOutUsd else quote.amountOutUsd
+        if (executedAmountOut != null) response.swapDetails?.amountOutUsd
+        else quote.amountOutUsd.takeIf { it.signum() > 0 }
 
     override val depositedAmountFormatted: BigDecimal? = response.swapDetails?.depositedAmountFormatted
         ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)

@@ -3,8 +3,10 @@
 package co.electriccoin.zcash.ui.screen.exchangerate.widget
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,12 +68,12 @@ fun StyledExchangeBalance(
     when (state) {
         is ExchangeRateState.Data -> {
             if ((state.isStale && !state.isLoading) || (!state.isLoading && state.currencyConversion == null)) {
-                Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-                    ExchangeRateUnavailableButton(
-                        textColor = textColor,
-                        style = style,
-                        modifier = if (state.isRefreshEnabled) Modifier.weight(1f, fill = false) else Modifier,
-                    )
+                FlowRow(
+                    modifier = modifier,
+                    horizontalArrangement = Arrangement.Center,
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ExchangeRateUnavailableButton(textColor = textColor, style = style)
                     if (state.isRefreshEnabled) ExchangeRateRefreshButton(state, textColor)
                 }
             } else {
@@ -186,12 +188,10 @@ internal fun createExchangeRateText(
 private fun ExchangeRateUnavailableButton(
     textColor: Color,
     style: TextStyle,
-    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val tooltipState = rememberTooltipState(isPersistent = true)
     ZashiTooltipBox(
-        modifier = modifier,
         state = tooltipState,
         tooltip = {
             StyledExchangeUnavailablePopup(

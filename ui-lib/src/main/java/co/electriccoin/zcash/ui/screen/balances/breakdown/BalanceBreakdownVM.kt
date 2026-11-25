@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.BalancePools
 import co.electriccoin.zcash.ui.common.usecase.GetBalancePoolsUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.TickerLocation
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import java.math.BigDecimal
 import java.math.MathContext
+import kotlin.time.Duration
 
 class BalanceBreakdownVM(
     getBalancePools: GetBalancePoolsUseCase,
@@ -38,12 +40,11 @@ class BalanceBreakdownVM(
             createState(pools, exchangeRate)
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
             initialValue = null
         )
 
-    private fun createState(pools: BalancePools?, exchangeRate: ExchangeRateState): BalanceBreakdownState? {
-        if (pools == null) return null
+    private fun createState(pools: BalancePools, exchangeRate: ExchangeRateState): BalanceBreakdownState {
         return BalanceBreakdownState(
             title = stringRes(R.string.balance_breakdown_title),
             subtitle = stringRes(R.string.balance_breakdown_subtitle),
@@ -81,7 +82,7 @@ class BalanceBreakdownVM(
 
     private fun fiatOf(amount: Zatoshi, exchangeRate: ExchangeRateState): StringResource? {
         val data = exchangeRate as? ExchangeRateState.Data
-        val conversion = data?.currencyConversion ?: return null
+        val conversion = data?.eligibleConversion() ?: return null
         return stringResByDynamicCurrencyNumber(
             amount =
                 amount
@@ -90,7 +91,7 @@ class BalanceBreakdownVM(
                         BigDecimal(conversion.priceOfZec),
                         MathContext.DECIMAL128
                     ),
-            ticker = data.expectedCurrency.symbol,
+            ticker = conversion.fiatCurrency.symbol,
             tickerLocation = TickerLocation.BEFORE
         )
     }

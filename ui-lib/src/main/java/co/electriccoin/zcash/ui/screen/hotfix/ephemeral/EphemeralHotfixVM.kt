@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 
 class EphemeralHotfixVM(
     args: EphemeralHotfixArgs,
@@ -65,7 +66,7 @@ class EphemeralHotfixVM(
             createState(text, isLoading, isError, isComplete, tor)
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = Duration.ZERO),
             initialValue = null
         )
 
