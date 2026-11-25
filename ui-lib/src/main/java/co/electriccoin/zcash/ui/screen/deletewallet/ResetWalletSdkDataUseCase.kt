@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 import android.content.Context
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
+import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.eraseWalletlessSdkData
 import co.electriccoin.zcash.ui.common.provider.requireClassicWalletFilesErased

@@ -1900,7 +1900,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/crashreporting/view/CrashReportingOptInView.kt": "921b60c6f18a49c52895aa35251f97ae98beefceb5565ea94984ac5b35ef14cb",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/crashreporting/viewmodel/CrashReportingViewModel.kt": "f5cae8c07c4fef1eca084a3e5eb984420b4b3d6f42143abc0993287cfb77e9f6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt": "fb65c2df3f4a0244bea013bf98566cb51e0c6c602485a2181d7b17fee9a399dd",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt": "42b440b26814d2e45e4cd6ca58bb3304987101a98da0d97ca24799df8b5b1cf2",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt": "69595a9207f942af2c1e6d34401733170536eef4e68e32d4e83f8410aec74006",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiScreen.kt": "5487aa7cab46055fa2539ccd33f75221ab66baed9f2ab828566c7486d1e91bc6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiState.kt": "ccbcd58ad621299990fdd957820b3e34add211f83b14c22b046735ee466bd084",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt": "fc222b516ae2353e2742ecd51a131b7f27d058c2f99df03b98fa59ecc112a84f",
