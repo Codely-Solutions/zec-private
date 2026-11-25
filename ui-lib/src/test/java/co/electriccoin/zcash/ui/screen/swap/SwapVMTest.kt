@@ -342,18 +342,18 @@ class SwapVMTest {
             val gate = harness.makeQuoteHang()
 
             harness.onAddressChange(BTC_ADDRESS)
-            val retainedInfo = harness.vm.state.value.swapInfoButton
+            val retainedInfo = harness.info
             assertTrue(retainedInfo.isEnabled)
 
             harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             assertEquals(true, harness.capturedState.isRequestingQuote)
-            assertFalse(harness.vm.state.value.swapInfoButton.isEnabled)
+            assertFalse(harness.info.isEnabled)
             retainedInfo.onClick()
             verify(exactly = 0) { harness.navigateToSwapInfo() }
 
             gate.complete(Unit)
             assertEquals(false, harness.capturedState.isRequestingQuote)
-            val currentInfo = harness.vm.state.value.swapInfoButton
+            val currentInfo = harness.info
             assertTrue(currentInfo.isEnabled)
             currentInfo.onClick()
             verify(exactly = 1) { harness.navigateToSwapInfo() }
@@ -966,6 +966,7 @@ class SwapVMTest {
         }
         val capturedState: InternalState
             get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets.value)
+        val info get() = assertNotNull(vm.state.value).swapInfoButton
         val onBack get() = callbacks.onBack
         val onSlippageClick get() = callbacks.onSlippageClick
         val onSwapAssetPickerClick get() = callbacks.onSwapAssetPickerClick

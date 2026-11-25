@@ -87405,7 +87405,7 @@ index 23393674d..1395c4595 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-index bf5467055..5c1e49199 100644
+index bf5467055..4a8519195 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 @@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.screen.swap
@@ -87528,16 +87528,16 @@ index bf5467055..5c1e49199 100644
 @@ -293 +344,5 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
-+            val retainedInfo = harness.vm.state.value.swapInfoButton
++            val retainedInfo = harness.info
 +            assertTrue(retainedInfo.isEnabled)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
 @@ -294,0 +350,3 @@ class SwapVMTest {
-+            assertFalse(harness.vm.state.value.swapInfoButton.isEnabled)
++            assertFalse(harness.info.isEnabled)
 +            retainedInfo.onClick()
 +            verify(exactly = 0) { harness.navigateToSwapInfo() }
 @@ -297,0 +356,4 @@ class SwapVMTest {
-+            val currentInfo = harness.vm.state.value.swapInfoButton
++            val currentInfo = harness.info
 +            assertTrue(currentInfo.isEnabled)
 +            currentInfo.onClick()
 +            verify(exactly = 1) { harness.navigateToSwapInfo() }
@@ -87901,7 +87901,7 @@ index bf5467055..5c1e49199 100644
 +        val navigateToSwapInfo: NavigateToSwapInfoUseCase,
 @@ -674,0 +951 @@ class SwapVMTest {
 +        val assets: MutableStateFlow<SwapAssetsData>,
-@@ -677,11 +954,26 @@ class SwapVMTest {
+@@ -677,11 +954,27 @@ class SwapVMTest {
 -        lateinit var capturedState: InternalState
 -        var onBack: () -> Unit = {}
 -        var onSlippageClick: (BigDecimal?) -> Unit = {}
@@ -87928,6 +87928,7 @@ index bf5467055..5c1e49199 100644
 +        }
 +        val capturedState: InternalState
 +            get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets.value)
++        val info get() = assertNotNull(vm.state.value).swapInfoButton
 +        val onBack get() = callbacks.onBack
 +        val onSlippageClick get() = callbacks.onSlippageClick
 +        val onSwapAssetPickerClick get() = callbacks.onSwapAssetPickerClick
@@ -87939,7 +87940,7 @@ index bf5467055..5c1e49199 100644
 +        val onAddressClick get() = callbacks.onAddressClick
 +        val onTextFieldChange get() = callbacks.onTextFieldChange
 +        val onRequestSwapQuoteClick get() = callbacks.onRequestSwapQuoteClick
-@@ -693 +985 @@ class SwapVMTest {
+@@ -693 +986 @@ class SwapVMTest {
 -                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
 +                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt
