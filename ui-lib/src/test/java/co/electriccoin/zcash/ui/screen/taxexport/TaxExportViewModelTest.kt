@@ -51,9 +51,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.Clock
 import java.time.Instant
-import java.time.Year
-import kotlin.test.assertContains
+import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -95,18 +96,28 @@ class TaxExportViewModelTest {
         assertDownloadSharesCsv(Change.HANDOFF)
     }
 
-    private enum class Change { NONE, LOCK, REUNLOCK, ACCOUNT, RESET, HANDOFF }
+    @Test
+    fun historyAndFilenameKeepTheSameUtcYearWhenTheReadCrossesNewYear() = runTest {
+        assertDownloadSharesCsv(Change.YEAR_ROLLOVER)
+    }
+
+    private enum class Change { NONE, LOCK, REUNLOCK, ACCOUNT, RESET, HANDOFF, YEAR_ROLLOVER }
 
     private suspend fun TestScope.assertDownloadSharesCsv(change: Change) {
         val application = RuntimeEnvironment.getApplication()
         val authority = FileShareUtil.ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG
-        val year = Year.now().minusYears(1).value
+        val year = 2025
+        val now = AtomicReference(Instant.parse("2026-12-31T23:59:59Z"))
         val name = "Keystone_Transaction_History_$year.csv"
         lateinit var output: File
         val uri = Uri.parse("content://$authority/tax_exports/$name")
         val transaction = mockk<ReceiveTransaction.Success> {
             every { timestamp } returns Instant.parse("$year-06-15T12:00:00Z")
             every { amount } returns Zatoshi(125_000_000)
+        }
+        val nextYear = mockk<ReceiveTransaction.Success> {
+            every { timestamp } returns Instant.parse("2026-01-01T00:00:00Z")
+            every { amount } returns Zatoshi(100_000_000)
         }
         val selection = MutableStateFlow<WalletAccount?>(EditAccountFixtures.zodl())
         val accountDataSource = mockk<AccountDataSource> {
@@ -121,7 +132,7 @@ class TaxExportViewModelTest {
             coEvery { getTransactions(any()) } coAnswers {
                 readStarted.complete(Unit)
                 releaseRead.await()
-                listOf(transaction)
+                listOf(transaction, nextYear)
             }
         }
         val version = mockk<VersionInfo> {
@@ -143,6 +154,10 @@ class TaxExportViewModelTest {
             mockk(),
             mockk(relaxed = true),
         )
+        export.clock = mockk<Clock> {
+            every { zone } returns ZoneOffset.UTC
+            every { instant() } answers { now.get() }
+        }
         val scheduled = mutableListOf<File>()
         export.scheduleCleanup = {
             assertTrue(it.listFiles().orEmpty().isEmpty())
@@ -189,9 +204,10 @@ class TaxExportViewModelTest {
                 }
                 Change.ACCOUNT -> selection.value = EditAccountFixtures.zodl()
                 Change.RESET -> walletWriteAccess.beginReset()
+                Change.YEAR_ROLLOVER -> now.set(Instant.parse("2027-01-01T00:00:00Z"))
             }
             releaseRead.complete(Unit)
-            if (change != Change.NONE) {
+            if (change != Change.NONE && change != Change.YEAR_ROLLOVER) {
                 vm.state.first { !it.exportButton.isLoading }
                 assertNull(shadowOf(application).nextStartedActivity)
                 verify(exactly = 0) { navigation.back() }
@@ -211,7 +227,7 @@ class TaxExportViewModelTest {
             assertTrue(shared.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
             assertEquals(uri, shared.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
             assertEquals(uri, shared.clipData?.getItemAt(0)?.uri)
-            assertContains(output.readLines(), "06/15/$year 12:00:00,1.25,ZEC,,,,,")
+            assertEquals(listOf("06/15/$year 12:00:00,1.25,ZEC,,,,,"), output.readLines().drop(1))
             assertEquals(name, output.name)
             assertEquals(listOf(output.parentFile), scheduled)
             output.parentFile?.deleteRecursively()

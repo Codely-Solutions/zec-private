@@ -199,7 +199,8 @@ private fun NavigationRouter.dispatchUnscoped(command: NavigationCommand): Unit 
     is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
 }
 
-internal suspend fun NavigationRouter.commitFrom(
+/** Commits a command while the originating entry still owns navigation. */
+suspend fun NavigationRouter.commitFrom(
     sourceEntryId: String?,
     isStillAllowed: () -> Boolean = { true },
     buildCommand: () -> NavigationCommand?,

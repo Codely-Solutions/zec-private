@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.model.ZcashNetwork
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
@@ -168,6 +170,34 @@ class TaxExportFailureTest {
             store.clear()
             cancelled.await()
             assertNull(vm.state.value.error)
+            verify(exactly = 0) { navigation.back() }
+        } finally {
+            observer.cancel()
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun refusedBackLeavesDownloadUsable() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any(), "tax", any()) } returns Unit }
+        val navigation = mockk<NavigationRouter>(relaxed = true) {
+            every { custom(any()) } answers {
+                assertNull(firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(null))
+            }
+        }
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accounts()), export, navigation,
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(), sourceEntryId = "tax",
+        )
+        val store = ViewModelStore().apply { put("tax", vm) }
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        try {
+            vm.state.value.onBack()
+            assertTrue(vm.state.value.exportButton.isEnabled)
+            vm.state.value.exportButton.onClick()
+            coVerify(exactly = 1) { export(any(), "tax", any()) }
             verify(exactly = 0) { navigation.back() }
         } finally {
             observer.cancel()

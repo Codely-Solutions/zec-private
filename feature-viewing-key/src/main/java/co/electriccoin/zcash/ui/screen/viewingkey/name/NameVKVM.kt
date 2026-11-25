@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
@@ -20,6 +21,7 @@ import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsAccountNameTakenUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -173,6 +175,8 @@ internal class NameVKVM(
             leaving = true
             colorPickerJob?.cancel()
             continueJob?.cancel()
-            navigationRouter.back()
+            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
+            }
         }
 }

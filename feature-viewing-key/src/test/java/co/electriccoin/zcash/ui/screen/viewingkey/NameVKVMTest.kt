@@ -3,9 +3,11 @@ package co.electriccoin.zcash.ui.screen.viewingkey
 import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.isSpecified
+import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
@@ -673,6 +675,39 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         }
 
     @Test
+    fun refusedBackKeepsNameEditableAndAllowsTheOwnedBackToRetry() = runTest {
+        val nameEntry = mockk<NavBackStackEntry> { every { id } returns "name" }
+        var top = mockk<NavBackStackEntry> { every { id } returns "scanner" }
+        var committedBacks = 0
+        every { navigationRouter.custom(any()) } answers {
+            val command = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
+            if (command != null) {
+                val owned = assertIs<NavigationCommand.ForEntry>(command)
+                assertTrue(owned.isStillAllowed())
+                assertEquals(NavigationCommand.Back, owned.buildCommand())
+                owned.acknowledge(true)
+                committedBacks++
+            }
+        }
+        val vm = vm(sourceEntryId = "name")
+        collect(vm)
+
+        vm.content().onBack()
+        runCurrent()
+        assertEquals(0, committedBacks)
+        type(vm, "Vault")
+        assertEquals("Vault", vm.content().nameField.field.value.text())
+
+        top = nameEntry
+        vm.content().onBack()
+        runCurrent()
+        type(vm, "Ignored")
+        assertEquals(1, committedBacks)
+        assertEquals("Vault", vm.content().nameField.field.value.text())
+        verify(exactly = 0) { navigationRouter.back() }
+    }
+
+    @Test
     fun backReturnsToTheBirthdayAndKeepsThePendingKeyAndBirthday() =
         runTest {
             val vm = vm()
@@ -777,7 +812,10 @@ internal abstract class NameVKVMFixture {
         runCurrent()
     }
 
-    protected fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
+    protected fun vm(
+        importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount,
+        sourceEntryId: String? = null,
+    ) =
         NameVKVM(
             pendingImportRepository = repository,
             navigationRouter = navigationRouter,
@@ -785,6 +823,7 @@ internal abstract class NameVKVMFixture {
             isAccountNameTaken = isAccountNameTaken,
             importViewOnlyAccount = importer,
             errorStateMapper = errorStateMapper,
+            sourceEntryId = sourceEntryId,
         )
 
     protected fun TestScope.collect(vm: NameVKVM) {

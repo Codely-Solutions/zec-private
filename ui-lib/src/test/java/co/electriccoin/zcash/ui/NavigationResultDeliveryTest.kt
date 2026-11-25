@@ -260,6 +260,34 @@ class NavigationResultDeliveryTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun acknowledgedBackDoesNotPopAnExternalScannerCoveringItsOrigin() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val router = NavigationRouterImpl()
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                    router.observePipeline().collect { command ->
+                        if (command is CustomNavigationCommand) navigator.executeCommand(command)
+                    }
+                }
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(DeliveryOrigin)
+                val origin = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(ScanGiftCardArgs(true))
+
+                assertFalse(router.commitFrom(origin) { NavigationCommand.Back })
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertTrue(controller.popBackStack())
+                assertTrue(router.commitFrom(origin) { NavigationCommand.Back })
+                assertEquals(home, controller.currentBackStackEntry?.id)
+            }
+        }
+    }
+
     private fun install() {
         compose.setContent {
             controller = rememberNavController()

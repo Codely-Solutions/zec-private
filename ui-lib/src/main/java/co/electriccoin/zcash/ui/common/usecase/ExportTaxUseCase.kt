@@ -38,8 +38,8 @@ import kotlinx.coroutines.ensureActive
 import java.io.BufferedWriter
 import java.io.File
 import java.nio.file.Files
+import java.time.Clock
 import java.time.Year
-import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -52,6 +52,8 @@ class ExportTaxUseCase(
     private val viewOnlyContent: ViewOnlyContent,
     private val biometricRepository: BiometricRepository,
 ) {
+    internal var clock: Clock = Clock.systemUTC()
+
     internal var scheduleCleanup: (File) -> Unit = {
         DeleteDiagnosticExportWorker.scheduleTax(context, it).result.get()
     }
@@ -90,14 +92,7 @@ class ExportTaxUseCase(
     ) =
         withContext(Dispatchers.IO) {
             if (!isAllowed()) return@withContext
-            val previousYear =
-                Year
-                    .now()
-                    .minusYears(1)
-                    .let {
-                        val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy")
-                        it.format(formatter)
-                    }
+            val previousYear = Year.now(clock).minusYears(1).value
 
             val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).apply { mkdirs() }
             val staging = Files.createTempDirectory(directory.toPath(), "tax-").toFile()
@@ -125,7 +120,7 @@ class ExportTaxUseCase(
 
             var shared = false
             try {
-                val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid)
+                val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid, previousYear)
                 if (!isAllowed()) return@withContext
                 scheduleCleanup(staging)
                 currentCoroutineContext().ensureActive()
@@ -200,14 +195,12 @@ class ExportTaxUseCase(
         }
     }
 
-    private suspend fun getCsvEntries(accountUuid: AccountUuid) =
+    private suspend fun getCsvEntries(accountUuid: AccountUuid, previousYear: Int) =
         transactionRepository
             .getTransactions(accountUuid)
             .mapNotNull { transaction ->
-                val previousYear = Year.now().minusYears(1)
-
-                val date = transaction.timestamp?.atZone(ZoneId.of("UTC")) ?: return@mapNotNull null
-                if (date.year != previousYear.value) return@mapNotNull null
+                val date = transaction.timestamp?.atZone(ZoneOffset.UTC) ?: return@mapNotNull null
+                if (date.year != previousYear) return@mapNotNull null
 
                 val dateString =
                     date.let {

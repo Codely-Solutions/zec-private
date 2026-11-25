@@ -13408,27 +13408,29 @@ index 81241a8a6..06602bf47 100644
 -                        isEnabled = !isImporting,
 +                        isEnabled = !isImporting && !isFinalizing,
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
-index a958b4ec7..9873b8369 100644
+index a958b4ec7..7ca5d7cb4 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.viewModelScope
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -6,0 +8,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -6,0 +8,3 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.discardResultFrom
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -18,0 +22 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
+@@ -18,0 +23,2 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 +import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
-@@ -44,0 +49 @@ internal class NameVKVM(
++import kotlinx.coroutines.CoroutineStart
+@@ -44,0 +51 @@ internal class NameVKVM(
 +    private val sourceEntryId: String? = null,
-@@ -45,0 +51,4 @@ internal class NameVKVM(
+@@ -45,0 +53,4 @@ internal class NameVKVM(
 +    override fun onCleared() {
 +        navigationRouter.discardResultFrom(sourceEntryId)
 +        super.onCleared()
 +    }
-@@ -55,0 +65,2 @@ internal class NameVKVM(
+@@ -55,0 +67,2 @@ internal class NameVKVM(
 +    private var leaving = false
 +
-@@ -61,2 +72,11 @@ internal class NameVKVM(
+@@ -61,2 +74,11 @@ internal class NameVKVM(
 -        combine(isAccountNameTaken.observe(name), color, importLce.state) { check, color, lce ->
 -            createState(check.name, color, isDuplicate = check.isTaken, isImporting = lce.loading)
 +        combine(
@@ -13442,61 +13444,66 @@ index a958b4ec7..9873b8369 100644
 +                isImporting = lce.loading,
 +                committedBirthday = approved?.committedBirthday,
 +            )
-@@ -68 +88,4 @@ internal class NameVKVM(
+@@ -68 +90,4 @@ internal class NameVKVM(
 -                        content = createState(name.value, color.value, isDuplicate = false, isImporting = false)
 +                        content = createState(
 +                            name.value, color.value, isDuplicate = false, isImporting = false,
 +                            committedBirthday = pendingImportRepository.get()?.committedBirthday,
 +                        )
-@@ -74 +97 @@ internal class NameVKVM(
+@@ -74 +99 @@ internal class NameVKVM(
 -            navigationRouter.backToRoot()
 +            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-@@ -82,0 +106 @@ internal class NameVKVM(
+@@ -82,0 +108 @@ internal class NameVKVM(
 +        committedBirthday: CommittedEnrollmentBirthday?,
-@@ -87,0 +112 @@ internal class NameVKVM(
+@@ -87,0 +114 @@ internal class NameVKVM(
 +        committedBirthday = committedBirthday,
-@@ -90 +115 @@ internal class NameVKVM(
+@@ -90 +117 @@ internal class NameVKVM(
 -        onContinueClick = ::onContinueClick,
 +        onContinueClick = { onContinueClick(committedBirthday) },
-@@ -95,0 +121 @@ internal class NameVKVM(
+@@ -95,0 +123 @@ internal class NameVKVM(
 +            if (leaving || pendingImportRepository.get()?.importedAccount != null) return@guardLoading
-@@ -105 +131,3 @@ internal class NameVKVM(
+@@ -105 +133,3 @@ internal class NameVKVM(
 -            name.update { AccountNameLimit.cap(value) }
 +            if (!leaving && pendingImportRepository.get()?.importedAccount == null) {
 +                name.update { AccountNameLimit.cap(value) }
 +            }
-@@ -112 +140 @@ internal class NameVKVM(
+@@ -112 +142 @@ internal class NameVKVM(
 -    private fun onContinueClick() =
 +    private fun onContinueClick(committedBirthday: CommittedEnrollmentBirthday?) =
-@@ -114 +142,3 @@ internal class NameVKVM(
+@@ -114 +144,3 @@ internal class NameVKVM(
 -            if (continueJob?.isActive == true) return@guardLoading
 +            if (leaving || continueJob?.isActive == true) return@guardLoading
 +            val pending = pendingImportRepository.get()
 +            if (pending?.committedBirthday != committedBirthday) return@guardLoading
-@@ -119,2 +149 @@ internal class NameVKVM(
+@@ -119,2 +151 @@ internal class NameVKVM(
 -                    if (isAccountNameTaken(normalized)) return@launch
 -                    val pending = pendingImportRepository.get()
 +                    if (pendingImportRepository.get() !== pending) return@launch
-@@ -125 +154,5 @@ internal class NameVKVM(
+@@ -125 +156,5 @@ internal class NameVKVM(
 -                    pendingImportRepository.set(pending.copy(name = normalized, color = color.value))
 +                    if (pending.importedAccount == null) {
 +                        if (isAccountNameTaken(normalized)) return@launch
 +                        val approved = pending.copy(name = normalized, color = color.value)
 +                        if (!pendingImportRepository.replace(pending, approved)) return@launch
 +                    }
-@@ -128 +161 @@ internal class NameVKVM(
+@@ -128 +163 @@ internal class NameVKVM(
 -                            importViewOnlyAccount()
 +                            importViewOnlyAccount(sourceEntryId)
-@@ -136,5 +169 @@ internal class NameVKVM(
+@@ -136,5 +171 @@ internal class NameVKVM(
 -    /**
 -     * Returns to the birthday screen underneath, which still needs the pending key and birthday, so
 -     * both are kept; the name and the colour are dropped, since they are only stored on Continue.
 -     * Ignored while the import runs.
 -     */
 +    /** Returns to the birthday screen, retaining any import the SDK has already completed. */
-@@ -142,0 +172,2 @@ internal class NameVKVM(
+@@ -142,0 +174,2 @@ internal class NameVKVM(
 +            if (leaving) return@guardLoading
 +            leaving = true
+@@ -145 +178,3 @@ internal class NameVKVM(
+-            navigationRouter.back()
++            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
++                leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
++            }
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKScreen.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKScreen.kt
 index 51193fc1e..d972d4a04 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKScreen.kt
@@ -14222,34 +14229,37 @@ index 000000000..99de90350
 +    }
 +}
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
-index 5faf35c95..14f058778 100644
+index 5faf35c95..eb32546c5 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.viewingkey
 +import android.content.SharedPreferences
-@@ -5,0 +7,2 @@ import cash.z.ecc.android.sdk.model.BlockHeight
+@@ -4,0 +6 @@ import androidx.compose.ui.graphics.isSpecified
++import androidx.navigation.NavBackStackEntry
+@@ -5,0 +8,3 @@ import cash.z.ecc.android.sdk.model.BlockHeight
 +import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
-@@ -6,0 +10 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.NavigationCommand
+@@ -6,0 +12 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -11,0 +16,2 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -11,0 +18,2 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-@@ -13,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositor
+@@ -13,0 +22 @@ import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositor
 +import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
-@@ -21,0 +29,5 @@ import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
+@@ -21,0 +31,5 @@ import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 +import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 +import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
-@@ -23,0 +36 @@ import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKVM
+@@ -23,0 +38 @@ import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKVM
 +import co.electriccoin.zcash.viewingkey.ViewOnlyAccountImporterImpl
-@@ -25,0 +39 @@ import io.mockk.coVerify
+@@ -25,0 +41 @@ import io.mockk.coVerify
 +import io.mockk.coVerifyOrder
-@@ -40,0 +55 @@ import kotlinx.coroutines.test.setMain
+@@ -40,0 +57 @@ import kotlinx.coroutines.test.setMain
 +import java.util.Base64
-@@ -51,13 +65,0 @@ import kotlin.test.assertTrue
+@@ -51,13 +67,0 @@ import kotlin.test.assertTrue
 -/**
 - * The name is capped at twelve characters as it is typed, the counter follows it, and Continue needs
 - * a name that is not blank. Naming is the last step: Continue stores the trimmed name and the picked
@@ -14263,7 +14273,7 @@ index 5faf35c95..14f058778 100644
 - * so under the field, never next to another name, and Continue checks the name again when tapped.
 - * The keyboard's Done key continues only while Continue is enabled.
 - */
-@@ -65,46 +67 @@ import kotlin.test.assertTrue
+@@ -65,46 +69 @@ import kotlin.test.assertTrue
 -class NameVKVMTest {
 -    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 -
@@ -14311,7 +14321,7 @@ index 5faf35c95..14f058778 100644
 -    }
 -
 +internal class NameVKVMTest : NameVKVMFixture() {
-@@ -325,0 +283,102 @@ class NameVKVMTest {
+@@ -325,0 +285,102 @@ class NameVKVMTest {
 +    @Test
 +    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
 +        runTest {
@@ -14414,7 +14424,7 @@ index 5faf35c95..14f058778 100644
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +internal class NameVKImportVMTest : NameVKVMFixture() {
-@@ -467,0 +527,73 @@ class NameVKVMTest {
+@@ -467,0 +529,73 @@ class NameVKVMTest {
 +    @Test
 +    fun backFromNameCanFinishTheCommittedImportAfterSelectionCommitFailed() = runTest {
 +        val previous = ViewOnlyAccountFixtures.zodlUuid
@@ -14488,9 +14498,43 @@ index 5faf35c95..14f058778 100644
 +        }
 +    }
 +
-@@ -556,0 +689 @@ class NameVKVMTest {
+@@ -542,0 +677,33 @@ class NameVKVMTest {
++    @Test
++    fun refusedBackKeepsNameEditableAndAllowsTheOwnedBackToRetry() = runTest {
++        val nameEntry = mockk<NavBackStackEntry> { every { id } returns "name" }
++        var top = mockk<NavBackStackEntry> { every { id } returns "scanner" }
++        var committedBacks = 0
++        every { navigationRouter.custom(any()) } answers {
++            val command = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
++            if (command != null) {
++                val owned = assertIs<NavigationCommand.ForEntry>(command)
++                assertTrue(owned.isStillAllowed())
++                assertEquals(NavigationCommand.Back, owned.buildCommand())
++                owned.acknowledge(true)
++                committedBacks++
++            }
++        }
++        val vm = vm(sourceEntryId = "name")
++        collect(vm)
++
++        vm.content().onBack()
++        runCurrent()
++        assertEquals(0, committedBacks)
++        type(vm, "Vault")
++        assertEquals("Vault", vm.content().nameField.field.value.text())
++
++        top = nameEntry
++        vm.content().onBack()
++        runCurrent()
++        type(vm, "Ignored")
++        assertEquals(1, committedBacks)
++        assertEquals("Vault", vm.content().nameField.field.value.text())
++        verify(exactly = 0) { navigationRouter.back() }
++    }
++
+@@ -556,0 +724 @@ class NameVKVMTest {
 +}
-@@ -558,43 +691,3 @@ class NameVKVMTest {
+@@ -558,43 +726,3 @@ class NameVKVMTest {
 -    @Test
 -    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
 -        runTest {
@@ -14537,11 +14581,11 @@ index 5faf35c95..14f058778 100644
 +@OptIn(ExperimentalCoroutinesApi::class)
 +internal abstract class NameVKVMFixture {
 +    protected val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-@@ -602,2 +695 @@ class NameVKVMTest {
+@@ -602,2 +730 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 -        }
 +    protected val pickerRequests = mutableListOf<ColorPickerArgs>()
-@@ -605,15 +697,8 @@ class NameVKVMTest {
+@@ -605,15 +732,8 @@ class NameVKVMTest {
 -    @Test
 -    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
 -        runTest {
@@ -14565,14 +14609,14 @@ index 5faf35c95..14f058778 100644
 +                }
 +            }
 +        )
-@@ -621,2 +706,4 @@ class NameVKVMTest {
+@@ -621,2 +741,4 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 -        }
 +    protected val accounts =
 +        MutableStateFlow<List<WalletAccount>?>(
 +            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
 +        )
-@@ -624,7 +711 @@ class NameVKVMTest {
+@@ -624,7 +746 @@ class NameVKVMTest {
 -    @Test
 -    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
 -        runTest {
@@ -14581,24 +14625,24 @@ index 5faf35c95..14f058778 100644
 -            openPicker(vm)
 -            val request = pickerRequests.single()
 +    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
-@@ -632,3 +713 @@ class NameVKVMTest {
+@@ -632,3 +748 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(OTHER), request)
 -            runCurrent()
 -            assertEquals(Color(OTHER), vm.content().avatarColor())
 +    protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
-@@ -636,4 +715 @@ class NameVKVMTest {
+@@ -636,4 +750 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(PICKED), request)
 -            navigateToColorPicker.onClosed(request)
 -            runCurrent()
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 +    protected var importAnswer: suspend () -> Unit = {}
-@@ -641,2 +717,3 @@ class NameVKVMTest {
+@@ -641,2 +752,3 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            assertEquals(2, pickerRequests.size)
 +    protected val importViewOnlyAccount =
 +        mockk<ImportViewOnlyAccountUseCase> {
 +            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
-@@ -645,5 +722,6 @@ class NameVKVMTest {
+@@ -645,5 +757,6 @@ class NameVKVMTest {
 -    @Test
 -    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
 -        runTest {
@@ -14610,55 +14654,60 @@ index 5faf35c95..14f058778 100644
 +            sendEmail = mockk(relaxed = true),
 +            viewOnlyContent = mockk(relaxed = true),
 +        )
-@@ -651,2 +729,4 @@ class NameVKVMTest {
+@@ -651,2 +764,4 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            openPicker(vm)
 +    @BeforeTest
 +    fun setUp() {
 +        Dispatchers.setMain(StandardTestDispatcher())
 +    }
-@@ -654,2 +734,4 @@ class NameVKVMTest {
+@@ -654,2 +769,4 @@ class NameVKVMTest {
 -            assertEquals(1, pickerRequests.size)
 -        }
 +    @AfterTest
 +    fun tearDown() {
 +        Dispatchers.resetMain()
 +    }
-@@ -657 +739 @@ class NameVKVMTest {
+@@ -657 +774 @@ class NameVKVMTest {
 -    private fun NameVKState.avatarColor() =
 +    protected fun NameVKState.avatarColor() =
-@@ -660 +742 @@ class NameVKVMTest {
+@@ -660 +777 @@ class NameVKVMTest {
 -    private fun TestScope.openPicker(vm: NameVKVM) {
 +    protected fun TestScope.openPicker(vm: NameVKVM) {
-@@ -669 +751 @@ class NameVKVMTest {
+@@ -669 +786 @@ class NameVKVMTest {
 -    private fun TestScope.pickColor(
 +    protected fun TestScope.pickColor(
-@@ -680 +762 @@ class NameVKVMTest {
+@@ -680 +797 @@ class NameVKVMTest {
 -    private fun NameVKVM.content() = assertNotNull(state.value.content)
 +    protected fun NameVKVM.content() = assertNotNull(state.value.content)
-@@ -682 +764 @@ class NameVKVMTest {
+@@ -682 +799 @@ class NameVKVMTest {
 -    private fun pending(
 +    protected fun pending(
-@@ -687 +769 @@ class NameVKVMTest {
+@@ -687 +804 @@ class NameVKVMTest {
 -    private fun TestScope.type(
 +    protected fun TestScope.type(
-@@ -698 +780 @@ class NameVKVMTest {
+@@ -698 +815,4 @@ class NameVKVMTest {
 -    private fun vm() =
-+    protected fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
-@@ -704 +786 @@ class NameVKVMTest {
++    protected fun vm(
++        importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount,
++        sourceEntryId: String? = null,
++    ) =
+@@ -704 +824 @@ class NameVKVMTest {
 -            importViewOnlyAccount = importViewOnlyAccount,
 +            importViewOnlyAccount = importer,
-@@ -708 +790 @@ class NameVKVMTest {
+@@ -705,0 +826 @@ class NameVKVMTest {
++            sourceEntryId = sourceEntryId,
+@@ -708 +829 @@ class NameVKVMTest {
 -    private fun TestScope.collect(vm: NameVKVM) {
 +    protected fun TestScope.collect(vm: NameVKVM) {
-@@ -713 +795 @@ class NameVKVMTest {
+@@ -713 +834 @@ class NameVKVMTest {
 -    private fun StringResource.text() = (this as StringResource.ByString).value
 +    protected fun StringResource.text() = (this as StringResource.ByString).value
-@@ -715 +797,2 @@ class NameVKVMTest {
+@@ -715 +836,2 @@ class NameVKVMTest {
 -    private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +    protected fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +}
-@@ -717,5 +800,34 @@ class NameVKVMTest {
+@@ -717,5 +839,34 @@ class NameVKVMTest {
 -    private companion object {
 -        const val UFVK = "uview1namefixture"
 -        const val PICKED = 0x80BE38F3
@@ -36176,7 +36225,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..479cdc59f 100644
+index 67c1e883c..ffabd09e8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -36258,7 +36307,7 @@ index 67c1e883c..479cdc59f 100644
 +    internal fun removeFor(sourceEntryId: String) {
 +        pending.update { it - sourceEntryId }
 +    }
-@@ -54,0 +128,125 @@ interface NavigationRouter {
+@@ -54,0 +128,126 @@ interface NavigationRouter {
 +internal fun NavigationRouter.forwardFrom(
 +    sourceEntryId: String?,
 +    isStillAllowed: () -> Boolean,
@@ -36333,7 +36382,8 @@ index 67c1e883c..479cdc59f 100644
 +    is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
 +}
 +
-+internal suspend fun NavigationRouter.commitFrom(
++/** Commits a command while the originating entry still owns navigation. */
++suspend fun NavigationRouter.commitFrom(
 +    sourceEntryId: String?,
 +    isStillAllowed: () -> Boolean = { true },
 +    buildCommand: () -> NavigationCommand?,
@@ -36384,7 +36434,7 @@ index 67c1e883c..479cdc59f 100644
 +}
 +
 +@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
-@@ -62,0 +261,22 @@ class NavigationRouterImpl : NavigationRouter {
+@@ -62,0 +262,22 @@ class NavigationRouterImpl : NavigationRouter {
 +    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
 +    private var entryObserver: ActiveNavigationEntryObserver? = null
 +
@@ -36407,7 +36457,7 @@ index 67c1e883c..479cdc59f 100644
 +            entryObserver = it
 +            entryState.value = null
 +        }
-@@ -103,0 +324,8 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -103,0 +325,8 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 +    data class ForEntry(
 +        val sourceEntryId: String,
 +        val isStillAllowed: () -> Boolean,
@@ -36416,7 +36466,7 @@ index 67c1e883c..479cdc59f 100644
 +        val acknowledge: (Boolean) -> Unit,
 +    ) : NavigationCommand
 +
-@@ -105 +333 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -105 +334 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 -        val routes: List<Any>
 +        val routes: List<Any>,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt
@@ -47467,7 +47517,7 @@ index 000000000..9d1b94657
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
-index 81540cc83..62c8205a3 100644
+index 81540cc83..8ced25a90 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -47495,12 +47545,17 @@ index 81540cc83..62c8205a3 100644
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import java.io.BufferedWriter
-@@ -26,0 +40 @@ import java.io.File
+@@ -26,0 +40,2 @@ import java.io.File
 +import java.nio.file.Files
++import java.time.Clock
+@@ -28 +42,0 @@ import java.time.Year
+-import java.time.ZoneId
 @@ -38,0 +53 @@ class ExportTaxUseCase(
 +    private val biometricRepository: BiometricRepository,
-@@ -40 +55,36 @@ class ExportTaxUseCase(
+@@ -40 +55,38 @@ class ExportTaxUseCase(
 -    suspend operator fun invoke() =
++    internal var clock: Clock = Clock.systemUTC()
++
 +    internal var scheduleCleanup: (File) -> Unit = {
 +        DeleteDiagnosticExportWorker.scheduleTax(context, it).result.get()
 +    }
@@ -47537,17 +47592,26 @@ index 81540cc83..62c8205a3 100644
 +        sourceEntryId: String?,
 +        isAllowed: () -> Boolean,
 +    ) =
-@@ -41,0 +92 @@ class ExportTaxUseCase(
+@@ -42,8 +94,2 @@ class ExportTaxUseCase(
+-            val previousYear =
+-                Year
+-                    .now()
+-                    .minusYears(1)
+-                    .let {
+-                        val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy")
+-                        it.format(formatter)
+-                    }
 +            if (!isAllowed()) return@withContext
-@@ -50,0 +102,2 @@ class ExportTaxUseCase(
++            val previousYear = Year.now(clock).minusYears(1).value
+@@ -50,0 +97,2 @@ class ExportTaxUseCase(
 +            val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).apply { mkdirs() }
 +            val staging = Files.createTempDirectory(directory.toPath(), "tax-").toFile()
-@@ -53,2 +106,2 @@ class ExportTaxUseCase(
+@@ -53,2 +101,2 @@ class ExportTaxUseCase(
 -                    context.cacheDir,
 -                    when (accountDataSource.getSelectedAccount()) {
 +                    staging,
 +                    when (approvedAccount) {
-@@ -73,6 +126,8 @@ class ExportTaxUseCase(
+@@ -73,6 +121,8 @@ class ExportTaxUseCase(
 -            writeCsvToFile(
 -                outputFile = outputFile,
 -                data = getCsvEntries()
@@ -47556,13 +47620,13 @@ index 81540cc83..62c8205a3 100644
 -            runCatching {
 +            var shared = false
 +            try {
-+                val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid)
++                val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid, previousYear)
 +                if (!isAllowed()) return@withContext
 +                scheduleCleanup(staging)
 +                currentCoroutineContext().ensureActive()
 +                if (!isAllowed()) return@withContext
 +                writeCsvToFile(outputFile = outputFile, data = entries)
-@@ -89 +144,17 @@ class ExportTaxUseCase(
+@@ -89 +139,17 @@ class ExportTaxUseCase(
 -                context.startActivity(intent)
 +                withContext(Dispatchers.Main.immediate) handoff@{
 +                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
@@ -47581,38 +47645,45 @@ index 81540cc83..62c8205a3 100644
 +                    outputFile.delete()
 +                    staging.delete()
 +                }
-@@ -92 +162,0 @@ class ExportTaxUseCase(
+@@ -92 +157,0 @@ class ExportTaxUseCase(
 -            navigationRouter.back()
-@@ -94,0 +165,3 @@ class ExportTaxUseCase(
+@@ -94,0 +160,3 @@ class ExportTaxUseCase(
 +    private fun canHandOff(sourceEntryId: String?, isAllowed: () -> Boolean) =
 +        navigationRouter.isAtEntry(sourceEntryId) && isAllowed()
 +
-@@ -100 +173 @@ class ExportTaxUseCase(
+@@ -100 +168 @@ class ExportTaxUseCase(
 -            writer.write(
 +            writer.writeCsvRow(
-@@ -110 +183 @@ class ExportTaxUseCase(
+@@ -110 +178 @@ class ExportTaxUseCase(
 -                ).joinToString(separator = CSV_SEPARATOR)
 +                )
-@@ -112 +184,0 @@ class ExportTaxUseCase(
+@@ -112 +179,0 @@ class ExportTaxUseCase(
 -            writer.newLine()
-@@ -115 +187 @@ class ExportTaxUseCase(
+@@ -115 +182 @@ class ExportTaxUseCase(
 -                writer.write(
 +                writer.writeCsvRow(
-@@ -125 +197 @@ class ExportTaxUseCase(
+@@ -125 +192 @@ class ExportTaxUseCase(
 -                    ).joinToString(separator = CSV_SEPARATOR)
 +                    )
-@@ -127 +198,0 @@ class ExportTaxUseCase(
+@@ -127 +193,0 @@ class ExportTaxUseCase(
 -                writer.newLine()
-@@ -129,2 +199,0 @@ class ExportTaxUseCase(
+@@ -129,2 +194,0 @@ class ExportTaxUseCase(
 -
 -            writer.flush()
-@@ -134 +203 @@ class ExportTaxUseCase(
+@@ -134 +198 @@ class ExportTaxUseCase(
 -    private suspend fun getCsvEntries() =
-+    private suspend fun getCsvEntries(accountUuid: AccountUuid) =
-@@ -136 +205 @@ class ExportTaxUseCase(
++    private suspend fun getCsvEntries(accountUuid: AccountUuid, previousYear: Int) =
+@@ -136 +200 @@ class ExportTaxUseCase(
 -            .getTransactions()
 +            .getTransactions(accountUuid)
-@@ -158,6 +227 @@ class ExportTaxUseCase(
+@@ -138,4 +202,2 @@ class ExportTaxUseCase(
+-                val previousYear = Year.now().minusYears(1)
+-
+-                val date = transaction.timestamp?.atZone(ZoneId.of("UTC")) ?: return@mapNotNull null
+-                if (date.year != previousYear.value) return@mapNotNull null
++                val date = transaction.timestamp?.atZone(ZoneOffset.UTC) ?: return@mapNotNull null
++                if (date.year != previousYear) return@mapNotNull null
+@@ -158,6 +220 @@ class ExportTaxUseCase(
 -                        val sentQuantity =
 -                            if (fee != null) {
 -                                stringRes(transaction.amount - fee, HIDDEN)
@@ -47620,16 +47691,16 @@ index 81540cc83..62c8205a3 100644
 -                                stringRes(transaction.amount, HIDDEN)
 -                            }
 +                        val sentQuantity = transaction.amount - (fee ?: Zatoshi(0))
-@@ -169 +233 @@ class ExportTaxUseCase(
+@@ -169 +226 @@ class ExportTaxUseCase(
 -                            sentQuantity = sentQuantity.getString(context),
 +                            sentQuantity = sentQuantity.toCsvQuantity(),
-@@ -171 +235 @@ class ExportTaxUseCase(
+@@ -171 +228 @@ class ExportTaxUseCase(
 -                            feeAmount = stringRes(fee ?: Zatoshi(0), HIDDEN).getString(context),
 +                            feeAmount = (fee ?: Zatoshi(0)).toCsvQuantity(),
-@@ -185 +249 @@ class ExportTaxUseCase(
+@@ -185 +242 @@ class ExportTaxUseCase(
 -                            receivedQuantity = stringRes(transaction.amount, HIDDEN).getString(context),
 +                            receivedQuantity = transaction.amount.toCsvQuantity(),
-@@ -219 +283,15 @@ private data class CsvEntry(
+@@ -219 +276,15 @@ private data class CsvEntry(
 -private const val CSV_SEPARATOR = ","
 +private fun Zatoshi.toCsvQuantity(): String =
 +    convertZatoshiToZec(scale = ZEC_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
@@ -65271,25 +65342,30 @@ index 4281c2cdb..64c077754 100644
 +        }
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModel.kt
-index 5b354b6fc..768234f5f 100644
+index 5b354b6fc..cdafef351 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModel.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModel.kt
-@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
+@@ -6,0 +7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
++import co.electriccoin.zcash.ui.NavigationCommand
+@@ -7,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.commitFrom
+@@ -8,0 +11 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
-@@ -12,0 +14 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -12,0 +16 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -19,0 +22,3 @@ import kotlinx.coroutines.flow.WhileSubscribed
+@@ -19,0 +24,3 @@ import kotlinx.coroutines.flow.WhileSubscribed
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.distinctUntilChangedBy
-@@ -20,0 +26,2 @@ import kotlinx.coroutines.flow.map
+@@ -20,0 +28,3 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineStart
 +import kotlinx.coroutines.Job
-@@ -27,0 +35,3 @@ class TaxExportViewModel(
+@@ -27,0 +38,3 @@ class TaxExportViewModel(
 +    private val appAccessSession: AppAccessSession,
 +    private val walletWriteAccess: WalletWriteAccess,
 +    private val sourceEntryId: String? = null,
-@@ -28,0 +39,11 @@ class TaxExportViewModel(
+@@ -28,0 +42,11 @@ class TaxExportViewModel(
 +    private val exporting = MutableStateFlow(false)
 +    private val failed = MutableStateFlow(false)
 +    private var exportJob: Job? = null
@@ -65301,7 +65377,7 @@ index 5b354b6fc..768234f5f 100644
 +        .map(::Selection)
 +        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 +
-@@ -30,4 +51,6 @@ class TaxExportViewModel(
+@@ -30,4 +54,6 @@ class TaxExportViewModel(
 -        getSelectedWalletAccount
 -            .observe()
 -            .map {
@@ -65312,7 +65388,7 @@ index 5b354b6fc..768234f5f 100644
 +                selectedAccount.value === selection && appAccessSession.permits(grant) &&
 +                    walletWriteAccess.permits(token)
 +            }
-@@ -40 +63,6 @@ class TaxExportViewModel(
+@@ -40 +66,6 @@ class TaxExportViewModel(
 -    private fun createState(selectedAccount: WalletAccount?) =
 +    private fun createState(
 +        selectedAccount: WalletAccount?,
@@ -65320,14 +65396,14 @@ index 5b354b6fc..768234f5f 100644
 +        error: Boolean = false,
 +        isAllowed: () -> Boolean = { false },
 +    ) =
-@@ -46 +74,3 @@ class TaxExportViewModel(
+@@ -46 +77,3 @@ class TaxExportViewModel(
 -                    onClick = ::onExportClick
 +                    isEnabled = !loading && selectedAccount != null && isAllowed(),
 +                    isLoading = loading,
 +                    onClick = { selectedAccount?.let { onExportClick(it, isAllowed) } }
-@@ -48,0 +79 @@ class TaxExportViewModel(
+@@ -48,0 +82 @@ class TaxExportViewModel(
 +            error = stringRes(R.string.taxExport_error).takeIf { error },
-@@ -61,3 +92,13 @@ class TaxExportViewModel(
+@@ -61,3 +95,13 @@ class TaxExportViewModel(
 -    private fun onExportClick() =
 -        viewModelScope.launch {
 -            exportTax()
@@ -65344,11 +65420,16 @@ index 5b354b6fc..768234f5f 100644
 +            } finally {
 +                exporting.value = false
 +            }
-@@ -64,0 +106 @@ class TaxExportViewModel(
+@@ -64,0 +109 @@ class TaxExportViewModel(
 +    }
-@@ -66,0 +109,2 @@ class TaxExportViewModel(
+@@ -67 +112,6 @@ class TaxExportViewModel(
+-        navigationRouter.back()
++        if (leaving) return
 +        leaving = true
 +        exportJob?.cancel()
++        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
++            leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
 index 67a497e6e..39ef969f4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
@@ -73560,10 +73641,10 @@ index 000000000..2ae836acd
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..c9f47f675
+index 000000000..28aca88f3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,330 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -73822,6 +73903,34 @@ index 000000000..c9f47f675
 +                runCurrent()
 +                assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
 +                assertEquals(1, deliveries)
++            }
++        }
++    }
++
++    @Test
++    @OptIn(ExperimentalCoroutinesApi::class)
++    fun acknowledgedBackDoesNotPopAnExternalScannerCoveringItsOrigin() {
++        install()
++        compose.runOnIdle {
++            runTest {
++                val router = NavigationRouterImpl()
++                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
++                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
++                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
++                    router.observePipeline().collect { command ->
++                        if (command is CustomNavigationCommand) navigator.executeCommand(command)
++                    }
++                }
++                val home = checkNotNull(controller.currentBackStackEntry).id
++                controller.navigate(DeliveryOrigin)
++                val origin = checkNotNull(controller.currentBackStackEntry).id
++                controller.navigate(ScanGiftCardArgs(true))
++
++                assertFalse(router.commitFrom(origin) { NavigationCommand.Back })
++                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
++                assertTrue(controller.popBackStack())
++                assertTrue(router.commitFrom(origin) { NavigationCommand.Back })
++                assertEquals(home, controller.currentBackStackEntry?.id)
 +            }
 +        }
 +    }
@@ -107539,17 +107648,19 @@ index 3027e6cda..4a194c05e 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt
 new file mode 100644
-index 000000000..839047c93
+index 000000000..5b390a9fb
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,261 @@
 +package co.electriccoin.zcash.ui.screen.taxexport
 +
 +import android.content.Context
 +import android.net.Uri
 +import androidx.core.content.FileProvider
 +import androidx.lifecycle.ViewModelStore
++import androidx.navigation.NavBackStackEntry
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
++import co.electriccoin.zcash.ui.NavigationCommand
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.DistributionDimension
@@ -107722,6 +107833,34 @@ index 000000000..839047c93
 +    }
 +
 +    @Test
++    fun refusedBackLeavesDownloadUsable() = runTest {
++        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
++        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any(), "tax", any()) } returns Unit }
++        val navigation = mockk<NavigationRouter>(relaxed = true) {
++            every { custom(any()) } answers {
++                assertNull(firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(null))
++            }
++        }
++        val vm = TaxExportViewModel(
++            GetSelectedWalletAccountUseCase(accounts()), export, navigation,
++            AppAccessSession().apply { unlock() }, WalletWriteAccess(), sourceEntryId = "tax",
++        )
++        val store = ViewModelStore().apply { put("tax", vm) }
++        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
++        try {
++            vm.state.value.onBack()
++            assertTrue(vm.state.value.exportButton.isEnabled)
++            vm.state.value.exportButton.onClick()
++            coVerify(exactly = 1) { export(any(), "tax", any()) }
++            verify(exactly = 0) { navigation.back() }
++        } finally {
++            observer.cancel()
++            store.clear()
++            Dispatchers.resetMain()
++        }
++    }
++
++    @Test
 +    fun backCancelsTheRealExportAndPreservesAPreviouslySharedFile() = runTest {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
 +        val cache = Files.createTempDirectory(
@@ -107776,10 +107915,10 @@ index 000000000..839047c93
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt
 new file mode 100644
-index 000000000..7fb751fca
+index 000000000..b3779d0d1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,242 @@
 +package co.electriccoin.zcash.ui.screen.taxexport
 +
 +import android.content.Intent
@@ -107833,9 +107972,10 @@ index 000000000..7fb751fca
 +import org.robolectric.Shadows.shadowOf
 +import org.robolectric.annotation.Config
 +import java.io.File
++import java.time.Clock
 +import java.time.Instant
-+import java.time.Year
-+import kotlin.test.assertContains
++import java.time.ZoneOffset
++import java.util.concurrent.atomic.AtomicReference
 +import kotlin.test.assertEquals
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
@@ -107877,18 +108017,28 @@ index 000000000..7fb751fca
 +        assertDownloadSharesCsv(Change.HANDOFF)
 +    }
 +
-+    private enum class Change { NONE, LOCK, REUNLOCK, ACCOUNT, RESET, HANDOFF }
++    @Test
++    fun historyAndFilenameKeepTheSameUtcYearWhenTheReadCrossesNewYear() = runTest {
++        assertDownloadSharesCsv(Change.YEAR_ROLLOVER)
++    }
++
++    private enum class Change { NONE, LOCK, REUNLOCK, ACCOUNT, RESET, HANDOFF, YEAR_ROLLOVER }
 +
 +    private suspend fun TestScope.assertDownloadSharesCsv(change: Change) {
 +        val application = RuntimeEnvironment.getApplication()
 +        val authority = FileShareUtil.ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG
-+        val year = Year.now().minusYears(1).value
++        val year = 2025
++        val now = AtomicReference(Instant.parse("2026-12-31T23:59:59Z"))
 +        val name = "Keystone_Transaction_History_$year.csv"
 +        lateinit var output: File
 +        val uri = Uri.parse("content://$authority/tax_exports/$name")
 +        val transaction = mockk<ReceiveTransaction.Success> {
 +            every { timestamp } returns Instant.parse("$year-06-15T12:00:00Z")
 +            every { amount } returns Zatoshi(125_000_000)
++        }
++        val nextYear = mockk<ReceiveTransaction.Success> {
++            every { timestamp } returns Instant.parse("2026-01-01T00:00:00Z")
++            every { amount } returns Zatoshi(100_000_000)
 +        }
 +        val selection = MutableStateFlow<WalletAccount?>(EditAccountFixtures.zodl())
 +        val accountDataSource = mockk<AccountDataSource> {
@@ -107903,7 +108053,7 @@ index 000000000..7fb751fca
 +            coEvery { getTransactions(any()) } coAnswers {
 +                readStarted.complete(Unit)
 +                releaseRead.await()
-+                listOf(transaction)
++                listOf(transaction, nextYear)
 +            }
 +        }
 +        val version = mockk<VersionInfo> {
@@ -107925,6 +108075,10 @@ index 000000000..7fb751fca
 +            mockk(),
 +            mockk(relaxed = true),
 +        )
++        export.clock = mockk<Clock> {
++            every { zone } returns ZoneOffset.UTC
++            every { instant() } answers { now.get() }
++        }
 +        val scheduled = mutableListOf<File>()
 +        export.scheduleCleanup = {
 +            assertTrue(it.listFiles().orEmpty().isEmpty())
@@ -107971,9 +108125,10 @@ index 000000000..7fb751fca
 +                }
 +                Change.ACCOUNT -> selection.value = EditAccountFixtures.zodl()
 +                Change.RESET -> walletWriteAccess.beginReset()
++                Change.YEAR_ROLLOVER -> now.set(Instant.parse("2027-01-01T00:00:00Z"))
 +            }
 +            releaseRead.complete(Unit)
-+            if (change != Change.NONE) {
++            if (change != Change.NONE && change != Change.YEAR_ROLLOVER) {
 +                vm.state.first { !it.exportButton.isLoading }
 +                assertNull(shadowOf(application).nextStartedActivity)
 +                verify(exactly = 0) { navigation.back() }
@@ -107993,7 +108148,7 @@ index 000000000..7fb751fca
 +            assertTrue(shared.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
 +            assertEquals(uri, shared.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
 +            assertEquals(uri, shared.clipData?.getItemAt(0)?.uri)
-+            assertContains(output.readLines(), "06/15/$year 12:00:00,1.25,ZEC,,,,,")
++            assertEquals(listOf("06/15/$year 12:00:00,1.25,ZEC,,,,,"), output.readLines().drop(1))
 +            assertEquals(name, output.name)
 +            assertEquals(listOf(output.parentFile), scheduled)
 +            output.parentFile?.deleteRecursively()

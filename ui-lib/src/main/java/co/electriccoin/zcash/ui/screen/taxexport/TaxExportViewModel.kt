@@ -4,7 +4,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -106,8 +109,11 @@ class TaxExportViewModel(
     }
 
     private fun onBack() {
+        if (leaving) return
         leaving = true
         exportJob?.cancel()
-        navigationRouter.back()
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
+        }
     }
 }
