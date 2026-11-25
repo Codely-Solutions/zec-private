@@ -169,7 +169,7 @@ class AccountDataSourceImpl(
     private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
     accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
         flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
-    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
+    private val walletTransport: WalletTransportAccess,
 ) : AccountDataSource {
     private val log = loggableNot("AccountDataSource")
 

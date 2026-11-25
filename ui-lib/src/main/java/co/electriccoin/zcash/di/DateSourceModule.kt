@@ -36,6 +36,7 @@ val dataSourceModule =
                 context = get(),
                 accountPreferenceReads = wallet.readGeneration,
                 accountWalletAvailability = wallet.availabilityRead,
+                walletTransport = get(),
             )
         }
         singleOf(::ZashiSpendingKeyDataSourceImpl) bind ZashiSpendingKeyDataSource::class

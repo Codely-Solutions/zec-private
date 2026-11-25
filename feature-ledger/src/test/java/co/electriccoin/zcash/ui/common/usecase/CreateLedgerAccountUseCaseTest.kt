@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedArgs
@@ -138,6 +139,7 @@ class CreateLedgerAccountUseCaseTest {
             coEvery { this@mockk.invoke() } returns androidPreferences
         })
         val accountDataSource = AccountDataSourceImpl(
+            walletTransport = WalletTransportAccess(),
             synchronizerProvider = synchronizerProvider,
             selectedAccountUUIDProvider = selected,
             persistableWalletProvider = mockk {

@@ -3903,7 +3903,7 @@ index 7aa2b041f..ff6e3d7b2 100644
 @@ -75 +60,0 @@ class CancelLedgerSigningUseCaseTest {
 -        every { this@mockk.signingState } returns MutableStateFlow(signingState)
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
-index bed02742e..d32f788c3 100644
+index bed02742e..e3eaea289 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -3917,41 +3917,43 @@ index bed02742e..d32f788c3 100644
 @@ -10,0 +16,2 @@ import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 +import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
-@@ -12,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
+@@ -11,0 +19 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -12,0 +21 @@ import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 +import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
-@@ -20,0 +29,3 @@ import io.mockk.verify
+@@ -20,0 +30,3 @@ import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.runBlocking
-@@ -21,0 +33,2 @@ import kotlinx.coroutines.test.runTest
+@@ -21,0 +34,2 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
 +import java.util.Base64
-@@ -22,0 +36 @@ import kotlin.test.Test
+@@ -22,0 +37 @@ import kotlin.test.Test
 +import kotlin.test.assertEquals
-@@ -23,0 +38,2 @@ import kotlin.test.assertFailsWith
+@@ -23,0 +39,2 @@ import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
 +import kotlin.test.assertSame
-@@ -30,0 +47 @@ class CreateLedgerAccountUseCaseTest {
+@@ -30,0 +48 @@ class CreateLedgerAccountUseCaseTest {
 +    private val enrollment = LedgerEnrollmentFixture()
-@@ -43 +60 @@ class CreateLedgerAccountUseCaseTest {
+@@ -43 +61 @@ class CreateLedgerAccountUseCaseTest {
 -            coVerify(exactly = 1) { accountDataSource.importLedgerAccount(any(), null) }
 +            coVerify(exactly = 1) { accountDataSource.importLedgerAccount(any(), any(), null) }
-@@ -45 +62 @@ class CreateLedgerAccountUseCaseTest {
+@@ -45 +63 @@ class CreateLedgerAccountUseCaseTest {
 -            verify(exactly = 1) { ledgerPairingRepository.clear() }
 +            verify(exactly = 1) { ledgerPairingRepository.clear(any()) }
-@@ -59 +76 @@ class CreateLedgerAccountUseCaseTest {
+@@ -59 +77 @@ class CreateLedgerAccountUseCaseTest {
 -            coVerify(exactly = 1) { accountDataSource.importLedgerAccount(any(), birthday) }
 +            coVerify(exactly = 1) { accountDataSource.importLedgerAccount(any(), any(), birthday) }
-@@ -76 +93 @@ class CreateLedgerAccountUseCaseTest {
+@@ -76 +94 @@ class CreateLedgerAccountUseCaseTest {
 -            coVerify(exactly = 0) { accountDataSource.importLedgerAccount(any(), any()) }
 +            coVerify(exactly = 0) { accountDataSource.importLedgerAccount(any(), any(), any()) }
-@@ -85 +102 @@ class CreateLedgerAccountUseCaseTest {
+@@ -85 +103 @@ class CreateLedgerAccountUseCaseTest {
 -                    coEvery { importLedgerAccount(any(), any()) } throws
 +                    coEvery { importLedgerAccount(any(), any(), any()) } throws
-@@ -94 +111 @@ class CreateLedgerAccountUseCaseTest {
+@@ -94 +112 @@ class CreateLedgerAccountUseCaseTest {
 -            verify(exactly = 0) { ledgerPairingRepository.clear() }
 +            verify(exactly = 0) { ledgerPairingRepository.clear(any()) }
-@@ -97,0 +115,117 @@ class CreateLedgerAccountUseCaseTest {
+@@ -97,0 +116,118 @@ class CreateLedgerAccountUseCaseTest {
 +    @Test
 +    fun selectionRetryUsesTheImportedAccountAndKeepsItsLedgerBinding() = runBlocking {
 +        val pairing = mockk<LedgerAccountPairing>(relaxed = true) {
@@ -3978,6 +3980,7 @@ index bed02742e..d32f788c3 100644
 +            coEvery { this@mockk.invoke() } returns androidPreferences
 +        })
 +        val accountDataSource = AccountDataSourceImpl(
++            walletTransport = WalletTransportAccess(),
 +            synchronizerProvider = synchronizerProvider,
 +            selectedAccountUUIDProvider = selected,
 +            persistableWalletProvider = mockk {
@@ -4069,15 +4072,15 @@ index bed02742e..d32f788c3 100644
 +        verify(exactly = 0) { router.forward(*anyVararg()) }
 +    }
 +
-@@ -100 +234 @@ class CreateLedgerAccountUseCaseTest {
+@@ -100 +236 @@ class CreateLedgerAccountUseCaseTest {
 -            coEvery { importLedgerAccount(any(), any()) } returns createdAccount
 +            coEvery { importLedgerAccount(any(), any(), any()) } returns createdAccount
-@@ -105,0 +240,4 @@ class CreateLedgerAccountUseCaseTest {
+@@ -105,0 +242,4 @@ class CreateLedgerAccountUseCaseTest {
 +            every { importedAccount(any()) } returns null
 +            every { owner(any()) } returns enrollment.owner
 +            every { recordImport(any(), any()) } returns true
 +            every { clear(any()) } returns true
-@@ -116,0 +255 @@ class CreateLedgerAccountUseCaseTest {
+@@ -116,0 +257 @@ class CreateLedgerAccountUseCaseTest {
 +        walletEnrollment = enrollment.access,
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/LedgerEnrollmentFixture.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/LedgerEnrollmentFixture.kt
 new file mode 100644
@@ -36351,7 +36354,7 @@ index abd227feb..4d509be29 100644
 +        singleOf(::LaunchNavigationRequests)
 +        singleOf(::KeystoneEnrollmentSession)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
-index b1dfa14c3..79dddf89d 100644
+index b1dfa14c3..3c9d78428 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
 @@ -13 +12,0 @@ import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSourceI
@@ -36360,7 +36363,7 @@ index b1dfa14c3..79dddf89d 100644
 -import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 @@ -22,0 +21 @@ import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSourceImpl
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-@@ -29 +28,13 @@ val dataSourceModule =
+@@ -29 +28,14 @@ val dataSourceModule =
 -        singleOf(::AccountDataSourceImpl) bind AccountDataSource::class
 +        single<AccountDataSource> {
 +            val wallet = get<PersistableWalletProvider>()
@@ -36373,9 +36376,10 @@ index b1dfa14c3..79dddf89d 100644
 +                context = get(),
 +                accountPreferenceReads = wallet.readGeneration,
 +                accountWalletAvailability = wallet.availabilityRead,
++                walletTransport = get(),
 +            )
 +        }
-@@ -35 +45,0 @@ val dataSourceModule =
+@@ -35 +46,0 @@ val dataSourceModule =
 -        singleOf(::NearSwapDataSource) bind SwapDataSource::class
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt
 new file mode 100644
@@ -38197,7 +38201,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..13d22da17 100644
+index 4d388e80f..9828db51a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -38247,7 +38251,7 @@ index 4d388e80f..13d22da17 100644
 +    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
 +        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
-+    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
++    private val walletTransport: WalletTransportAccess,
 @@ -146 +174,0 @@ class AccountDataSourceImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 @@ -149,0 +178,24 @@ class AccountDataSourceImpl(
@@ -77458,7 +77462,7 @@ index 4e28ba3d9..7ffa64524 100644
 -                coEvery { isFlexaAvailable() } returns false
 -            },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-index 5c72d78d5..90f954b71 100644
+index 5c72d78d5..444392b1c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 @@ -10,0 +11,4 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
@@ -77468,48 +77472,51 @@ index 5c72d78d5..90f954b71 100644
 +import co.electriccoin.zcash.ui.NavigationRouter
 @@ -18,0 +23 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
-@@ -19,0 +25 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -19,0 +25,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 +import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
-@@ -20,0 +27 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
+@@ -20,0 +28 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 +import co.electriccoin.zcash.ui.screen.receive.ReceiveArgs
-@@ -24,0 +32 @@ import io.mockk.mockk
+@@ -24,0 +33 @@ import io.mockk.mockk
 +import io.mockk.verify
-@@ -25,0 +34,5 @@ import kotlinx.coroutines.CompletableDeferred
+@@ -25,0 +35,5 @@ import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.async
-@@ -26,0 +40 @@ import kotlinx.coroutines.awaitCancellation
+@@ -26,0 +41 @@ import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.cancelAndJoin
-@@ -27,0 +42 @@ import kotlinx.coroutines.delay
+@@ -27,0 +43 @@ import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.Flow
-@@ -28,0 +44,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -28,0 +45,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.flow.flowOf
-@@ -32,0 +51,3 @@ import kotlinx.coroutines.runBlocking
+@@ -32,0 +52,3 @@ import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
-@@ -72,0 +94,5 @@ class AccountDataSourceImplTest {
+@@ -72,0 +95,5 @@ class AccountDataSourceImplTest {
 +        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +        storedSelection: Flow<AccountUuid?> = flowOf(null),
 +        accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +        synchronizerFlow: MutableStateFlow<Synchronizer?>? = null,
 +        deriveAddress: suspend () -> String = { "unified-address" },
-@@ -78 +104 @@ class AccountDataSourceImplTest {
+@@ -78 +105 @@ class AccountDataSourceImplTest {
 -                coEvery { getCustomUnifiedAddress(any(), any()) } returns "unified-address"
 +                coEvery { getCustomUnifiedAddress(any(), any()) } coAnswers { deriveAddress() }
-@@ -81,0 +108 @@ class AccountDataSourceImplTest {
+@@ -81,0 +109 @@ class AccountDataSourceImplTest {
 +        val activeSynchronizer = synchronizerFlow?.also { it.value = synchronizer } ?: MutableStateFlow(synchronizer)
-@@ -84 +111 @@ class AccountDataSourceImplTest {
+@@ -84 +112 @@ class AccountDataSourceImplTest {
 -                every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
 +                every { this@mockk.synchronizer } returns activeSynchronizer
-@@ -88 +115 @@ class AccountDataSourceImplTest {
+@@ -88 +116 @@ class AccountDataSourceImplTest {
 -                every { uuid } returns MutableStateFlow(null)
 +                every { uuid } returns storedSelection
-@@ -104,0 +132,128 @@ class AccountDataSourceImplTest {
+@@ -98,0 +127 @@ class AccountDataSourceImplTest {
++            walletTransport = WalletTransportAccess(),
+@@ -104,0 +134,128 @@ class AccountDataSourceImplTest {
 +            scope = scope,
 +            accountPreferenceReads = accountPreferenceReads,
 +        )
@@ -77638,7 +77645,7 @@ index 5c72d78d5..90f954b71 100644
 +            null to null,
 +            accountBalance(available = 40L, unshielded = 0L) to 40L,
 +            accountBalance(available = 47L, unshielded = 0L) to 47L,
-@@ -105,0 +261,8 @@ class AccountDataSourceImplTest {
+@@ -105,0 +263,8 @@ class AccountDataSourceImplTest {
 +
 +        for ((snapshot, expected) in states) {
 +            walletBalances.value = snapshot
@@ -77647,21 +77654,21 @@ index 5c72d78d5..90f954b71 100644
 +            }
 +            assertEquals(expected, account.totalBalance?.value)
 +        }
-@@ -303 +466 @@ class AccountDataSourceImplTest {
+@@ -303 +468 @@ class AccountDataSourceImplTest {
 -                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
 +                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
-@@ -341 +504,3 @@ class AccountDataSourceImplTest {
+@@ -341 +506,3 @@ class AccountDataSourceImplTest {
 -            val import = launch { dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null) }
 +            val import = launch {
 +                dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
 +            }
-@@ -374 +539 @@ class AccountDataSourceImplTest {
+@@ -374 +541 @@ class AccountDataSourceImplTest {
 -                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
 +                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
-@@ -405 +570 @@ class AccountDataSourceImplTest {
+@@ -405 +572 @@ class AccountDataSourceImplTest {
 -                .importLedgerAccount(pairing = pairing, birthday = null)
 +                .importLedgerAccount(synchronizer, pairing = pairing, birthday = null)
-@@ -483,0 +649,30 @@ class AccountDataSourceImplTest {
+@@ -483,0 +651,30 @@ class AccountDataSourceImplTest {
 +    @Test
 +    fun aPersistedSelectionOverridesStaleAccountRowsAtApprovalAndRevokesExistingApproval() = runTest {
 +        val second = Account.new(AccountUuid.new(ByteArray(16) { 7 }))
@@ -77692,12 +77699,14 @@ index 5c72d78d5..90f954b71 100644
 +        assertTrue(assertNotNull(source.confirmSelection(stale.copy(sdkAccount = second)))())
 +    }
 +
-@@ -499,0 +695,4 @@ class AccountDataSourceImplTest {
+@@ -499,0 +697,4 @@ class AccountDataSourceImplTest {
 +        selection: SelectedAccountUUIDProvider = mockk {
 +            every { uuid } returns MutableStateFlow(null)
 +            coEvery { getUUID() } returns null
 +        },
-@@ -508,5 +707 @@ class AccountDataSourceImplTest {
+@@ -506,0 +708 @@ class AccountDataSourceImplTest {
++            walletTransport = WalletTransportAccess(),
+@@ -508,5 +710 @@ class AccountDataSourceImplTest {
 -            selectedAccountUUIDProvider =
 -                mockk {
 -                    every { uuid } returns MutableStateFlow(null)
@@ -77705,81 +77714,93 @@ index 5c72d78d5..90f954b71 100644
 -                },
 +            selectedAccountUUIDProvider = selection,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyDeletionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyDeletionTest.kt
-index c57c43f26..3b34c01c2 100644
+index c57c43f26..a2206e53f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyDeletionTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyDeletionTest.kt
-@@ -60 +60 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -60 +61 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -                selection.clearUUID()
 +                selection.clearIfSelected(accountUuid)
-@@ -80 +80 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -80 +81 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -            coVerify(exactly = 0) { selection.clearUUID() }
 +            coVerify(exactly = 0) { selection.clearIfSelected(accountUuid) }
-@@ -84 +84 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -84 +85 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -    fun aStaleSelectedSnapshotDoesNotClearTheSelectionOfAnotherAccount() =
 +    fun deletionOnlyOffersTheRemovedAccountForSelectionCleanup() =
-@@ -99 +99 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -99 +100 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -            coVerify(exactly = 0) { selection.clearUUID() }
 +            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
-@@ -109 +109 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -109 +110 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -                    coEvery { clearUUID() } throws IllegalStateException("preferences unavailable")
 +                    coEvery { clearIfSelected(accountUuid) } throws IllegalStateException("preferences unavailable")
-@@ -124 +124 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -124 +125 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -            coVerify(exactly = 1) { selection.clearUUID() }
 +            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
-@@ -133 +133 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -133 +134 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -                    coEvery { getUUID() } throws IllegalStateException("preferences unavailable")
 +                    coEvery { clearIfSelected(accountUuid) } throws IllegalStateException("preferences unavailable")
-@@ -152 +152 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -152 +153 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -    fun deletingAnUnselectedAccountKeepsTheSelection() =
 +    fun deletingAnUnselectedAccountUsesConditionalCleanup() =
-@@ -165 +165 @@ class AccountDataSourceImplViewOnlyDeletionTest {
+@@ -165 +166 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -            coVerify(exactly = 0) { selection.clearUUID() }
 +            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
+@@ -238,0 +240 @@ class AccountDataSourceImplViewOnlyDeletionTest {
++            walletTransport = WalletTransportAccess(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
-index a425a5c4d..7fa887455 100644
+index a425a5c4d..c879277e8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
-@@ -46 +46,2 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -46 +47,2 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
 -                dataSource(synchronizer).importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                dataSource(synchronizer)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -127,0 +130 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
++            walletTransport = WalletTransportAccess(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
-index 04895fbcd..9c95aa829 100644
+index 04895fbcd..8e771aef3 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
-@@ -340 +340 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -25,0 +26 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -340 +341 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -369 +369 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -369 +370 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -393 +393 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -393 +394 @@ class AccountDataSourceImplViewOnlyTest {
 -                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -420 +420 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -420 +421 @@ class AccountDataSourceImplViewOnlyTest {
 -                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -450 +450 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -450 +451 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -473 +473 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -473 +474 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -491 +491 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -491 +492 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -510 +510 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -510 +511 @@ class AccountDataSourceImplViewOnlyTest {
 -                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -533 +533 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -533 +534 @@ class AccountDataSourceImplViewOnlyTest {
 -                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -563 +563 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -563 +564 @@ class AccountDataSourceImplViewOnlyTest {
 -                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
-@@ -584 +584 @@ class AccountDataSourceImplViewOnlyTest {
+@@ -584 +585 @@ class AccountDataSourceImplViewOnlyTest {
 -                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
 +                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -676,0 +678 @@ class AccountDataSourceImplViewOnlyTest {
++            walletTransport = WalletTransportAccess(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AddressBookDurabilityTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AddressBookDurabilityTest.kt
 new file mode 100644
 index 000000000..01f8991ed
@@ -78012,6 +78033,85 @@ index 000000000..01f8991ed
 +                    AddressBookContact("Second", "second", timestamp, null)
 +                )
 +            )
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/BroadcastTransportFenceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/BroadcastTransportFenceTest.kt
+new file mode 100644
+index 000000000..a519e74d7
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/BroadcastTransportFenceTest.kt
+@@ -0,0 +1,73 @@
++package co.electriccoin.zcash.ui.common.datasource
++
++import cash.z.ecc.android.sdk.model.CreatedTransaction
++import cash.z.ecc.android.sdk.model.FirstClassByteArray
++import cash.z.ecc.android.sdk.model.TransactionSubmitResult
++import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
++import co.electriccoin.zcash.ui.util.CloseableScopeHolderImpl
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertIs
++import kotlin.test.assertTrue
++import kotlin.time.Duration.Companion.milliseconds
++
++class BroadcastTransportFenceTest {
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun remainingEndpointCallbacksPreventAutomaticSwitchAfterSuccessUntilTheyDrain() = runTest {
++        val transport = WalletTransportAccess()
++        val fast = endpoint("fast.example.com")
++        val slow = endpoint("slow.example.com")
++        val transaction = CreatedTransaction(
++            txId = FirstClassByteArray(byteArrayOf(72)),
++            raw = FirstClassByteArray(byteArrayOf(72, 72)),
++            expiryHeight = null,
++        )
++        val workerScope = CoroutineScope(
++            backgroundScope.coroutineContext + SupervisorJob(backgroundScope.coroutineContext[Job])
++        )
++        val graceMillis = 100L
++        val result = transport.whileOperating { lease ->
++            val submitter = MultiEndpointTransactionSubmitter(
++                closeableScopeHolder = CloseableScopeHolderImpl(workerScope),
++                gracePeriod = graceMillis.milliseconds,
++                logger = quiet,
++                onDrained = lease.retainUntilDrain(),
++                submit = { _, target ->
++                    if (target == slow) awaitCancellation()
++                    TransactionSubmitResult.Success(transaction.txId)
++                }
++            )
++            submitter.submitTransactions(listOf(transaction), listOf(fast, slow), "[TransportFenceTest]")
++        }
++        assertIs<TransactionSubmitResult.Success>(result.single())
++
++        var switched = false
++        transport.ifIdleSwitch { switched = true }
++        assertFalse(switched)
++        advanceTimeBy(graceMillis)
++        runCurrent()
++
++        transport.ifIdleSwitch { switched = true }
++        assertTrue(switched)
++    }
++
++    private fun endpoint(host: String) = LightWalletEndpoint(host = host, port = 443, isSecure = true)
++
++    private val quiet = object : MultiEndpointTransactionSubmitterLogger {
++        override fun info(message: () -> String) = Unit
++
++        override fun warn(message: () -> String) = Unit
++
++        override fun error(message: () -> String) = Unit
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSourceImplTest.kt
@@ -80011,69 +80111,22 @@ index 555126883..1eab9c67b 100644
 -            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles(key) }
 +            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles() }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
-index 6cb0997ff..2e7a86582 100644
+index 6cb0997ff..5cc74da4e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
-@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
-+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
-@@ -9,0 +11,3 @@ import kotlinx.coroutines.CompletableDeferred
-+import kotlinx.coroutines.CoroutineScope
-+import kotlinx.coroutines.Job
-+import kotlinx.coroutines.SupervisorJob
-@@ -20,0 +25,2 @@ import kotlin.test.assertEquals
-+import kotlin.test.assertFalse
-+import kotlin.test.assertTrue
-@@ -24,0 +31,36 @@ class MultiEndpointTransactionSubmitterTest {
-+    @OptIn(ExperimentalCoroutinesApi::class)
-+    @Test
-+    fun remainingEndpointCallbacksPreventAutomaticSwitchAfterSuccessUntilTheyDrain() = runTest {
-+        val transport = WalletTransportAccess()
-+        val fast = endpoint("fast.example.com")
-+        val slow = endpoint("slow.example.com")
-+        val transaction = transaction(72)
-+        val workerScope = CoroutineScope(
-+            backgroundScope.coroutineContext + SupervisorJob(backgroundScope.coroutineContext[Job])
-+        )
-+        val graceMillis = 100L
-+        val result = transport.whileOperating { lease ->
-+            val submitter = MultiEndpointTransactionSubmitter(
-+                closeableScopeHolder = CloseableScopeHolderImpl(workerScope),
-+                gracePeriod = graceMillis.milliseconds,
-+                logger = noOpLogger,
-+                onDrained = lease.retainUntilDrain(),
-+                submit = { _, target ->
-+                    if (target == slow) awaitCancellation()
-+                    TransactionSubmitResult.Success(transaction.txId)
-+                }
-+            )
-+            submitter.submitTransactions(listOf(transaction), listOf(fast, slow), LOG_TAG)
-+        }
-+        assertIs<TransactionSubmitResult.Success>(result.single())
-+
-+        var switched = false
-+        transport.ifIdleSwitch { switched = true }
-+        assertFalse(switched)
-+        advanceTimeBy(graceMillis)
-+        runCurrent()
-+
-+        transport.ifIdleSwitch { switched = true }
-+        assertTrue(switched)
-+    }
-+
-@@ -209 +251 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -209 +209 @@ class MultiEndpointTransactionSubmitterTest {
 -    fun automaticModeReturnsFirstNonGrpcFailureWhenAllEndpointsFailFast() =
 +    fun automaticModeKeepsMixedRejectionAndTransportFailurePending() =
-@@ -220 +262 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -220 +220 @@ class MultiEndpointTransactionSubmitterTest {
 -                            "third.example.com" -> failure(transaction, code = 19, grpcError = false)
 +                            "third.example.com" -> throw java.io.IOException("fixture response lost")
-@@ -239,3 +281,24 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -239,3 +239,2 @@ class MultiEndpointTransactionSubmitterTest {
 -            assertEquals(false, result.grpcError)
 -            assertEquals(18, result.code)
 -            assertEquals("failure 18", result.description)
 +            assertEquals(true, result.grpcError)
 +            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
-+        }
-+
+@@ -243,0 +243,23 @@ class MultiEndpointTransactionSubmitterTest {
 +    @Test
 +    fun directAndAutomaticRejectionsRemainPendingWhileTheSdkCanRetry() = runTest {
 +        val transaction = transaction(3)
@@ -80094,12 +80147,13 @@ index 6cb0997ff..2e7a86582 100644
 +            assertEquals(servers.toSet(), submitted.toSet())
 +            assertEquals(18, assertIs<TransactionSubmitResult.Failure>(results.single()).code)
 +            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
-@@ -242,0 +306 @@ class MultiEndpointTransactionSubmitterTest {
++        }
 +    }
-@@ -464 +528 @@ class MultiEndpointTransactionSubmitterTest {
++
+@@ -464 +486 @@ class MultiEndpointTransactionSubmitterTest {
 -    fun nonGrpcFailuresMapToFirstFailureDetail() {
 +    fun allRejectedLegsKeepTheOriginalAttemptPending() {
-@@ -475,5 +539 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -475,5 +497 @@ class MultiEndpointTransactionSubmitterTest {
 -            SubmitResult.Failure(
 -                txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString()),
 -                code = 18,

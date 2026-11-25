@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -126,6 +127,7 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
                 coEvery { getSynchronizer() } returns synchronizer
             }
         return AccountDataSourceImpl(
+            walletTransport = WalletTransportAccess(),
             synchronizerProvider = synchronizerProvider,
             selectedAccountUUIDProvider =
                 mockk(relaxed = true) {

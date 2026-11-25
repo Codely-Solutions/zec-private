@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.CapturingSlot
@@ -674,6 +675,7 @@ class AccountDataSourceImplViewOnlyTest {
                 coEvery { getSynchronizer() } returns synchronizer
             }
         return AccountDataSourceImpl(
+            walletTransport = WalletTransportAccess(),
             synchronizerProvider = synchronizerProvider,
             selectedAccountUUIDProvider = selectedAccountUUIDProvider,
             persistableWalletProvider =

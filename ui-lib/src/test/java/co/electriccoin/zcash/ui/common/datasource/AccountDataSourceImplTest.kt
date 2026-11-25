@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.screen.receive.ReceiveArgs
@@ -123,6 +124,7 @@ class AccountDataSourceImplTest {
                 every { observe(any()) } returns MutableStateFlow(ledgerBinding)
             }
         return AccountDataSourceImpl(
+            walletTransport = WalletTransportAccess(),
             synchronizerProvider = synchronizerProvider,
             selectedAccountUUIDProvider = selectedAccountUUIDProvider,
             persistableWalletProvider = persistableWalletProvider,
@@ -703,6 +705,7 @@ class AccountDataSourceImplTest {
                 coEvery { getSynchronizer() } returns synchronizer
             }
         return AccountDataSourceImpl(
+            walletTransport = WalletTransportAccess(),
             synchronizerProvider = synchronizerProvider,
             selectedAccountUUIDProvider = selection,
             persistableWalletProvider =
