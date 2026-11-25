@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
@@ -13,10 +15,11 @@ class SetAppearanceModeUseCase(
 ) {
     suspend operator fun invoke(
         appearanceMode: AppearanceMode,
-        isOledEnabled: Boolean
+        isOledEnabled: Boolean,
+        sourceEntryId: String? = null,
     ) {
         appearanceModeStorageProvider.store(appearanceMode)
         isOledEnabledStorageProvider.store(isOledEnabled)
-        navigationRouter.backTo(MoreArgs::class)
+        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackTo(MoreArgs::class) }
     }
 }

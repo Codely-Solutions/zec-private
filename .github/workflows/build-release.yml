@@ -238,11 +238,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .private/signing_wiring.py
-      - name: Recheck production controller after queueing
+      - name: Recheck direct publication controller and upgrade fixture
         if: needs.admit.outputs.main == 'true' && !inputs.hosted && !inputs.validation_only && !inputs.preflight_only
         env:
           GH_TOKEN: ${{ github.token }}
-        run: PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
+        shell: bash
+        run: |
+          PYTHONPATH=.private python3 -B - <<'PY'
+          import os
+          from publish import require_current_controller, require_current_local_upgrade
+
+          require_current_controller(os.environ["GITHUB_SHA"])
+          require_current_local_upgrade()
+          PY
       - name: Verify signing credentials are absent outside the environment
         if: steps.wiring.outputs.changed == 'true'
         env:

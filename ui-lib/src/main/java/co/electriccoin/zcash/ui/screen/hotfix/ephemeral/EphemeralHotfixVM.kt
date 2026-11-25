@@ -22,6 +22,7 @@ class EphemeralHotfixVM(
     isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val navigationRouter: NavigationRouter,
     private val fixEphemeralAddressUseCase: FixEphemeralAddressUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val text = MutableStateFlow(args.address)
 
@@ -70,5 +71,5 @@ class EphemeralHotfixVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onRecoverFundsClick() = fixEphemeralAddressUseCase(text.value.orEmpty())
+    private fun onRecoverFundsClick() = fixEphemeralAddressUseCase(text.value.orEmpty(), sourceEntryId)
 }

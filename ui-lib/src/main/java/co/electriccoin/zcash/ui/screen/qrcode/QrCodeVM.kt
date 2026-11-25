@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.WalletAddress
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -38,6 +39,7 @@ class QrCodeVM(
     private val viewOnlyContent: ViewOnlyContent,
     private val appAccessSession: AppAccessSession,
     private val walletWriteAccess: WalletWriteAccess,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val loading = QrCodeState.Loading(::onBack)
 
@@ -81,7 +83,7 @@ class QrCodeVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
-                                    isAllowed = { permitted(address) },
+                                    isAllowed = { navigationRouter.isAtEntry(sourceEntryId) && permitted(address) },
                                 )
                             }
                         },

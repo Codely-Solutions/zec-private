@@ -6,10 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun TorSettingsScreen() {
-    val vm = koinViewModel<TorSettingsVM>()
+fun TorSettingsScreen(sourceEntryId: String) {
+    val vm = koinViewModel<TorSettingsVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler(state != null) { state?.onDismiss?.invoke() }
     state?.let { TorSettingsView(state = it) }

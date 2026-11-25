@@ -15,8 +15,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun VKDetailScreen(args: VKDetailArgs) {
-    val vm = koinViewModel<VKDetailVM> { parametersOf(args) }
+fun VKDetailScreen(args: VKDetailArgs, sourceEntryId: String) {
+    val vm = koinViewModel<VKDetailVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val unavailable by vm.isUnavailable.collectAsStateWithLifecycle()
     VKDetailScreenContent(state, unavailable, { vm.isRevealed }, vm::onBack)

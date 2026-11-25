@@ -60,6 +60,10 @@ class FinalizeMigrationScheduleUseCase(
         accountKeyId: String,
         startLiveDriverImmediately: Boolean = true,
     ) {
+        // Protect the first proving anchor before waiting on a separate scheduler operation.
+        // A failed enqueue leaves the already committed SDK plan and its sync session intact.
+        val restarted = synchronizerProvider.getSynchronizerOrNull()?.restartSyncSession() ?: false
+        migrationLog("FinalizeMigrationSchedule: sync-session restart for anchor retention — restarted=$restarted")
         // Measured block rate — the 75s constant grossly overestimates on the bursty testnet,
         // scheduling the first worker run far past the real due heights.
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
@@ -78,13 +82,6 @@ class FinalizeMigrationScheduleUseCase(
                 rateHeight = rateReferenceHeight(sdk.estimatedChainTip(), tipHeight),
             )
         )
-        // The engine's anchor-retention floor is session-scoped and was computed BEFORE this plan
-        // existed — restart the sync session now, before the chain crosses the plan's first
-        // boundary, or that boundary's checkpoint is never created and its transfer can never be
-        // proved (see Synchronizer.restartSyncSession; observed live as a permanent
-        // AnchorNotFound on the plan's first bucket).
-        val restarted = synchronizerProvider.getSynchronizerOrNull()?.restartSyncSession() ?: false
-        migrationLog("FinalizeMigrationSchedule: sync-session restart for anchor retention — restarted=$restarted")
         // Must come AFTER the sync-session restart above, never before: starting the live driver
         // first risks it entering syncRun (syncToTip) concurrently with the anchor-retention
         // restart, the exact mechanism that exists to prevent a permanent AnchorNotFound on the

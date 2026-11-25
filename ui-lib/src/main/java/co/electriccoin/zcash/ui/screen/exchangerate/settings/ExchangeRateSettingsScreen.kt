@@ -6,10 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun ExchangeRateSettingsScreen() {
-    val vm = koinViewModel<ExchangeRateSettingsVM>()
+fun ExchangeRateSettingsScreen(sourceEntryId: String) {
+    val vm = koinViewModel<ExchangeRateSettingsVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state?.onBack() }
     state?.let { ExchangeRateSettingsView(state = it) }

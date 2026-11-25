@@ -4,7 +4,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -22,6 +25,7 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyNavigator
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.showFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -64,6 +68,7 @@ class EditAccountVM(
     private val viewOnlyNavigator: ViewOnlyNavigator,
     private val viewOnlyContent: ViewOnlyContent,
     private val isAccountNameTaken: IsAccountNameTakenUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     /** The account the route names while it is the Zodl account or a view-only one, otherwise null. */
     private val account: Flow<WalletAccount?> =
@@ -117,10 +122,11 @@ class EditAccountVM(
         }.stateIn(this)
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             val current = account.first()
             if (current == null) {
-                navigationRouter.back()
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
             } else {
                 name.update { it ?: AccountNameLimit.cap(current.currentName()) }
             }
@@ -182,7 +188,7 @@ class EditAccountVM(
             viewModelScope.launch {
                 val current = account.first()
                 if (current == null) {
-                    navigationRouter.back()
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
                     return@launch
                 }
                 val isTaken =
@@ -197,14 +203,14 @@ class EditAccountVM(
                     val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
                     ensureActive()
                     if (isColorSaved) {
-                        navigationRouter.back()
+                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
                     } else {
-                        navigateToError(ErrorArgs.General(AccountColorNotSavedException()))
+                        navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    navigateToError(ErrorArgs.General(e))
+                    navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
                 } finally {
                     isSaving.update { false }
                 }

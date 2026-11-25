@@ -10,8 +10,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun DisconnectScreen(args: DisconnectArgs) {
-    val vm = koinViewModel<DisconnectVM> { parametersOf(args) }
+fun DisconnectScreen(args: DisconnectArgs, sourceEntryId: String) {
+    val vm = koinViewModel<DisconnectVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(state) {
         BackHandler { it.onBack() }

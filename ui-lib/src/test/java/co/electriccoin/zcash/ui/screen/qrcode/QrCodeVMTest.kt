@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.qrcode
 import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.WalletAddress
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -29,6 +30,7 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -119,12 +121,18 @@ class QrCodeVMTest {
         }
 
     @Test
-    fun stagedReceiveQrRetainsTheDisplayedPayloadAndOriginalGrant() = runTest(dispatcher) {
+    fun stagedReceiveQrRequiresTheDisplayedPayloadOriginalGrantAndLiveEntry() = runTest(dispatcher) {
         val access = AppAccessSession().apply { unlock() }
+        val router = FakeNavigationRouter()
+        router.activeEntry.value = ActiveNavigationEntry("receive-qr", null)
         val share = mockk<ShareQRUseCase> {
             coEvery { this@mockk(any(), any(), any(), any(), any(), any()) } coAnswers {
                 val allowed = arg<() -> Boolean>(5)
                 assertEquals(UNIFIED, firstArg())
+                assertTrue(allowed())
+                router.activeEntry.value = ActiveNavigationEntry("external-scanner", null)
+                assertFalse(allowed())
+                router.activeEntry.value = ActiveNavigationEntry("receive-qr", null)
                 assertTrue(allowed())
                 access.lock()
                 access.unlock()
@@ -132,7 +140,7 @@ class QrCodeVMTest {
                 false
             }
         }
-        val vm = startedVm(shareQR = share, access = access)
+        val vm = startedVm(shareQR = share, access = access, router = router, sourceEntryId = "receive-qr")
         val state = assertIs<QrCodeState.Prepared>(vm.state.value)
         state.onQrCodeShare("other-address")
         state.onQrCodeShare(UNIFIED)
@@ -292,6 +300,7 @@ class QrCodeVMTest {
         access: AppAccessSession = AppAccessSession().apply { unlock() },
         accountFlow: Flow<WalletAccount?> = flowOf(account),
         ownership: WalletWriteAccess = WalletWriteAccess(),
+        sourceEntryId: String? = null,
     ): QrCodeVM {
         val observeSelectedWalletAccount =
             mockk<ObserveSelectedWalletAccountUseCase> {
@@ -307,6 +316,7 @@ class QrCodeVMTest {
                 viewOnlyContent = viewOnlyContent,
                 appAccessSession = access,
                 walletWriteAccess = ownership,
+                sourceEntryId = sourceEntryId,
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()
@@ -327,6 +337,8 @@ private val VIEW_ONLY_SHIELDED = StringResource.ByResource(resource = 11, args =
 private val VIEW_ONLY_TRANSPARENT = StringResource.ByResource(resource = 12, args = emptyList())
 
 private class FakeNavigationRouter : NavigationRouter {
+    override val activeEntry = MutableStateFlow<ActiveNavigationEntry?>(null)
+
     var backCount = 0
         private set
     val forwardedRoutes = mutableListOf<Any>()

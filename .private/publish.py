@@ -26,6 +26,21 @@ def require_current_controller(controller):
         raise RuntimeError('Main changed since validation began; resolve a new promotion')
 
 
+def require_current_local_upgrade(root=ROOT, metadata=None):
+    local = json.loads((root / '.private/upgrade-baseline.json').read_text())
+    hosted = json.loads((root / '.private/hosted-fixture.json').read_text())
+    require(all(local[key] == hosted[key] for key in ('release', 'source_sha', 'version_code')),
+            'Direct publication requires the paired fixture for the latest wallet release')
+    metadata = metadata or Metadata(REPO)
+    tag = local['release']
+    require(metadata.api('/releases/latest')['tag_name'] == tag,
+            'The direct upgrade fixture no longer matches the latest wallet release')
+    ref = metadata.api('/git/ref/tags/' + tag)
+    require(ref['ref'] == f'refs/tags/{tag}' and ref['object']['type'] == 'commit'
+            and ref['object']['sha'] == local['source_sha'],
+            'The direct upgrade fixture source no longer matches the public release tag')
+
+
 def read_attestation(path, expected_digest):
     with path.open('rb') as stream:
         data = stream.read(256 * 1024 + 1)
@@ -248,6 +263,7 @@ def main():
 
         if run('git', 'ls-tree', '--name-only', expected, '--', CUSTOM_MARKER):
             raise RuntimeError('Custom releases require hosted acceptance and explicit dispatch')
+        require_current_local_upgrade()
         core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
         core=json.loads(core_bytes)
         acceptance_revision=controller if late_attestation else expected

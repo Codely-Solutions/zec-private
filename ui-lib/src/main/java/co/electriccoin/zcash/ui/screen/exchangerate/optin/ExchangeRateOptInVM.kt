@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectFiatCurrencyUseCase
@@ -27,6 +28,7 @@ class ExchangeRateOptInVM(
     private val navigationRouter: NavigationRouter,
     private val preferredFiatProvider: PreferredFiatProvider,
     private val navigateToSelectFiatCurrency: NavigateToSelectFiatCurrencyUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val selectedCurrency = MutableStateFlow<FiatCurrency?>(null)
 
@@ -41,6 +43,7 @@ class ExchangeRateOptInVM(
             )
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             selectedCurrency.update { preferredFiatProvider.get() ?: FiatCurrency.USD }
         }
@@ -63,10 +66,10 @@ class ExchangeRateOptInVM(
             onSkipClick = ::onSkipClick
         )
 
-    private fun onSkipClick() = viewModelScope.launch { optInExchangeRate(false) }
+    private fun onSkipClick() = viewModelScope.launch { optInExchangeRate(false, sourceEntryId = sourceEntryId) }
 
     private fun optInExchangeRateUsd() =
-        viewModelScope.launch { optInExchangeRate(true, selectedCurrency.value) }
+        viewModelScope.launch { optInExchangeRate(true, selectedCurrency.value, sourceEntryId = sourceEntryId) }
 
     private fun dismissOptInExchangeRateUsd() = navigationRouter.back()
 

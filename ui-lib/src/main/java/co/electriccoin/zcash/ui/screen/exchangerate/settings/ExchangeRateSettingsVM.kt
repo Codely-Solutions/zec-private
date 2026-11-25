@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
@@ -32,6 +33,7 @@ internal class ExchangeRateSettingsVM(
     private val isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     private val preferredFiatProvider: PreferredFiatProvider,
     private val navigateToSelectFiatCurrency: NavigateToSelectFiatCurrencyUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private var isOptedInOriginal = false
 
@@ -55,6 +57,7 @@ internal class ExchangeRateSettingsVM(
         )
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             isOptedInOriginal = isExchangeRateEnabledStorageProvider.get() == true
             selectedCurrencyOriginal = preferredFiatProvider.get() ?: FiatCurrency.USD
@@ -101,7 +104,9 @@ internal class ExchangeRateSettingsVM(
     private fun onOptInClick() = isOptedIn.update { true }
 
     private fun onOptInExchangeRateUsdClick() =
-        viewModelScope.launch { optInExchangeRate(isOptedIn.value, selectedCurrency.value) }
+        viewModelScope.launch {
+            optInExchangeRate(isOptedIn.value, selectedCurrency.value, sourceEntryId = sourceEntryId)
+        }
 
     private fun onOptOutClick() = isOptedIn.update { false }
 

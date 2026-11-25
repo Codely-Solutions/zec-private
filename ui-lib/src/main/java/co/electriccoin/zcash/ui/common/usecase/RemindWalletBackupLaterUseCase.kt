@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.provider.WalletBackupConsentStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeCountStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeTimestampStorageProvider
@@ -12,12 +14,12 @@ class RemindWalletBackupLaterUseCase(
     private val walletBackupRemindMeCountStorageProvider: WalletBackupRemindMeCountStorageProvider,
     private val walletBackupRemindMeTimestampStorageProvider: WalletBackupRemindMeTimestampStorageProvider
 ) {
-    suspend operator fun invoke(persistConsent: Boolean) {
+    suspend operator fun invoke(persistConsent: Boolean, sourceEntryId: String? = null) {
         if (persistConsent) {
             walletBackupConsentStorageProvider.store(true)
         }
         remindMeLater()
-        navigationRouter.backToRoot()
+        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
     }
 
     private suspend fun remindMeLater() {

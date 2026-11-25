@@ -8,12 +8,15 @@ import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.PreparationStep
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.TransferProposal
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.work.MigrationScheduler
 import com.google.common.util.concurrent.SettableFuture
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -47,13 +50,16 @@ class FinalizeMigrationScheduleUseCaseTest {
             proposalHandle = 0L,
         )
 
-    private fun useCase(scheduler: MigrationScheduler = mockk(relaxed = true)) =
+    private fun useCase(
+        scheduler: MigrationScheduler = mockk(relaxed = true),
+        synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
+    ) =
         FinalizeMigrationScheduleUseCase(
             migrationScheduler = scheduler,
             getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
                 coEvery { this@mockk("fixture-owner") } returns mockk<OrchardMigrationSdk>(relaxed = true)
             },
-            synchronizerProvider = mockk(relaxed = true),
+            synchronizerProvider = synchronizerProvider,
             migrationLiveDriver = mockk(relaxed = true),
         )
 
@@ -83,6 +89,8 @@ class FinalizeMigrationScheduleUseCaseTest {
         val acknowledgement = SettableFuture.create<Operation.State.SUCCESS>()
         val operation = mockk<Operation> { every { result } returns acknowledgement }
         val workId = MigrationScheduler.workId(account)
+        val synchronizer = mockk<Synchronizer>(relaxed = true)
+        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizerOrNull() } returns synchronizer }
         val manager = mockk<WorkManager> {
             every { enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>()) } returns operation
         }
@@ -91,10 +99,14 @@ class FinalizeMigrationScheduleUseCaseTest {
             every { WorkManager.getInstance(context) } returns manager
             supervisorScope {
                 val result = async {
-                    useCase(MigrationScheduler(context))(schedule(), MigrationMode.AUTOMATIC, account)
+                    useCase(MigrationScheduler(context), provider)(schedule(), MigrationMode.AUTOMATIC, account)
                 }
                 runCurrent()
                 verify(exactly = 1) {
+                    manager.enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>())
+                }
+                coVerifyOrder {
+                    synchronizer.restartSyncSession()
                     manager.enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>())
                 }
                 assertFalse(result.isCompleted)

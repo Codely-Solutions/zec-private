@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.isMigrationPausedUntilNetworkUpgrade
@@ -25,6 +26,7 @@ import co.electriccoin.zcash.ui.screen.migration.review.requiresNewMigrationRevi
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,6 +52,12 @@ class MigrationKeystoneSignVM(
         navigationRouter.discardResultFrom(sourceEntryId)
         super.onCleared()
     }
+    private data class SigningAttempt(
+        val accountKeyId: String,
+        val reviewed: ReviewedMigrationSchedule,
+        val existing: PendingKeystoneMigrationPczts?,
+    )
+
     private val qrParts = MutableStateFlow<List<String>?>(null)
     private val qrFrameIndex = MutableStateFlow(0)
 
@@ -75,6 +83,7 @@ class MigrationKeystoneSignVM(
     // round already got signatures for.
     private fun buildBatch() {
         viewModelScope.launch {
+            var attempt: SigningAttempt? = null
             runCatching {
                 val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
                 check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
@@ -82,6 +91,8 @@ class MigrationKeystoneSignVM(
                 }
                 val reviewed = pendingSchedule.review(accountKeyId) ?: return@runCatching null
                 val existing = pendingKeystonePczts.get(accountKeyId)
+                val approved = SigningAttempt(accountKeyId, reviewed, existing)
+                attempt = approved
                 if (existing?.isFullySigned == true) {
                     navigationRouter.stageResultFrom(sourceEntryId) {
                         NavigationCommand.Replace(listOf(MigrationScheduledArgs(accountKeyId)))
@@ -140,6 +151,7 @@ class MigrationKeystoneSignVM(
                         transferUnsignedPczts = (prepsForRound + transfersForRound).map { Pczt(it.second) },
                         maxFragmentLen = MAX_FRAGMENT_LEN,
                     )
+                if (!isCurrent(approved)) return@runCatching null
                 pendingKeystonePczts.set(
                     accountKeyId,
                     PendingKeystoneMigrationPczts(
@@ -168,34 +180,37 @@ class MigrationKeystoneSignVM(
                     qrParts.value = parts
                     roundInfo.value = roundIndex to totalRounds
                 }
-            }.onFailure { error ->
-                if (error.requiresNewMigrationReview()) {
-                    onReject()
-                    return@onFailure
-                }
-                failureSheet.update {
-                    MigrationTransferFailureState(
-                        message =
-                            when {
-                                error.isMigrationPausedUntilNetworkUpgrade() -> {
-                                    stringRes(DesignR.string.migrationUpgradePaused_message)
-                                }
+            }.onFailure { error -> showPreparationFailure(error, attempt) }
+        }
+    }
 
-                                error.isMigrationWalletTipUnavailable() -> {
-                                    stringRes(DesignR.string.migrationTipUnavailable_message)
-                                }
+    private fun showPreparationFailure(error: Throwable, attempt: SigningAttempt?) {
+        if (error is CancellationException) throw error
+        if (error.requiresNewMigrationReview()) {
+            attempt?.let(::reject)
+        } else {
+            failureSheet.update {
+                MigrationTransferFailureState(
+                    message =
+                        when {
+                            error.isMigrationPausedUntilNetworkUpgrade() -> {
+                                stringRes(DesignR.string.migrationUpgradePaused_message)
+                            }
 
-                                else -> {
-                                    stringRes(DesignR.string.migrationKeystoneSign_prepareErrorMessage)
-                                }
-                            },
-                        onRetry = {
-                            failureSheet.value = null
-                            buildBatch()
+                            error.isMigrationWalletTipUnavailable() -> {
+                                stringRes(DesignR.string.migrationTipUnavailable_message)
+                            }
+
+                            else -> {
+                                stringRes(DesignR.string.migrationKeystoneSign_prepareErrorMessage)
+                            }
                         },
-                        onDismiss = { failureSheet.value = null },
-                    )
-                }
+                    onRetry = {
+                        failureSheet.value = null
+                        buildBatch()
+                    },
+                    onDismiss = { failureSheet.value = null },
+                )
             }
         }
     }
@@ -215,7 +230,11 @@ class MigrationKeystoneSignVM(
                 // that may be re-evaluated on every selected-account emission; get() clears the
                 // stored schedule on account mismatch which would strand the QR screen if a
                 // transient wrong-account emission arrived before the correct one.
-                navigationRouter.back()
+                if (accountKeyId != null) {
+                    navigationRouter.stageResultFrom(sourceEntryId, { pendingSchedule.peek(accountKeyId) == null }) {
+                        NavigationCommand.Back
+                    }
+                }
                 return@combine null
             }
             // Only surfaced for a migration too large for one Keystone QR round trip — invisible
@@ -273,14 +292,27 @@ class MigrationKeystoneSignVM(
 
     private fun onReject() {
         val owner = args.accountKeyId
-        if (owner != null) {
-            val batch = pendingKeystonePczts.peek(owner)
-            if (batch?.isFullySigned != true) {
-                batch?.let { pendingKeystonePczts.clear(owner, it) }
-                pendingSchedule.peek(owner)?.let { pendingSchedule.clear(owner, it) }
-            }
+        val reviewed = owner?.let(pendingSchedule::review)
+        if (owner != null && reviewed != null) {
+            reject(SigningAttempt(owner, reviewed, pendingKeystonePczts.peek(owner)))
+        } else {
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
         }
-        navigationRouter.backToRoot()
+    }
+
+    private fun isCurrent(attempt: SigningAttempt) =
+        pendingSchedule.review(attempt.accountKeyId) === attempt.reviewed &&
+            pendingKeystonePczts.peek(attempt.accountKeyId) === attempt.existing
+
+    private fun reject(attempt: SigningAttempt) {
+        navigationRouter.stageResultFrom(sourceEntryId, { isCurrent(attempt) }) {
+            val owner = attempt.accountKeyId
+            if (attempt.existing?.isFullySigned != true) {
+                attempt.existing?.let { pendingKeystonePczts.clear(owner, it) }
+                pendingSchedule.clear(owner, attempt.reviewed.schedule)
+            }
+            NavigationCommand.BackToRoot
+        }
     }
 
     companion object {

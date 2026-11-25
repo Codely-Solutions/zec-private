@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,8 +16,13 @@ import kotlinx.coroutines.launch
 class TorSettingsVM(
     isTorEnabledUseCase: IsTorEnabledUseCase,
     private val navigationRouter: NavigationRouter,
-    private val optInExchangeRateAndTor: OptInExchangeRateAndTorUseCase
+    private val optInExchangeRateAndTor: OptInExchangeRateAndTorUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
+    }
+
     val state =
         isTorEnabledUseCase
             .observe()
@@ -34,5 +40,7 @@ class TorSettingsVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onOptInClick(optInt: Boolean) = viewModelScope.launch { optInExchangeRateAndTor(optInt) }
+    private fun onOptInClick(optIn: Boolean) = viewModelScope.launch {
+        optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId)
+    }
 }

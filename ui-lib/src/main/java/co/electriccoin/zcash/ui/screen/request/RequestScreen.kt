@@ -15,8 +15,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun RequestScreen(args: RequestArgs) {
-    val vm = koinViewModel<RequestVM> { parametersOf(args.addressType) }
+internal fun RequestScreen(args: RequestArgs, sourceEntryId: String) {
+    val vm = koinViewModel<RequestVM> { parametersOf(args.addressType, sourceEntryId) }
     val requestState by vm.state.collectAsStateWithLifecycle()
     RequestScreenContent(requestState)
 }

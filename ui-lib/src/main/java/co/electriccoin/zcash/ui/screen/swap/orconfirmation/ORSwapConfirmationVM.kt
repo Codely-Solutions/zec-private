@@ -9,6 +9,7 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.forwardFrom
@@ -255,7 +256,9 @@ class ORSwapConfirmationVM(
         publication: SwapQuoteData.Success,
         grant: AppAccessSession.Grant?,
     ) = viewModelScope.launch {
-        val isAllowed = { appAccessSession.permits(grant) && canFund(publication) }
+        val isAllowed = {
+            navigationRouter.isAtEntry(sourceEntryId) && appAccessSession.permits(grant) && canFund(publication)
+        }
         if (!isAllowed()) return@launch
         val quote = publication.quote
         shareQR(

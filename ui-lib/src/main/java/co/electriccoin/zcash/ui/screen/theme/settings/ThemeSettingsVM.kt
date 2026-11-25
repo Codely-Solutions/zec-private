@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.getOrSystem
@@ -26,6 +27,7 @@ internal class ThemeSettingsVM(
     private val navigationRouter: NavigationRouter,
     private val appearanceModeStorageProvider: AppearanceModeStorageProvider,
     private val setAppearanceMode: SetAppearanceModeUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private var storedMode = AppearanceMode.SYSTEM
 
@@ -41,6 +43,7 @@ internal class ThemeSettingsVM(
             )
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             storedMode = appearanceModeStorageProvider.getOrSystem()
             selectedMode.update { storedMode }
@@ -92,6 +95,6 @@ internal class ThemeSettingsVM(
                 }
                 return@launch
             }
-            setAppearanceMode(mode, isOledEnabled = false)
+            setAppearanceMode(mode, isOledEnabled = false, sourceEntryId = sourceEntryId)
         }
 }

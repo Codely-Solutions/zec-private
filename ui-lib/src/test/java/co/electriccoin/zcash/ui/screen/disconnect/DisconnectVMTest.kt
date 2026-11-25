@@ -3,7 +3,9 @@ package co.electriccoin.zcash.ui.screen.disconnect
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -23,6 +25,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -261,6 +264,30 @@ class DisconnectVMTest {
         }
 
     @Test
+    fun confirmedDisconnectCompletesOnlyThroughTheOwningEntry() = runTest {
+        val account = keystone(isSelected = true)
+        val complete = CompletableDeferred<Unit>()
+        val disconnect = mockk<DisconnectUseCase> { coEvery { this@mockk(account) } coAnswers { complete.await() } }
+        val queue = PendingNavigation()
+        val router = mockk<NavigationRouter>(relaxed = true) {
+            every { pendingNavigation } returns queue
+        }
+        val vm = vm(MutableStateFlow(account), disconnect, router, sourceEntryId = "disconnect")
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        runCurrent()
+        assertNotNull(vm.state.value.content).disconnectButton.onClick()
+        runCurrent()
+        assertNotNull(vm.state.value.content?.confirmationDialog).primaryAction.onClick()
+        runCurrent()
+        assertEquals(emptyMap(), queue.commands.value)
+        complete.complete(Unit)
+        runCurrent()
+
+        assertEquals(NavigationCommand.BackToRoot, queue.commands.value.getValue("disconnect").buildCommand())
+        verify(exactly = 0) { router.backToRoot() }
+    }
+
+    @Test
     fun aNamedAccountThatIsMissingOrNotAHardwareWalletGoesBack() =
         runTest {
             val zodl = zodl(isSelected = true)
@@ -347,6 +374,7 @@ class DisconnectVMTest {
         navigationRouter: NavigationRouter = mockk(relaxed = true),
         accounts: MutableStateFlow<List<WalletAccount>?> = MutableStateFlow(null),
         args: DisconnectArgs = DisconnectArgs(),
+        sourceEntryId: String? = null,
     ) = DisconnectVM(
         args = args,
         observeSelectedWalletAccount =
@@ -361,6 +389,7 @@ class DisconnectVMTest {
             },
         disconnect = disconnect,
         navigationRouter = navigationRouter,
+        sourceEntryId = sourceEntryId,
         errorStateMapper =
             ErrorMapperUseCase(
                 reportAccess = mockk(relaxed = true),

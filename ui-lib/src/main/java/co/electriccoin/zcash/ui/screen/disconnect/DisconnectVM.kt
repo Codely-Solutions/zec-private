@@ -2,7 +2,10 @@ package co.electriccoin.zcash.ui.screen.disconnect
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.destructive
 import co.electriccoin.zcash.ui.common.model.HWWalletAccount
@@ -45,6 +48,7 @@ class DisconnectVM(
     private val disconnect: DisconnectUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val confirmationDialogFlow = MutableStateFlow<ZashiConfirmationState?>(null)
     private val disconnectLce = mutableLce<Unit>()
@@ -52,6 +56,7 @@ class DisconnectVM(
     private val accountKeyId = args.accountKeyId
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             val account =
                 if (accountKeyId == null) {
@@ -59,7 +64,9 @@ class DisconnectVM(
                 } else {
                     getWalletAccounts.require().first().findByKeyId(accountKeyId)
                 }
-            if (account !is HWWalletAccount) navigationRouter.back()
+            if (account !is HWWalletAccount) {
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+            }
         }
     }
 
@@ -178,10 +185,12 @@ class DisconnectVM(
         confirmationDialogFlow.value = null
         disconnectLce.execute {
             disconnect(hwAccount)
-            if (accountKeyId == null) {
-                navigationRouter.backToRoot()
-            } else {
-                navigationRouter.backTo(AccountListArgs::class)
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                if (accountKeyId == null) {
+                    NavigationCommand.BackToRoot
+                } else {
+                    NavigationCommand.BackTo(AccountListArgs::class)
+                }
             }
         }
     }

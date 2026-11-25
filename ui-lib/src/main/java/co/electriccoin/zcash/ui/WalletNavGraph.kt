@@ -250,25 +250,25 @@ fun NavGraphBuilder.walletNavGraph(
         composable<MoreArgs> { MoreScreen() }
         composable<AdvancedSettingsArgs> { AdvancedSettingsScreen() }
         composable<ChooseServerArgs> { ChooseServerScreen() }
-        composable<WalletBackup> { AndroidWalletBackup(it.toRoute()) }
+        composable<WalletBackup> { AndroidWalletBackup(it.toRoute(), it.id) }
         composable<ResetZashiArgs> { ResetZashiScreen() }
         composable<AboutArgs> { AboutScreen() }
         composable<co.electriccoin.zcash.ui.screen.donation.DonationArgs> {
             co.electriccoin.zcash.ui.screen.donation.DonationScreen(it.toRoute())
         }
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
-        composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
+        composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen(it.id) }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
         composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute(), it.id) }
         composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen(it.id) }
         composable<AccountListArgs> { AccountListScreen(it.id) }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
-        composable<EditAccountArgs> { EditAccountScreen(it.toRoute()) }
+        composable<EditAccountArgs> { EditAccountScreen(it.toRoute(), it.id) }
         composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute(), it.id) }
         composable(NavigationTargets.EXPORT_PRIVATE_DATA) { WrapExportPrivateData() }
         composable<ExportVKArgs> { ExportVKScreen() }
         dialogComposable<ExportVKConfirmArgs> { ExportVKConfirmScreen(it.toRoute()) }
-        composable<VKDetailArgs> { VKDetailScreen(it.toRoute()) }
+        composable<VKDetailArgs> { VKDetailScreen(it.toRoute(), it.id) }
         composable(NavigationTargets.NOT_ENOUGH_SPACE) {
             WrapNotEnoughSpace(
                 goPrevious = { navigationRouter.back() },
@@ -284,9 +284,9 @@ fun NavGraphBuilder.walletNavGraph(
         ) { backStackEntry ->
             val addressType =
                 backStackEntry.arguments?.getInt(NavigationArgs.ADDRESS_TYPE) ?: ReceiveAddressType.Unified.ordinal
-            QrCodeScreen(addressType)
+            QrCodeScreen(addressType, backStackEntry.id)
         }
-        composable<RequestArgs> { RequestScreen(it.toRoute()) }
+        composable<RequestArgs> { RequestScreen(it.toRoute(), it.id) }
         composable<ConnectKeystoneArgs> { ConnectKeystoneScreen() }
         composable<ChooseHWWalletArgs> { ChooseHWWalletScreen() }
         dialogComposable<KeystoneExplainerScreenArgs> { KeystoneExplainerScreen() }
@@ -341,13 +341,13 @@ fun NavGraphBuilder.walletNavGraph(
         composable<AddSwapABContactArgs> { AddSwapABContactScreen(it.toRoute()) }
         composable<AddGenericABContactArgs> { AddGenericABContactScreen(it.toRoute()) }
         composable<UpdateGenericABContactArgs> { UpdateGenericABContactScreen(it.toRoute()) }
-        composable<TorSettingsArgs> { TorSettingsScreen() }
-        composable<ThemeSettingsArgs> { ThemeSettingsScreen() }
+        composable<TorSettingsArgs> { TorSettingsScreen(it.id) }
+        composable<ThemeSettingsArgs> { ThemeSettingsScreen(it.id) }
         dialogComposable<ThemeDarkLookArgs> { ThemeDarkLookScreen(it.toRoute()) }
-        composable<TorOptInArgs> { TorOptInScreen() }
+        composable<TorOptInArgs> { TorOptInScreen(it.id) }
         dialogComposable<ShieldedAddressInfoArgs> { ShieldedAddressInfoScreen() }
         dialogComposable<TransparentAddressInfoArgs> { TransparentAddressInfoScreen() }
-        composable<ExchangeRateOptInArgs> { ExchangeRateOptInScreen() }
+        composable<ExchangeRateOptInArgs> { ExchangeRateOptInScreen(it.id) }
         composable<PayArgs> { PayScreen(it.id) }
         dialogComposable<PayInfoArgs> { PayInfoScreen() }
         composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen(it.id) }
@@ -355,7 +355,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SwapRefundAddressInfoArgs> { SwapRefundAddressInfoScreen(it.toRoute()) }
         dialogComposable<SwapSupportArgs> { SwapSupportScreen(it.toRoute()) }
         dialogComposable<SwapQuoteMismatchArgs> { SwapQuoteMismatchScreen(it.toRoute()) }
-        dialogComposable<EphemeralHotfixArgs> { EphemeralHotfixScreen(it.toRoute()) }
+        dialogComposable<EphemeralHotfixArgs> { EphemeralHotfixScreen(it.toRoute(), it.id) }
         dialogComposable<EnhancementHotfixArgs> { EnhancementHotfixScreen() }
         dialogComposable<EphemeralLockArgs> { EphemeralLockScreen() }
         composable<DebugArgs> { DebugScreen() }
@@ -366,7 +366,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ResyncDateArgs> { ResyncDateScreen(it.toRoute(), it.id) }
         composable<ResyncEstimationArgs> { ResyncEstimationScreen(it.toRoute()) }
         composable<ResyncHeightArgs> { ResyncHeightScreen() }
-        composable<DisconnectArgs> { DisconnectScreen(it.toRoute()) }
+        composable<DisconnectArgs> { DisconnectScreen(it.toRoute(), it.id) }
         // Migration destinations are contributed by the feature-migration module — see
         // MigrationNavContributor in MigrationContracts.kt (wired via Koin in the app module).
         org.koin.mp.KoinPlatform.getKoin().getAll<MigrationNavContributor>().forEach {

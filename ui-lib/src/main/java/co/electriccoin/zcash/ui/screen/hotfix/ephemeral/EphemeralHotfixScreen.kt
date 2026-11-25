@@ -14,8 +14,8 @@ import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EphemeralHotfixScreen(args: EphemeralHotfixArgs) {
-    val vm = koinViewModel<EphemeralHotfixVM> { parametersOf(args) }
+fun EphemeralHotfixScreen(args: EphemeralHotfixArgs, sourceEntryId: String) {
+    val vm = koinViewModel<EphemeralHotfixVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     var hasBeenAutofocused by rememberSaveable { mutableStateOf(false) }
     EphemeralHotfixView(

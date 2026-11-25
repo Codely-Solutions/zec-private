@@ -9,6 +9,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -63,6 +64,7 @@ class RequestVM(
     private val observeAccountIcon: ObserveAccountIconUseCase,
     private val appAccessSession: AppAccessSession,
     private val walletWriteAccess: WalletWriteAccess,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     companion object {
         private const val DEFAULT_MEMO = ""
@@ -201,7 +203,7 @@ class RequestVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
-                                    isAllowed = permitted,
+                                    isAllowed = { navigationRouter.isAtEntry(sourceEntryId) && permitted() },
                                 )
                             }
                         },

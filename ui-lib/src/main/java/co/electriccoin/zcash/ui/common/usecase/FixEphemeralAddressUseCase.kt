@@ -2,10 +2,18 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import android.widget.Toast
+import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +29,10 @@ class FixEphemeralAddressUseCase(
     private val navigationRouter: NavigationRouter,
     private val accountDataSource: AccountDataSource,
     private val getSwapStatus: GetSwapStatusUseCase,
-    private val context: Context
+    private val context: Context,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
+    private val isTorEnabled: IsTorEnabledStorageProvider,
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -29,50 +40,48 @@ class FixEphemeralAddressUseCase(
 
     private var job: Job? = null
 
-    operator fun invoke(address: String) {
-        if (job?.isActive == true) return
-        job =
-            scope.launch {
-                try {
-                    isLoading.update { true }
-                    val validation = synchronizerProvider.getSynchronizer().validateAddress(address)
-
-                    val ephemeral =
-                        when (validation) {
-                            AddressType.Shielded,
-                            AddressType.Tex,
-                            AddressType.Unified -> {
-                                return@launch
-                            }
-
-                            AddressType.Transparent -> {
-                                address
-                            }
-
-                            is AddressType.Invalid -> {
-                                getSwapStatus(depositAddress = address)
-                                    .status
-                                    ?.destinationAddress
-                                    ?.address
-                                    ?: return@launch
-                            }
-                        }
-                    navigationRouter.back()
-                    fetchUtxosByAddress(ephemeral)
-                } finally {
-                    isLoading.update { false }
+    operator fun invoke(address: String, sourceEntryId: String?) {
+        if (job?.isActive == true || !navigationRouter.isAtEntry(sourceEntryId)) return
+        val account = selectedAccount() ?: return
+        val grant = appAccessSession.grant.value
+        val token = walletWriteAccess.token()
+        val canRecover = {
+            appAccessSession.permits(grant) && walletWriteAccess.permits(token) && selectedAccount() == account
+        }
+        job = scope.launch {
+            try {
+                isLoading.update { true }
+                if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isAtEntry(sourceEntryId)) {
+                    return@launch
                 }
+                val synchronizer = synchronizerProvider.getSynchronizer()
+                val ephemeral = resolveEphemeralAddress(synchronizer, address) ?: return@launch
+                if (isTorEnabled.get() == true && navigationRouter.commitFrom(sourceEntryId, canRecover) {
+                        NavigationCommand.Back
+                    } && canRecover()
+                ) {
+                    fetchUtxosByAddress(synchronizer, account, ephemeral)
+                }
+            } finally {
+                isLoading.update { false }
             }
+        }
     }
 
     fun observeIsLoading() = isLoading.asStateFlow()
 
-    private suspend fun fetchUtxosByAddress(address: String) {
-        val fundsDiscovered =
-            synchronizerProvider.getSynchronizer().fetchUtxosByAddress(
-                accountUuid = accountDataSource.getSelectedAccount().sdkAccount.accountUuid,
-                address = address
-            )
+    private fun selectedAccount() =
+        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
+
+    private suspend fun resolveEphemeralAddress(synchronizer: Synchronizer, address: String): String? =
+        when (synchronizer.validateAddress(address)) {
+            AddressType.Shielded, AddressType.Tex, AddressType.Unified -> null
+            AddressType.Transparent -> address
+            is AddressType.Invalid -> getSwapStatus(depositAddress = address).status?.destinationAddress?.address
+        }
+
+    private suspend fun fetchUtxosByAddress(synchronizer: Synchronizer, account: AccountUuid, address: String) {
+        val fundsDiscovered = synchronizer.fetchUtxosByAddress(accountUuid = account, address = address)
         withContext(Dispatchers.Main.immediate) {
             if (fundsDiscovered) {
                 Toast.makeText(context, "Funds were successfully discovered", Toast.LENGTH_LONG).show()

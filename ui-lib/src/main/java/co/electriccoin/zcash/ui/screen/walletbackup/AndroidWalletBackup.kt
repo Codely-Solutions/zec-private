@@ -9,8 +9,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun AndroidWalletBackup(args: WalletBackup) {
-    val viewModel = koinViewModel<WalletBackupViewModel> { parametersOf(args) }
+internal fun AndroidWalletBackup(args: WalletBackup, sourceEntryId: String) {
+    val viewModel = koinViewModel<WalletBackupViewModel> { parametersOf(args, sourceEntryId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     BackHandler { state?.onBack?.invoke() }
     state?.takeIf { !it.seed.isRevealed || viewModel.isRevealed }?.let { WalletBackupView(state = it) }

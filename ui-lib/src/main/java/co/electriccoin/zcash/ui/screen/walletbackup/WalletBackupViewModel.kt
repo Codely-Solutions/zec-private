@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SensitiveReveal
@@ -42,7 +43,12 @@ class WalletBackupViewModel(
     private val biometricRepository: BiometricRepository,
     private val copyRecoveryToClipboard: CopyRecoveryToClipboardUseCase,
     private val appAccessSession: AppAccessSession,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
+    }
+
     private val lockoutDuration =
         walletBackupMessageUseCase
             .observe()
@@ -165,11 +171,11 @@ class WalletBackupViewModel(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT), null)
 
     private fun onRemindMeLaterClick(grant: AppAccessSession.Grant?) =
-        viewModelScope.launch { if (reveal.permits(grant)) remindWalletBackupLater(persistConsent = false) }
+        viewModelScope.launch { if (reveal.permits(grant)) remindWalletBackupLater(false, sourceEntryId) }
 
     private fun onWalletBackupSavedClick(grant: AppAccessSession.Grant?) =
         viewModelScope.launch {
-            if (reveal.permits(grant)) onUserSavedWalletBackup()
+            if (reveal.permits(grant)) onUserSavedWalletBackup(sourceEntryId)
         }
 
     private fun onRevealClick() =

@@ -21,6 +21,36 @@ with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
     from integrate_release import state_commit
 
 
+class DirectUpgradeBaselineTest(unittest.TestCase):
+    def test_direct_publication_requires_the_same_live_release_and_source_as_hosted(self):
+        hosted = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330)
+        legacy = dict(release='v3.19.0-private.21', source_sha='b' * 40, version_code=321)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(hosted))
+            local = root / '.private/upgrade-baseline.json'
+            local.write_text(json.dumps(legacy))
+            metadata = MagicMock()
+            with self.assertRaisesRegex(ValueError, 'paired fixture'):
+                publish.require_current_local_upgrade(root, metadata)
+            metadata.api.assert_not_called()
+
+            local.write_text(json.dumps(hosted))
+            metadata.api.return_value = {'tag_name': 'v3.19.0-private.31'}
+            with self.assertRaisesRegex(ValueError, 'no longer matches the latest'):
+                publish.require_current_local_upgrade(root, metadata)
+
+            ref = {'ref': 'refs/tags/' + hosted['release'], 'object': {'sha': legacy['source_sha'], 'type': 'commit'}}
+            metadata.api.side_effect = [{'tag_name': hosted['release']}, ref]
+            with self.assertRaisesRegex(ValueError, 'source no longer matches'):
+                publish.require_current_local_upgrade(root, metadata)
+
+            ref['object']['sha'] = hosted['source_sha']
+            metadata.api.side_effect = [{'tag_name': hosted['release']}, ref]
+            publish.require_current_local_upgrade(root, metadata)
+
+
 class UpgradeSimulationControlTest(unittest.TestCase):
     def test_diagnostic_signing_is_scoped_to_the_protected_dispatch(self):
         controller = 'b' * 40

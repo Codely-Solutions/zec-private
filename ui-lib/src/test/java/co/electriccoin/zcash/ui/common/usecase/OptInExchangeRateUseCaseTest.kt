@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import kotlinx.coroutines.flow.Flow
@@ -55,6 +56,21 @@ class OptInExchangeRateUseCaseTest {
             assertEquals(false, optInProvider.stored)
             assertEquals(1, router.backCount)
         }
+
+    @Test
+    fun scopedPreferenceCompletionKeepsTheStoredChoiceAndQueuesOnlyTheOwnersBack() = runTest {
+        val events = mutableListOf<String>()
+        val router = FakeOptInNavigationRouter()
+        val optIn = FakeIsExchangeRateEnabledStorageProvider(events)
+        val useCase = OptInExchangeRateUseCase(router, optIn, FakePreferredFiatProvider(events))
+
+        useCase(true, FiatCurrency("EUR"), "exchange-settings")
+
+        assertEquals(listOf("storeFiat=EUR", "storeOptIn=true"), events)
+        assertEquals(0, router.backCount)
+        val command = router.pendingNavigation.commands.value.getValue("exchange-settings")
+        assertEquals(NavigationCommand.Back, command.buildCommand())
+    }
 
     @Test
     fun optInWithoutCurrencyLeavesCurrencyUntouched() =
@@ -113,6 +129,7 @@ private class FakePreferredFiatProvider(
 }
 
 private class FakeOptInNavigationRouter : NavigationRouter {
+    override val pendingNavigation = PendingNavigation()
     var backCount = 0
         private set
 

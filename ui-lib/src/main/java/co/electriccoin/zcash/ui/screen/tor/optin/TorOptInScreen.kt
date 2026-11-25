@@ -6,10 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun TorOptInScreen() {
-    val vm = koinViewModel<TorOptInVM>()
+fun TorOptInScreen(sourceEntryId: String) {
+    val vm = koinViewModel<TorOptInVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.onBack() }
     TorOptInView(state = state)
