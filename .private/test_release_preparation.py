@@ -161,9 +161,9 @@ class ReleaseTests(unittest.TestCase):
 
     def test_assemble_reused_receipts_validates_and_preserves_exact_bytes(self):
         core=json.loads((preparation.SOURCE/'.private/core-acceptance.json').read_text())
-        core['build_source_sha']=SHA
+        source=core['build_source_sha']
         version=core['candidate_version_code']
-        quotes=self.quote_receipt()
+        quotes=dict(self.quote_receipt(), build_source_sha=source)
         core_path=self.root/'core.json'; quote_path=self.root/'quotes.json'
         core_raw=json.dumps(core,indent=3).encode()+b'\n'; quote_raw=json.dumps(quotes,indent=3).encode()+b'\n'
         core_path.write_bytes(core_raw); quote_path.write_bytes(quote_raw)
@@ -178,9 +178,9 @@ class ReleaseTests(unittest.TestCase):
         def isolated_validate(receipt, expected, root=None, **kwargs):
             return original_validate(receipt,expected,root=policy_root,**kwargs)
         out=self.root/'assembled'
-        argv=['assemble_release.py','--source-sha',SHA,'--candidate-run','1','--reuse-core',str(core_path),
+        argv=['assemble_release.py','--source-sha',source,'--candidate-run','1','--reuse-core',str(core_path),
               '--reuse-quote',str(quote_path),'--task-root',str(self.root),'--out',str(out)]
-        with patch.object(sys,'argv',argv), patch.object(assembly,'verify_revision',return_value=SHA), \
+        with patch.object(sys,'argv',argv), patch.object(assembly,'verify_revision',return_value=source), \
              patch.object(assembly,'git',return_value=f'ZCASH_VERSION_CODE={version}'), \
              patch.object(assembly,'Metadata',return_value=FakeMetadata()), \
              patch.object(assembly,'selected_baseline',return_value=BASELINE), \
