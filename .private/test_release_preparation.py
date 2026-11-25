@@ -164,7 +164,7 @@ class ReleaseTests(unittest.TestCase):
             input_fingerprint=DIGEST,executed_apk_sha256=DIGEST,quote_requests=3,quote_reviews=3,dismissals=3,
             tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
             recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True,independent_comparisons=1,
-            ui_bridge=dict(artifact=dict(ARTIFACT, source_sha=source),
+            ui_bridge=dict(artifact=dict(ARTIFACT, source_sha=source), archive_verified=True,
                 producer=dict(workflow='ui-bridge.yml', head_branch='main', event='workflow_dispatch', head_sha=source,
                               producer_job_name='probe', producer_job_conclusion='success',
                               artifact_name='android-ui-bridge', run_id=3, run_attempt=1, producer_job_id=20),
@@ -187,6 +187,10 @@ class ReleaseTests(unittest.TestCase):
                 validate_direct_quotes(mismatched, DIGEST, SHA)
         with self.assertRaisesRegex(ValueError, 'verified bridge'):
             validate_direct_quotes({key: value for key, value in receipt.items() if key != 'ui_bridge'}, DIGEST, SHA)
+        missing_archive = deepcopy(receipt)
+        del missing_archive['ui_bridge']['archive_verified']
+        with self.assertRaisesRegex(ValueError, 'verified bridge'):
+            validate_direct_quotes(missing_archive, DIGEST, SHA)
         with patch('acceptance_policy.direct_bridge_inputs', return_value='a'*64):
             with self.assertRaisesRegex(ValueError, 'inputs differ'):
                 validate_direct_quotes(receipt, DIGEST, SHA)
@@ -222,7 +226,7 @@ class ReleaseTests(unittest.TestCase):
                         'candidate': {'executed_sha256': staged_hash['instrumentation_apk_sha256']}},
                     stages={'interruption': dict(update_metadata_valid_before=True, update_metadata_valid_after=True,
                                                  update_blocked_during_outage=True)})
-        probe = dict(passed=True, probeArtifact=dict(ARTIFACT, **apks), apkHashes=staged_hash,
+        probe = dict(passed=True, preparedApksReused=False, probeArtifact=dict(ARTIFACT, **apks), apkHashes=staged_hash,
                      apkPreparation={role: dict(executionEntriesUnchanged=True, abi='x86_64', originalSha256=original,
                                                 testedSha256=staged_hash[role]) for role, original in apks.items()})
         profile = dict(receipt={'job': 'owned', 'sources': prepared['acceptanceRuntimeBindings']},
@@ -245,6 +249,9 @@ class ReleaseTests(unittest.TestCase):
                 assembly.main()
                 validate_wallet.assert_called_once()
 
+        with self.assertRaisesRegex(ValueError, 'requires verified producer archives'):
+            assemble(prepared, downloaded=dict(probe, preparedApksReused=True))
+        self.assertFalse(out.exists())
         changed = deepcopy(prepared)
         changed['upgradeBaseline']['apk_sha256'] = '0' * 64
         with self.assertRaisesRegex(ValueError, 'Selected upgrade baseline changed'):

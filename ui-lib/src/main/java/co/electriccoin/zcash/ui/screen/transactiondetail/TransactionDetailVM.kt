@@ -233,6 +233,12 @@ class TransactionDetailVM(
                         ).takeIf {
                             transaction.transaction is SendTransaction.Failed || saved?.fundingNotSubmitted == true
                         }
+                        val quoteHeader = mapper.createTransactionDetailQuoteHeaderState(
+                            swap = transaction.swap.status,
+                            originAsset = transaction.swap.originAsset,
+                            destinationAsset = transaction.swap.destinationAsset,
+                            savedMetadata = transaction.swap.savedMetadata,
+                        )
                         SendSwapState(
                             statusRow = transaction.swap.toDetailStatusRow(
                                 metadata = saved,
@@ -241,13 +247,12 @@ class TransactionDetailVM(
                             message = getSwapMessage.getMessage(
                                 transaction.swap.status, saved, transaction.swap.isFundingWindowOpen
                             ),
-                            quoteHeader =
-                                mapper.createTransactionDetailQuoteHeaderState(
-                                    swap = transaction.swap.status,
-                                    originAsset = transaction.swap.originAsset,
-                                    destinationAsset = transaction.swap.destinationAsset,
-                                    savedMetadata = transaction.swap.savedMetadata,
-                                ),
+                            quoteHeader = quoteHeader,
+                            savedProviderOutput = saved?.takeIf {
+                                quoteHeader.to == null && it.status == PAYMENT_SHORTFALL
+                            }?.executedAmountOut?.let {
+                                stringResByCurrencyNumber(it, saved.destination.tokenTicker, minDecimals = 0)
+                            },
                             depositAddress =
                                 stringResByAddress(
                                     value = transaction.recipient?.address.orEmpty()

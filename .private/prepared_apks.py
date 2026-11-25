@@ -36,6 +36,8 @@ def expected_roles(manifest):
 
 
 def reuse(receipt_path, manifest, root, sdk, expected_sha256):
+    if 'stable_candidate_run' in manifest:
+        raise ValueError('Release acceptance requires authenticated producer archives')
     receipt_path = Path(receipt_path)
     if not receipt_path.is_absolute():
         raise ValueError('Prepared receipt path must be absolute')

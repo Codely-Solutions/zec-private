@@ -288,6 +288,7 @@ class WalletRepositoryImpl(
         scope.launch {
             try {
                 walletMutation.withLock {
+                    if (resetProgressStore.isPending.value) return@withLock
                     val version = persistableWalletProvider.writeVersion
                     val wallet = persistableWalletProvider.getPersistableWallet()
                     val onboarding = readOnboardingState()

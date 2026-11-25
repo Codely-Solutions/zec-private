@@ -7,10 +7,14 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 
@@ -46,24 +50,30 @@ interface WalletServerSelectionProvider {
 class PersistableWalletProviderImpl(
     private val preferenceHolder: EncryptedPreferenceProvider,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+    resetProgressStore: ResetProgressStore? = null,
 ) : PersistableWalletProvider, WalletServerSelectionProvider {
     private val persistableWalletStorageProvider = PersistableWalletStorageProviderImpl(preferenceHolder)
     override val writeVersion get() = walletWriteAccess.token()
 
+    private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val records = (readsSuppressed ?: flowOf(false)).flatMapLatest { suppressed ->
+        if (suppressed) flowOf(null) else persistableWalletStorageProvider.observe()
+    }
+
     override val persistableWallet: Flow<PersistableWallet?> =
-        persistableWalletStorageProvider
-            .observe()
-            .map { record ->
-                val wallet = record?.wallet
-                wallet?.copy(
-                    seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
-                )
-            }.distinctUntilChanged()
+        records.map { record ->
+            val wallet = record?.wallet
+            wallet?.copy(
+                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
+            )
+        }.distinctUntilChanged()
 
     override val serverSelection =
-        persistableWalletStorageProvider.observe().map { it?.serverSelection() }.distinctUntilChanged()
+        records.map { it?.serverSelection() }.distinctUntilChanged()
 
-    override suspend fun getServerSelection() = persistableWalletStorageProvider.get()?.serverSelection()
+    override suspend fun getServerSelection() = currentRecord()?.serverSelection()
 
     override suspend fun store(persistableWallet: PersistableWallet) {
         walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
@@ -106,9 +116,12 @@ class PersistableWalletProviderImpl(
             }
         } ?: false
 
-    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()?.wallet
+    override suspend fun getPersistableWallet() = currentRecord()?.wallet
 
     override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
+
+    private suspend fun currentRecord() =
+        if (readsSuppressed?.value == true) null else persistableWalletStorageProvider.get()
 
     private suspend fun WalletRecord.serverSelection() =
         WalletServerSelection(
@@ -139,9 +152,14 @@ private class PersistableWalletPreferenceDefault(
     override val key: PreferenceKey
 ) : PreferenceDefault<WalletRecord?> {
     override suspend fun getValue(preferenceProvider: PreferenceProvider) =
-        preferenceProvider.getString(key)?.let {
-            val json = JSONObject(it)
-            WalletRecord(PersistableWallet.from(json), json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean)
+        preferenceProvider.getString(key)?.let { serialized ->
+            runCatchingRecoverable {
+                val json = JSONObject(serialized)
+                WalletRecord(PersistableWallet.from(json), json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean)
+            }.getOrElse {
+                // JSONObject and SDK parse errors can contain the original decrypted record.
+                throw StoredWalletDecodeException()
+            }
         }
 
     override suspend fun putValue(
@@ -154,3 +172,5 @@ private class PersistableWalletPreferenceDefault(
         preferenceProvider.putStringWithRollback(key, value)
     }
 }
+
+internal class StoredWalletDecodeException : IllegalStateException("Could not read the stored wallet record")

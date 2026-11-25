@@ -1002,7 +1002,7 @@
     <string name="swapStatus_paying">Pagando</string>
     <string name="swapStatus_swapIncomplete">Swap incompleto</string>
     <string name="swapStatus_paymentIncomplete">Pago incompleto</string>
-    <string name="transaction_detail_info_incomplete_deposit_message">Envía %1$s antes del %2$s para alcanzar el depósito requerido.</string>
+    <string name="transaction_detail_info_incomplete_deposit_message">Faltan %1$s en el depósito. La cotización vence el %2$s.</string>
 
     <!-- ===== transaction_filters ===== -->
     <string name="filter_title">Filtrar</string>

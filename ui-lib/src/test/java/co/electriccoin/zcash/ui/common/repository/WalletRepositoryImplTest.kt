@@ -670,7 +670,8 @@ class WalletRepositoryImplTest {
             },
             standardPreferenceProvider = preferences,
             walletViewModel = wallet,
-            appAccessSession = access
+            appAccessSession = access,
+            resetProgressStore = mockk { every { isPending } returns MutableStateFlow(false) },
         )
         scopes += auth.viewModelScope
         return Triple(wallet, auth, access)

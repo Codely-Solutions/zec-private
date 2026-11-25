@@ -12,10 +12,12 @@ import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
+import co.electriccoin.zcash.ui.common.provider.StoredWalletDecodeException
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -88,6 +90,33 @@ class WalletSdkInputCommitTest {
         assertUncommitted(walletProvider, sdkWallets, storage)
     }
 
+    @Test
+    fun malformedWalletRecordLeavesOnlyASanitizedDecodeError() = runTest {
+        val marker = "synthetic-sensitive-field"
+        val serialized = "{\"seedPhrase\": \"" + marker
+        val storage = CommitFixture(serialized)
+
+        val error = assertFailsWith<StoredWalletDecodeException> { provider(storage).getPersistableWallet() }
+
+        assertTrue(marker !in error.stackTraceToString())
+        assertNull(error.cause)
+        assertEquals(serialized, storage.durable)
+    }
+
+    @Test
+    fun coldPendingResetSkipsUnreadableWalletHydration() = runTest {
+        val context = mockk<Context> { every { noBackupFilesDir } returns directory.root }
+        ResetProgressStore(context, DirectorySync {}).store(ResetStage.ERASE_SDK)
+        val pending = ResetProgressStore(context, DirectorySync {})
+        val storage = CommitFixture("{synthetic-unreadable}")
+        val walletProvider = provider(storage, pending)
+
+        assertTrue(pending.isPending.value)
+        assertNull(walletProvider.persistableWallet.first())
+        assertNull(walletProvider.getPersistableWallet())
+        assertEquals("{synthetic-unreadable}", storage.durable)
+    }
+
     private suspend fun TestScope.assertUncommitted(
         walletProvider: PersistableWalletProviderImpl,
         sdkWallets: List<PersistableWallet?>,
@@ -111,10 +140,13 @@ class WalletSdkInputCommitTest {
         return sdkWallets
     }
 
-    private fun TestScope.provider(storage: CommitFixture): PersistableWalletProviderImpl {
+    private fun TestScope.provider(
+        storage: CommitFixture,
+        resetProgressStore: ResetProgressStore? = null,
+    ): PersistableWalletProviderImpl {
         val android = AndroidPreferenceProvider(storage.preferences, StandardTestDispatcher(testScheduler))
         val encryptedHolder = mockk<EncryptedPreferenceProvider> { coEvery { this@mockk.invoke() } returns android }
-        return PersistableWalletProviderImpl(encryptedHolder)
+        return PersistableWalletProviderImpl(encryptedHolder, resetProgressStore = resetProgressStore)
     }
 
     /** Like SharedPreferences, publishes the new in-memory value even on a failed disk commit. */

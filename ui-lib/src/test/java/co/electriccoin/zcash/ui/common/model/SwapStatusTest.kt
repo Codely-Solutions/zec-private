@@ -13,6 +13,7 @@ class SwapStatusTest {
     @Test
     fun terminalStatusesEndPolling() {
         assertTrue(SwapStatus.SUCCESS.isTerminal)
+        assertTrue(SwapStatus.PAYMENT_SHORTFALL.isTerminal)
         assertTrue(SwapStatus.REFUNDED.isTerminal)
         assertTrue(SwapStatus.FAILED.isTerminal)
         assertTrue(SwapStatus.EXPIRED.isTerminal)
@@ -28,7 +29,9 @@ class SwapStatusTest {
     @Test
     fun everyStatusIsClassified() {
         // Guards against a new enum entry silently defaulting to non-terminal and looping forever.
-        val expectedTerminal = setOf(SwapStatus.SUCCESS, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)
+        val expectedTerminal = setOf(
+            SwapStatus.SUCCESS, SwapStatus.PAYMENT_SHORTFALL, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED
+        )
         assertEquals(expectedTerminal, SwapStatus.entries.filter { it.isTerminal }.toSet())
     }
 }

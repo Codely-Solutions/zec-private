@@ -36,6 +36,7 @@ import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
@@ -491,7 +492,11 @@ class TransactionDetailVMTest {
         val origin = SwapCatalogTestFixture.nativeZec
         val destination = SwapCatalogTestFixture.externalAssets.first()
         val shortAmount = fixture.quotedAmount - BigDecimal.ONE.movePointLeft(destination.decimals)
-        val saved = swapMetadata(SwapStatus.SUCCESS, SwapCatalogTestFixture.simple(origin)).copy(
+        val saved = swapMetadata(
+            SwapStatus.SUCCESS,
+            SwapCatalogTestFixture.simple(origin),
+            SwapCatalogTestFixture.simple(destination),
+        ).copy(
             mode = SwapMode.EXACT_OUTPUT,
             quotedAmountOut = fixture.quotedAmount,
             executedAmountOut = shortAmount,
@@ -508,6 +513,15 @@ class TransactionDetailVMTest {
             assertEquals(stringRes(R.string.private_payment_shortfall), detail.header.title)
             assertEquals(SwapStatus.PAYMENT_SHORTFALL, info.statusRow.status)
             assertEquals(stringRes(R.string.private_payment_shortfall), info.message?.title)
+            if (provider == null) {
+                assertEquals(
+                    stringResByCurrencyNumber(shortAmount, destination.tokenTicker, minDecimals = 0),
+                    info.savedProviderOutput,
+                )
+            } else {
+                assertEquals(stringResByNumber(shortAmount), info.quoteHeader.to?.amount)
+                assertNull(info.savedProviderOutput)
+            }
             assertNotNull(detail.secondaryButton)
             assertNull(info.donationBasisZec)
         }

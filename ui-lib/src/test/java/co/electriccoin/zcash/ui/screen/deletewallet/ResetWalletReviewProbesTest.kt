@@ -115,18 +115,18 @@ class ResetWalletReviewProbesTest {
     @Test
     fun preferencesCanRetryAfterRestartWithoutRequiringSdkOrWalletKeys() = runBlocking {
         val fixture = Fixture()
-        coEvery { fixture.standardPrefs.clearPreferences() } returns false
-        assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = true) }
-        coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
-
-        coEvery { fixture.standardPrefs.clearPreferences() } returns true
         coEvery { fixture.encryptedPrefs.clearPreferences() } returns false
+        assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = true) }
+        coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
+
+        coEvery { fixture.encryptedPrefs.clearPreferences() } returns true
+        coEvery { fixture.standardPrefs.clearPreferences() } returns false
         assertFailsWith<IllegalStateException> { fixture.newReset()(keepFiles = false) }
 
         val resumed = fixture.newReset()
         assertTrue(resumed.isPending.value)
         assertEquals(ResetStage.CLEAR_PREFERENCES, fixture.progressStore().getStage())
-        coEvery { fixture.encryptedPrefs.clearPreferences() } returns true
+        coEvery { fixture.standardPrefs.clearPreferences() } returns true
         resumed(keepFiles = false)
 
         coVerify(exactly = 1) { fixture.sdkData() }

@@ -25,7 +25,9 @@ if manifest.get('probeKind') == 'core-testnet' and 'stable_candidate_run' in man
         require_current_local_upgrade(PROJECT, manifest)
 guest_memory=3072 if manifest.get('probeKind')=='core-testnet' else 1536
 from prepared_apks import binding, reuse, write_receipt, export_prepared
-local_receipt=os.environ.get('CODEX_EMULATOR_PREPARED_RECEIPT')
+# Verify the original acceptance APKs against the selected producer archives.
+local_receipt = (None if 'stable_candidate_run' in manifest
+                 else os.environ.get('CODEX_EMULATOR_PREPARED_RECEIPT'))
 manifest_binding=binding(manifest) if local_receipt else json.loads(json.dumps(manifest))
 if local_receipt:
     apk_paths,apk_preparation,manifest=reuse(local_receipt,manifest,ROOT,SDK,os.environ.get('CODEX_EMULATOR_PREPARED_SHA256'))
@@ -83,7 +85,7 @@ if manifest_binding.get('build_source_sha') or manifest_binding.get('source_sha'
     if os.environ.get('CODEX_EMULATOR_PREPARED_EXPORT'):
         export_prepared(Path(os.environ['CODEX_EMULATOR_PREPARED_EXPORT']),manifest_binding,manifest,apk_paths,apk_preparation,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
-receipt={'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','guestMemoryMiB':guest_memory,'writableState':'guard-owned root','userdataRequestedBytes':2147483648}
+receipt={'preparedApksReused':local_receipt is not None,'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','guestMemoryMiB':guest_memory,'writableState':'guard-owned root','userdataRequestedBytes':2147483648}
 with EmulatorSession(ROOT, guest_memory=guest_memory) as session:
     adb=session.adb
     receipt.update(emulatorSlot=session.slot,privateAdbPort=session.ports.adb,

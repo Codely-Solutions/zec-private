@@ -4,7 +4,6 @@ import android.content.Context
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
 import kotlinx.coroutines.Dispatchers
@@ -17,12 +16,11 @@ import kotlin.time.Duration.Companion.seconds
 class ResetWalletSdkDataUseCase(
     private val context: Context,
     private val coordinator: WalletCoordinator,
-    private val walletProvider: PersistableWalletProvider,
     private val preferenceRecovery: SdkEncryptedPreferenceRecoveryProvider,
     private val progressStore: ResetProgressStore,
 ) {
     suspend operator fun invoke() {
-        val network = walletProvider.getPersistableWallet()?.network ?: ZcashNetwork.fromResources(context)
+        val network = ZcashNetwork.fromResources(context)
         val ready = withTimeoutOrNull(5.seconds) {
             coordinator.synchronizer.first { it == null }
             true

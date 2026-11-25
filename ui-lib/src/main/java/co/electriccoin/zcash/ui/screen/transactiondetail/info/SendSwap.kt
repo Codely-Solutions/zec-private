@@ -44,10 +44,10 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
         modifier = modifier
     ) {
         var isExpanded by rememberSaveable { mutableStateOf(false) }
-        ZashiSwapQuoteHeader(
-            state = state.quoteHeader
-        )
-        Spacer(20.dp)
+        if (state.savedProviderOutput == null) {
+            ZashiSwapQuoteHeader(state = state.quoteHeader)
+            Spacer(20.dp)
+        }
         TransactionDetailRowHeader(
             title = stringRes(R.string.transactionHistory_details),
             isExpanded = isExpanded,
@@ -59,6 +59,15 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 state = state.statusRow,
             )
+            state.savedProviderOutput?.let { output ->
+                ZashiHorizontalDivider(thickness = 2.dp)
+                TransactionDetailInfoRow(
+                    state = TransactionDetailInfoRowState(
+                        title = stringRes(R.string.private_saved_provider_output),
+                        message = output.withStyle(),
+                    ),
+                )
+            }
             ZashiHorizontalDivider(thickness = 2.dp)
             TransactionDetailInfoRow(
                 modifier = Modifier.fillMaxWidth(),

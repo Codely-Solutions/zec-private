@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -7,6 +8,7 @@ from unittest.mock import patch
 import zipfile
 from prepared_apks import reuse, write_receipt, export_prepared
 from strip_emulator_apk import verify_prepared, signing_identity
+from tor_differential_driver import fetch_baseline
 from ui_step import active_root, identity
 
 
@@ -59,6 +61,38 @@ class ArtifactTests(unittest.TestCase):
             data = json.loads(receipt.read_text()); data['executionManifest']['package']='other'
             receipt.write_text(json.dumps(data))
             with self.assertRaises(ValueError): reuse(receipt, manifest, root, root, receipt_hash)
+
+    def test_release_acceptance_rejects_locally_prepared_apks_before_reading(self):
+        manifest = dict(stable_candidate_run=27, build_source_sha='d'*40, probeKind='ui')
+        with patch('prepared_apks.Path.read_bytes') as read:
+            with self.assertRaisesRegex(ValueError, 'authenticated producer archives'):
+                reuse('unused.json', manifest, 'unused', 'unused', 'e'*64)
+            read.assert_not_called()
+
+    def test_original_archive_checks_digest_and_source_before_staging(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'apks').mkdir()
+            data = io.BytesIO()
+            with zipfile.ZipFile(data, 'w') as source:
+                source.writestr('source-sha.txt', 'd' * 40)
+                source.writestr('bridge.apk', b'original APK bytes')
+            archive = data.getvalue()
+            descriptor = dict(id=4, size_in_bytes=len(archive), source_sha='d' * 40,
+                              digest='sha256:' + hashlib.sha256(archive).hexdigest())
+
+            def download(command, *, stdout, **kwargs):
+                stdout.write(archive)
+
+            with patch('tor_differential_driver.subprocess.run', side_effect=download):
+                for change, reason in ((dict(digest='sha256:' + '0' * 64), 'digest mismatch'),
+                                       (dict(source_sha='e' * 40), 'source identity mismatch')):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        fetch_baseline(root, dict(descriptor, **change), 'ui-bridge.apk')
+                    self.assertFalse(list((root / 'apks').iterdir()))
+                staged = fetch_baseline(root, descriptor, 'ui-bridge.apk')
+                self.assertEqual(staged.read_bytes(), b'original APK bytes')
+                self.assertFalse((root / 'baseline.zip').exists())
 
     def test_cached_pair_checks_both_original_apk_pins_before_copying(self):
         with tempfile.TemporaryDirectory() as temporary:

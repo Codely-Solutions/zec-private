@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.repository.permitsUnsecuredDeviceAccess
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.screen.authentication.AuthenticationUseCase
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,6 +50,7 @@ class AuthenticationViewModel(
     private val standardPreferenceProvider: StandardPreferenceProvider,
     walletViewModel: WalletViewModel,
     internal val appAccessSession: AppAccessSession,
+    resetProgressStore: ResetProgressStore,
 ) : AndroidViewModel(application) {
     private val executor: Executor by lazy { ContextCompat.getMainExecutor(application) }
     private val versionInfo by lazy { getVersionInfo() }
@@ -116,16 +118,20 @@ class AuthenticationViewModel(
             appAccessAuthentication,
             walletViewModel.secretState,
             showWelcomeAnimation,
-        ) { required, state, secretState, animate ->
+            resetProgressStore.isPending,
+        ) { required, state, secretState, animate, resetPending ->
             when {
                 (!required || versionInfo.isRunningUnderTestService) -> {
                     AuthenticationUIState.NotRequired
                 }
 
-                secretState == SecretState.INCOMPLETE && state == AuthenticationUIState.NotRequired -> {
+                state == AuthenticationUIState.NotRequired &&
+                    (secretState == SecretState.INCOMPLETE || resetPending) -> {
                     appAccessAuthentication.value = AuthenticationUIState.Initial
                     AuthenticationUIState.Required
                 }
+
+                resetPending && state == AuthenticationUIState.Initial -> AuthenticationUIState.Required
 
                 (state == AuthenticationUIState.Initial) -> {
                     when (secretState) {

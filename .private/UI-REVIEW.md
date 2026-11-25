@@ -20,7 +20,7 @@ Use `python3 -B .private/ui_step.py --owner OWNER` with a JSON command on stdin.
 
 ## Prepared APKs and reusable scenes
 
-`run_tor_emulator.py` accepts `CODEX_EMULATOR_PREPARED_RECEIPT` plus its independently pinned `CODEX_EMULATOR_PREPARED_SHA256`. The caller's trusted manifest/guard admission must bind that digest and configuration. [prepared_apks.py](prepared_apks.py) verifies source, role, original/prepared hashes, execution entries, x86_64 ABI and the exact verified test signer before making session-owned copies. This skips download, stripping/alignment and test re-signing. Older receipts missing signer identity require re-verification; preserve their original bytes.
+`run_tor_emulator.py` accepts `CODEX_EMULATOR_PREPARED_RECEIPT` plus its independently pinned `CODEX_EMULATOR_PREPARED_SHA256`. The caller's trusted manifest/guard admission must bind that digest and configuration. [prepared_apks.py](prepared_apks.py) verifies source, role, original/prepared hashes, execution entries, x86_64 ABI and the exact verified test signer before making session-owned copies. This skips download, stripping/alignment and test re-signing for diagnostic sessions. Release acceptance downloads the verified producer archives before preparing APKs. Older receipts missing signer identity require re-verification; preserve their original bytes.
 
 The launcher writes `prepared-apks.json` inside its guard root. Set `CODEX_EMULATOR_PREPARED_EXPORT` to a new absolute task-owned directory to retain verified APK copies and a receipt with retained paths. Account for that output in task storage/retention. The export is exclusive and never replaces existing evidence. Retire it after its final consumer; keep only the current candidate and necessary baseline.
 

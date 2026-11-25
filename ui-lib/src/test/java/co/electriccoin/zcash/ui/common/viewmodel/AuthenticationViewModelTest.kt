@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -223,10 +224,27 @@ class AuthenticationViewModelTest {
             assertEquals(AuthenticationUIState.Successful, viewModel.appAccessAuthentication.value)
         }
 
+    @Test
+    fun pendingResetRequiresAppAccessBeforeWalletHydrates() = runTest {
+        val (viewModel, _, _) = newViewModel(
+            secretState = SecretState.LOADING,
+            isAppAccessAuthenticationPreference = "true",
+            pendingReset = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(AuthenticationUIState.Required, viewModel.appAccessAuthenticationResultState.value)
+        assertNull(viewModel.appAccessSession.grant.value)
+        viewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
+        advanceUntilIdle()
+        assertNotNull(viewModel.appAccessSession.grant.value)
+    }
+
     private fun newViewModel(
         secretState: SecretState,
         isAppAccessAuthenticationPreference: String? = null,
-        isRunningUnderTestService: Boolean = false
+        isRunningUnderTestService: Boolean = false,
+        pendingReset: Boolean = false,
     ): Triple<AuthenticationViewModel, MutableStateFlow<SecretState>, (Long) -> Unit> {
         val secretStateFlow = MutableStateFlow(secretState)
         val walletViewModel = mockk<WalletViewModel>()
@@ -251,7 +269,10 @@ class AuthenticationViewModelTest {
                 getVersionInfo = getVersionInfo,
                 standardPreferenceProvider = standardPreferenceProvider,
                 walletViewModel = walletViewModel,
-                appAccessSession = AppAccessSession()
+                appAccessSession = AppAccessSession(),
+                resetProgressStore = mockk<ResetProgressStore> {
+                    every { isPending } returns MutableStateFlow(pendingReset)
+                },
             )
 
         return Triple(viewModel, secretStateFlow) { monotonicTimeMillis = it }

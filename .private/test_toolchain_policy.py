@@ -36,6 +36,16 @@ class ToolchainPolicyTests(unittest.TestCase):
             self.assertEqual(staged.read_bytes(), source.read_bytes())
             self.assertEqual(list(staged.parent.iterdir()), [staged])
 
+    def test_normal_build_attaches_verified_sandboxes_to_robolectric_tests(self):
+        root_build = (ROOT / 'build.gradle.kts').read_text()
+        script = 'gradle/robolectric-sandboxes.gradle'
+        self.assertIn(f'apply(from = "{script}")', root_build)
+        staging = (ROOT / script).read_text()
+        self.assertIn('tasks.withType(Test).configureEach', staging)
+        self.assertIn('dependsOn(stage)', staging)
+        self.assertIn("systemProperty 'robolectric.offline', 'true'", staging)
+        self.assertIn('DependencyVerificationMode.STRICT', staging)
+
     def test_proposals_exclude_majors_and_runtime_dependency_sweep(self):
         config=(ROOT/'.github/dependabot.yml').read_text()
         self.assertIn('dependency-name: gradle-wrapper',config)

@@ -155,6 +155,8 @@ def main():
         core_manifest = profiles['core']['evidence']('manifest.json')
         core = profiles['core']['evidence']('core-testnet-result.json')
         core_probe = profiles['core']['evidence']('tor-probe-result.json')
+        require(core_probe.get('preparedApksReused') is False,
+                'Fresh core acceptance requires verified producer archives')
         require(core_manifest.get('artifactProducer') == core_proof, 'Core producer provenance changed')
         require(core_manifest['workflow_run_id'] == args.core_run, 'Producer run/source binding mismatch')
         require(core_manifest['candidate_version_code'] == version, 'Expected stable candidate version execution')
@@ -206,6 +208,8 @@ def main():
         ui_manifest = profiles['quotes']['evidence']('manifest.json')
         probe = profiles['quotes']['evidence']('tor-probe-result.json')
         ui = profiles['quotes']['evidence']('tor-ui-result.json')
+        require(probe.get('preparedApksReused') is False,
+                'Fresh quote acceptance requires verified producer archives')
         require(ui_manifest.get('artifactProducer') == ui_proof, 'UI producer provenance changed')
         require(ui_manifest['workflow_run_id'] == args.ui_run, 'Producer run/source binding mismatch')
         require(ui_manifest['expectedVersionCode'] == version, 'Expected stable candidate version execution')
@@ -223,7 +227,7 @@ def main():
         bridge_preparation = probe['apkPreparation'].get('ui-bridge.apk') or {}
         require(probe['apkHashes'].get('ui-bridge.apk') == bridge_preparation.get('testedSha256'),
                 'Local quote executed bridge differs from its prepared bytes')
-        bridge = dict(artifact=bridge_artifact, producer=bridge_producer,
+        bridge = dict(artifact=bridge_artifact, producer=bridge_producer, archive_verified=True,
                       apk_preparation=bridge_preparation, input_fingerprint=ui_manifest.get('bridgeInputs'))
         app_names = [name for name in probe['apkPreparation'] if name != 'ui-bridge.apk']
         require(len(app_names) == 1, 'Expected a single quote application APK')

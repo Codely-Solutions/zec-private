@@ -62,6 +62,8 @@ plugins {
     id("secant.rosetta-conventions")
 }
 
+apply(from = "gradle/robolectric-sandboxes.gradle")
+
 tasks {
     withType<com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask> {
         gradleReleaseChannel = "current"

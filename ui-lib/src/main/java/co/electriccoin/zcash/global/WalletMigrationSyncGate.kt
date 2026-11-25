@@ -25,6 +25,8 @@ import kotlin.time.Duration.Companion.seconds
 class WalletMigrationSyncGate {
     private val failure = MutableStateFlow<SynchronizerError?>(null)
     val error = failure.asStateFlow()
+    private val blocked = MutableStateFlow(true)
+    val isBlocked = blocked.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     internal fun observe(
@@ -32,6 +34,7 @@ class WalletMigrationSyncGate {
         resetProgressStore: ResetProgressStore,
         observe: (PersistableWallet) -> Flow<Boolean>,
     ): Flow<Boolean> = sdkWallet.flatMapLatest { wallet ->
+        blocked.value = true
         failure.value = null
         if (wallet == null) flowOf(false) else resetProgressStore.observeMigrationSyncBlock {
             flow { emitAll(observe(wallet)) }
@@ -51,6 +54,7 @@ class WalletMigrationSyncGate {
                     emit(true)
                 }
                 .onStart { emit(true) }
+                .onEach { blocked.value = it }
         }
     }.distinctUntilChanged()
 

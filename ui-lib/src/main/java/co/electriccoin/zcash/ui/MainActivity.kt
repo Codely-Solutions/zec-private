@@ -48,6 +48,7 @@ import co.electriccoin.zcash.ui.screen.authentication.RETRY_TRIGGER_DELAY
 import co.electriccoin.zcash.ui.screen.authentication.WrapAuthentication
 import co.electriccoin.zcash.ui.screen.authentication.view.AnimationConstants
 import co.electriccoin.zcash.ui.screen.authentication.view.WelcomeAnimationAutostart
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.theme.ThemeVM
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import co.electriccoin.zcash.work.WorkIds
@@ -83,6 +84,7 @@ class MainActivity : FragmentActivity() {
     private val migrationAppHooks: MigrationAppHooks by inject()
     private val handleExternalLink: HandleExternalLinkUseCase by inject()
     private val launchNavigation: LaunchNavigationRequests by inject()
+    private val resetProgressStore: ResetProgressStore by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(restorableNavigationState(savedInstanceState))
@@ -189,7 +191,7 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Holds the splash screen until the wallet secret is known and the stored theme has been read. Without
+     * Holds the splash until the stored theme and wallet state are known, or a reset is pending. Without
      * the theme gate the first frames would render with [ThemeVM]'s seeded System/Classic Dark defaults and
      * then repaint the whole tree once the stored values land.
      *
@@ -211,7 +213,8 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            !themeVM.isThemeResolved.value || SecretState.LOADING == walletViewModel.secretState.value
+            !themeVM.isThemeResolved.value ||
+                (!resetProgressStore.isPending.value && SecretState.LOADING == walletViewModel.secretState.value)
         }
     }
 

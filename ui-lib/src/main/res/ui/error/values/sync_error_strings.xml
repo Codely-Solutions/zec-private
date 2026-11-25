@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="shielding_pending_with_ids" translatable="false">%1$s\n\n%2$s\n%3$s</string>
-    <string name="migration_sync_state_unavailable">Wallet sync is paused because migration data is unavailable. Restart the app to retry.</string>
+    <string name="migration_sync_state_unavailable">Migration data is unavailable. Restart the app to retry wallet sync.</string>
     <string name="sync_error_title">Something went wrong</string>
     <string name="sync_error_message">There was an error trying to execute the last operation. Check your connection, VPN setting, restart the app, or try one of the following:</string>
     <string name="sync_error_switch_server">Switch server</string>

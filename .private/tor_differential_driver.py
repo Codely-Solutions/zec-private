@@ -1,7 +1,7 @@
 """Run one real-native cancellation test against old and fixed app DEX."""
 import json,hashlib,subprocess,zipfile,re
 from pathlib import Path
-from release_metadata import GH
+from release_metadata import GH, require
 
 def fetch_baseline(root, manifest, target_name="baseline-app.apk", instrumentation=False,
                    expected_apk_sha256=None):
@@ -20,19 +20,20 @@ def fetch_baseline(root, manifest, target_name="baseline-app.apk", instrumentati
     try:
         with archive.open('wb') as out:
             subprocess.run(command,stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
-        assert archive.stat().st_size<=manifest['size_in_bytes']+1048576
-        assert 'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['digest']
+        require(archive.stat().st_size <= manifest['size_in_bytes'] + 1048576, 'Source archive exceeds its declared size')
+        require('sha256:' + hashlib.sha256(archive.read_bytes()).hexdigest() == manifest['digest'],
+                'Source archive digest mismatch')
         with zipfile.ZipFile(archive) as z:
-            assert sum(item.file_size for item in z.infolist())<=512*1024**2, 'Baseline expansion exceeds budget'
+            require(sum(item.file_size for item in z.infolist()) <= 512*1024**2, 'Baseline expansion exceeds budget')
             if manifest.get('source_sha'):
                 sources=[n for n in z.namelist() if n.endswith('source-sha.txt')]
-                assert len(sources)==1, 'Exactly one baseline source identity required'
-                assert z.read(sources[0]).decode().strip()==manifest['source_sha'], 'Baseline source identity mismatch'
+                require(len(sources) == 1, 'Exactly one baseline source identity required')
+                require(z.read(sources[0]).decode().strip() == manifest['source_sha'], 'Baseline source identity mismatch')
             names=[n for n in z.namelist() if n.endswith('.apk') and ('androidTest' in n)==instrumentation]
-            assert len(names)==1, 'Exactly one selected baseline APK required'
+            require(len(names) == 1, 'Exactly one selected baseline APK required')
             data=z.read(names[0])
             if expected_apk_sha256:
-                assert hashlib.sha256(data).hexdigest()==expected_apk_sha256, 'Baseline APK digest mismatch'
+                require(hashlib.sha256(data).hexdigest() == expected_apk_sha256, 'Baseline APK digest mismatch')
             target=root/'apks'/target_name
             target.write_bytes(data)
         return target

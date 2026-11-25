@@ -1,0 +1,41 @@
+package co.electriccoin.zcash.ui.common.repository
+
+import cash.z.ecc.android.sdk.Synchronizer
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ApplicationStateRepositoryTest {
+    @Test
+    fun foregroundStartWaitsForMigrationStateAndStopsWhenItIsBlocked() = runTest {
+        val lifecycleCalls = mutableListOf<String>()
+        val synchronizer = mockk<Synchronizer> {
+            every { onForeground() } answers { lifecycleCalls += "foreground" }
+            every { onBackground() } answers { lifecycleCalls += "background" }
+        }
+        val current = MutableStateFlow<Synchronizer?>(synchronizer)
+        val foreground = MutableStateFlow(true)
+        val blocked = MutableStateFlow(true)
+        backgroundScope.launch { relaySynchronizerLifecycle(current, foreground, blocked) }
+        runCurrent()
+        blocked.value = false
+        runCurrent()
+        blocked.value = true
+        runCurrent()
+        foreground.value = false
+        runCurrent()
+        blocked.value = false
+        runCurrent()
+        foreground.value = true
+        runCurrent()
+
+        assertEquals(listOf("background", "foreground", "background", "foreground"), lifecycleCalls)
+    }
+}

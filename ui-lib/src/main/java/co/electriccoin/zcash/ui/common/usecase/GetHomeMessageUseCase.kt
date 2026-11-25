@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.model.WalletSnapshot
 import co.electriccoin.zcash.ui.common.provider.CrashReportingStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageData
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -51,9 +53,25 @@ class GetHomeMessageUseCase(
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val migrationHomeMessageSource: MigrationHomeMessageSource,
     private val votingHomeMessageSource: VotingHomeMessageSource,
+    private val synchronizerProvider: SynchronizerProvider,
 ) {
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    @OptIn(FlowPreview::class)
     fun observe(): Flow<HomeMessageData?> =
+        combine(
+            observeOrdinaryMessage().onStart { emit(null) },
+            synchronizerProvider.error.map { it == SynchronizerError.MigrationStateUnavailable }.distinctUntilChanged(),
+        ) { ordinary, migrationUnavailable ->
+            if (migrationUnavailable && ordinary !is HomeMessageData.Backup) {
+                HomeMessageData.Error(SynchronizerError.MigrationStateUnavailable)
+            } else {
+                ordinary
+            }
+        }.debounce(1.seconds)
+            .distinctUntilChanged()
+            .map { message -> prioritizeMessage(message) }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeOrdinaryMessage(): Flow<HomeMessageData?> =
         channelFlow {
             val messages =
                 combine(
@@ -95,9 +113,7 @@ class GetHomeMessageUseCase(
             }
 
             awaitClose()
-        }.debounce(1.seconds)
-            .distinctUntilChanged()
-            .map { message -> prioritizeMessage(message) }
+        }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeShieldFundsMessage() =
@@ -227,16 +243,12 @@ class GetHomeMessageUseCase(
     }
 
     private fun createSynchronizerErrorMessage(walletSnapshot: WalletSnapshot): HomeMessageData.Error? {
-        if (walletSnapshot.synchronizerError == null ||
-            (
-                walletSnapshot.synchronizerError is SynchronizerError.Processor &&
-                    walletSnapshot.synchronizerError.cause is CancellationException
-            )
-        ) {
-            return null
+        val error = walletSnapshot.synchronizerError
+        return when {
+            error == null || error == SynchronizerError.MigrationStateUnavailable -> null
+            error is SynchronizerError.Processor && error.cause is CancellationException -> null
+            else -> HomeMessageData.Error(error)
         }
-
-        return HomeMessageData.Error(walletSnapshot.synchronizerError)
     }
 
     private fun createDisconnectedMessage(walletSnapshot: WalletSnapshot): HomeMessageData.Disconnected? =

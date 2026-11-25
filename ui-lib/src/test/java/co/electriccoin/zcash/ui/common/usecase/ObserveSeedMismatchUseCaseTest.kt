@@ -37,7 +37,7 @@ import kotlinx.coroutines.test.runTest
 /**
  * MOB-1397: [ObserveSeedMismatchUseCase] runs recovery on every `true` flip of
  * [SynchronizerProvider.isSeedMismatch], keeps collecting after a failed recovery, and routes a terminal
- * [SeedMismatchRecoveryException] to the error screen.
+ * recovery failure to the error screen.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ObserveSeedMismatchUseCaseTest {
@@ -74,7 +74,7 @@ class ObserveSeedMismatchUseCaseTest {
         }
 
     @Test
-    fun recoveryFailureIsLoggedAndDoesNotCrashTheCollector() =
+    fun recoveryFailureQueuesSupportAndDoesNotCrashTheCollector() =
         runTest {
             coEvery { recoverFromSeedMismatch(any(), any()) } throws RuntimeException("erase failed")
             backgroundScope.launch { useCase() }
@@ -88,7 +88,10 @@ class ObserveSeedMismatchUseCaseTest {
             runCurrent()
 
             coVerify(exactly = 2) { recoverFromSeedMismatch(any(), any()) }
-            assertTrue(launchNavigation.changes.value.isEmpty())
+            assertEquals(
+                listOf(LaunchNavigationRequests.Kind.SEED_RECOVERY_ERROR),
+                launchNavigation.changes.value.map { it.kind },
+            )
         }
 
     @Test
@@ -175,7 +178,7 @@ class ObserveSeedMismatchUseCaseTest {
 
     /**
      * The collector's coroutine is cancelled by the propagated [CancellationException], so unlike
-     * [recoveryFailureIsLoggedAndDoesNotCrashTheCollector] a further flip must not retrigger recovery.
+     * [recoveryFailureQueuesSupportAndDoesNotCrashTheCollector] a further flip must not retrigger recovery.
      */
     @Test
     fun cancellationExceptionIsNotSwallowedAndStopsTheCollector() =
@@ -212,13 +215,7 @@ class ObserveSeedMismatchUseCaseTest {
         val synchronizer = mockk<SynchronizerProvider> {
             every { isSeedMismatch } returns mismatch
         }
-        val initial = PersistableWallet(
-            network = ZcashNetwork.Testnet,
-            birthday = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
-            endpoint = LightWalletEndpoint("example.invalid", 443, true),
-            seedPhrase = SeedPhrase.new(WalletFixture.Alice.seedPhrase),
-            walletInitMode = WalletInitMode.ExistingWallet,
-        )
+        val initial = existingTestWallet()
         val wallet = RecoveryWallet(initial)
         val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
         val observe = ObserveSeedMismatchUseCase(
@@ -235,7 +232,46 @@ class ObserveSeedMismatchUseCaseTest {
         assertEquals(initial.copy(walletInitMode = WalletInitMode.RestoreWallet), wallet.requirePersistableWallet())
     }
 
-    private class RecoveryWallet(initial: PersistableWallet) : PersistableWalletProvider {
+    @Test
+    fun restoreWriteFailureAfterReportedEraseOffersSupportBeforeDelay() = runTest {
+        val coordinator = mockk<WalletCoordinator> {
+            every { deleteSdkDataFlow() } returns flow { emit(true) }
+        }
+        val initial = existingTestWallet()
+        val wallet = RecoveryWallet(initial, failRestoreWrite = true)
+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
+        val observe = ObserveSeedMismatchUseCase(
+            synchronizerProvider, recover, navigateToError, launchNavigation, walletWriteAccess,
+        )
+        backgroundScope.launch { observe() }
+        runCurrent()
+
+        isSeedMismatchState.value = true
+        runCurrent()
+
+        assertEquals(initial, wallet.requirePersistableWallet())
+        var delivered = false
+        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+            val route = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
+            assertEquals(ErrorArgs.SeedRecoveryFailed, navigateToError.argsFor(route))
+            delivered = true
+            true
+        }
+        assertTrue(delivered)
+    }
+
+    private fun existingTestWallet() = PersistableWallet(
+        network = ZcashNetwork.Testnet,
+        birthday = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
+        endpoint = LightWalletEndpoint("example.invalid", 443, true),
+        seedPhrase = SeedPhrase.new(WalletFixture.Alice.seedPhrase),
+        walletInitMode = WalletInitMode.ExistingWallet,
+    )
+
+    private class RecoveryWallet(
+        initial: PersistableWallet,
+        private val failRestoreWrite: Boolean = false,
+    ) : PersistableWalletProvider {
         override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
 
         override suspend fun store(persistableWallet: PersistableWallet): Unit =
@@ -248,6 +284,7 @@ class ObserveSeedMismatchUseCaseTest {
         ): Boolean {
             assertEquals(writeVersion, version)
             assertEquals(persistableWallet.value, expected)
+            if (failRestoreWrite) error("Synthetic encrypted restore write failure")
             persistableWallet.value = replacement
             return true
         }

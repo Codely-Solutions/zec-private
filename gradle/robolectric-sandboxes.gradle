@@ -1,0 +1,44 @@
+import org.gradle.api.artifacts.verification.DependencyVerificationMode
+import org.gradle.api.tasks.ClasspathNormalizer
+import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.testing.Test
+
+// Register after the modules declare their test dependencies.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def robolectricProjects = project.allprojects.findAll { candidate ->
+        candidate.configurations.findByName('testImplementation')?.dependencies?.any {
+            it.group == 'org.robolectric' && it.name == 'robolectric'
+        }
+    }
+    if (robolectricProjects.isEmpty()) return
+    // Separate configurations keep Gradle from choosing only the highest version of this module.
+    def sandboxes = ['9-robolectric-4913185-2-i7', '14-robolectric-10818077-i7'].collect { version ->
+        def dependency = project.dependencies.create("org.robolectric:android-all-instrumented:${version}@jar")
+        def configuration = project.configurations.detachedConfiguration(dependency)
+        configuration.transitive = false
+        configuration.resolutionStrategy.deactivateDependencyLocking()
+        configuration
+    }
+    def verifiedSandboxes = project.provider {
+        if (!project.file('gradle/verification-metadata.xml').isFile() ||
+            gradle.startParameter.dependencyVerificationMode != DependencyVerificationMode.STRICT ||
+            !gradle.startParameter.writeDependencyVerifications.isEmpty()) {
+            throw new GradleException('Robolectric sandbox staging requires reviewed metadata and strict verification')
+        }
+        sandboxes
+    }
+    def directory = project.layout.buildDirectory.dir('verified-robolectric-sdks')
+    def stage = project.tasks.register('stageVerifiedRobolectricSdks', Sync) {
+        from(verifiedSandboxes)
+        into(directory)
+    }
+    robolectricProjects.each { candidate ->
+        candidate.tasks.withType(Test).configureEach { testTask ->
+            dependsOn(stage)
+            inputs.files(stage).withPropertyName('robolectricSandboxes').withNormalizer(ClasspathNormalizer)
+            systemProperty 'robolectric.offline', 'true'
+            systemProperty 'robolectric.dependency.dir', directory.get().asFile.absolutePath
+        }
+    }
+}

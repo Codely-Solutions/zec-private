@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.collect
 /**
  * Runs [RecoverFromSeedMismatchUseCase] whenever [SynchronizerProvider.isSeedMismatch] flips to `true`.
  * Collects forever and is launched once from the application class, so recovery does not depend on the
- * UI lifecycle. A delayed erase or [SeedMismatchRecoveryException] offers help for the initiating wallet.
+ * UI lifecycle. A delayed or failed recovery offers help for the initiating wallet.
  */
 class ObserveSeedMismatchUseCase(
     private val synchronizerProvider: SynchronizerProvider,
@@ -50,16 +50,13 @@ class ObserveSeedMismatchUseCase(
         } catch (e: CancellationException) {
             finishNotice(phase, stillApplies)
             throw e
-        } catch (e: SeedMismatchRecoveryException) {
-            Twig.error(e) { "Seed-mismatch recovery failed" }
+        } catch (e: Exception) {
+            Twig.error { "Seed-mismatch recovery failed (${e.javaClass.simpleName})" }
             phase.value = SeedRecoveryPhase.FAILED
             if (noticeRoute?.let(navigateToError::argsFor) == null && stillApplies()) {
                 val failure = navigateToError.stage(ErrorArgs.SeedRecoveryFailed)
                 launchNavigation.updateSeedRecoveryError(failure, stillApplies)
             }
-        } catch (e: Exception) {
-            Twig.error(e) { "Seed-mismatch recovery failed" }
-            phase.value = SeedRecoveryPhase.FAILED
         }
     }
 

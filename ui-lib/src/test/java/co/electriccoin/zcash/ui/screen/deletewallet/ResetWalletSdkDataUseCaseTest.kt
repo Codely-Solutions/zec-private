@@ -4,7 +4,6 @@ import android.content.Context
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import com.zodl.slipstream.SlipstreamSynchronizer
@@ -34,9 +33,6 @@ class ResetWalletSdkDataUseCaseTest {
     private val synchronizer = MutableStateFlow<Synchronizer?>(null)
     private val coordinator = mockk<WalletCoordinator> {
         every { synchronizer } returns this@ResetWalletSdkDataUseCaseTest.synchronizer
-    }
-    private val walletProvider = mockk<PersistableWalletProvider> {
-        coEvery { getPersistableWallet() } returns mockk { every { network } returns ZcashNetwork.Testnet }
     }
     private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxUnitFun = true)
 
@@ -123,11 +119,14 @@ class ResetWalletSdkDataUseCaseTest {
         val progress = ResetProgressStore(context, DirectorySync {})
         progress.store(ResetStage.ERASE_SDK)
         progress.suppressSdkInput()
-        return ResetWalletSdkDataUseCase(context, coordinator, walletProvider, preferenceRecovery, progress)
+        return ResetWalletSdkDataUseCase(context, coordinator, preferenceRecovery, progress)
     }
 
     private fun fileContext(): Context = mockk {
         every { noBackupFilesDir } returns directory.root
+        every { resources } returns mockk {
+            every { getBoolean(cash.z.ecc.sdk.ext.R.bool.zcash_is_testnet) } returns true
+        }
         every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
     }
 }

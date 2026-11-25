@@ -1066,7 +1066,7 @@
     <string name="swapStatus_paying">Paying</string>
     <string name="swapStatus_swapIncomplete">Swap Incomplete</string>
     <string name="swapStatus_paymentIncomplete">Payment Incomplete</string>
-    <string name="transaction_detail_info_incomplete_deposit_message">Send %1$s by %2$s to reach the required deposit.</string>
+    <string name="transaction_detail_info_incomplete_deposit_message">Deposit short by %1$s. Quote expires %2$s.</string>
 
     <!-- ===== transaction_filters ===== -->
     <string name="filter_title">Filter</string>

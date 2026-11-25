@@ -372,7 +372,8 @@ def validate_direct_quotes(receipt, expected_inputs, revision, root=ROOT):
     producer = binding.get('producer') or {}
     apk = binding.get('apk_preparation') or {}
     source = receipt['build_source_sha']
-    if (producer.get('workflow') != 'ui-bridge.yml' or producer.get('head_branch') != 'main' or
+    if (binding.get('archive_verified') is not True or
+            producer.get('workflow') != 'ui-bridge.yml' or producer.get('head_branch') != 'main' or
             producer.get('event') != 'workflow_dispatch' or producer.get('head_sha') != source or
             producer.get('producer_job_name') != 'probe' or producer.get('producer_job_conclusion') != 'success' or
             producer.get('artifact_name') != 'android-ui-bridge' or

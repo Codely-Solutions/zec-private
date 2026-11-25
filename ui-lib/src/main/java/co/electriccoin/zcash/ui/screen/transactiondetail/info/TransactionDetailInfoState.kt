@@ -38,6 +38,7 @@ data class SendSwapState(
     val isPending: Boolean,
     val completedTimestamp: StringResource,
     val donationBasisZec: String? = null,
+    val savedProviderOutput: StringResource? = null,
 ) : TransactionDetailInfoState
 
 data class SendTransparentState(
