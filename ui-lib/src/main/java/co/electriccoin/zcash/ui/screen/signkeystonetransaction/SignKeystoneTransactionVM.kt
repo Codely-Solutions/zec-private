@@ -48,11 +48,6 @@ class SignKeystoneTransactionVM(
     private val sharePCZT: SharePCZTUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
-    override fun onCleared() {
-        navigationRouter.discardResultFrom(sourceEntryId)
-        super.onCleared()
-    }
-
     private val retryRequests = MutableStateFlow(0)
     private val preparation = MutableStateFlow<Preparation?>(null)
     private val proposals = keystoneProposalRepository.transactionProposal
@@ -158,6 +153,7 @@ class SignKeystoneTransactionVM(
         )
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             val selected = wallets.map { it.selectedKeystone() }.distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
             combine(proposals, selected, retryRequests) { proposal, wallet, _ -> proposal to wallet }

@@ -108,10 +108,10 @@ class ExportTaxUseCase(
                     )
 
                 withContext(Dispatchers.Main.immediate) handoff@{
-                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
+                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
                     check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==
                         approvedAccount.sdkAccount.accountUuid)
-                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
+                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
                     currentCoroutineContext().ensureActive()
                     context.startActivity(intent)
                     shared = true
@@ -125,6 +125,9 @@ class ExportTaxUseCase(
             }
 
         }
+
+    private fun canHandOff(sourceEntryId: String?, isAllowed: () -> Boolean) =
+        navigationRouter.isAtEntry(sourceEntryId) && isAllowed()
 
     private fun writeCsvToFile(
         outputFile: File,

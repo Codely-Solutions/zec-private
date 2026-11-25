@@ -43561,7 +43561,7 @@ index 000000000..17693a8e1
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
-index 81540cc83..20fd6d559 100644
+index 81540cc83..ca58d992a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -43625,10 +43625,10 @@ index 81540cc83..20fd6d559 100644
 @@ -89 +110,15 @@ class ExportTaxUseCase(
 -                context.startActivity(intent)
 +                withContext(Dispatchers.Main.immediate) handoff@{
-+                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
++                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
 +                    check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==
 +                        approvedAccount.sdkAccount.accountUuid)
-+                    if (!isAllowed() || !navigationRouter.isAtEntry(sourceEntryId)) return@handoff
++                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
 +                    currentCoroutineContext().ensureActive()
 +                    context.startActivity(intent)
 +                    shared = true
@@ -43641,32 +43641,36 @@ index 81540cc83..20fd6d559 100644
 +                }
 @@ -92 +126,0 @@ class ExportTaxUseCase(
 -            navigationRouter.back()
-@@ -100 +134 @@ class ExportTaxUseCase(
+@@ -94,0 +129,3 @@ class ExportTaxUseCase(
++    private fun canHandOff(sourceEntryId: String?, isAllowed: () -> Boolean) =
++        navigationRouter.isAtEntry(sourceEntryId) && isAllowed()
++
+@@ -100 +137 @@ class ExportTaxUseCase(
 -            writer.write(
 +            writer.writeCsvRow(
-@@ -110 +144 @@ class ExportTaxUseCase(
+@@ -110 +147 @@ class ExportTaxUseCase(
 -                ).joinToString(separator = CSV_SEPARATOR)
 +                )
-@@ -112 +145,0 @@ class ExportTaxUseCase(
+@@ -112 +148,0 @@ class ExportTaxUseCase(
 -            writer.newLine()
-@@ -115 +148 @@ class ExportTaxUseCase(
+@@ -115 +151 @@ class ExportTaxUseCase(
 -                writer.write(
 +                writer.writeCsvRow(
-@@ -125 +158 @@ class ExportTaxUseCase(
+@@ -125 +161 @@ class ExportTaxUseCase(
 -                    ).joinToString(separator = CSV_SEPARATOR)
 +                    )
-@@ -127 +159,0 @@ class ExportTaxUseCase(
+@@ -127 +162,0 @@ class ExportTaxUseCase(
 -                writer.newLine()
-@@ -129,2 +160,0 @@ class ExportTaxUseCase(
+@@ -129,2 +163,0 @@ class ExportTaxUseCase(
 -
 -            writer.flush()
-@@ -134 +164 @@ class ExportTaxUseCase(
+@@ -134 +167 @@ class ExportTaxUseCase(
 -    private suspend fun getCsvEntries() =
 +    private suspend fun getCsvEntries(accountUuid: AccountUuid) =
-@@ -136 +166 @@ class ExportTaxUseCase(
+@@ -136 +169 @@ class ExportTaxUseCase(
 -            .getTransactions()
 +            .getTransactions(accountUuid)
-@@ -158,6 +188 @@ class ExportTaxUseCase(
+@@ -158,6 +191 @@ class ExportTaxUseCase(
 -                        val sentQuantity =
 -                            if (fee != null) {
 -                                stringRes(transaction.amount - fee, HIDDEN)
@@ -43674,16 +43678,16 @@ index 81540cc83..20fd6d559 100644
 -                                stringRes(transaction.amount, HIDDEN)
 -                            }
 +                        val sentQuantity = transaction.amount - (fee ?: Zatoshi(0))
-@@ -169 +194 @@ class ExportTaxUseCase(
+@@ -169 +197 @@ class ExportTaxUseCase(
 -                            sentQuantity = sentQuantity.getString(context),
 +                            sentQuantity = sentQuantity.toCsvQuantity(),
-@@ -171 +196 @@ class ExportTaxUseCase(
+@@ -171 +199 @@ class ExportTaxUseCase(
 -                            feeAmount = stringRes(fee ?: Zatoshi(0), HIDDEN).getString(context),
 +                            feeAmount = (fee ?: Zatoshi(0)).toCsvQuantity(),
-@@ -185 +210 @@ class ExportTaxUseCase(
+@@ -185 +213 @@ class ExportTaxUseCase(
 -                            receivedQuantity = stringRes(transaction.amount, HIDDEN).getString(context),
 +                            receivedQuantity = transaction.amount.toCsvQuantity(),
-@@ -219 +244,15 @@ private data class CsvEntry(
+@@ -219 +247,15 @@ private data class CsvEntry(
 -private const val CSV_SEPARATOR = ","
 +private fun Zatoshi.toCsvQuantity(): String =
 +    convertZatoshiToZec(scale = ZEC_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
@@ -56048,7 +56052,7 @@ index 2fa3791c5..be13a88b9 100644
 +enum class KeystoneQrPreparation { LOADING, ERROR, READY }
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
-index 285d9d850..4b9226eb5 100644
+index 285d9d850..879c1fd65 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
 @@ -4,0 +5 @@ import androidx.lifecycle.viewModelScope
@@ -56083,15 +56087,11 @@ index 285d9d850..4b9226eb5 100644
 -    private val sharePCZT: SharePCZTUseCase
 +    private val sharePCZT: SharePCZTUseCase,
 +    private val sourceEntryId: String? = null,
-@@ -40,3 +51,4 @@ class SignKeystoneTransactionVM(
+@@ -40,5 +51,7 @@ class SignKeystoneTransactionVM(
 -    private var encoder: UREncoder? = null
 -
 -    private val isBottomSheetVisible = MutableStateFlow(false)
-+    override fun onCleared() {
-+        navigationRouter.discardResultFrom(sourceEntryId)
-+        super.onCleared()
-+    }
-@@ -44 +56,7 @@ class SignKeystoneTransactionVM(
+-
 -    private val currentQrPart = MutableStateFlow<String?>(null)
 +    private val retryRequests = MutableStateFlow(0)
 +    private val preparation = MutableStateFlow<Preparation?>(null)
@@ -56100,7 +56100,7 @@ index 285d9d850..4b9226eb5 100644
 +    // The repository holds a single approved proposal even when the selected Keystone account changes.
 +    private var signingAccount = wallets.value.selectedKeystone()?.sdkAccount?.accountUuid
 +    private val rejection = MutableStateFlow<Attempt?>(null)
-@@ -47,23 +65,14 @@ class SignKeystoneTransactionVM(
+@@ -47,23 +60,14 @@ class SignKeystoneTransactionVM(
 -        isBottomSheetVisible
 -            .map { isVisible ->
 -                if (isVisible) {
@@ -56138,13 +56138,13 @@ index 285d9d850..4b9226eb5 100644
 +                        text = stringRes(R.string.keystoneTransactionReject_rejectSig),
 +                        onClick = { confirmRejection(attempt) }
 +                    ),
-@@ -70,0 +80,5 @@ class SignKeystoneTransactionVM(
+@@ -70,0 +75,5 @@ class SignKeystoneTransactionVM(
 +        }.stateIn(
 +            scope = viewModelScope,
 +            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
 +            initialValue = null
 +        )
-@@ -74,4 +88,12 @@ class SignKeystoneTransactionVM(
+@@ -74,4 +83,12 @@ class SignKeystoneTransactionVM(
 -            observeProposalUseCase(),
 -            observeSelectedWalletAccount.require(),
 -            currentQrPart
@@ -56161,7 +56161,7 @@ index 285d9d850..4b9226eb5 100644
 +            val attempt = current?.attempt
 +            val phase = current?.phase ?: KeystoneQrPreparation.LOADING
 +            val ready = phase == KeystoneQrPreparation.READY
-@@ -94,2 +116,9 @@ class SignKeystoneTransactionVM(
+@@ -94,2 +111,9 @@ class SignKeystoneTransactionVM(
 -                generateNextQrCode = { currentQrPart.update { encoder?.nextPart() } },
 -                qrData = qrData,
 +                generateNextQrCode = { if (attempt != null && ready) generateNextQrCode(attempt) },
@@ -56173,7 +56173,7 @@ index 285d9d850..4b9226eb5 100644
 +                        onClick = { retryPreparation(it) }
 +                    )
 +                },
-@@ -99 +128,8 @@ class SignKeystoneTransactionVM(
+@@ -99 +123,8 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onSignTransactionClick
 +                        onClick = {
 +                            if (attempt != null && ready && isReady(attempt)) {
@@ -56183,10 +56183,10 @@ index 285d9d850..4b9226eb5 100644
 +                            }
 +                        },
 +                        isEnabled = ready
-@@ -104 +140 @@ class SignKeystoneTransactionVM(
+@@ -104 +135 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onRejectClick
 +                        onClick = { reject(attempt) }
-@@ -109 +145,6 @@ class SignKeystoneTransactionVM(
+@@ -109 +140,6 @@ class SignKeystoneTransactionVM(
 -                        onClick = ::onSharePCZTClick
 +                        onClick = {
 +                            if (attempt != null && ready) {
@@ -56194,10 +56194,12 @@ index 285d9d850..4b9226eb5 100644
 +                            }
 +                        },
 +                        isEnabled = ready
-@@ -111 +152 @@ class SignKeystoneTransactionVM(
+@@ -111 +147 @@ class SignKeystoneTransactionVM(
 -                onBack = ::onBack,
 +                onBack = { reject(attempt) },
-@@ -121,6 +162,23 @@ class SignKeystoneTransactionVM(
+@@ -119,0 +156 @@ class SignKeystoneTransactionVM(
++        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
+@@ -121,6 +158,23 @@ class SignKeystoneTransactionVM(
 -            try {
 -                encoder = createKeystoneProposalPCZTEncoder()
 -                currentQrPart.update { encoder?.nextPart() }
@@ -56227,7 +56229,7 @@ index 285d9d850..4b9226eb5 100644
 +                        if (isCurrent(attempt)) preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
 +                    }
 +                }
-@@ -130,5 +188,4 @@ class SignKeystoneTransactionVM(
+@@ -130,5 +184,4 @@ class SignKeystoneTransactionVM(
 -    private fun onRejectBottomSheetClick() {
 -        viewModelScope.launch {
 -            isBottomSheetVisible.update { false }
@@ -56237,7 +56239,7 @@ index 285d9d850..4b9226eb5 100644
 +        if (isCurrent(attempt) && preparation.value?.phase == KeystoneQrPreparation.ERROR) {
 +            preparation.value = Preparation(attempt)
 +            retryRequests.update { it + 1 }
-@@ -138,2 +195,9 @@ class SignKeystoneTransactionVM(
+@@ -138,2 +191,9 @@ class SignKeystoneTransactionVM(
 -    private fun onCloseBottomSheetClick() {
 -        isBottomSheetVisible.update { false }
 +    private fun generateNextQrCode(attempt: Attempt) {
@@ -56249,18 +56251,18 @@ index 285d9d850..4b9226eb5 100644
 +        } catch (_: Exception) {
 +            preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
 +        }
-@@ -142,3 +206,3 @@ class SignKeystoneTransactionVM(
+@@ -142,3 +202,3 @@ class SignKeystoneTransactionVM(
 -    private fun onSharePCZTClick() =
 -        viewModelScope.launch {
 -            sharePCZT()
 +    private fun reject(attempt: Attempt?) {
 +        if (attempt != null && isCurrent(attempt) && preparation.value?.isRejecting == false) {
 +            rejection.value = attempt
-@@ -146,3 +209,0 @@ class SignKeystoneTransactionVM(
+@@ -146,3 +205,0 @@ class SignKeystoneTransactionVM(
 -
 -    private fun onBack() {
 -        isBottomSheetVisible.update { !it }
-@@ -151,2 +212,12 @@ class SignKeystoneTransactionVM(
+@@ -151,2 +208,12 @@ class SignKeystoneTransactionVM(
 -    private fun onRejectClick() {
 -        isBottomSheetVisible.update { true }
 +    internal fun leaveSigning() = navigationRouter.back()
@@ -56275,12 +56277,12 @@ index 285d9d850..4b9226eb5 100644
 +                cancelKeystoneProposalFlow.rejectKeystone(attempt.proposal, attempt.account, sourceEntryId)
 +            }
 +        }
-@@ -155,2 +226,2 @@ class SignKeystoneTransactionVM(
+@@ -155,2 +222,2 @@ class SignKeystoneTransactionVM(
 -    private fun onSignTransactionClick() {
 -        navigationRouter.forward(ScanKeystonePCZTRequest)
 +    private fun closeRejection(attempt: Attempt) {
 +        if (rejection.value === attempt) rejection.value = null
-@@ -157,0 +229,26 @@ class SignKeystoneTransactionVM(
+@@ -157,0 +225,26 @@ class SignKeystoneTransactionVM(
 +
 +    private fun isCurrent(attempt: Attempt): Boolean =
 +        isActiveSigningAccount(attempt.account) && preparation.value?.attempt === attempt &&
