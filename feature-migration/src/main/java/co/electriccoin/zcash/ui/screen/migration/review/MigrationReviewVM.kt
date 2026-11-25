@@ -90,6 +90,7 @@ class MigrationReviewVM(
     private val zashiProposalRepository: ZashiProposalRepository,
     private val keystoneProposalRepository: KeystoneProposalRepository,
     private val submitProposal: SubmitProposalUseCase,
+    private val sourceEntryId: String? = null,
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 ) : ViewModel() {
@@ -521,17 +522,17 @@ class MigrationReviewVM(
                     return@execute
                 }
                 requireReviewAccount()
-                keystoneProposalRepository.setMigrationSweepProposal(proposal)
+                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
                 keystoneProposalRepository.createPCZTFromProposal(account)
                 requireReviewAccount()
-                keystoneProposalRepository.approveForSigning()
+                keystoneProposalRepository.approveForSigning(reviewed)
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
                 val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
-                submitProposal(reviewed)
+                submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
@@ -22,6 +23,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveTransactionSubmitStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
 import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccessfulProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ViewTransactionsAfterSuccessfulProposalUseCase
@@ -42,7 +44,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 
 @Suppress("TooManyFunctions")
@@ -56,43 +60,57 @@ class TransactionProgressVM(
     private val copyToClipboard: CopyToClipboardUseCase,
     private val navigationRouter: NavigationRouter,
     reportAccess: WalletReportAccess,
+    private val submissionProgress: SubmissionProgressStore? = null,
+    private val progressArgs: BoundTransactionProgressArgs? = null,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val reportPermission = reportAccess.bind(viewModelScope)
 
     private fun shareReport(send: suspend (() -> Boolean) -> Unit) {
-        val allowed = reportPermission()
+        val originalGrant = reportPermission()
+        val allowed = { originalGrant() && canUseOutcome() }
         if (allowed()) viewModelScope.launch { send(allowed) }
     }
 
+    private val submission = if (progressArgs == null) {
+        combine(observeTransactionProposal.observeNullable(), observeTransactionSubmitState(), ::Pair)
+    } else {
+        submissionProgress?.observe(progressArgs.submissionId) ?: flowOf(null to null)
+    }
+
     val state: StateFlow<TransactionProgressState?> =
-        combine(observeTransactionProposal.observeNullable(), observeTransactionSubmitState()) {
-                proposal, submitState ->
-            if (proposal == null) return@combine createUnavailableState(submitState)
-            when (submitState) {
-                null, SubmitProposalState.Submitting -> {
-                    createSendingState(proposal)
-                }
+        submission.transform { (proposal, submitState) ->
+            if (proposal == null) {
+                emit(createUnavailableState(submitState))
+                return@transform
+            }
+            emit(
+                when (submitState) {
+                    null, SubmitProposalState.Submitting -> {
+                        createSendingState(proposal)
+                    }
 
-                is SubmitProposalState.Result -> {
-                    when (submitState.submitResult) {
-                        is SubmitResult.Success -> {
-                            createSuccessState(proposal, submitState.submitResult)
-                        }
+                    is SubmitProposalState.Result -> {
+                        when (submitState.submitResult) {
+                            is SubmitResult.Success -> {
+                                createSuccessState(proposal, submitState.submitResult)
+                            }
 
-                        is SubmitResult.NonResubmittableError -> {
-                            createNonResubmittableErrorState(proposal, submitState.submitResult)
-                        }
+                            is SubmitResult.NonResubmittableError -> {
+                                createNonResubmittableErrorState(proposal, submitState.submitResult)
+                            }
 
-                        is SubmitResult.GrpcFailure -> {
-                            createPendingState(proposal, submitState.submitResult)
-                        }
+                            is SubmitResult.GrpcFailure -> {
+                                createPendingState(proposal, submitState.submitResult)
+                            }
 
-                        is SubmitResult.Partial -> {
-                            createFundsStuckState(submitState.submitResult)
+                            is SubmitResult.Partial -> {
+                                createFundsStuckState(submitState.submitResult)
+                            }
                         }
                     }
                 }
-            }
+            )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -136,7 +154,9 @@ class TransactionProgressVM(
             secondaryButton =
                 ButtonState(
                     text = stringRes(R.string.send_confirmation_multiple_trx_failure_copy_button),
-                    onClick = { copyToClipboard(value = result.txIds.joinToString()) },
+                    onClick = {
+                        if (canUseOutcome()) copyToClipboard(value = result.txIds.joinToString())
+                    },
                     style = ButtonStyle.TERTIARY,
                     icon = R.drawable.ic_copy
                 ),
@@ -173,7 +193,7 @@ class TransactionProgressVM(
                     else -> {
                         styledStringResource(
                             R.string.send_sendingInfo,
-                            getAddressAbbreviated()
+                            getAddressAbbreviated(proposal)
                         )
                     }
                 },
@@ -225,7 +245,7 @@ class TransactionProgressVM(
                     else -> {
                         styledStringResource(
                             R.string.send_successInfo,
-                            getAddressAbbreviated()
+                            getAddressAbbreviated(proposal)
                         )
                     }
                 },
@@ -266,7 +286,7 @@ class TransactionProgressVM(
                 when (proposal) {
                     is SwapTransactionProposal -> ButtonState(
                         text = stringRes(R.string.swapAndPay_checkStatus),
-                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal, txId) },
+                        onClick = { openSwapDetails(proposal, txId) },
                         style = ButtonStyle.PRIMARY
                     )
 
@@ -378,7 +398,7 @@ class TransactionProgressVM(
                 when (proposal) {
                     is SwapTransactionProposal -> ButtonState(
                         text = stringRes(R.string.swapAndPay_checkStatus),
-                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal, txId) },
+                        onClick = { openSwapDetails(proposal, txId) },
                         style = ButtonStyle.PRIMARY
                     )
 
@@ -461,14 +481,32 @@ class TransactionProgressVM(
                 )
         )
 
-    private suspend fun getAddressAbbreviated(): StyledStringResource {
-        val address = (getTransactionProposal() as? SendTransactionProposal)?.destination?.address
+    private suspend fun getAddressAbbreviated(proposal: TransactionProposal?): StyledStringResource {
+        val original = if (progressArgs == null) getTransactionProposal() else proposal
+        val address = (original as? SendTransactionProposal)?.destination?.address
         return address?.let { stringResByAddress(it) } ?: stringRes("").withStyle()
     }
 
-    private fun onCloseClick() = viewTransactionsAfterSuccessfulProposal()
+    private fun canUseOutcome(): Boolean =
+        navigationRouter.isAtEntry(sourceEntryId) &&
+            (progressArgs == null || submissionProgress?.canShow(progressArgs.submissionId) == true)
 
-    private fun onViewTransactionDetailClick(txId: String) = viewTransactionDetailAfterSuccessfulProposal(txId)
+    private fun onCloseClick() {
+        if (canUseOutcome()) viewTransactionsAfterSuccessfulProposal() else onOpenActivity()
+    }
+
+    private fun onViewTransactionDetailClick(txId: String) {
+        if (canUseOutcome()) viewTransactionDetailAfterSuccessfulProposal(txId)
+    }
+
+    private fun openSwapDetails(proposal: SwapTransactionProposal, txId: String) {
+        if (canUseOutcome()) viewTransactionDetailAfterSuccessfulProposal(proposal, txId)
+    }
+
+    override fun onCleared() {
+        submissionProgress?.discard(progressArgs?.submissionId)
+        super.onCleared()
+    }
 }
 
 /**

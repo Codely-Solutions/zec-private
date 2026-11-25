@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ fun ZashiQr(
                 .clickable(
                     enabled = !state.isBlurred,
                     role = Role.Button,
+                    onClickLabel = stringResource(co.electriccoin.zcash.ui.design.R.string.qr_open_fullscreen),
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {
@@ -198,6 +200,8 @@ private fun FullscreenDialogContent(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
+                    role = Role.Button,
+                    onClickLabel = stringResource(co.electriccoin.zcash.ui.design.R.string.general_close),
                     onClick = onBack
                 ).padding(start = 16.dp, end = 16.dp, bottom = 64.dp)
     ) {

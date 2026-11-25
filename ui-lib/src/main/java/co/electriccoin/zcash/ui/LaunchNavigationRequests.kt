@@ -69,8 +69,11 @@ class LaunchNavigationRequests {
     internal val pendingMigrationLookup: SavedMigrationNotice?
         get() = resolvingMigrationNotice?.let { SavedMigrationNotice(it.ownerKey, it.runStepPending) }
 
-    fun requestMigrationRecovery(ownerKey: String, command: NavigationCommand.ReplaceAll) =
-        offer(Kind.MIGRATION_RECOVERY, command, ownerKey)
+    fun requestMigrationRecovery(
+        ownerKey: String,
+        command: NavigationCommand.ReplaceAll,
+        stillApplies: () -> Boolean = { true },
+    ) = offer(Kind.MIGRATION_RECOVERY, command, ownerKey, stillApplies)
 
     fun clearMigrationRequests(ownerKey: String? = null) {
         pending.update { queue ->
@@ -90,6 +93,7 @@ class LaunchNavigationRequests {
         canPresentRecovery: () -> Boolean = { true },
         navigate: suspend (NavigationCommand, isCurrent: () -> Boolean) -> Boolean,
     ) = delivery.withLock {
+        pending.update { requests -> requests.filter { it.stillApplies() } }
         val requests = pending.value
         if (walletReady && requests.any { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }) {
             return@withLock
@@ -110,10 +114,17 @@ class LaunchNavigationRequests {
         }
     }
 
-    private fun offer(kind: Kind, command: NavigationCommand, recoveryOwnerKey: String? = null) {
+    private fun offer(
+        kind: Kind,
+        command: NavigationCommand,
+        recoveryOwnerKey: String? = null,
+        stillApplies: () -> Boolean = { true },
+    ) {
         pending.update { queue ->
-            val request = Request(kind, command, recoveryOwnerKey = recoveryOwnerKey)
-            if (request in queue) queue else queue.filterNot { it.kind == kind } + request
+            val request = Request(kind, command, recoveryOwnerKey = recoveryOwnerKey, stillApplies = stillApplies)
+            val existing = queue.firstOrNull { it.kind == kind }
+            if (kind != Kind.MIGRATION_RECOVERY && existing?.command == command) queue
+            else queue.filterNot { it.kind == kind } + request
         }
     }
 
@@ -126,6 +137,7 @@ class LaunchNavigationRequests {
         val command: NavigationCommand?,
         val migrationNotice: MigrationNotice? = null,
         val recoveryOwnerKey: String? = null,
+        val stillApplies: () -> Boolean = { true },
     )
 
     internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
@@ -136,11 +148,13 @@ private fun List<LaunchNavigationRequests.Request>.admits(
     walletReady: Boolean,
     canPresentRecovery: Boolean,
 ): Boolean {
-    if (request.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && !canPresentRecovery) return false
+    val recoveryBlocked = request.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && !canPresentRecovery
+    if (recoveryBlocked || !request.stillApplies()) return false
     val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
         any { pending ->
             pending.kind == LaunchNavigationRequests.Kind.MIGRATION_PROGRESS ||
-                (pending.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && canPresentRecovery)
+                (pending.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY &&
+                    canPresentRecovery && pending.stillApplies())
         }
     return !migrationHasPriority && any { it === request }
 }

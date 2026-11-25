@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -25,6 +27,8 @@ internal class ScanKeystonePCZTViewModel(
     private val parseKeystonePCZT: ParseKeystonePCZTUseCase,
     private val navigateToError: NavigateToErrorUseCase,
     private val repository: KeystoneProposalRepository,
+    private val navigationRouter: NavigationRouter? = null,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val lostPreparation = MutableStateFlow(false)
 
@@ -48,7 +52,11 @@ internal class ScanKeystonePCZTViewModel(
         viewModelScope.launch {
             if (!canScan(args)) return@launch
             try {
-                val scanResult = parseKeystonePCZT(result, args.preparationId)
+                val scanResult = if (sourceEntryId == null) {
+                    parseKeystonePCZT(result, args.preparationId)
+                } else {
+                    parseKeystonePCZT.scanFrom(result, args.preparationId, sourceEntryId)
+                }
                 state.update { it.copy(progress = scanResult.progress) }
             } catch (e: KeystoneFirmwareBelowMinimumException) {
                 // MOB-1510: the QR decoded fine but the device firmware is too old — replace the
@@ -67,4 +75,9 @@ internal class ScanKeystonePCZTViewModel(
                 // do nothing
             }
         }
+
+    override fun onCleared() {
+        navigationRouter?.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
 }

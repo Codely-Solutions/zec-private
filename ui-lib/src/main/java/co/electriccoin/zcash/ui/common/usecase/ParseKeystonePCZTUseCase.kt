@@ -16,10 +16,15 @@ class ParseKeystonePCZTUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
     keystoneSDKProvider: KeystoneSDKProvider,
 ) : BaseKeystoneScanner(keystoneSDKProvider) {
-    override suspend fun onSuccess(ur: UR, scanSessionId: String?) {
-        val preparationId = checkNotNull(scanSessionId)
+    override suspend fun onSuccess(ur: UR, scanSessionId: String?) =
+        submit(ur, checkNotNull(scanSessionId), sourceEntryId = null)
+
+    internal suspend fun scanFrom(result: String, preparationId: String, sourceEntryId: String) =
+        invoke(result, preparationId) { ur -> submit(ur, preparationId, sourceEntryId) }
+
+    private suspend fun submit(ur: UR, preparationId: String, sourceEntryId: String?) {
         val proposal = keystoneProposalRepository.parsePCZT(ur, preparationId)
-        submitKSProposal(proposal, preparationId)
+        submitKSProposal(proposal, preparationId, sourceEntryId)
     }
 }
 
@@ -34,7 +39,8 @@ abstract class BaseKeystoneScanner(
     @Suppress("TooGenericExceptionCaught", "SwallowedException")
     suspend operator fun invoke(
         result: String,
-        scanSessionId: String? = null
+        scanSessionId: String? = null,
+        handleComplete: (suspend (UR) -> Unit)? = null,
     ): ParseKeystoneQrResult =
         withSemaphore {
             resetDecoderForNewSession(scanSessionId)
@@ -50,7 +56,7 @@ abstract class BaseKeystoneScanner(
                 val new =
                     if (ur != null) {
                         try {
-                            onSuccess(ur, scanSessionId)
+                            handleComplete?.invoke(ur) ?: onSuccess(ur, scanSessionId)
                             ParseKeystoneQrResult(
                                 progress = decodedResult.progress,
                                 isFinished = true

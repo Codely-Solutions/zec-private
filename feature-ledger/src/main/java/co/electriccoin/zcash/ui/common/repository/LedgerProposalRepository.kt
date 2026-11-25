@@ -10,6 +10,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -208,13 +209,12 @@ class LedgerProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal() {
+    override suspend fun createShieldProposal(): ShieldTransactionProposal =
         createProposalInternal {
             proposalDataSource.createShieldProposal(
                 account = accountDataSource.getSelectedAccount(),
             )
         }
-    }
 
     override suspend fun createPCZTFromProposal() {
         val transactionProposal = getTransactionProposal()

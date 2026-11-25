@@ -41,10 +41,10 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationSendingScreen(args: MigrationSendingArgs) {
-    val vm = koinViewModel<MigrationSendingVM> { parametersOf(args) }
+fun MigrationSendingScreen(args: MigrationSendingArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationSendingVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    BackHandler { vm.onBack() }
+    BackHandler { state.content?.onBack?.invoke() }
     LceRenderer(
         state = state,
         loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
@@ -59,7 +59,9 @@ fun MigrationSendingView(state: MigrationSendingState) {
     BlankBgScaffold(
         topBar = {
             ZashiSmallTopAppBar(
-                navigationAction = { ZashiTopAppBarCloseNavigation(onBack = state.onBack) },
+                navigationAction = {
+                    if (state.canGoBack) ZashiTopAppBarCloseNavigation(onBack = state.onBack)
+                },
             )
         }
     ) { padding ->

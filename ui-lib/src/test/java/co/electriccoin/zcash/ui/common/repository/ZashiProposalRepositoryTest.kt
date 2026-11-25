@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -49,6 +50,25 @@ class ZashiProposalRepositoryTest {
 
         assertSame(adopted, repository.transactionProposal.value)
         assertSame(sdkProposal, adopted.proposal)
+    }
+
+    @Test
+    fun shieldingAdmitsOnlyItsOwnProposalAndPreservesAReplacementDraft() = runBlocking {
+        val shield = ShieldTransactionProposal(mockk<Proposal>())
+        val draft = RegularTransactionProposal(
+            WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(10), Memo(""), mockk<Proposal>()
+        )
+        repository.transactionProposal.value = draft
+        val draftState = SubmitProposalState.Result(SubmitResult.Success(listOf("fixture")))
+        repository.submitState.value = draftState
+
+        assertFailsWith<IllegalStateException> { repository.submit(shield) }
+        repository.clearIfCurrent(shield)
+
+        assertSame(draft, repository.transactionProposal.value)
+        assertSame(draftState, repository.submitState.value)
+        coVerify(exactly = 0) { keys.getZashiSpendingKey() }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
     }
 
     @Test

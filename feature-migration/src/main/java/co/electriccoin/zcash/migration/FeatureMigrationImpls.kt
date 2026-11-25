@@ -240,12 +240,18 @@ class MigrationAppHooksImpl(
 
     override suspend fun checkRecovery() {
         if (!resetProgress.isPending.value) {
+            val wallet = walletWriteAccess.token()
             checkMigrationRecovery { ownerKey ->
                 MigrationAccountRetirement.admit(ownerKey) {
                     launchNavigation.requestMigrationRecovery(
                         ownerKey,
-                        NavigationCommand.ReplaceAll(listOf(MigrationSendingArgs(ownerKey)))
-                    )
+                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
+                    ) {
+                        val selected = accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }
+                        selected?.sdkAccount?.accountUuid?.toStorageKeyId() == ownerKey &&
+                            walletWriteAccess.token() == wallet && !resetProgress.isPending.value &&
+                            !MigrationAccountRetirement.blocks(ownerKey)
+                    }
                 }
             }
         }
@@ -364,19 +370,19 @@ class MigrationNavContributorImpl : MigrationNavContributor {
         with(navGraphBuilder) {
             composable<MigrationSetupArgs> { MigrationSetupScreen() }
             composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
-            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
+            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute(), it.id) }
             composable<MigrationKeystoneSignArgs> { MigrationKeystoneSignScreen(it.toRoute()) }
-            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute()) }
+            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
             composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
             composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
             dialogComposable<MigrationPrivacyArgs> { MigrationPrivacyScreen(it.toRoute()) }
             dialogComposable<MigrationCustomServerTorArgs> { MigrationCustomServerTorScreen(it.toRoute()) }
             dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
             dialogComposable<MigrationLockExplainerArgs> { MigrationLockExplainerScreen() }
-            composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
+            composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
             composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
-            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
+            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute(), it.id) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute()) }
             composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }

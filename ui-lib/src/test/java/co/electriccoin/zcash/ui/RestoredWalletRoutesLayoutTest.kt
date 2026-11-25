@@ -541,6 +541,55 @@ class RestoredWalletRoutesLayoutTest {
                 assertTrue(controller.popBackStack())
                 runCurrent()
                 assertEquals(progress, controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>())
+
+                controller.navigate(ScanGiftCardArgs(true))
+                var ownsRecovery = true
+                requests.requestMigrationRecovery("previous-owner", NavigationCommand.ReplaceAll(listOf(progress))) {
+                    ownsRecovery
+                }
+                runCurrent()
+                ownsRecovery = false
+                assertTrue(controller.popBackStack())
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
+            }
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun lateSubmissionResultWaitsForItsOwnEntryWithoutDisplacingTheScanner() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val navigation = collectOwnedNavigation()
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(SignKeystoneTransactionArgs)
+                val origin = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(ScanGiftCardArgs(true))
+                var resultDeliveries = 0
+                navigation.stageResultFrom(origin) {
+                    resultDeliveries++
+                    NavigationCommand.Replace(listOf(ActivityHistoryArgs))
+                }
+                navigation.stageResultFrom(home) { NavigationCommand.Forward(listOf(FixtureMigrationProgress("home"))) }
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertEquals(0, resultDeliveries)
+
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                assertEquals(1, resultDeliveries)
+
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(
+                    FixtureMigrationProgress("home"),
+                    controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>(),
+                )
+                assertEquals(1, resultDeliveries)
             }
         }
     }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ledger.R
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.LedgerIssue
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
 import co.electriccoin.zcash.ui.common.model.LedgerIssueRetry
@@ -65,6 +66,7 @@ class LedgerSignVM(
     private val submitLedgerProposal: SubmitLedgerProposalUseCase,
     private val navigateToLedgerRepair: NavigateToLedgerRepairUseCase,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : AndroidViewModel(application) {
     private val permissionDenial = MutableStateFlow<PermissionDenial?>(null)
 
@@ -112,7 +114,7 @@ class LedgerSignVM(
         }
         viewModelScope.launch {
             observeLedgerSigningState().filterIsInstance<LedgerSigningState.Signed>().first()
-            submitLedgerProposal()
+            submitLedgerProposal(sourceEntryId)
         }
     }
 
@@ -343,6 +345,7 @@ class LedgerSignVM(
     }
 
     override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
         cancelLedgerSigning.stopSession()
         super.onCleared()
     }

@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwarePolicy
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
@@ -42,6 +45,7 @@ class MigrationKeystoneScanVM(
     private val pendingSchedule: PendingMigrationScheduleRepository,
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val validationState = MutableStateFlow(ScanValidationState.NONE)
 
@@ -93,7 +97,7 @@ class MigrationKeystoneScanVM(
                     return@launch
                 }
                 if (pending.isFullySigned) {
-                    navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
+                    openAfterSigning(MigrationScheduledArgs(accountKeyId))
                     return@launch
                 }
                 val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
@@ -218,9 +222,7 @@ class MigrationKeystoneScanVM(
                         "KeystoneScan: round ${pending.roundIndex} done — handing off to round " +
                             "${pending.roundIndex + 1} of $totalRounds"
                     )
-                    navigationRouter.replaceFrom(
-                        MigrationKeystoneSignArgs::class, MigrationKeystoneSignArgs(args.mode, accountKeyId)
-                    )
+                    openAfterSigning(MigrationKeystoneSignArgs(args.mode, accountKeyId))
                     return@launch
                 }
 
@@ -245,7 +247,7 @@ class MigrationKeystoneScanVM(
                 migrationLog(
                     "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
                 )
-                navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
+                openAfterSigning(MigrationScheduledArgs(accountKeyId))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -281,6 +283,15 @@ class MigrationKeystoneScanVM(
                 }
             }
         }
+    }
+
+    private fun openAfterSigning(route: Any) = navigationRouter.stageResultFrom(sourceEntryId) {
+        NavigationCommand.ReplaceFrom(MigrationKeystoneSignArgs::class, listOf(route))
+    }
+
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
     }
 
     fun onBack() = navigationRouter.back()

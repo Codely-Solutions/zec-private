@@ -6,7 +6,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import co.electriccoin.zcash.ui.common.compose.LocalScreenSecurity
@@ -102,8 +106,14 @@ class ScannerSecurityLayoutTest {
             showCamera.value = false
             showSigning.value = true
         }
-        val label = context.getString(R.string.private_keystone_open_qr)
-        compose.onNodeWithContentDescription(label).performClick()
+        val description = context.getString(R.string.private_keystone_signing_qr)
+        val openLabel = context.getString(co.electriccoin.zcash.ui.design.R.string.qr_open_fullscreen)
+        val closeLabel = context.getString(co.electriccoin.zcash.ui.design.R.string.general_close)
+        val signingQr = compose.onNodeWithContentDescription(description)
+        assertEquals(openLabel, signingQr.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        signingQr.performClick()
+        val fullscreen = compose.onNode(hasContentDescription(description) and hasAnyAncestor(isDialog()))
+        assertEquals(closeLabel, fullscreen.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         compose.runOnIdle {
             assertEquals(1, security.referenceCount.value)
             val window = checkNotNull(ShadowDialog.getLatestDialog()?.window)

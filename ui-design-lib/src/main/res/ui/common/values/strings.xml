@@ -46,6 +46,7 @@
 
     <!-- ===== common ===== -->
     <string name="general_close">Close</string>
+    <string name="qr_open_fullscreen">Open QR code full screen</string>
     <string name="tooltip_close_content_description">Close tooltip</string>
     <string name="fiat_currency_conversion_rate_unavailable">Unavailable</string>
     <string name="empty_char">-</string>

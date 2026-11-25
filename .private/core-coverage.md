@@ -240,6 +240,8 @@ These maintained cases cover the eight interaction areas identified by the Novem
 
 The resumed navigator retains a prepared form result until its exact entry can receive it. Layout regressions exercise automatic recovery waiting for Home, shared Keystone camera protection and a secure fullscreen signing QR with a screen-reader label. The NEAR data-source test advances elapsed time during a synthetic provider request and verifies that initial device-clock skew cannot extend funding.
 
+The submission progress tests keep the original proposal and its outcome together across late completion, a different account, replacement and reset. The real Navigator fixture keeps an already admitted result with its covered entry until the scanner above it closes. The software Shield regression refuses a replacement draft before loading a spending key and preserves that draft and its state. Migration Sending shares its Back availability between the toolbar and the system. Automatic migration recovery presents the current owner-bound Progress and leaves the next payment decision to the supported flow.
+
 ## Historical funded coverage
 
 See [published status](STATUS.md) for the current release and its bound acceptance record.

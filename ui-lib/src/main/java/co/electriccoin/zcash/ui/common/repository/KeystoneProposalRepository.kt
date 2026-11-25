@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -78,14 +79,14 @@ interface KeystoneProposalRepository {
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createShieldProposal()
+    suspend fun createShieldProposal(): ShieldTransactionProposal
 
     /**
      * Adopts an already-built migration send-max [Proposal] (see
      * [cash.z.ecc.android.sdk.OrchardMigrationSdk.proposeImmediateMigration]) so [createPCZTFromProposal]
      * can build a Keystone PCZT from it exactly as it would from any other proposal.
      */
-    fun setMigrationSweepProposal(proposal: Proposal)
+    fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal
 
     /**
      * The SDK rejects any multi-step proposal for PCZT generation. That rejection is surfaced as
@@ -221,17 +222,15 @@ class KeystoneProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal() {
+    override suspend fun createShieldProposal(): ShieldTransactionProposal =
         createProposalInternal {
             proposalDataSource.createShieldProposal(
                 account = accountDataSource.getSelectedAccount(),
             )
         }
-    }
 
-    override fun setMigrationSweepProposal(proposal: Proposal) {
-        transactionProposal.update { MigrationSweepTransactionProposal(proposal) }
-    }
+    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
+        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
 
     override suspend fun createPCZTFromProposal() =
         createAccountBoundPczt { accountDataSource.getSelectedAccount() }

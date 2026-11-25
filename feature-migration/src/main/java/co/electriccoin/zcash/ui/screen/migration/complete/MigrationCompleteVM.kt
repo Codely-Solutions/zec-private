@@ -69,6 +69,7 @@ class MigrationCompleteVM(
     private val keystoneProposalRepository: KeystoneProposalRepository,
     private val zashiProposalRepository: ZashiProposalRepository,
     private val submitProposal: SubmitProposalUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private data class Summary(
         val accountKeyId: String,
@@ -227,15 +228,16 @@ class MigrationCompleteVM(
             val proposal = sdk.proposeImmediateMigration()
             activeCompletionOwner()
             if (owner is KeystoneAccount) {
-                keystoneProposalRepository.setMigrationSweepProposal(proposal)
+                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 keystoneProposalRepository.createPCZTFromProposal(owner)
                 activeCompletionOwner()
-                keystoneProposalRepository.approveForSigning()
+                keystoneProposalRepository.approveForSigning(reviewed)
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
                 // The normal transaction progress path retains submission identity and lets
                 // the SDK reconcile its original transaction after an uncertain result.
-                submitProposal(zashiProposalRepository.setMigrationSweepProposal(proposal))
+                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
+                submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }
 

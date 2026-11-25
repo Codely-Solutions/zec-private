@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.job
@@ -85,16 +87,23 @@ interface ActiveNavigationEntryObserver {
 }
 
 private val noActiveEntry = MutableStateFlow<ActiveNavigationEntry?>(null).asStateFlow()
+
 class PendingNavigation {
-    private val pending = MutableStateFlow<NavigationCommand.ForEntry?>(null)
+    private val pending = MutableStateFlow<Map<String, NavigationCommand.ForEntry>>(emptyMap())
     internal val commands = pending.asStateFlow()
 
     internal fun offer(command: NavigationCommand.ForEntry) {
-        pending.value = command
+        pending.update { it + (command.sourceEntryId to command) }
     }
 
     internal fun remove(command: NavigationCommand.ForEntry) {
-        pending.compareAndSet(command, null)
+        pending.update { current ->
+            if (current[command.sourceEntryId] === command) current - command.sourceEntryId else current
+        }
+    }
+
+    internal fun removeFor(sourceEntryId: String?) {
+        if (sourceEntryId != null) pending.update { it - sourceEntryId }
     }
 }
 
@@ -103,28 +112,45 @@ internal fun NavigationRouter.forwardFrom(
     isStillAllowed: () -> Boolean,
     buildRoute: () -> Any?,
 ) {
+    if (isAtEntry(sourceEntryId)) {
+        stageResultFrom(sourceEntryId, isStillAllowed) {
+            buildRoute()?.let { NavigationCommand.Forward(listOf(it)) }
+        }
+    }
+}
+
+/** Retains the result while another screen is covering its live owner. */
+fun NavigationRouter.stageResultFrom(
+    sourceEntryId: String?,
+    isStillAllowed: () -> Boolean = { true },
+    buildCommand: () -> NavigationCommand?,
+) {
     if (!isStillAllowed()) return
     if (sourceEntryId == null) {
-        buildRoute()?.let { forward(it) }
-    } else if (isAtEntry(sourceEntryId)) {
-        val command = NavigationCommand.ForEntry(
-            sourceEntryId,
-            isStillAllowed,
-            buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
-            acknowledge = {},
-        )
+        buildCommand()?.let { dispatchUnscoped(it) }
+    } else {
+        val command = NavigationCommand.ForEntry(sourceEntryId, isStillAllowed, buildCommand, acknowledge = {})
         pendingNavigation?.offer(command) ?: custom { command }
     }
 }
 
+fun NavigationRouter.discardResultFrom(sourceEntryId: String?) {
+    pendingNavigation?.removeFor(sourceEntryId)
+}
+
 internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
     val queue = pendingNavigation ?: return
-    queue.commands.filterNotNull().collect { command ->
-        if (canCommit()) {
-            navigator.executeCommand(command)
-            queue.remove(command)
+    combine(queue.commands, activeEntry) { commands, entry -> commands[entry?.id] }
+        .filterNotNull()
+        .collect { command ->
+            if (canCommit() && queue.commands.value[command.sourceEntryId] === command) {
+                val currentCommand = command.copy(isStillAllowed = {
+                    queue.commands.value[command.sourceEntryId] === command && command.isStillAllowed()
+                })
+                navigator.executeCommand(currentCommand)
+                queue.remove(command)
+            }
         }
-    }
 }
 
 @Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.

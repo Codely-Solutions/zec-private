@@ -143,7 +143,7 @@ class RequestSwapQuoteUseCaseTest {
             BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
             canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
         )
-        val command = checkNotNull(pending.commands.value)
+        val command = pending.commands.value.getValue("swap-entry")
         assertEquals("swap-entry", command.sourceEntryId)
         verify(exactly = 0) { swapRepository.consumeReview(any()) }
         assertEquals(NavigationCommand.Forward(listOf(SwapQuoteArgs)), command.buildCommand())

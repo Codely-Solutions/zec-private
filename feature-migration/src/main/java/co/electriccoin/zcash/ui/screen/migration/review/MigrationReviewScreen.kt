@@ -75,8 +75,8 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationReviewScreen(args: MigrationReviewArgs) {
-    val vm = koinViewModel<MigrationReviewVM> { parametersOf(args) }
+fun MigrationReviewScreen(args: MigrationReviewArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationReviewVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     // Hoisted outside LceRenderer (matching MigrationProgressScreen) so back-navigation is always
     // available, even when state.content is permanently null (e.g. NothingToMigrate on propose —

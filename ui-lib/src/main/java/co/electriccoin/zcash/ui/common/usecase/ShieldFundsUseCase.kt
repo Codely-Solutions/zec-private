@@ -3,6 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
@@ -72,9 +74,10 @@ class ShieldFundsUseCase(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun shieldZashiFunds() {
+        var created: ShieldTransactionProposal? = null
         try {
-            zashiProposalRepository.createShieldProposal()
-            when (val result = zashiProposalRepository.submit()) {
+            val proposal = zashiProposalRepository.createShieldProposal().also { created = it }
+            when (val result = zashiProposalRepository.submit(proposal)) {
                 is SubmitResult.Failure,
                 is SubmitResult.GrpcFailure,
                 is SubmitResult.Error,
@@ -86,22 +89,32 @@ class ShieldFundsUseCase(
                     // do nothing
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         } finally {
-            zashiProposalRepository.clear()
+            created?.let(zashiProposalRepository::clearIfCurrent)
         }
     }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun createKeystoneShieldProposal() {
+        var created: ShieldTransactionProposal? = null
         try {
-            keystoneProposalRepository.createShieldProposal()
+            val proposal = keystoneProposalRepository.createShieldProposal().also { created = it }
             keystoneProposalRepository.createPCZTFromProposal()
-            keystoneProposalRepository.approveForSigning()
+            keystoneProposalRepository.approveForSigning(proposal)
             navigationRouter.forward(SignKeystoneTransactionArgs)
+        } catch (e: CancellationException) {
+            clearOwnedShield(
+                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
+            )
+            throw e
         } catch (e: Exception) {
-            keystoneProposalRepository.clear()
+            clearOwnedShield(
+                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
+            )
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
     }
@@ -112,17 +125,30 @@ class ShieldFundsUseCase(
      */
     @Suppress("TooGenericExceptionCaught")
     private suspend fun createLedgerShieldProposal() {
+        var created: ShieldTransactionProposal? = null
         try {
-            ledgerProposalPipeline.createShieldProposal()
+            val proposal = ledgerProposalPipeline.createShieldProposal().also { created = it }
             ledgerProposalPipeline.createPCZTFromProposal()
-            ledgerProposalPipeline.approveForSigning()
+            ledgerProposalPipeline.approveForSigning(proposal)
             ledgerNavigator.forwardToSign()
         } catch (e: CancellationException) {
-            ledgerProposalPipeline.clear()
+            clearOwnedShield(
+                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
+            )
             throw e
         } catch (e: Exception) {
-            ledgerProposalPipeline.clear()
+            clearOwnedShield(
+                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
+            )
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
     }
+}
+
+private fun clearOwnedShield(
+    created: ShieldTransactionProposal?,
+    current: TransactionProposal?,
+    clear: () -> Unit,
+) {
+    if (created != null && current === created) clear()
 }

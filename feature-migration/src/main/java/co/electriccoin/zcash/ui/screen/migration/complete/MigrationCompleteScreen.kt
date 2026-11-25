@@ -84,8 +84,8 @@ data class MigrationCompleteArgs(
 )
 
 @Composable
-fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
-    val vm = koinViewModel<MigrationCompleteVM> { parametersOf(args) }
+fun MigrationCompleteScreen(args: MigrationCompleteArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationCompleteVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(
         state = state,

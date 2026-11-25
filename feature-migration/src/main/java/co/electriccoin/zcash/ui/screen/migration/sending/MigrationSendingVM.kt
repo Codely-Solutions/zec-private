@@ -7,7 +7,10 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.TransferResult
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.migration.migrationFailureMessage
@@ -49,6 +52,7 @@ class MigrationSendingVM(
     private val pendingMigrationTorFailureDecisionRepository: PendingMigrationTorFailureDecisionRepository,
     private val pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider,
     private val migrationDriveOnce: MigrationDriveOnce,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
     private val failure = MutableStateFlow<SendFailure?>(null)
@@ -95,21 +99,12 @@ class MigrationSendingVM(
                                 send()
                             },
                             onDismiss = {
-                                failure.value = null
-                                navigationRouter.back()
+                                onBack()
                             },
                         )
                     },
-                // The escape hatch stays disabled while a send is actively in flight (no failure
-                // shown yet) — matches TransactionProgressVM.createSendingState()'s
-                // onBack = { /* do nothing */ } while sending, wired to a real back action only once
-                // there's a failure sheet the user might need to escape from.
-                onBack =
-                    if (f == null) {
-                        {}
-                    } else {
-                        ::onBack
-                    },
+                onBack = ::onBack,
+                canGoBack = f != null,
             )
         }.withLce(sendLce, errorStateMapper::mapToState)
             .stateIn(this)
@@ -118,7 +113,18 @@ class MigrationSendingVM(
         sendOnce(useTor = isMigrationTorEnabledStorageProvider.get(args.accountKeyId))
     }
 
-    fun onBack() = navigationRouter.back()
+    fun onBack() {
+        if (failure.value != null) navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+    }
+
+    private fun openResult(route: Any) = navigationRouter.stageResultFrom(sourceEntryId) {
+        NavigationCommand.Forward(listOf(route))
+    }
+
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
 
     private suspend fun sendOnce(useTor: Boolean) {
         val sdk = getOrchardMigrationSdk(args.accountKeyId)
@@ -175,9 +181,9 @@ class MigrationSendingVM(
                             // This was the plan's last transfer — one Migration Complete screen covers
                             // both this (foreground, just confirmed) and the background-completion case
                             // (CheckMigrationRecoveryUseCase, on next app open), rather than two.
-                            navigationRouter.forward(MigrationCompleteArgs(accountKeyId = args.accountKeyId))
+                            openResult(MigrationCompleteArgs(accountKeyId = args.accountKeyId))
                         } else {
-                            navigationRouter.forward(MigrationSuccessArgs(r.txId.txIdString()))
+                            openResult(MigrationSuccessArgs(r.txId.txIdString()))
                         }
                     }
 
@@ -186,7 +192,7 @@ class MigrationSendingVM(
                     // since the fix (drop Tor) differs from a real network outage.
                     is TransferResult.NetworkError -> {
                         if (r.isTorFailure) {
-                            navigationRouter.forward(MigrationTorFailureArgs(args.accountKeyId))
+                            openResult(MigrationTorFailureArgs(args.accountKeyId))
                         } else {
                             failure.value = SendFailure.Engine(r)
                         }

@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -62,7 +63,7 @@ interface ZashiProposalRepository {
     ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createShieldProposal()
+    suspend fun createShieldProposal(): ShieldTransactionProposal
 
     /**
      * Adopt an already-built IMMEDIATE send-max migration [proposal] as the current transaction, so
@@ -80,6 +81,8 @@ interface ZashiProposalRepository {
     suspend fun getTransactionProposal(): TransactionProposal
 
     fun clear()
+
+    fun clearIfCurrent(proposal: TransactionProposal)
 }
 
 @Suppress("TooManyFunctions")
@@ -145,13 +148,12 @@ class ZashiProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal() {
+    override suspend fun createShieldProposal(): ShieldTransactionProposal =
         createProposalInternal {
             proposalDataSource.createShieldProposal(
                 account = accountDataSource.getSelectedAccount(),
             )
         }
-    }
 
     override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
         MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
@@ -164,6 +166,9 @@ class ZashiProposalRepositoryImpl(
         scope
             .async {
                 val transactionProposal = transactionProposal.value
+                check(expectedProposal == null || transactionProposal === expectedProposal) {
+                    "The reviewed transaction changed before submission."
+                }
                 if (transactionProposal == null) {
                     val cause = IllegalStateException("Transaction proposal is null")
                     submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
@@ -171,9 +176,6 @@ class ZashiProposalRepositoryImpl(
                 } else {
                     submitState.update { SubmitProposalState.Submitting }
                     try {
-                        check(expectedProposal == null || transactionProposal === expectedProposal) {
-                            "The reviewed transaction changed before submission."
-                        }
                         val swapWasReviewed = transactionProposal !is SwapTransactionProposal ||
                             transactionProposal === expectedProposal
                         check(swapWasReviewed) {
@@ -213,14 +215,18 @@ class ZashiProposalRepositoryImpl(
                             validateFunding()
                             submit(validateFunding)
                         }
-                        submitState.update { SubmitProposalState.Result(result) }
+                        publishOutcome(transactionProposal, result)
                         result
                     } catch (e: Exception) {
-                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                        publishOutcome(transactionProposal, SubmitResult.Error(e))
                         throw e
                     }
                 }
             }.await()
+
+    private fun publishOutcome(expected: TransactionProposal, result: SubmitResult) {
+        submitState.update { if (transactionProposal.value === expected) SubmitProposalState.Result(result) else it }
+    }
 
     private fun requireCurrentProposal(expected: TransactionProposal) {
         check(transactionProposal.value === expected) { "The transaction changed before submission." }
@@ -231,6 +237,12 @@ class ZashiProposalRepositoryImpl(
     override fun clear() {
         transactionProposal.update { null }
         submitState.update { null }
+    }
+
+    override fun clearIfCurrent(proposal: TransactionProposal) {
+        if (transactionProposal.value === proposal && transactionProposal.compareAndSet(proposal, null)) {
+            submitState.update { previous -> if (transactionProposal.value == null) null else previous }
+        }
     }
 
     private suspend inline fun <T : TransactionProposal> createProposalInternal(

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
@@ -72,6 +73,7 @@ class ReviewTransactionVM(
     private val getExchangeRate: GetExchangeRateUseCase,
     private val navigationRouter: NavigationRouter,
     private val submitProposal: SubmitProposalUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val isReceiverExpanded = MutableStateFlow(false)
 
@@ -146,6 +148,11 @@ class ReviewTransactionVM(
 
 
     private var onConfirmClickJob: Job? = null
+
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
 
     init {
         // Side effect kept in init{} rather than in the state combine to avoid re-triggering on
@@ -324,7 +331,7 @@ class ReviewTransactionVM(
 
     private fun onConfirmClick(proposal: SendTransactionProposal) {
         if (onConfirmClickJob?.isActive == true) return
-        onConfirmClickJob = viewModelScope.launch { submitProposal(proposal) }
+        onConfirmClickJob = viewModelScope.launch { submitProposal(proposal, sourceEntryId = sourceEntryId) }
     }
 
     private fun onAddContactClick(address: String) = navigationRouter.forward(AddZashiABContactArgs(address))

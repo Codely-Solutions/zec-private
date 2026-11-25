@@ -9,6 +9,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.forwardFrom
 import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
@@ -273,7 +274,12 @@ internal class SwapQuoteVM(
     }
 
     private fun onSubmitQuoteClick(proposal: TransactionProposal?, quote: SwapQuoteData.Success) =
-        viewModelScope.launch { submitProposal(proposal, quote) }
+        viewModelScope.launch { submitProposal(proposal, quote, sourceEntryId) }
+
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
 
     private fun onCancelPaymentClick() = closeQuote {
         if (sourceEntryId == null) {

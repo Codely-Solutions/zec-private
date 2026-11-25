@@ -66,7 +66,7 @@ class LedgerNavigatorImpl(
 class LedgerNavContributorImpl : LedgerNavContributor {
     override fun contribute(navGraphBuilder: NavGraphBuilder) {
         with(navGraphBuilder) {
-            dialogComposable<LedgerSignArgs> { LedgerSignScreen() }
+            dialogComposable<LedgerSignArgs> { LedgerSignScreen(it.id) }
             composable<LedgerConnectArgs> { LedgerConnectScreen() }
             composable<LedgerTurnOnArgs> { LedgerTurnOnScreen() }
             composable<LedgerDeviceScanArgs> { LedgerDeviceScanScreen() }

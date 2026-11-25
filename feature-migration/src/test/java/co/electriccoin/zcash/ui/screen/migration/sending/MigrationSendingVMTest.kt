@@ -159,7 +159,7 @@ class MigrationSendingVMTest {
         }
 
     @Test
-    fun onBackNavigatesBackImmediately() =
+    fun backNeverInterruptsAnActiveSend() =
         runTest {
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
             coEvery { sdk.executeNextPendingTransfer(any(), any()) } returns TransferAttemptOutcome.NothingDue
@@ -168,7 +168,7 @@ class MigrationSendingVMTest {
 
             vm.onBack()
 
-            assertEquals(1, router.backCount)
+            assertEquals(0, router.backCount)
         }
 
     @Test
@@ -194,6 +194,7 @@ class MigrationSendingVMTest {
             val content = vm.state.value.content
             assertTrue(content != null)
             assertTrue(content.failureSheet == null)
+            assertTrue(!content.canGoBack)
             content.onBack()
 
             assertEquals(0, router.backCount)

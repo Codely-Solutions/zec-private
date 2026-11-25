@@ -216,6 +216,7 @@ import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryScreen
 import co.electriccoin.zcash.ui.screen.transactionnote.AndroidTransactionNote
 import co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote
+import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressScreen
 import co.electriccoin.zcash.ui.screen.walletbackup.AndroidWalletBackup
@@ -258,7 +259,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
-        composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute()) }
+        composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute(), it.id) }
         composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
         composable<AccountListArgs> { AccountListScreen() }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
@@ -293,8 +294,9 @@ fun NavGraphBuilder.walletNavGraph(
         composable<KeystoneConnectedArgs> { KeystoneConnectedScreen() }
         composable<KeepOpenArgs> { KeepOpenScreen(it.toRoute()) }
         dialogComposable<HeightInfoArgs> { HeightInfoScreen() }
-        composable<ReviewTransactionArgs> { AndroidReviewTransaction() }
-        composable<TransactionProgressArgs> { TransactionProgressScreen(it.toRoute()) }
+        composable<ReviewTransactionArgs> { AndroidReviewTransaction(it.id) }
+        composable<TransactionProgressArgs> { TransactionProgressScreen(BoundTransactionProgressArgs(null), it.id) }
+        composable<BoundTransactionProgressArgs> { TransactionProgressScreen(it.toRoute(), it.id) }
         composable<ActivityHistoryArgs> { ActivityHistoryScreen() }
         dialogComposable<TransactionFiltersArgs> { TransactionFiltersScreen() }
         composable<TransactionDetailArgs> { TransactionDetailScreen(it.toRoute()) }

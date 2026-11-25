@@ -5,4 +5,5 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureS
 data class MigrationSendingState(
     val failureSheet: MigrationTransferFailureState? = null,
     val onBack: () -> Unit = {},
+    val canGoBack: Boolean = false,
 )

@@ -85,13 +85,13 @@ class CheckMigrationRecoveryUseCase(
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
-        requestSendingScreen: (String) -> Unit = { navigationRouter.replaceAll(MigrationSendingArgs(it)) },
+        requestProgress: (String) -> Unit = { navigationRouter.replaceAll(MigrationSendingArgs(it)) },
     ) {
         if (!recoveryMutex.tryLock()) return
         try {
             val elapsed = lastRunMark?.elapsedNow()
             if (!resetPending.value && (elapsed == null || elapsed >= RUN_THROTTLE)) {
-                recoverPersistedWallet(requestSendingScreen)
+                recoverPersistedWallet(requestProgress)
             }
         } catch (e: CancellationException) {
             throw e
@@ -102,7 +102,7 @@ class CheckMigrationRecoveryUseCase(
         }
     }
 
-    private suspend fun recoverPersistedWallet(requestSendingScreen: (String) -> Unit) {
+    private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
         if (persistableWalletProvider.getPersistableWallet() == null) return
         val ownerKey = awaitOwnerKey() ?: return
         val accounts = accountDataSource.getAllAccounts()
@@ -110,7 +110,7 @@ class CheckMigrationRecoveryUseCase(
         val sdk = if (resetPending.value) null else getOrchardMigrationSdk(ownerKey)
         if (sdk != null && !resetPending.value) {
             reviveAccountWorkers(accounts)
-            recoverBroadcast(sdk, ownerKey, requestSendingScreen)
+            recoverBroadcast(sdk, ownerKey, requestProgress)
             if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
         }
     }
@@ -160,7 +160,7 @@ class CheckMigrationRecoveryUseCase(
     private suspend fun recoverBroadcast(
         sdk: OrchardMigrationSdk,
         ownerKey: String,
-        requestSendingScreen: (String) -> Unit,
+        requestProgress: (String) -> Unit,
     ) {
         if (!resetPending.value && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
             // The flag only records THAT a background attempt once failed on Tor, not what the
@@ -182,15 +182,9 @@ class CheckMigrationRecoveryUseCase(
                     ?.filter { it.isTransfer && !it.isSent }
                     ?.minByOrNull { it.scheduledHeight }
             if (nextTransfer?.action == MigrationNextAction.BROADCAST) {
-                // A background attempt failed specifically because of Tor — route through the Sending
-                // screen first rather than straight to MigrationProgressArgs/MigrationTorFailureArgs:
-                // MigrationSendingVM's init{} always attempts a send immediately on construction,
-                // reproducing the exact condition that failed in the background using the current
-                // migration Tor setting. If it fails again, MigrationSendingVM's own existing
-                // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
-                // that routing here.
-                migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
-                if (!resetPending.value) requestSendingScreen(ownerKey)
+                // The legacy flag has no plan identity. Surface current Progress without attempting a payment.
+                migrationLog("MigrationRecovery: pending background Tor failure — offering Progress.")
+                if (!resetPending.value) requestProgress(ownerKey)
             } else {
                 migrationLog(
                     "MigrationRecovery: pending background Tor failure flag is stale " +

@@ -29,8 +29,8 @@ data class MigrationKeystoneScanArgs(
 )
 
 @Composable
-fun MigrationKeystoneScanScreen(args: MigrationKeystoneScanArgs) {
-    val vm = koinViewModel<MigrationKeystoneScanVM> { parametersOf(args) }
+fun MigrationKeystoneScanScreen(args: MigrationKeystoneScanArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationKeystoneScanVM> { parametersOf(args, sourceEntryId) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }

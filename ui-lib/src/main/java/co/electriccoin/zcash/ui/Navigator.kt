@@ -12,6 +12,8 @@ import co.electriccoin.zcash.ui.common.provider.getOrSystem
 import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.util.WebBrowserUtil
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.serializer
 
@@ -31,7 +33,13 @@ class NavigatorImpl(
     private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
     private val canCommitOwnedNavigation: () -> Boolean = { true },
 ) : Navigator {
-    override suspend fun executeCommand(command: NavigationCommand) {
+    private val commandLock = Mutex()
+
+    override suspend fun executeCommand(command: NavigationCommand) = commandLock.withLock {
+        executeOne(command)
+    }
+
+    private suspend fun executeOne(command: NavigationCommand) {
         when {
             command is NavigationCommand.ForEntry && canCommitOwnedNavigation() ->
                 keyboardManager.controller?.hide()
@@ -41,12 +49,15 @@ class NavigatorImpl(
         executeAfterKeyboard(command)
     }
 
-    internal suspend fun executeLaunchCommand(command: NavigationCommand, canNavigate: () -> Boolean): Boolean {
+    internal suspend fun executeLaunchCommand(
+        command: NavigationCommand,
+        canNavigate: () -> Boolean,
+    ): Boolean = commandLock.withLock {
         keyboardManager.close()
-        if (!canNavigate()) return false
+        if (!canNavigate()) return@withLock false
         val previous = navController.currentBackStackEntry
         executeAfterKeyboard(command)
-        return navController.currentBackStackEntry !== previous
+        navController.currentBackStackEntry !== previous
     }
 
     private suspend fun executeAfterKeyboard(command: NavigationCommand) {
@@ -70,12 +81,9 @@ class NavigatorImpl(
         command.acknowledge(navController.currentBackStackEntry !== previous)
     }
 
-    override suspend fun executeCommand(command: CustomNavigationCommand) {
-        val current = navController.currentBackStackEntry
-        val new = command.block(current)
-        if (new != null) {
-            executeCommand(new)
-        }
+    override suspend fun executeCommand(command: CustomNavigationCommand) = commandLock.withLock {
+        command.block(navController.currentBackStackEntry)?.let { executeOne(it) }
+        Unit
     }
 
     @SuppressLint("RestrictedApi")
