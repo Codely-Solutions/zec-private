@@ -70,24 +70,27 @@ class AppUpdateRepository(
             val last = lastAttempt
             if (!UpdatePolicy.shouldCheck(now, last, manual)) return
             val previous = mutableState.value
-            preferences.edit().putLong("last_check", now).apply()
             mutableState.value = AppUpdateState.Checking
             try {
                 val release = readLatestRelease()
+                val completedAt = nowMillis()
                 preferences.edit()
                     .putString("release", encodeCache(release))
-                    .putLong("release_checked_at", nowMillis())
+                    .putLong("release_checked_at", completedAt)
+                    .putLong("last_completed_check", completedAt)
+                    .remove("last_check")
                     .remove("last_check_failed")
                     .apply()
                 mutableState.value = cachedAvailability() ?: AppUpdateState.Current
             } catch (cancelled: CancellationException) {
-                val editor = preferences.edit()
-                if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
-                editor.apply()
                 mutableState.value = if (previous is AppUpdateState.Available) cachedState() else previous
                 throw cancelled
             } catch (_: Exception) {
-                preferences.edit().putBoolean("last_check_failed", true).apply()
+                preferences.edit()
+                    .putLong("last_completed_check", nowMillis())
+                    .remove("last_check")
+                    .putBoolean("last_check_failed", true)
+                    .apply()
                 mutableState.value = AppUpdateState.Failed
             }
         } finally {
@@ -117,7 +120,14 @@ class AppUpdateRepository(
     }
 
     private val lastAttempt: Long?
-        get() = preferences.getLong("last_check", -1L).takeIf { it >= 0 }
+        get() {
+            val completedAt = preferences.getLong("last_completed_check", -1L)
+            if (completedAt >= 0) return completedAt
+            // The old attempt timestamp was written before I/O. Only a successful result has a proven end time.
+            return preferences.getLong("release_checked_at", -1L).takeIf {
+                it >= 0 && !preferences.getBoolean("last_check_failed", false)
+            }
+        }
 
     private fun cachedState(): AppUpdateState =
         if (preferences.getBoolean("last_check_failed", false)) AppUpdateState.Failed

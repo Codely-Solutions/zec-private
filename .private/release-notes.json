@@ -81,5 +81,9 @@
     "Fix incoming BTC swap details when the provider lists multiple BTC assets.",
     "Keep saved swap amounts and status visible when refreshing is unavailable, with an option to retry.",
     "Display long swap timestamps without truncation."
+  ],
+  "v3.19.0-private.31": [
+    "Retry automatic update checks after an interruption.",
+    "Refresh the inline QR code after fullscreen closes so it shows the current address or request."
   ]
 }

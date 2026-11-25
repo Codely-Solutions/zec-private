@@ -2376,7 +2376,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..b8cf53ec2 100644
+index ec56161b5..2635d7d27 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -15359,6 +15359,13 @@ index 6742c1802..59d7d81e9 100644
 @@ -209 +215 @@ fun Modifier.zashiFrostSource(hazeState: HazeState): Modifier =
 -    if (hazeState.blurEnabled) {
 +    if (isZashiFrostBlurEnabled()) {
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
+index 016405668..701f4f35c 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt
+@@ -135 +135 @@ private fun ZashiQrInternal(
+-    LaunchedEffect(state.qrData, qrSizePx, colors) {
++    LaunchedEffect(state.qrData, qrSizePx, colors, enableBitmapReload) {
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
 index 2d38073f4..3dea5aa4d 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
@@ -30398,10 +30405,10 @@ index 000000000..fca45c2b2
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..1f6072f3e
+index 000000000..fcdecfc42
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,181 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -30474,24 +30481,27 @@ index 000000000..1f6072f3e
 +            val last = lastAttempt
 +            if (!UpdatePolicy.shouldCheck(now, last, manual)) return
 +            val previous = mutableState.value
-+            preferences.edit().putLong("last_check", now).apply()
 +            mutableState.value = AppUpdateState.Checking
 +            try {
 +                val release = readLatestRelease()
++                val completedAt = nowMillis()
 +                preferences.edit()
 +                    .putString("release", encodeCache(release))
-+                    .putLong("release_checked_at", nowMillis())
++                    .putLong("release_checked_at", completedAt)
++                    .putLong("last_completed_check", completedAt)
++                    .remove("last_check")
 +                    .remove("last_check_failed")
 +                    .apply()
 +                mutableState.value = cachedAvailability() ?: AppUpdateState.Current
 +            } catch (cancelled: CancellationException) {
-+                val editor = preferences.edit()
-+                if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
-+                editor.apply()
 +                mutableState.value = if (previous is AppUpdateState.Available) cachedState() else previous
 +                throw cancelled
 +            } catch (_: Exception) {
-+                preferences.edit().putBoolean("last_check_failed", true).apply()
++                preferences.edit()
++                    .putLong("last_completed_check", nowMillis())
++                    .remove("last_check")
++                    .putBoolean("last_check_failed", true)
++                    .apply()
 +                mutableState.value = AppUpdateState.Failed
 +            }
 +        } finally {
@@ -30521,7 +30531,14 @@ index 000000000..1f6072f3e
 +    }
 +
 +    private val lastAttempt: Long?
-+        get() = preferences.getLong("last_check", -1L).takeIf { it >= 0 }
++        get() {
++            val completedAt = preferences.getLong("last_completed_check", -1L)
++            if (completedAt >= 0) return completedAt
++            // The old attempt timestamp was written before I/O. Only a successful result has a proven end time.
++            return preferences.getLong("release_checked_at", -1L).takeIf {
++                it >= 0 && !preferences.getBoolean("last_check_failed", false)
++            }
++        }
 +
 +    private fun cachedState(): AppUpdateState =
 +        if (preferences.getBoolean("last_check_failed", false)) AppUpdateState.Failed
@@ -35680,6 +35697,89 @@ index 70b1a725c..23aa98f43 100644
 -</vector>
 +<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#123A46" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#B9F3DC" android:pathData="M32,30h44v10L46,68h30v10H32V68l30,-28H32z"/></vector>
 \ No newline at end of file
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt
+new file mode 100644
+index 000000000..e8b63d191
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt
+@@ -0,0 +1,77 @@
++package co.electriccoin.zcash.ui
++
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.asAndroidBitmap
++import androidx.compose.ui.platform.testTag
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.test.captureToImage
++import androidx.compose.ui.test.isDialog
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onNodeWithTag
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.design.component.QrCodeDefaults
++import co.electriccoin.zcash.ui.design.component.QrState
++import co.electriccoin.zcash.ui.design.component.ZashiQr
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import com.google.zxing.BinaryBitmap
++import com.google.zxing.RGBLuminanceSource
++import com.google.zxing.common.HybridBinarizer
++import com.google.zxing.qrcode.QRCodeReader
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import org.robolectric.shadows.ShadowDialog
++import kotlin.test.assertEquals
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], qualifiers = "w360dp-h780dp")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class QrCodeFullscreenLayoutTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    @Suppress("DEPRECATION")
++    fun dismissingFullscreenShowsTheLatestInlineQrData() {
++        val firstReceiver = "synthetic-receive-first"
++        val rotatedReceiver = "synthetic-receive-rotated"
++        val data = mutableStateOf(firstReceiver)
++        compose.setContent {
++            ZcashTheme {
++                ZashiQr(
++                    state = QrState(data.value),
++                    modifier = Modifier.testTag(INLINE_QR),
++                    qrSize = 180.dp,
++                    colors = QrCodeDefaults.colors(Color.White, Color.Black),
++                )
++            }
++        }
++        assertEquals(firstReceiver, inlineContents())
++        compose.onNodeWithTag(INLINE_QR).performSemanticsAction(SemanticsActions.OnClick) { it() }
++        compose.onNode(isDialog()).assertExists()
++
++        compose.runOnIdle { data.value = rotatedReceiver }
++        compose.runOnIdle { requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed() }
++
++        compose.onNode(isDialog()).assertDoesNotExist()
++        assertEquals(rotatedReceiver, inlineContents())
++    }
++
++    private fun inlineContents(): String {
++        val bitmap = compose.onNodeWithTag(INLINE_QR).captureToImage().asAndroidBitmap()
++        val pixels = IntArray(bitmap.width * bitmap.height)
++        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
++        val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
++        return QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source))).text
++    }
++
++    private companion object {
++        const val INLINE_QR = "inline-qr"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt
 index 4e28ba3d9..ca4d7ba2e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt
@@ -44651,10 +44751,10 @@ index 000000000..94b7bc988
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..d3496d646
+index 000000000..d69763b6b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,310 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -44796,7 +44896,7 @@ index 000000000..d3496d646
 +    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry(): Unit = runBlocking {
 +        for (previous in listOf<Long?>(null, 123L)) {
 +            preferences.edit().clear().apply()
-+            previous?.let { preferences.edit().putLong("last_check", it).apply() }
++            previous?.let { preferences.edit().putLong("last_completed_check", it).apply() }
 +            val entered = CompletableDeferred<Unit>()
 +            val provider = UpdateTestClientProvider {
 +                entered.complete(Unit)
@@ -44807,10 +44907,10 @@ index 000000000..d3496d646
 +            val checking = launch { repository.check() }
 +            withTimeout(10_000) { entered.await() }
 +            assertIs<AppUpdateState.Checking>(repository.state.value)
++            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
 +            checking.cancelAndJoin()
 +
-+            assertEquals(previous != null, preferences.contains("last_check"))
-+            previous?.let { assertEquals(it, preferences.getLong("last_check", 0)) }
++            assertEquals(previous, preferences.getLong("last_completed_check", -1L).takeIf { it >= 0 })
 +            assertIs<AppUpdateState.Idle>(repository.state.value)
 +            provider.reply = { releaseMetadata(200) }
 +            repository.check()
@@ -44820,19 +44920,38 @@ index 000000000..d3496d646
 +    }
 +
 +    @Test
++    fun interruptedLegacyAttemptDoesNotSuppressAutomaticCheck(): Unit = runBlocking {
++        val now = UPDATE_INTERVAL_MILLIS * 2
++        preferences.edit()
++            .putLong("last_check", now - 1)
++            .putLong("release_checked_at", now - UPDATE_INTERVAL_MILLIS)
++            .putBoolean("last_check_failed", true)
++            .apply()
++        val provider = UpdateTestClientProvider { releaseMetadata(200) }
++        val repository = AppUpdateRepository(context, provider) { now }
++
++        repository.check()
++
++        assertEquals(1, provider.requests)
++        assertEquals(now, preferences.getLong("last_completed_check", -1L))
++        assertFalse(preferences.contains("last_check"))
++        assertEquals(200, repository.cachedNotice()?.versionCode)
++    }
++
++    @Test
 +    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries(): Unit = runBlocking {
 +        val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
 +        val repository = AppUpdateRepository(context, provider)
 +        assertTrue(repository.enabled)
 +        repository.check()
 +        assertIs<AppUpdateState.Failed>(repository.state.value)
-+        val lastCheck = preferences.getLong("last_check", 0)
++        val lastCheck = preferences.getLong("last_completed_check", 0)
 +        assertTrue(lastCheck > 0)
 +
 +        val recreated = AppUpdateRepository(context, provider)
 +        recreated.check()
 +        assertEquals(1, provider.requests)
-+        assertEquals(lastCheck, preferences.getLong("last_check", 0))
++        assertEquals(lastCheck, preferences.getLong("last_completed_check", 0))
 +        provider.reply = { releaseMetadata(200) }
 +        recreated.check(manual = true)
 +        assertEquals(2, provider.requests)
