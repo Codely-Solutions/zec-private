@@ -9305,36 +9305,37 @@ index 05231840e..b5bcfe02a 100644
 @@ -433 +613,0 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { this@mockk() } returns sdk
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
-index 860a02aa2..8170536a9 100644
+index 860a02aa2..39cdde79b 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
-@@ -2,0 +3,4 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
 +import android.content.Context
 +import androidx.work.ExistingWorkPolicy
++import androidx.work.OneTimeWorkRequest
 +import androidx.work.Operation
 +import androidx.work.WorkManager
-@@ -3,0 +8 @@ import cash.z.ecc.android.sdk.MigrationSchedule
+@@ -3,0 +9 @@ import cash.z.ecc.android.sdk.MigrationSchedule
 +import cash.z.ecc.android.sdk.OrchardMigrationSdk
-@@ -6 +10,0 @@ import cash.z.ecc.android.sdk.TransferProposal
+@@ -6 +11,0 @@ import cash.z.ecc.android.sdk.TransferProposal
 -import co.electriccoin.zcash.ui.common.model.ZodlAccount
-@@ -8,0 +13 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -8,0 +14 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import com.google.common.util.concurrent.SettableFuture
-@@ -9,0 +15,2 @@ import io.mockk.coEvery
+@@ -9,0 +16,2 @@ import io.mockk.coEvery
 +import io.mockk.coVerify
 +import io.mockk.every
-@@ -10,0 +18,2 @@ import io.mockk.mockk
+@@ -10,0 +19,2 @@ import io.mockk.mockk
 +import io.mockk.mockkObject
 +import io.mockk.unmockkObject
-@@ -11,0 +21,4 @@ import io.mockk.verify
+@@ -11,0 +22,4 @@ import io.mockk.verify
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.supervisorScope
 +import kotlinx.coroutines.test.runCurrent
-@@ -14,0 +28,3 @@ import kotlin.test.assertEquals
+@@ -14,0 +29,3 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertFalse
 +import kotlin.test.assertSame
-@@ -37,5 +53,3 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -37,5 +54,3 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase>(relaxed = true),
 -            getSelectedWalletAccount =
 -                mockk<GetSelectedWalletAccountUseCase> {
@@ -9343,13 +9344,13 @@ index 860a02aa2..8170536a9 100644
 +            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
 +                coEvery { this@mockk("fixture-owner") } returns mockk<OrchardMigrationSdk>(relaxed = true)
 +            },
-@@ -54 +68 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -54 +69 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC)
 +            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC, "fixture-owner")
-@@ -56 +70 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -56 +71 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            verify(exactly = 1) { scheduler.schedule(any(), any()) }
 +            coVerify(exactly = 1) { scheduler.scheduleAndAwait("fixture-owner", any()) }
-@@ -58,0 +73,38 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -58,0 +74,39 @@ class FinalizeMigrationScheduleUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun aFailedEnqueueCannotAcknowledgeACommittedSchedule() = runTest {
@@ -9361,9 +9362,10 @@ index 860a02aa2..8170536a9 100644
 +            }
 +        }
 +        val acknowledgement = SettableFuture.create<Operation.State.SUCCESS>()
++        val operation = mockk<Operation> { every { result } returns acknowledgement }
++        val workId = MigrationScheduler.workId(account)
 +        val manager = mockk<WorkManager> {
-+            every { enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any()) } returns
-+                mockk { every { result } returns acknowledgement }
++            every { enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>()) } returns operation
 +        }
 +        mockkObject(WorkManager.Companion)
 +        try {
@@ -9374,7 +9376,7 @@ index 860a02aa2..8170536a9 100644
 +                }
 +                runCurrent()
 +                verify(exactly = 1) {
-+                    manager.enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any())
++                    manager.enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>())
 +                }
 +                assertFalse(result.isCompleted)
 +
@@ -79302,7 +79304,7 @@ index 000000000..5e998fea0
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 new file mode 100644
-index 000000000..4e386ac2e
+index 000000000..d4986d12e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 @@ -0,0 +1,231 @@
@@ -79315,6 +79317,7 @@ index 000000000..4e386ac2e
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.VersionInfo
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.model.DistributionDimension
 +import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
@@ -79488,13 +79491,12 @@ index 000000000..4e386ac2e
 +        val transactions = mockk<TransactionRepository> {
 +            coEvery { getTransactions(any()) } returns emptyList()
 +        }
-+        val versions = mockk<GetVersionInfoProvider> {
-+            every { invoke() } returns mockk {
-+                every { network } returns ZcashNetwork.Mainnet
-+                every { distribution } returns DistributionDimension.FOSS
-+                every { isDebuggable } returns true
-+            }
++        val version = mockk<VersionInfo> {
++            every { network } returns ZcashNetwork.Mainnet
++            every { distribution } returns DistributionDimension.FOSS
++            every { isDebuggable } returns true
 +        }
++        val versions = mockk<GetVersionInfoProvider> { every { this@mockk() } returns version }
 +        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("tax", null))
 +        val router = mockk<NavigationRouter>(relaxed = true) {
 +            every { activeEntry } returns entry

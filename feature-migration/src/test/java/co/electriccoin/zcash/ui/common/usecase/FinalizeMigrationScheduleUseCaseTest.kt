@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.Operation
 import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationSchedule
@@ -81,9 +82,10 @@ class FinalizeMigrationScheduleUseCaseTest {
             }
         }
         val acknowledgement = SettableFuture.create<Operation.State.SUCCESS>()
+        val operation = mockk<Operation> { every { result } returns acknowledgement }
+        val workId = MigrationScheduler.workId(account)
         val manager = mockk<WorkManager> {
-            every { enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any()) } returns
-                mockk { every { result } returns acknowledgement }
+            every { enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>()) } returns operation
         }
         mockkObject(WorkManager.Companion)
         try {
@@ -94,7 +96,7 @@ class FinalizeMigrationScheduleUseCaseTest {
                 }
                 runCurrent()
                 verify(exactly = 1) {
-                    manager.enqueueUniqueWork(MigrationScheduler.workId(account), ExistingWorkPolicy.REPLACE, any())
+                    manager.enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>())
                 }
                 assertFalse(result.isCompleted)
 

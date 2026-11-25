@@ -7,6 +7,7 @@ import androidx.core.content.FileProvider
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
@@ -180,13 +181,12 @@ class ExportTaxUseCaseTest {
         val transactions = mockk<TransactionRepository> {
             coEvery { getTransactions(any()) } returns emptyList()
         }
-        val versions = mockk<GetVersionInfoProvider> {
-            every { invoke() } returns mockk {
-                every { network } returns ZcashNetwork.Mainnet
-                every { distribution } returns DistributionDimension.FOSS
-                every { isDebuggable } returns true
-            }
+        val version = mockk<VersionInfo> {
+            every { network } returns ZcashNetwork.Mainnet
+            every { distribution } returns DistributionDimension.FOSS
+            every { isDebuggable } returns true
         }
+        val versions = mockk<GetVersionInfoProvider> { every { this@mockk() } returns version }
         val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("tax", null))
         val router = mockk<NavigationRouter>(relaxed = true) {
             every { activeEntry } returns entry
