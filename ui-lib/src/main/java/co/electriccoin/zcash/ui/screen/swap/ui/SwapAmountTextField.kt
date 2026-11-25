@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -208,6 +209,7 @@ private fun SwapTextFieldCard(
                             Modifier
                                 .clickable(
                                     onClick = state.onSwapChange,
+                                    role = Role.Button,
                                     indication = null,
                                     interactionSource = remember { MutableInteractionSource() }
                                 )
@@ -215,7 +217,7 @@ private fun SwapTextFieldCard(
                             Modifier
                         },
                     painter = painterResource(R.drawable.ic_swap_recipient),
-                    contentDescription = null
+                    contentDescription = state.swapChangeDescription.getValue().takeIf { state.isSwapChangeEnabled },
                 )
             }
         }
@@ -257,6 +259,7 @@ data class SwapAmountTextFieldState(
     val textField: NumberTextFieldState,
     val secondaryText: StringResource,
     val isSwapChangeEnabled: Boolean = true,
+    val swapChangeDescription: StringResource = stringRes(R.string.amount_switch_unit),
     val onSwapChange: () -> Unit,
 ) {
     val isError = error != null || textField.innerState.isError

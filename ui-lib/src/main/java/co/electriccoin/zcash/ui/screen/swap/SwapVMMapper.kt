@@ -250,6 +250,11 @@ internal class SwapVMMapper {
                     SWAP_FROM_ZEC -> createMaxState(state, onBalanceButtonClick)
                     SWAP_INTO_ZEC -> null
                 },
+            swapChangeDescription = when (state.currencyType) {
+                TOKEN -> stringRes(R.string.amount_switch_to_fiat)
+                FIAT -> state.originAsset?.tokenTicker?.let { stringRes(R.string.amount_switch_to_asset, it) }
+                    ?: stringRes(R.string.amount_switch_unit)
+            },
             onSwapChange = {
                 when (state.currencyType) {
                     TOKEN -> {

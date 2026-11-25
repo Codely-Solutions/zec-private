@@ -22,10 +22,8 @@ class DisconnectUseCase(
     /**
      * A disconnected hardware account must take its scheduled migration work with it — otherwise
      * the lanes zombie-retry for an account that no longer exists. Deleting the account also drops
-     * a Ledger account's stored binding. When the disconnected account was the selected one the
-     * software wallet is selected afterwards, so the app is never left pointing at an account that
-     * is gone; disconnecting an account that is not selected leaves the selection alone. Whether it
-     * was selected is read again right before deleting, since [hwAccount] can be a stale snapshot.
+     * a Ledger account's stored binding. Account deletion clears the stored selection only if it
+     * still names the removed account. The account flow supplies its ordinary fallback.
      */
     @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(hwAccount: HWWalletAccount) =
@@ -35,17 +33,9 @@ class DisconnectUseCase(
             )
 
             val uuid = hwAccount.sdkAccount.accountUuid
-            var wasSelected = false
             migrationAppHooks.retireHardwareAccount(uuid.toStorageKeyId()) {
-                wasSelected = accountDataSource.getAllAccounts()
-                    .firstOrNull { it.sdkAccount.accountUuid == uuid }?.isSelected ?: hwAccount.isSelected
                 accountDataSource.deleteAccount(hwAccount)
             }
             logger("Hardware account removed")
-
-            if (wasSelected) {
-                val zashiAccount = accountDataSource.getZashiAccount()
-                accountDataSource.selectAccount(zashiAccount)
-            }
         }
 }

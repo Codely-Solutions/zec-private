@@ -1,8 +1,11 @@
 """Resolve explicitly migrated public refs while keeping original artifact evidence."""
+import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
+
+from release_metadata import PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require, require_public_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,3 +56,23 @@ def release_tag_matches(tag, source, apk_digest, release_id, ref, api, root=ROOT
             or ref['sha'] != migrated.get('commit')):
         return False
     return api('git/commits/' + ref['sha'])['tree']['sha'] == migrated['tree']
+
+
+
+def require_recorded_public_release(live, proof, api, root=ROOT):
+    tag = proof['release_tag']
+    require(live['tag_name'] == tag and live['draft'] is False and live['prerelease'] is False,
+            'Expected the recorded public stable release')
+    require_public_version(live, proof['versionCode'], 'Latest public release version differs from its record')
+    apk_digest = proof['apk_sha256']
+    checksum = checksum_bytes(apk_digest)
+    expected = {WALLET_APK: (apk_digest, PUBLIC_APK_LIMIT),
+                'SHA256SUMS': (hashlib.sha256(checksum).hexdigest(), len(checksum))}
+    assets = live['assets']
+    require(len(assets) == len(expected) and {asset['name'] for asset in assets} == expected.keys()
+            and all(asset['state'] == 'uploaded' and 0 < asset['size'] <= expected[asset['name']][1]
+                    and asset.get('digest') == 'sha256:' + expected[asset['name']][0] for asset in assets),
+            'Latest public release assets differ from the integrated release evidence')
+    ref = find_release_tag(tag, api)
+    require(ref is not None and release_tag_matches(tag, proof['source_sha'], apk_digest, live['id'], ref, api, root),
+            'Latest public release tag differs from the attested upgrade source')

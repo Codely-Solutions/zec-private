@@ -13,8 +13,6 @@ import co.electriccoin.zcash.ui.common.migration.MigrationHomeMessageSource
 import co.electriccoin.zcash.ui.common.migration.MigrationNavContributor
 import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
-import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
-import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
@@ -100,8 +98,6 @@ val featureMigrationModule =
             HasSeenMigrationCompleteStorageProvider::class
         singleOf(::MigrationUpgradeNoticeStorageProviderImpl) bind MigrationUpgradeNoticeStorageProvider::class
         singleOf(::MigrationGateBypassStorageProviderImpl) bind MigrationGateBypassStorageProvider::class
-        singleOf(::HasLockedOrchardDustStorageProviderImpl) bind
-            HasLockedOrchardDustStorageProvider::class
         singleOf(::IsMigrationTorEnabledStorageProviderImpl) bind IsMigrationTorEnabledStorageProvider::class
         singleOf(::PendingMigrationTorFailureStorageProviderImpl) bind
             PendingMigrationTorFailureStorageProvider::class

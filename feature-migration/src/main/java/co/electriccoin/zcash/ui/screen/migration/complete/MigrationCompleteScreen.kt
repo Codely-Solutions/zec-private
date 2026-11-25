@@ -61,7 +61,7 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 data class MigrationCompleteState(
     val totalTransferred: StringResource?,
     val remainingDust: StringResource?,
-    val isDustLocked: Boolean,
+    val lockNotice: StringResource? = null,
     val transfersProgress: StringResource?,
     val duration: StringResource?,
     val onDone: () -> Unit,
@@ -119,11 +119,9 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                     ZcashTheme.colors.topAppBarColors.copyColors(
                         containerColor = Color.Transparent
                     ),
-                // The "?" opens the lock explainer as pure information. It's only meaningful while
-                // there's an unlocked residue that can still be locked, so it's hidden once the
-                // balance is locked or when there's no residual dust at all.
+                // Explain the account-wide lock when the wallet reports spendable Orchard funds.
                 regularActions = {
-                    if (state.remainingDust != null && !state.isDustLocked) {
+                    if (state.remainingDust != null) {
                         ZashiIconButton(
                             state =
                                 IconButtonState(
@@ -190,22 +188,12 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                 )
                 SummaryCard(state)
                 Spacer(Modifier.weight(1f))
+                state.lockNotice?.let { notice ->
+                    LockedDisclaimer(notice)
+                    Spacer(Modifier.height(16.dp))
+                }
                 when {
                     state.remainingDust == null -> {
-                        ZashiButton(
-                            state =
-                                ButtonState(
-                                    text = stringRes(DesignR.string.migration_common_gotIt),
-                                    onClick = state.onDone
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    state.isDustLocked -> {
-                        Spacer(Modifier.height(20.dp))
-                        LockedDisclaimer(dustAmount = state.remainingDust.getValue())
-                        Spacer(Modifier.height(24.dp))
                         ZashiButton(
                             state =
                                 ButtonState(
@@ -344,7 +332,7 @@ private fun SummaryRow(label: String, value: String) {
 }
 
 @Composable
-private fun LockedDisclaimer(dustAmount: String) {
+private fun LockedDisclaimer(notice: StringResource) {
     Row(
         modifier =
             Modifier
@@ -353,20 +341,12 @@ private fun LockedDisclaimer(dustAmount: String) {
                 .background(ZashiColors.Surfaces.bgSecondary)
                 .padding(16.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringRes(DesignR.string.migrationComplete_orchardBalanceLockedTitle).getValue(),
-                style = ZashiTypography.textSm,
-                fontWeight = FontWeight.Medium,
-                color = ZashiColors.Text.textPrimary,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringRes(DesignR.string.migrationComplete_orchardBalanceLockedBody, dustAmount).getValue(),
-                style = ZashiTypography.textSm,
-                color = ZashiColors.Text.textTertiary,
-            )
-        }
+        Text(
+            modifier = Modifier.weight(1f),
+            text = notice.getValue(),
+            style = ZashiTypography.textSm,
+            color = ZashiColors.Text.textPrimary,
+        )
         Spacer(Modifier.width(12.dp))
         Icon(
             painter = painterResource(co.electriccoin.zcash.ui.design.R.drawable.ic_info),
@@ -386,7 +366,6 @@ private fun PreviewWithDust() =
                 MigrationCompleteState(
                     totalTransferred = stringRes("12.458 ZEC"),
                     remainingDust = stringRes("0.00031 ZEC"),
-                    isDustLocked = false,
                     transfersProgress = stringRes("5 of 5 sent"),
                     duration = stringRes("~24 hours"),
                     onDone = {},
@@ -406,7 +385,7 @@ private fun PreviewWithLockedDust() =
                 MigrationCompleteState(
                     totalTransferred = stringRes("12.458 ZEC"),
                     remainingDust = stringRes("0.00031 ZEC"),
-                    isDustLocked = true,
+                    lockNotice = stringRes(DesignR.string.migrationComplete_lockRequestCompleted),
                     transfersProgress = stringRes("5 of 5 sent"),
                     duration = stringRes("~24 hours"),
                     onDone = {},
@@ -426,7 +405,6 @@ private fun PreviewNoDust() =
                 MigrationCompleteState(
                     totalTransferred = stringRes("12.458 ZEC"),
                     remainingDust = null,
-                    isDustLocked = false,
                     transfersProgress = stringRes("5 of 5 sent"),
                     duration = stringRes("~24 hours"),
                     onDone = {},
@@ -446,7 +424,6 @@ private fun PreviewResidueOnly() =
                 MigrationCompleteState(
                     totalTransferred = stringRes("12.45 ZEC"),
                     remainingDust = stringRes("0.008 ZEC"),
-                    isDustLocked = false,
                     transfersProgress = stringRes("0 of 0 sent"),
                     duration = stringRes("~0 hours"),
                     isResidueOnly = true,

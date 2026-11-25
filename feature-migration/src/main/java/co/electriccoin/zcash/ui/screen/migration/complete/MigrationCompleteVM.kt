@@ -3,12 +3,12 @@ package co.electriccoin.zcash.ui.screen.migration.complete
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.MigrationState
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
-import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LceState
@@ -17,20 +17,14 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZATOSHI
+import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
-import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
-import co.electriccoin.zcash.ui.common.repository.BiometricRepository
-import co.electriccoin.zcash.ui.common.repository.BiometricRequest
-import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
-import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
-import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
-import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
@@ -38,17 +32,15 @@ import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
-import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExplainerArgs
-import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import co.electriccoin.zcash.ui.stageResultFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -61,17 +53,12 @@ class MigrationCompleteVM(
     private val getOrchardBalance: GetOrchardBalanceUseCase,
     private val getIronwoodBalance: GetIronwoodBalanceUseCase,
     private val hasSeenMigrationCompleteStorageProvider: HasSeenMigrationCompleteStorageProvider,
-    private val hasLockedOrchardDustStorageProvider: HasLockedOrchardDustStorageProvider,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val lockOrchardBalance: LockOrchardBalanceUseCase,
-    private val biometricRepository: BiometricRepository,
-    private val keystoneProposalRepository: KeystoneProposalRepository,
-    private val zashiProposalRepository: ZashiProposalRepository,
-    private val submitProposal: SubmitProposalUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
     override fun onCleared() {
@@ -80,7 +67,7 @@ class MigrationCompleteVM(
     }
 
     private data class Summary(
-        val accountKeyId: String,
+        val accountUuid: AccountUuid,
         val canShowCompletion: Boolean,
         val totalTransferred: Long?,
         val totalCount: Int?,
@@ -95,8 +82,7 @@ class MigrationCompleteVM(
     // sheet, so its loading/error state is kept OUT of groupLce below — a lock in progress shows a
     // spinner on the button, it must never blank the whole success screen behind a full-screen
     // loader, and a lock error simply re-enables the button for a retry.
-    private val lockLce = mutableLce<Unit>()
-    private val refreshedDust = MutableStateFlow<Long?>(null)
+    private val lockLce = mutableLce<Boolean>()
 
     private val completionOwnerKey = viewModelScope.async(start = CoroutineStart.LAZY) {
         args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
@@ -109,7 +95,7 @@ class MigrationCompleteVM(
             val key = uuid.toStorageKeyId()
             val summary = if (args.isResidueOnly) {
                 Summary(
-                    accountKeyId = key,
+                    accountUuid = uuid,
                     canShowCompletion = true,
                     totalTransferred = getIronwoodBalance(uuid).value,
                     totalCount = null,
@@ -125,7 +111,7 @@ class MigrationCompleteVM(
                     getOrchardMigrationSdk(key)?.getMigrationStateUnreconciled() == MigrationState.Complete)
                 val minedAt = transfers?.let { rows -> rows.mapNotNull { it.minedAt }.takeIf { it.size == rows.size } }
                 Summary(
-                    accountKeyId = key,
+                    accountUuid = uuid,
                     canShowCompletion = canShowCompletion,
                     totalTransferred = transfers?.takeIf { it.all { row -> row.amountZatoshi > 0L } }
                         ?.sumOf { it.amountZatoshi },
@@ -154,23 +140,27 @@ class MigrationCompleteVM(
         combine(
             loadLce.state,
             loadLce.state.flatMapLatest { state ->
-                state.success?.accountKeyId?.let(hasLockedOrchardDustStorageProvider::observe) ?: flowOf(false)
+                state.success?.accountUuid?.let(getOrchardBalance::observe) ?: flowOf(null)
             },
             migrateAnywayLce.state,
             lockLce.state,
-            refreshedDust,
-        ) { lce, isLocked, migrateAnywayState, lockState, latestDust ->
+        ) { lce, available, migrateAnywayState, lockState ->
+            val lockNotice = when {
+                lockState.success == true -> stringRes(DesignR.string.migrationComplete_lockRequestCompleted)
+                lockState.error != null -> stringRes(DesignR.string.migrationComplete_lockRequestFailed)
+                else -> null
+            }
             lce.success?.let { summary ->
                 createState(
-                    summary.copy(dustZatoshi = latestDust ?: summary.dustZatoshi),
-                    isLocked, migrateAnywayState.loading, lockState.loading,
+                    summary.copy(dustZatoshi = available?.value ?: summary.dustZatoshi),
+                    lockNotice, migrateAnywayState.loading, lockState.loading,
                 )
             }
         }.withLce(groupLce(loadLce, migrateAnywayLce), errorStateMapper::mapToState).stateIn(this)
 
     private fun createState(
         summary: Summary,
-        isLocked: Boolean,
+        lockNotice: StringResource?,
         isMigrating: Boolean,
         isLocking: Boolean,
     ): MigrationCompleteState =
@@ -178,7 +168,7 @@ class MigrationCompleteVM(
             canShowCompletion = summary.canShowCompletion,
             totalTransferred = summary.totalTransferred?.let { stringRes(Zatoshi(it)) },
             remainingDust = if (summary.dustZatoshi > 0L) stringRes(Zatoshi(summary.dustZatoshi)) else null,
-            isDustLocked = isLocked,
+            lockNotice = lockNotice,
             transfersProgress = summary.totalCount?.let {
                 stringRes(DesignR.string.migrationComplete_transfersProgress, it, it)
             },
@@ -218,10 +208,9 @@ class MigrationCompleteVM(
     private fun onLockBalance(reviewedDust: Long) =
         lockLce.execute {
             val key = activeCompletionOwner().sdkAccount.accountUuid.toStorageKeyId()
-            val locked = ownsCompletionEntry && lockOrchardBalance(key) {
+            ownsCompletionEntry && lockOrchardBalance(key) {
                 matchesReviewedResidue(reviewedDust)
             }
-            if (locked) hasLockedOrchardDustStorageProvider.store(key, true)
         }
 
     // The "?" in the top bar opens the lock explainer purely as information about what locking does.
@@ -234,34 +223,13 @@ class MigrationCompleteVM(
             if (owner is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
             owner.requireSpendable()
             if (!matchesReviewedResidue(reviewedDust)) return@execute
-            if (owner is KeystoneAccount && !authenticateMigrateAnyway()) return@execute
-            activeCompletionOwner()
-
             val key = owner.sdkAccount.accountUuid.toStorageKeyId()
             check(args.isResidueOnly || hasCompletionEvidence(key)) {
                 "The migration has not completed."
             }
-            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-            val proposal = sdk.proposeImmediateMigration()
-            if (!matchesReviewedResidue(reviewedDust)) return@execute
-            if (owner is KeystoneAccount) {
-                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
-                keystoneProposalRepository.createPCZTFromProposal(owner)
-                if (!matchesReviewedResidue(reviewedDust)) {
-                    keystoneProposalRepository.clear(reviewed)
-                    return@execute
-                }
-                keystoneProposalRepository.approveForSigning(reviewed)
-                navigationRouter.stageResultFrom(sourceEntryId, {
-                    keystoneProposalRepository.transactionProposal.value === reviewed
-                }) {
-                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
-                }
-            } else {
-                // The normal transaction progress path retains submission identity and lets
-                // the SDK reconcile its original transaction after an uncertain result.
-                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
-                submitProposal(reviewed, sourceEntryId = sourceEntryId)
+            activeCompletionOwner()
+            navigationRouter.stageResultFrom(sourceEntryId, { ownsCompletionEntry }) {
+                NavigationCommand.Forward(listOf(MigrationReviewArgs(MigrationMode.IMMEDIATE, key)))
             }
         }
 
@@ -269,29 +237,11 @@ class MigrationCompleteVM(
         val account = activeCompletionOwner().sdkAccount.accountUuid
         val balance = getOrchardBalance(account).value
         activeCompletionOwner()
-        if (balance != reviewed) refreshedDust.value = balance
         return ownsCompletionEntry && balance == reviewed && reviewed > 0
     }
 
     private val ownsCompletionEntry
         get() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
-
-    private suspend fun authenticateMigrateAnyway(): Boolean =
-        try {
-            biometricRepository.requestBiometrics(
-                BiometricRequest(
-                    message = stringRes(
-                        R.string.authentication_system_ui_subtitle,
-                        stringRes(R.string.authentication_use_case_send_funds)
-                    )
-                )
-            )
-            true
-        } catch (_: BiometricsFailureException) {
-            false
-        } catch (_: BiometricsCancelledException) {
-            false
-        }
 
     private suspend fun hasCompletionEvidence(key: String): Boolean {
         val snapshot = getMigrationSnapshot(key)

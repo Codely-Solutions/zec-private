@@ -161,25 +161,21 @@ class TransactionRepositoryImpl(
                                                         val batchedOutputs = outputsDeferred.await()
                                                         val batchedRecipients = recipientsDeferred.await()
                                                         transactions.associate { transaction ->
+                                                            val recipients =
+                                                                batchedRecipients[transaction.txId].orEmpty()
                                                             val details =
                                                                 TxDetails(
                                                                     outputs =
                                                                         batchedOutputs[transaction.txId].orEmpty(),
                                                                     recipient =
-                                                                        batchedRecipients[transaction.txId]
-                                                                            .orEmpty()
-                                                                            .let { recipients ->
-                                                                                selectDisplayRecipient(recipients)
-                                                                                    ?: recipients
-                                                                                        .firstNotNullOfOrNull {
-                                                                                            it.accountUuid
-                                                                                        }?.let {
-                                                                                            ownUnifiedAddress(
-                                                                                                synchronizer,
-                                                                                                it
-                                                                                            )
-                                                                                        }
-                                                                            }
+                                                                        selectDisplayRecipient(recipients)
+                                                                            ?: recipients.firstNotNullOfOrNull {
+                                                                                it.accountUuid
+                                                                            }?.let {
+                                                                                ownUnifiedAddress(synchronizer, it)
+                                                                            },
+                                                                    canRepeatPayment =
+                                                                        hasOneExternalPayment(recipients, uuid),
                                                                 )
                                                             val key = transaction.txId.txIdString()
                                                             if (transaction.raw != null) {
@@ -266,7 +262,8 @@ class TransactionRepositoryImpl(
                             fee = transaction.feePaid,
                             overview = transaction,
                             accountUuid = accountUuid,
-                            recipient = details.recipient
+                            recipient = details.recipient,
+                            canRepeatPayment = details.canRepeatPayment,
                         )
                     }
 
@@ -311,7 +308,8 @@ class TransactionRepositoryImpl(
                             fee = transaction.feePaid,
                             overview = transaction,
                             accountUuid = accountUuid,
-                            recipient = details.recipient
+                            recipient = details.recipient,
+                            canRepeatPayment = details.canRepeatPayment,
                         )
                     }
 
@@ -356,7 +354,8 @@ class TransactionRepositoryImpl(
                             fee = transaction.feePaid,
                             overview = transaction,
                             accountUuid = accountUuid,
-                            recipient = details.recipient
+                            recipient = details.recipient,
+                            canRepeatPayment = details.canRepeatPayment,
                         )
                     }
 
@@ -469,6 +468,8 @@ sealed interface Transaction {
 }
 
 sealed interface SendTransaction : Transaction {
+    val canRepeatPayment: Boolean
+
     data class Success(
         override val id: TransactionId,
         override val amount: Zatoshi,
@@ -479,6 +480,7 @@ sealed interface SendTransaction : Transaction {
         override val overview: TransactionOverview,
         override val recipient: String?,
         override val accountUuid: AccountUuid? = null,
+        override val canRepeatPayment: Boolean = false,
     ) : SendTransaction
 
     data class Pending(
@@ -491,6 +493,7 @@ sealed interface SendTransaction : Transaction {
         override val overview: TransactionOverview,
         override val recipient: String?,
         override val accountUuid: AccountUuid? = null,
+        override val canRepeatPayment: Boolean = false,
     ) : SendTransaction
 
     data class Failed(
@@ -503,6 +506,7 @@ sealed interface SendTransaction : Transaction {
         override val overview: TransactionOverview,
         override val recipient: String?,
         override val accountUuid: AccountUuid? = null,
+        override val canRepeatPayment: Boolean = false,
     ) : SendTransaction
 }
 
@@ -588,6 +592,7 @@ val Transaction.isPending: Boolean
 private data class TxDetails(
     val outputs: List<TransactionOutput>,
     val recipient: String?,
+    val canRepeatPayment: Boolean = false,
 )
 
 /**
@@ -630,5 +635,10 @@ internal fun sentTransactionAmount(transaction: TransactionOverview): Zatoshi =
  */
 internal fun selectDisplayRecipient(recipients: List<TransactionRecipient>): String? =
     recipients.sortedBy { it.accountUuid != null }.firstNotNullOfOrNull { it.addressValue }
+
+internal fun hasOneExternalPayment(recipients: List<TransactionRecipient>, owner: AccountUuid): Boolean =
+    recipients.filter { it.accountUuid != owner }.singleOrNull()?.let {
+        it.accountUuid == null && !it.addressValue.isNullOrBlank()
+    } == true
 
 private const val TRANSACTIONS_RETRY_DELAY_CAP = 10L

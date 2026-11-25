@@ -8,6 +8,8 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -19,12 +21,15 @@ interface SelectedAccountUUIDProvider {
     suspend fun setUUID(uuid: AccountUuid)
 
     suspend fun clearUUID()
+
+    suspend fun clearIfSelected(uuid: AccountUuid)
 }
 
 class SelectedAccountUUIDProviderImpl(
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider
 ) : SelectedAccountUUIDProvider {
     private val default = SelectedAccountUUIDPreferenceDefault()
+    private val selectionWrites = Mutex()
 
     override val uuid: Flow<AccountUuid?> =
         flow {
@@ -33,12 +38,19 @@ class SelectedAccountUUIDProviderImpl(
 
     override suspend fun getUUID(): AccountUuid? = default.getValue(encryptedPreferenceProvider())
 
-    override suspend fun setUUID(uuid: AccountUuid) {
+    override suspend fun setUUID(uuid: AccountUuid) = selectionWrites.withLock {
         default.putValue(encryptedPreferenceProvider(), uuid)
     }
 
-    override suspend fun clearUUID() {
+    override suspend fun clearUUID() = selectionWrites.withLock {
         default.putValue(encryptedPreferenceProvider(), null)
+    }
+
+    override suspend fun clearIfSelected(uuid: AccountUuid) = selectionWrites.withLock {
+        val preferences = encryptedPreferenceProvider()
+        if (default.getValue(preferences) == uuid) {
+            default.putValue(preferences, null)
+        }
     }
 }
 

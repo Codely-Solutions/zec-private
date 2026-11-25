@@ -360,7 +360,7 @@ class MigrationReviewVM(
                 ),
             fee = stringRes(fee),
             isConfirming = isConfirming,
-            onConfirm = { onConfirmImmediate(proposal.proposal) },
+            onConfirm = { confirmLce.guardLoading { onConfirmImmediate(proposal) } },
             onBack = ::onBack,
             // Submit failures now surface on the Sending screen (which owns the broadcast) rather
             // than here — this screen only hands the signed proposal off after biometric auth.
@@ -564,10 +564,10 @@ class MigrationReviewVM(
     // MigrationSweepTransactionProposal, then hand off to SubmitProposalUseCase (biometrics + async
     // broadcast + Transaction Progress screen, whose sending/success states already render the
     // migration-sweep "…migrated to Ironwood" copy). No migration-specific screen or handoff.
-    private fun onConfirmImmediate(proposal: Proposal) =
+    private fun onConfirmImmediate(review: ReviewProposal.Immediate) =
         confirmLce.execute {
             val account = requireReviewAccount()
-            if (!ownsReviewEntry()) return@execute
+            if (!ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
             if (account is KeystoneAccount) {
                 // Keystone can't sign in-process — adopt the already-built send-max proposal into the
                 // app's existing generic external-signer pipeline exactly as an ordinary Keystone
@@ -591,14 +591,14 @@ class MigrationReviewVM(
                     return@execute
                 }
                 requireReviewAccount()
-                if (!ownsReviewEntry()) return@execute
-                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
+                if (!ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
+                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(review.proposal)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
                 keystoneProposalRepository.createPCZTFromProposal(account)
                 requireReviewAccount()
-                if (!ownsReviewEntry()) {
+                if (!ownsReviewEntry() || proposeLce.state.value.success !== review) {
                     keystoneProposalRepository.clear(reviewed)
                     return@execute
                 }
@@ -609,7 +609,7 @@ class MigrationReviewVM(
                     NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
                 }
             } else {
-                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
+                val reviewed = zashiProposalRepository.setMigrationSweepProposal(review.proposal)
                 submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }

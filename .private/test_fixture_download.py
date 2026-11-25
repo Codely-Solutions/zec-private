@@ -157,13 +157,21 @@ class FixtureDownloadTests(unittest.TestCase):
             (root/'.private').mkdir()
             selected = root/'.private/hosted-fixture.json'
             selected.write_text('{"version_code":21}')
-            with patch('hosted_fixture.recorded_pair', return_value=({'apk_sha256': apk}, core)), \
-                    patch('hosted_fixture.Metadata.api', return_value={
-                        'tag_name': binding['release'],
-                        'assets': [{'name': 'zec-private-latest.apk', 'digest': 'sha256:'+apk}]}):
+            from test_support import public_baseline_metadata
+
+            public = public_baseline_metadata(binding, apk)
+            proof = dict(release_tag=binding['release'], apk_sha256=apk,
+                         versionCode=binding['version_code'], source_sha=binding['source_sha'])
+            with patch('hosted_fixture.recorded_pair', return_value=(proof, core)), \
+                    patch('hosted_fixture.Metadata.api', side_effect=public.__getitem__):
                 from release_metadata import Metadata
 
                 metadata = Metadata()
+                public['/releases/latest']['body'] += ' '
+                with self.assertRaisesRegex(ValueError, 'version differs'):
+                    record(binding, metadata, root)
+                self.assertEqual({'version_code': 21}, json.loads(selected.read_text()))
+                public['/releases/latest']['body'] = public['/releases/latest']['body'].rstrip()
                 self.assertTrue(record(binding, metadata, root))
                 self.assertEqual(binding, json.loads(selected.read_text()))
                 self.assertFalse(record(binding, metadata, root))

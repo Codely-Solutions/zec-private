@@ -42,7 +42,8 @@ class PrefillSendUseCase {
                 amount = value.transaction.amount,
                 address = value.recipient?.address,
                 fee = value.transaction.fee,
-                memos = value.memos
+                // The SDK exposes a memo list without the recipient of each output.
+                memos = value.memos?.takeIf { value.transaction.transactionOutputs.size == 1 }
             )
         )
 

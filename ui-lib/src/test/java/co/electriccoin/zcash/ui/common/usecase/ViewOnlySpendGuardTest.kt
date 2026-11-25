@@ -357,7 +357,10 @@ class ViewOnlySpendGuardTest {
                 RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError),
                 accountDataSource,
                 co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
-            )(mockk { every { transaction } returns mockk { every { accountUuid } returns null } }, "fixture-send")
+            )(mockk {
+                every { canSendAgain } returns true
+                every { transaction } returns mockk { every { accountUuid } returns null }
+            }, "fixture-send")
 
             verify(exactly = 2) { navigateToError(match { it.isViewOnlyError() }, any()) }
             verify(exactly = 0) { navigationRouter.replace(*anyVararg()) }

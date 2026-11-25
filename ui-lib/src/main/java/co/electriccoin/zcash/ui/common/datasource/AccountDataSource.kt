@@ -398,13 +398,9 @@ class AccountDataSourceImpl(
      * retry something that cannot be retried. An orphaned binding is keyed by an account UUID that no
      * longer resolves.
      *
-     * Between the cleared selection and the caller's next one there is a short window in which no
-     * account UUID is stored and the selection falls back to the default account. DisconnectUseCase
-     * and RemoveViewOnlyAccountUseCase close it by selecting the Zodl account right after this
-     * returns, when the deleted account was the selected one. The order is deliberate: clearing the
-     * selection before the deletion would leave a failed deletion with its account deselected. A
-     * selection left naming the deleted account, when the clear never ran, falls back to the
-     * default account as well.
+     * With no surviving selected UUID, the account flow falls back to the default account.
+     * Clearing the deleted UUID and explicit account selections serialize so a newer selection
+     * survives account removal.
      */
     @Suppress("TooGenericExceptionCaught")
     override suspend fun deleteAccount(account: WalletAccount) =
@@ -422,9 +418,7 @@ class AccountDataSourceImpl(
                 throw AccountDeletionException("Failed to delete account: ${e.message}", e)
             }
             bestEffort("failed to clear the selection of a deleted account") {
-                if (selectedAccountUUIDProvider.getUUID() == accountUuid) {
-                    selectedAccountUUIDProvider.clearUUID()
-                }
+                selectedAccountUUIDProvider.clearIfSelected(accountUuid)
             }
             if (account is LedgerAccount) {
                 bestEffort("failed to clear the Ledger binding of a deleted account") {

@@ -125,9 +125,10 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
     if evidence.is_file():
         recorded = evidence.read_bytes()
         proof = json.loads(recorded)
-        apks = [asset for asset in latest['assets'] if asset['name'] == 'zec-private-latest.apk']
-        if len(apks) != 1 or apks[0]['digest'] != 'sha256:' + proof['apk_sha256']:
-            raise ValueError('Public APK differs from its trusted integration record')
+        from published_history import require_recorded_public_release
+
+        require_recorded_public_release(latest, proof, lambda path: api(f'{prefix}/{path}'),
+                                        evidence_dir.parent.parent)
         opened = blocker_issues(api(f'{prefix}/issues?state=open&per_page=100', '--paginate', '--slurp'))
         if len(opened) > 1:
             raise ValueError('Multiple open blocker issues require operator review')

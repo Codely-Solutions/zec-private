@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
-from test_support import patch_environment
+from test_support import patch_environment, public_baseline_metadata
 
 from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, trusted_proposal,
                                verified_wrapper, wrapper_patch)
@@ -819,18 +819,48 @@ class MaintenanceWatchTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'one live matching publication attestation'):
                     pending_recovery('repos/fork/wallet', directory,
                                      lambda *_args, **_kwargs: {'release_tag': 'v3.19.0-private.20'})
-            (directory/(tag+'.json')).write_text(json.dumps({'apk_sha256': digest}))
-            with patch('maintenance_watch.api', side_effect=[latest, [[]]]) as api:
+            fixture = dict(release=tag, source_sha='b' * 40, version_code=21)
+            public = public_baseline_metadata(fixture, digest)
+            latest, ref = public['/releases/latest'], public['/git/matching-refs/tags/' + tag]
+            record = dict(release_tag=tag, versionCode=21, source_sha=fixture['source_sha'], apk_sha256=digest)
+            (directory/(tag+'.json')).write_text(json.dumps(record))
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[]]]) as api:
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
                 self.assertIn('issues?state=open', api.call_args.args[0])
+
+    def test_watch_reports_recorded_release_drift_before_checking_any_blocker(self):
+        tag = 'v3.19.0-private.30'
+        fixture = dict(release=tag, source_sha='b' * 40, version_code=30)
+        digest = 'a' * 64
+        release = dict(release_tag=tag, source_sha=fixture['source_sha'], apk_sha256=digest, versionCode=30)
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            (directory / (tag + '.json')).write_text(json.dumps(release))
+            for drift in ('checksum', 'tag', 'version'):
+                with self.subTest(drift=drift):
+                    public = public_baseline_metadata(fixture, digest)
+                    latest, ref = public['/releases/latest'], public['/git/matching-refs/tags/' + tag]
+                    if drift == 'checksum':
+                        latest['assets'][1]['digest'] = 'sha256:' + 'f' * 64
+                    elif drift == 'tag':
+                        ref[0]['object']['sha'] = 'f' * 40
+                    else:
+                        latest['body'] += ' '
+                    with patch('maintenance_watch.api', side_effect=[latest, ref]) as api:
+                        with self.assertRaisesRegex(ValueError, 'release (assets|tag|version) differs?'):
+                            pending_recovery('repos/fork/wallet', directory)
+                        self.assertFalse(any('/issues?' in call.args[0] for call in api.call_args_list))
 
     def test_recorded_publication_is_reconciled_only_for_an_open_matching_blocker_and_exact_attestation(self):
         import notify
 
         tag = 'v3.19.0-private.31'
         digest = 'a' * 64
-        latest = dict(tag_name=tag, assets=[dict(name='zec-private-latest.apk', digest='sha256:' + digest)])
-        proof = dict(release_tag=tag, apk_sha256=digest, source_sha='b' * 40, controller_sha='c' * 40,
+        fixture = dict(release=tag, source_sha='b' * 40, version_code=31)
+        public = public_baseline_metadata(fixture, digest)
+        latest, ref = public['/releases/latest'], public['/git/matching-refs/tags/' + tag]
+        proof = dict(release_tag=tag, versionCode=31, apk_sha256=digest,
+                     source_sha=fixture['source_sha'], controller_sha='c' * 40,
                      publisher={'run': '4', 'attempt': '2'}, production_job_id=12)
         target = dict(release_tag=tag, attestation_attempt=2, attestation_id=42)
         archived = {'artifacts': [dict(id=41, name='release-attestation-1', expired=False, workflow_run={'id': 4}),
@@ -847,28 +877,28 @@ class MaintenanceWatchTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch_environment({'GITHUB_REPOSITORY': 'example/zec-private'}):
             directory = Path(temp)
             (directory / (tag + '.json')).write_bytes((json.dumps(proof, indent=2) + '\n').encode())
-            with patch('maintenance_watch.api', side_effect=[latest, [[unrelated]]]), \
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[unrelated]]]), \
                     patch('reconcile_release.lookup') as lookup:
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
                 lookup.assert_not_called()
-            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[issue]], archived]), \
                     patch('reconcile_release.lookup', return_value=(target, proof, latest)) as lookup:
                 self.assertEqual(pending_recovery('repos/fork/wallet', directory),
                                  dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='42'))
                 lookup.assert_called_once_with('4', '2', '42', target=latest)
             from reconcile_release import IncompleteProofSearch
-            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[issue]], archived]), \
                     patch('reconcile_release.lookup', side_effect=IncompleteProofSearch('Proof read timed out')):
                 with self.assertRaisesRegex(IncompleteProofSearch, 'timed out'):
                     pending_recovery('repos/fork/wallet', directory)
             notices.run_notice('Original publisher verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
                                NTFY_URL='', BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:4:2:42',
                                BLOCKER_ATTESTATION='42', GITHUB_RUN_ID='22')
-            with patch('maintenance_watch.api', side_effect=[latest, [[notices.issue]], archived]), \
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[notices.issue]], archived]), \
                     patch('reconcile_release.lookup') as lookup:
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
                 lookup.assert_not_called()
-            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+            with patch('maintenance_watch.api', side_effect=[latest, ref, [[issue]], archived]), \
                     patch('reconcile_release.lookup', return_value=(target, dict(proof, production_job_id=99), latest)):
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
 

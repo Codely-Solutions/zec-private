@@ -307,55 +307,18 @@ class DisconnectVMTest {
         }
 
     @Test
-    fun theDisconnectUseCaseDeletesTheSelectedAccountAndSelectsTheSoftwareWallet() =
-        runTest {
-            val account = ledger(isSelected = true).copy(sdkAccount = Account.new(otherUuid))
-            val zodl = zodl()
-            val accountDataSource =
-                mockk<AccountDataSource>(relaxed = true) {
-                    coEvery { getAllAccounts() } returns listOf(zodl, account)
-                    coEvery { getZashiAccount() } returns zodl
-                }
+    fun disconnectingDelegatesSelectionCleanupToAccountDeletion() = runTest {
+        for (selected in listOf(true, false)) {
+            val account = ledger(isSelected = selected).copy(sdkAccount = Account.new(otherUuid))
+            val accounts = mockk<AccountDataSource>(relaxed = true)
 
-            disconnectUseCase(accountDataSource)(account)
+            disconnectUseCase(accounts)(account)
 
-            coVerify(exactly = 1) { accountDataSource.deleteAccount(account) }
-            coVerify(exactly = 1) { accountDataSource.selectAccount(zodl) }
+            coVerify(exactly = 1) { accounts.deleteAccount(account) }
+            coVerify(exactly = 0) { accounts.selectAccount(any<WalletAccount>()) }
+            coVerify(exactly = 0) { accounts.selectAccount(any<Account>()) }
         }
-
-    @Test
-    fun disconnectingAnUnselectedAccountLeavesTheSelectionAlone() =
-        runTest {
-            val account = ledger(isSelected = false).copy(sdkAccount = Account.new(otherUuid))
-            val zodl = zodl(isSelected = true)
-            val accountDataSource =
-                mockk<AccountDataSource>(relaxed = true) {
-                    coEvery { getAllAccounts() } returns listOf(zodl, account)
-                    coEvery { getZashiAccount() } returns zodl
-                }
-
-            disconnectUseCase(accountDataSource)(account)
-
-            coVerify(exactly = 1) { accountDataSource.deleteAccount(account) }
-            coVerify(exactly = 0) { accountDataSource.selectAccount(any<WalletAccount>()) }
-            coVerify(exactly = 0) { accountDataSource.selectAccount(any<Account>()) }
-        }
-
-    @Test
-    fun theSelectionIsReadAgainRatherThanTakenFromTheStaleAccount() =
-        runTest {
-            val stale = ledger(isSelected = false).copy(sdkAccount = Account.new(otherUuid))
-            val zodl = zodl()
-            val accountDataSource =
-                mockk<AccountDataSource>(relaxed = true) {
-                    coEvery { getAllAccounts() } returns listOf(zodl, stale.copy(isSelected = true))
-                    coEvery { getZashiAccount() } returns zodl
-                }
-
-            disconnectUseCase(accountDataSource)(stale)
-
-            coVerify(exactly = 1) { accountDataSource.selectAccount(zodl) }
-        }
+    }
 
     private fun disconnectUseCase(accountDataSource: AccountDataSource) =
         DisconnectUseCase(

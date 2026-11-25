@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
+import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -117,6 +118,17 @@ class TransactionDetailVMTest {
 
         info.onTransactionIdClick()
         verify(exactly = 1) { clipboard(value = sent.id.txIdString()) }
+    }
+
+    @Test
+    fun aContactOnlyOffersSendAgainForASingleProvenPayment() = runTest(dispatcher) {
+        val recipient = mockk<WalletAddress.Unified> { every { address } returns sent.recipient.orEmpty() }
+        val contact = mockk<co.electriccoin.zcash.ui.common.repository.EnhancedABContact>(relaxed = true)
+        val ambiguous = data(sent).copy(contact = contact, recipient = recipient)
+        assertNull(state(ambiguous).primaryButton)
+
+        val unambiguous = ambiguous.copy(transaction = sent.copy(canRepeatPayment = true))
+        assertEquals(stringRes(R.string.transactionHistory_sendAgain), state(unambiguous).primaryButton?.text)
     }
 
     @Test

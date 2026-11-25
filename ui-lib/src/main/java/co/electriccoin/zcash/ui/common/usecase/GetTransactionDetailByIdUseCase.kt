@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.Transaction
 import co.electriccoin.zcash.ui.common.repository.TransactionMetadata
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
@@ -169,7 +170,14 @@ data class DetailedTransactionData(
     val swap: SwapQuoteStatusData?,
     val reloadHandle: ReloadHandle,
     val recipient: WalletAddress?
-)
+) {
+    val canSendAgain: Boolean
+        get() = (transaction as? SendTransaction)?.let { sent ->
+            val fee = sent.fee
+            sent.canRepeatPayment && recipient != null && recipient.address == sent.recipient &&
+                fee != null && sent.amount > fee
+        } == true
+}
 
 interface ReloadHandle {
     fun requestReload()

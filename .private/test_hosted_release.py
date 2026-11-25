@@ -35,7 +35,7 @@ class HostedReleaseTests(unittest.TestCase):
             evidence.mkdir(parents=True)
             (root / '.private/hosted-fixture.json').write_text(json.dumps(fixture))
             (evidence / (fixture['release'] + '.json')).write_text(json.dumps(record))
-            for drift in ('none', 'apk', 'checksum', 'tag'):
+            for drift in ('none', 'apk', 'checksum', 'tag', 'version-space', 'version-duplicate'):
                 with self.subTest(drift=drift):
                     endpoints = public_baseline_metadata(fixture, record['apk_sha256'])
                     if drift == 'tag':
@@ -43,12 +43,16 @@ class HostedReleaseTests(unittest.TestCase):
                     elif drift in ('apk', 'checksum'):
                         index = int(drift == 'checksum')
                         endpoints['/releases/latest']['assets'][index]['digest'] = 'sha256:' + 'f' * 64
+                    elif drift == 'version-space':
+                        endpoints['/releases/latest']['body'] += ' '
+                    elif drift == 'version-duplicate':
+                        endpoints['/releases/latest']['body'] += '\nAndroid versionCode: invalid'
                     metadata = Mock()
                     metadata.api.side_effect = endpoints.__getitem__
                     if drift == 'none':
                         self.assertEqual(hosted_release.require_current_hosted_upgrade(root, metadata), fixture)
                     else:
-                        with self.assertRaisesRegex(ValueError, 'release (assets|tag) differ'):
+                        with self.assertRaisesRegex(ValueError, 'release (assets|tag|version) differ'):
                             hosted_release.require_current_hosted_upgrade(root, metadata)
 
     def test_core_pair_matches_current_and_previous_producer_manifest_paths(self):

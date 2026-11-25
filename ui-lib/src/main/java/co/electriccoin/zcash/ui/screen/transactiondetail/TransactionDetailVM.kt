@@ -458,7 +458,7 @@ class TransactionDetailVM(
             }
 
             else -> {
-                if (data.transaction is SendTransaction) {
+                if (data.canSendAgain) {
                     ButtonState(
                         text = stringRes(R.string.transactionHistory_sendAgain),
                         onClick = { onSendAgainClick(data) }

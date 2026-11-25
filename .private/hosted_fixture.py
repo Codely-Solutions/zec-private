@@ -8,6 +8,7 @@ import subprocess
 import zipfile
 
 from preserve_upgrade_fixture import artifact_matches_pair, digest, fixture_apks, write_seedless_pair
+from published_history import require_recorded_public_release
 from release_metadata import Metadata, require
 
 
@@ -101,10 +102,7 @@ def verify_pair(path, core, *, prepared):
 def prepare(tag, archive, out, metadata):
     evidence, core = recorded_pair(tag)
     live = metadata.api('/releases/tags/' + tag)
-    apks = [asset for asset in live['assets'] if asset['name'] == 'zec-private-latest.apk']
-    require(live['tag_name'] == tag and live['draft'] is False and len(apks) == 1
-            and apks[0].get('digest') == 'sha256:' + evidence['apk_sha256'],
-            'Published APK differs from recorded verification')
+    require_recorded_public_release(live, evidence, lambda path: metadata.api('/' + path))
     asset = metadata.api('/actions/artifacts/' + str(core['artifact_id']))
     require(artifact_matches_pair(asset, core) and 0 < asset['size_in_bytes'] <= MAX_ARCHIVE,
             'Accepted artifact run or source differs')
@@ -150,10 +148,7 @@ def record(binding, metadata, root=ROOT):
             and 0 < binding['size_in_bytes'] <= MAX_ARCHIVE,
             'Hosted verifier output differs from the released testnet pair')
     live = metadata.api('/releases/latest')
-    apks = [asset for asset in live['assets'] if asset['name'] == 'zec-private-latest.apk']
-    require(live['tag_name'] == tag and len(apks) == 1
-            and apks[0]['digest'] == 'sha256:' + evidence['apk_sha256'],
-            'Only the currently published verified release may advance the hosted fixture')
+    require_recorded_public_release(live, evidence, lambda path: metadata.api('/' + path), root)
     path = root / '.private/hosted-fixture.json'
     previous = json.loads(path.read_text())
     if previous == binding:

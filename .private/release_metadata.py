@@ -1,5 +1,6 @@
 """Bounded read-only verification of release producer and fixture identities."""
 from datetime import datetime
+import hashlib
 import json,os,re,subprocess,time
 GH=r"C:\Program Files\GitHub CLI\gh.exe" if os.name == 'nt' else 'gh'
 MIB = 1024**2
@@ -39,6 +40,12 @@ def checksum_bytes(digest):
     return f'{digest}  {WALLET_APK}\n'.encode('ascii')
 
 
+def require_public_version(release, code, message):
+    lines = re.split(r'\r\n?|\n', release.get('body') or '')
+    require([line for line in lines if line.startswith('Android versionCode:')]
+            == [f'Android versionCode: {code}'], message)
+
+
 def find_release_tag(tag, api):
     exact = 'refs/tags/' + tag
     refs = [ref for ref in api('git/matching-refs/tags/' + tag) if ref['ref'] == exact]
@@ -51,6 +58,21 @@ def find_release_tag(tag, api):
             break
         obj = api('git/tags/' + obj['sha'])['object']
     return obj
+
+
+def verify_direct_assembly(root, source, run_id, artifact, producer, *, receipts=None):
+    path = root / '.private/core-validation-summary.json'
+    require(path.is_file(), 'A guarded assembly record is required to promote an existing candidate')
+    summary = json.loads(path.read_bytes())
+    require(summary.get('status') == 'accepted-awaiting-signing'
+            and summary.get('source_sha') == source and summary.get('candidate_run') == run_id
+            and summary.get('production_unsigned_artifact') == artifact
+            and summary.get('production_unsigned_producer') == producer,
+            'Production artifact or producer differs from the guarded assembly')
+    if receipts is not None:
+        digests = {name: hashlib.sha256(data).hexdigest() for name, data in receipts.items()}
+        require(summary.get('receipt_sha256') == digests, 'Acceptance receipts differ from the guarded assembly')
+    return {'production_artifact': artifact, 'production_job_id': producer['producer_job_id']}
 
 
 def job_timestamp(value):

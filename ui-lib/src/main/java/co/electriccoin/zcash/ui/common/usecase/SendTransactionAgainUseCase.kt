@@ -17,6 +17,7 @@ class SendTransactionAgainUseCase(
     private val appAccess: AppAccessSession,
 ) {
     suspend operator fun invoke(value: DetailedTransactionData, sourceEntryId: String) {
+        if (!value.canSendAgain) return
         val owner = selectedAccountId() ?: return
         val transactionOwner = value.transaction.accountUuid
         val grant = appAccess.grant.value

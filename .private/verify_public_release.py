@@ -17,7 +17,8 @@ from apk_architecture import check_apk
 from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
 from release_metadata import (APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT,
-                              UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, hosted_release_job_names)
+                              UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, hosted_release_job_names,
+                              require_public_version)
 
 
 APK = 'zec-private-latest.apk'
@@ -199,10 +200,7 @@ def main():
     unsigned, proof, original_artifact, producer_job_id = unsigned_proof(evidence)
     require(proof['release_tag'] == tag and payload(signed) == payload(unsigned),
             'Public APK payload differs from the validated candidate')
-    version_lines = [line for line in (release['body'] or '').splitlines()
-                     if line.startswith('Android versionCode:')]
-    require(version_lines == [f'Android versionCode: {proof["versionCode"]}'],
-            'Latest-release metadata does not identify the validated version')
+    require_public_version(release, proof['versionCode'], 'Latest-release metadata does not identify the validated version')
     tools = Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0'
     with tempfile.TemporaryDirectory() as scratch:
         apk = Path(scratch) / APK

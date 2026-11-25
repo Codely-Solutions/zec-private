@@ -573,6 +573,9 @@
     <string name="general_next">Siguiente</string>
     <string name="requestZec_summary_shareQR">Compartir Código QR</string>
     <string name="request_amount_empty">0</string>
+    <string name="amount_switch_unit">Cambiar unidad del monto</string>
+    <string name="amount_switch_to_fiat">Cambiar a moneda fiduciaria</string>
+    <string name="amount_switch_to_asset">Cambiar a %1$s</string>
     <string name="request_amount_fiat_minimum">Introduce el equivalente a al menos 0.00005 ZEC.</string>
     <string name="request_amount_rate_loading">Actualizando la tasa de cambio…</string>
     <string name="request_amount_rate_stale">La tasa de cambio está desactualizada.</string>
@@ -1165,8 +1168,8 @@
     <string name="migrationComplete_migrating">Migrando…</string>
     <string name="migrationComplete_lockBalance">Bloquear saldo</string>
     <string name="migrationComplete_lockingBalance">Bloqueando saldo…</string>
-    <string name="migrationComplete_orchardBalanceLockedTitle">Saldo de Orchard bloqueado</string>
-    <string name="migrationComplete_orchardBalanceLockedBody">%1$s ahora está bloqueado en Orchard. El bloqueo hace que este monto no se pueda gastar para proteger tu privacidad.</string>
+    <string name="migrationComplete_lockRequestFailed">No se pudieron bloquear los fondos de Orchard. Inténtalo de nuevo.</string>
+    <string name="migrationComplete_lockRequestCompleted">Solicitud de bloqueo completada.</string>
     <string name="migrationComplete_transfersProgress">%1$d de %2$d enviadas</string>
     <string name="migrationComplete_migrateAnywayFailureNetworkError">No se pudo conectar a la red. Revisa tu conexión e inténtalo de nuevo.</string>
     <string name="migrationComplete_migrateAnywayFailureRejected">La red rechazó esta transacción. Comunícate con el soporte.</string>

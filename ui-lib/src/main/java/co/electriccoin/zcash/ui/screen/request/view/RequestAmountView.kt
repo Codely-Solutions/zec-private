@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -163,8 +164,11 @@ private fun RequestAmountWithMainFiatView(
 
                 Image(
                     painter = painterResource(id = R.drawable.ic_switch),
-                    contentDescription = null,
-                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+                    contentDescription = stringResource(
+                        R.string.amount_switch_to_asset,
+                        state.zcashCurrency.localizedName(context),
+                    ),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onFiatPreferenceSwitch),
                 )
             }
         }
@@ -258,8 +262,8 @@ private fun RequestAmountWithMainZecView(
             if (conversion != null) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_switch),
-                    contentDescription = null,
-                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+                    contentDescription = stringResource(R.string.amount_switch_to_fiat),
+                    modifier = Modifier.clickable(role = Role.Button, onClick = onFiatPreferenceSwitch),
                 )
             }
         }

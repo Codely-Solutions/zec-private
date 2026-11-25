@@ -11,7 +11,7 @@ from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
 from release_metadata import (
     ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
-    wallet_release_versions,
+    require_public_version, verify_direct_assembly, wallet_release_versions,
 )
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -309,6 +309,13 @@ def main():
                                     'quote_run_id': quote['workflow_run_id']}
     archive_binding = {'production_artifact': quote['production_artifact']} if hosted else {}
     if not simulation:
+        if not hosted and str(proof['workflow_run_id']) != os.environ['GITHUB_RUN_ID']:
+            run_id = int(proof['workflow_run_id'])
+            _, produced, producer = Metadata().producer(run_id, expected, 'build-release.yml', 'unsigned',
+                                                       'validated-unsigned-apk')
+            archive_binding = verify_direct_assembly(ROOT, expected, run_id, produced, producer, receipts={
+                'core-acceptance.json': core_bytes, 'quote-acceptance.json': quote_bytes,
+            })
         if release_for_tag(tag):
             raise RuntimeError('Release already exists; use reconciliation with its original attestation')
         require_advancing_version(proof['versionCode'], tag)
@@ -414,9 +421,7 @@ def exact_assets(release, proof, *, complete):
     tag = proof['release_tag']
     require(release['tag_name'] == tag and release['prerelease'] is False,
             'Unexpected release state or tag')
-    version = [line for line in (release['body'] or '').splitlines() if line.startswith('Android versionCode:')]
-    require(version == [f'Android versionCode: {proof["versionCode"]}'],
-            'Release notes differ from the validated version')
+    require_public_version(release, proof['versionCode'], 'Release notes differ from the validated version')
     if proof.get('notes_sha256'):
         require(hashlib.sha256(release['body'].strip().encode('utf-8')).hexdigest() == proof['notes_sha256'],
                 'Release notes differ from the original publisher')

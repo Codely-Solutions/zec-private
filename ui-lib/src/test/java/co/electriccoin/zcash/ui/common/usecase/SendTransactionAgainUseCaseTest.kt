@@ -16,6 +16,21 @@ import kotlin.test.Test
 
 class SendTransactionAgainUseCaseTest {
     @Test
+    fun anAmbiguousHistoricalPaymentCannotPrefillOrOpenSend() = runTest {
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val prefill = mockk<PrefillSendUseCase>(relaxed = true)
+        val accounts = mockk<AccountDataSource>()
+        val again = SendTransactionAgainUseCase(
+            prefill, router, mockk(), accounts, AppAccessSession().apply { unlock() },
+        )
+
+        again(mockk { every { canSendAgain } returns false }, "detail")
+
+        verify(exactly = 0) { prefill.requestFromTransactionDetail(any()) }
+        verify(exactly = 0) { router.custom(any()) }
+    }
+
+    @Test
     fun aCoveredDetailCannotPrefillOrOpenSendAfterAccountLookup() = runTest {
         val entry = "transaction-detail"
         val active = MutableStateFlow(ActiveNavigationEntry(entry, null))
@@ -39,6 +54,7 @@ class SendTransactionAgainUseCaseTest {
             accounts, AppAccessSession().apply { unlock() },
         )
         val detail = mockk<DetailedTransactionData> {
+            every { canSendAgain } returns true
             every { transaction } returns mockk { every { accountUuid } returns sender.sdkAccount.accountUuid }
         }
 

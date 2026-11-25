@@ -247,17 +247,18 @@ def main():
     summary['reused_profiles'] = {name: dict(receipt_sha256=hashlib.sha256(raw).hexdigest(),
         preserved_bytes=True) for name, raw in reused_bytes.items()}
     summary['production_unsigned_artifact'] = production_artifact
+    summary['production_unsigned_producer'] = production_proof
+    receipts = {name: reused_bytes.get(name, (json.dumps(value, indent=2) + '\n').encode())
+                for name, value in (('core-acceptance.json', core), ('quote-acceptance.json', quotes))}
+    summary['receipt_sha256'] = {name: hashlib.sha256(data).hexdigest() for name, data in receipts.items()}
     require(not args.out.exists(), 'Choose a fresh staging directory')
     args.out.mkdir(parents=True)
     try:
         staging = args.out / '.private'
         staging.mkdir()
-        for name, value in (('core-acceptance.json', core), ('quote-acceptance.json', quotes),
-                            ('core-validation-summary.json', summary)):
-            if name in reused_bytes:
-                (staging / name).write_bytes(reused_bytes[name])
-            else:
-                (staging / name).write_text(json.dumps(value, indent=2) + '\n')
+        for name, data in receipts.items():
+            (staging / name).write_bytes(data)
+        (staging / 'core-validation-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     except BaseException:
         shutil.rmtree(args.out)
         raise

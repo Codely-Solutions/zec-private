@@ -405,7 +405,6 @@ private fun previewCompleteStateWithDust() =
     MigrationCompleteState(
         totalTransferred = stringRes("12.458 ZEC"),
         remainingDust = stringRes("0.00031 ZEC"),
-        isDustLocked = false,
         transfersProgress = stringRes("5 of 5 sent"),
         duration = stringRes("~24 hours"),
         onDone = {},
@@ -547,5 +546,5 @@ private fun previewProgressStateComplete() =
 
 private fun previewCompleteStateDustLocked() =
     previewCompleteStateWithDust().copy(
-        isDustLocked = true,
+        lockNotice = stringRes(DesignR.string.migrationComplete_lockRequestCompleted),
     )

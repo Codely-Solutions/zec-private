@@ -57,7 +57,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 
             coVerifyOrder {
                 synchronizer.deleteAccount(accountUuid)
-                selection.clearUUID()
+                selection.clearIfSelected(accountUuid)
             }
         }
 
@@ -77,11 +77,11 @@ class AccountDataSourceImplViewOnlyDeletionTest {
                     .deleteAccount(viewOnlyAccount().copy(isSelected = true))
             }
 
-            coVerify(exactly = 0) { selection.clearUUID() }
+            coVerify(exactly = 0) { selection.clearIfSelected(accountUuid) }
         }
 
     @Test
-    fun aStaleSelectedSnapshotDoesNotClearTheSelectionOfAnotherAccount() =
+    fun deletionOnlyOffersTheRemovedAccountForSelectionCleanup() =
         runBlocking {
             val otherUuid = AccountUuid.new(ByteArray(16) { (it + 7).toByte() })
             val selection = selectionProvider(selected = otherUuid)
@@ -96,7 +96,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
                 .deleteAccount(viewOnlyAccount().copy(isSelected = true))
 
             coVerify(exactly = 1) { synchronizer.deleteAccount(accountUuid) }
-            coVerify(exactly = 0) { selection.clearUUID() }
+            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
         }
 
     @Test
@@ -106,7 +106,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
                 mockk<SelectedAccountUUIDProvider>(relaxed = true) {
                     every { uuid } returns MutableStateFlow(accountUuid)
                     coEvery { getUUID() } returns accountUuid
-                    coEvery { clearUUID() } throws IllegalStateException("preferences unavailable")
+                    coEvery { clearIfSelected(accountUuid) } throws IllegalStateException("preferences unavailable")
                 }
             val synchronizer =
                 mockk<Synchronizer>(relaxed = true) {
@@ -121,7 +121,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
                 selectedAccountUUIDProvider = selection,
             ).deleteAccount(viewOnlyAccount().copy(isSelected = true))
 
-            coVerify(exactly = 1) { selection.clearUUID() }
+            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
         }
 
     @Test
@@ -130,7 +130,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
             val selection =
                 mockk<SelectedAccountUUIDProvider>(relaxed = true) {
                     every { uuid } returns MutableStateFlow(accountUuid)
-                    coEvery { getUUID() } throws IllegalStateException("preferences unavailable")
+                    coEvery { clearIfSelected(accountUuid) } throws IllegalStateException("preferences unavailable")
                 }
             val synchronizer =
                 mockk<Synchronizer>(relaxed = true) {
@@ -149,7 +149,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
         }
 
     @Test
-    fun deletingAnUnselectedAccountKeepsTheSelection() =
+    fun deletingAnUnselectedAccountUsesConditionalCleanup() =
         runBlocking {
             val selection = selectionProvider(selected = null)
             val synchronizer =
@@ -162,7 +162,7 @@ class AccountDataSourceImplViewOnlyDeletionTest {
             dataSource(synchronizer, relaxedBindingProvider(), selectedAccountUUIDProvider = selection)
                 .deleteAccount(viewOnlyAccount())
 
-            coVerify(exactly = 0) { selection.clearUUID() }
+            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
         }
 
     @Test

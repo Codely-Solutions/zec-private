@@ -5,7 +5,6 @@ import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
-import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
@@ -21,40 +20,35 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_DUST_THRESHOLD_ZATOSHI
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZATOSHI
 import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
-import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
-import co.electriccoin.zcash.ui.common.repository.BiometricRepository
-import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
-import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
-import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
-import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import kotlin.test.assertFalse
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 import kotlin.time.Instant
 import kotlin.test.assertNull
+import co.electriccoin.zcash.ui.design.R as DesignR
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.migrationMessageFor
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -263,66 +257,62 @@ class MigrationCompleteVMTest {
         }
 
     @Test
-    fun migrateAnywayForZashiAccountHandsTheOriginalProposalToSharedSubmission() =
-        runTest {
-            val router = FakeNavigationRouter()
-            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
-            val proposal = mockk<Proposal>(relaxed = true)
-            val sdk =
-                mockk<OrchardMigrationSdk> {
-                    coEvery { proposeImmediateMigration() } returns proposal
-                }
-            val adopted = MigrationSweepTransactionProposal(proposal)
-            val zashiProposalRepository = mockk<ZashiProposalRepository> {
-                every { setMigrationSweepProposal(proposal) } returns adopted
-            }
-
-            val vm =
-                vm(
-                    account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
-                    orchardBalanceZatoshi = 500_000L,
-                    router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-                    zashiProposalRepository = zashiProposalRepository,
-                    submitProposal = submitProposal,
-                    args = MigrationCompleteArgs(isResidueOnly = true),
-                )
-
+    fun migrateAnywayOpensASeparateReviewForBothSpendableAccountKinds() = runTest {
+        val accounts = listOf(
+            mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
+            mockk<KeystoneAccount>(relaxed = true) { every { isSpendable } returns true },
+        )
+        for (account in accounts) {
+            val owner = account.sdkAccount.accountUuid.toStorageKeyId()
+            val router = FakeNavigationRouter("completion")
+            val sdk = mockk<OrchardMigrationSdk>()
+            val vm = vm(
+                account = account,
+                orchardBalanceZatoshi = 500_000L,
+                router = router,
+                getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+                args = MigrationCompleteArgs(isResidueOnly = true),
+                sourceEntryId = "completion",
+            )
             advanceUntilIdle()
             invokeOnMigrateAnyway(vm)
             advanceUntilIdle()
-
-            coVerify(exactly = 1) { submitProposal(adopted) }
-            assertEquals(emptyList(), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationReviewArgs(MigrationMode.IMMEDIATE, owner)), router.forwardedRoutes)
+            coVerify(exactly = 0) { sdk.proposeImmediateMigration() }
         }
+    }
 
     @Test
-    fun preparationFromCoveredCompletionDoesNotReplaceTheNextPayment() = runTest {
+    fun aCoveredCompletionCannotOpenAReviewAfterWaitingForCompletionEvidence() = runTest {
         val entry = "migration-complete"
         val router = FakeNavigationRouter(entry)
-        val held = CompletableDeferred<Proposal>()
+        val requested = CompletableDeferred<Unit>()
+        val held = CompletableDeferred<Unit>()
+        var pending = false
         val sdk = mockk<OrchardMigrationSdk> {
-            coEvery { proposeImmediateMigration() } coAnswers { held.await() }
+            coEvery { getMigrationStateUnreconciled() } coAnswers {
+                if (pending) {
+                    requested.complete(Unit)
+                    held.await()
+                }
+                MigrationState.Complete
+            }
         }
-        val repository = mockk<ZashiProposalRepository>(relaxed = true)
         val vm = vm(
             account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
             orchardBalanceZatoshi = 500_000L,
             router = router,
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-            zashiProposalRepository = repository,
-            args = MigrationCompleteArgs(isResidueOnly = true),
             sourceEntryId = entry,
         )
-
+        advanceUntilIdle()
+        pending = true
         invokeOnMigrateAnyway(vm)
-        advanceUntilIdle()
-        coVerify(exactly = 1) { sdk.proposeImmediateMigration() }
+        requested.await()
         router.activeEntry.value = ActiveNavigationEntry("another-payment", null)
-        held.complete(mockk())
+        held.complete(Unit)
         advanceUntilIdle()
-
-        verify(exactly = 0) { repository.setMigrationSweepProposal(any()) }
+        assertEquals(emptyList(), router.forwardedRoutes)
     }
 
     @Test
@@ -366,41 +356,43 @@ class MigrationCompleteVMTest {
     }
 
     @Test
-    fun migrateAnywayForKeystoneAccountBuildsPcztAndNavigatesToSign() =
-        runTest {
-            val router = FakeNavigationRouter()
-            val proposal = mockk<Proposal>(relaxed = true)
-            val sdk =
-                mockk<OrchardMigrationSdk> {
-                    coEvery { proposeImmediateMigration() } returns proposal
-                }
-            val adopted = MigrationSweepTransactionProposal(proposal)
-            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
-                every { setMigrationSweepProposal(proposal) } returns adopted
-                every { transactionProposal } returns MutableStateFlow(adopted)
-            }
-            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
-
-            val vm =
-                vm(
-                    account = mockk<KeystoneAccount>(relaxed = true) { every { isSpendable } returns true },
-                    orchardBalanceZatoshi = 500_000L,
-                    router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-                    keystoneProposalRepository = keystoneProposalRepository,
-                    submitProposal = submitProposal,
-                    args = MigrationCompleteArgs(isResidueOnly = true),
-                )
-
-            advanceUntilIdle()
-            invokeOnMigrateAnyway(vm)
-            advanceUntilIdle()
-
-            coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal) }
-            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
-            coVerify(exactly = 0) { submitProposal(any()) }
-            assertEquals(1, router.forwardedRoutes.count { it == SignKeystoneTransactionArgs })
+    fun aCompletedLockRequestLeavesLaterSpendableResidueActionable() = runTest {
+        val orchardBalance = MutableStateFlow(500_000L)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val resolveSdk = mockk<GetOrchardMigrationSdkUseCase> {
+            coEvery { this@mockk(any<String>()) } returns sdk
         }
+        val account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true }
+        val router = FakeNavigationRouter()
+        val complete = vm(
+            account = account,
+            orchardBalanceZatoshi = orchardBalance.value,
+            orchardBalance = orchardBalance,
+            router = router,
+            args = MigrationCompleteArgs(isResidueOnly = true),
+            getOrchardMigrationSdk = resolveSdk,
+            lockOrchardBalance = LockOrchardBalanceUseCase(resolveSdk),
+        )
+        backgroundScope.launch { complete.state.collect {} }
+        advanceUntilIdle()
+        assertNotNull(complete.state.value.content).onLockBalance()
+        advanceUntilIdle()
+        assertEquals(
+            stringRes(DesignR.string.migrationComplete_lockRequestCompleted),
+            complete.state.value.content?.lockNotice,
+        )
+
+        orchardBalance.value = 0
+        advanceUntilIdle()
+        assertNull(complete.state.value.content?.remainingDust)
+        orchardBalance.value = 600_001
+        advanceUntilIdle()
+        val newBalance = assertNotNull(complete.state.value.content)
+        assertEquals(stringRes(Zatoshi(600_001L)), newBalance.remainingDust)
+        newBalance.onLockBalance()
+        advanceUntilIdle()
+        coVerify(exactly = 2) { sdk.lockRemainingOrchardBalance() }
+    }
 
     @Test
     fun completionShowsOnlyMinedTransfersFromTheExactAccount() = runTest {
@@ -542,16 +534,12 @@ class MigrationCompleteVMTest {
                 mockk<OrchardMigrationSdk> {
                     coEvery { proposeImmediateMigration() } returns mockk(relaxed = true)
                 }
-            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
-            val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val vm =
                 vm(
                     account = mockk<ViewOnlyAccount>(relaxed = true) { every { isSpendable } returns false },
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-                    keystoneProposalRepository = keystoneProposalRepository,
-                    submitProposal = submitProposal,
                     args = MigrationCompleteArgs(isResidueOnly = true),
                 )
 
@@ -569,9 +557,6 @@ class MigrationCompleteVMTest {
                 AccountOperationUnsupportedException.Kind.VIEW_ONLY,
                 assertIs<AccountOperationUnsupportedException>(error.cause).kind
             )
-            coVerify(exactly = 0) { submitProposal(any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
 
@@ -625,10 +610,6 @@ class MigrationCompleteVMTest {
                     coEvery { getMigrationStateUnreconciled() } returns MigrationState.Complete
                 }
             },
-        biometricRepository: BiometricRepository = mockk(relaxed = true),
-        zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
-        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
-        keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
         sourceEntryId: String? = null,
         orchardBalance: MutableStateFlow<Long> = MutableStateFlow(orchardBalanceZatoshi),
         lockOrchardBalance: LockOrchardBalanceUseCase = mockk(relaxed = true),
@@ -637,19 +618,13 @@ class MigrationCompleteVMTest {
         getOrchardBalance =
             mockk<GetOrchardBalanceUseCase> {
                 coEvery { this@mockk(any<AccountUuid>()) } coAnswers { Zatoshi(orchardBalance.value) }
+                every { observe(any<AccountUuid>()) } returns orchardBalance.map { Zatoshi(it) }
             },
         getIronwoodBalance =
             mockk<GetIronwoodBalanceUseCase> {
                 coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(ironwoodBalanceZatoshi)
             },
         hasSeenMigrationCompleteStorageProvider = seen,
-        hasLockedOrchardDustStorageProvider =
-            mockk<HasLockedOrchardDustStorageProvider>(relaxed = true) {
-                // A relaxed mock's default Flow return is empty (never emits), which would starve
-                // state's combine() forever -- it only emits once every source has emitted at least
-                // once. Tests that read vm.state.value.content need this to actually fire.
-                every { observe(any<String>()) } returns flowOf(false)
-            },
         getSelectedWalletAccount =
             mockk<GetSelectedWalletAccountUseCase> {
                 coEvery { this@mockk() } returns account
@@ -659,10 +634,6 @@ class MigrationCompleteVMTest {
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         getMigrationSnapshot = getMigrationSnapshot,
         lockOrchardBalance = lockOrchardBalance,
-        biometricRepository = biometricRepository,
-        zashiProposalRepository = zashiProposalRepository,
-        submitProposal = submitProposal,
-        keystoneProposalRepository = keystoneProposalRepository,
         sourceEntryId = sourceEntryId,
     )
 

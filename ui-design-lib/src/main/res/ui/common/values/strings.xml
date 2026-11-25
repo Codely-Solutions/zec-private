@@ -608,6 +608,9 @@
     <string name="zecKeyboard_invalid">This transaction amount is invalid</string>
     <string name="requestZec_summary_shareQR">Share QR Code</string>
     <string name="request_amount_empty">0</string>
+    <string name="amount_switch_unit">Switch amount unit</string>
+    <string name="amount_switch_to_fiat">Switch to fiat</string>
+    <string name="amount_switch_to_asset">Switch to %1$s</string>
     <string name="request_amount_keyboard_zero">0</string>
     <string name="request_amount_keyboard_one">1</string>
     <string name="request_amount_keyboard_two">2</string>
@@ -1302,8 +1305,8 @@
     <string name="migrationComplete_migrating">Migrating…</string>
     <string name="migrationComplete_lockBalance">Lock balance</string>
     <string name="migrationComplete_lockingBalance">Locking balance…</string>
-    <string name="migrationComplete_orchardBalanceLockedTitle">Orchard balance locked</string>
-    <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
+    <string name="migrationComplete_lockRequestFailed">Couldn\'t lock Orchard funds. Try again.</string>
+    <string name="migrationComplete_lockRequestCompleted">Lock request completed.</string>
     <string name="migrationComplete_transfersProgress">%1$d of %2$d sent</string>
     <string name="migrationComplete_migrateAnywayFailureNetworkError">Couldn\'t reach the network. Check your connection and try again.</string>
     <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>

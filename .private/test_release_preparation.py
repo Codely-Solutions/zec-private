@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 import assemble_release as assembly
 import prepare_release as preparation
-from release_metadata import Metadata
+from release_metadata import Metadata, verify_direct_assembly
 from release_inputs import selected_baseline
 
 SHA = 'a' * 40
@@ -23,11 +23,12 @@ BASELINE = dict(schema=1, release='baseline', source_sha='c'*40, version_code=1,
     instrumentation=dict(apk_sha256=DIGEST, artifact=dict(release_asset_id=1, size_in_bytes=2,
         digest='sha256:'+DIGEST, source_sha='c'*40, source_release='baseline')))
 ARTIFACT = dict(id=2, digest='sha256:'+DIGEST, size_in_bytes=3)
+PRODUCTION_PRODUCER = dict(producer_job_id=17, run_attempt=1, run_id=1)
 
 
 class FakeMetadata:
     def producer(self, *args):
-        return {}, dict(ARTIFACT), {}
+        return {}, dict(ARTIFACT), dict(PRODUCTION_PRODUCER)
     def verify_asset(self, asset):
         if asset.get('digest') != 'sha256:'+DIGEST:
             raise ValueError('Bad fixture digest')
@@ -193,6 +194,20 @@ class ReleaseTests(unittest.TestCase):
         summary=json.loads((out/'.private/core-validation-summary.json').read_text())
         self.assertEqual(summary['core_build_source_sha'],core['build_source_sha'])
         self.assertEqual(len(summary['reused_profiles']),2)
+        receipts = {'core-acceptance.json': core_raw, 'quote-acceptance.json': quote_raw}
+        self.assertEqual(verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER, receipts=receipts),
+                         dict(production_artifact=ARTIFACT, production_job_id=17))
+        for run, archive, producer in (
+            (2, dict(ARTIFACT, id=3), dict(PRODUCTION_PRODUCER, run_id=2, producer_job_id=18)),
+            (1, dict(ARTIFACT, digest='sha256:' + 'e' * 64), PRODUCTION_PRODUCER),
+            (1, ARTIFACT, dict(PRODUCTION_PRODUCER, run_attempt=2)),
+        ):
+            with self.subTest(run=run, archive=archive, producer=producer):
+                with self.assertRaisesRegex(ValueError, 'artifact or producer differs'):
+                    verify_direct_assembly(out, source, run, archive, producer, receipts=receipts)
+        with self.assertRaisesRegex(ValueError, 'receipts differ'):
+            verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER,
+                                   receipts=dict(receipts, **{'core-acceptance.json': b'different'}))
 
 
     def test_admission_owner_and_parallel_refusal_before_launch(self):
