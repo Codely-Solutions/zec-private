@@ -3075,7 +3075,7 @@ index 2e058d42f..526d1c113 100644
 +fun LedgerHandshakeScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<LedgerHandshakeVM> { parametersOf(sourceEntryId) }
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
-index b80b58884..02064a444 100644
+index b80b58884..10bb83b89 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.spackle.Twig
@@ -3083,49 +3083,93 @@ index b80b58884..02064a444 100644
 @@ -12,0 +14,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.discardResultFrom
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -32,0 +36 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+@@ -17,0 +21,2 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
+@@ -32,0 +38 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.error.showFrom
-@@ -64,0 +69 @@ class LedgerHandshakeVM(
+@@ -64,0 +71,2 @@ class LedgerHandshakeVM(
++    private val walletEnrollment: WalletEnrollmentAccess,
 +    private val sourceEntryId: String? = null,
-@@ -83,0 +89 @@ class LedgerHandshakeVM(
+@@ -83,0 +92 @@ class LedgerHandshakeVM(
 +        navigationRouter.discardResultFrom(sourceEntryId)
-@@ -249,0 +256,2 @@ class LedgerHandshakeVM(
-+                PairLedgerDeviceResult.Superseded -> Unit
-+
-@@ -251 +259,3 @@ class LedgerHandshakeVM(
+@@ -245,0 +255,5 @@ class LedgerHandshakeVM(
++        val owner = walletEnrollment.capture()
++        if (owner == null) {
++            showIssue(LedgerIssue.unknownWithoutRetry)
++            return
++        }
+@@ -249,4 +263,9 @@ class LedgerHandshakeVM(
+-            when (result) {
+-                is PairLedgerDeviceResult.Paired -> {
 -                    navigationRouter.replace(HWNewOrActiveArgs(HWWalletEnrollment.Ledger))
-+                    navigationRouter.stageResultFrom(sourceEntryId) {
-+                        NavigationCommand.Replace(listOf(HWNewOrActiveArgs(HWWalletEnrollment.Ledger)))
-+                    }
-@@ -255 +265,3 @@ class LedgerHandshakeVM(
+-                }
++            if (walletEnrollment.permits(owner)) showPairingResult(result, owner)
++            else showIssue(LedgerIssue.unknownWithoutRetry)
++        } catch (e: CancellationException) {
++            throw e
++        } catch (e: Exception) {
++            currentCoroutineContext().ensureActive()
++            showHandshakeFailure(e)
++        }
++    }
+@@ -254,3 +273,14 @@ class LedgerHandshakeVM(
+-                is PairLedgerDeviceResult.Rebound -> {
 -                    navigationRouter.replace(LedgerConnectedArgs)
-+                    navigationRouter.stageResultFrom(sourceEntryId) {
-+                        NavigationCommand.Replace(listOf(LedgerConnectedArgs))
-+                    }
-@@ -269,5 +280,0 @@ class LedgerHandshakeVM(
+-                }
++    private fun showPairingResult(result: PairLedgerDeviceResult, owner: WalletEnrollmentToken) {
++        when (result) {
++            PairLedgerDeviceResult.Superseded -> showIssue(LedgerIssue.unknownWithoutRetry)
++            PairLedgerDeviceResult.Paired ->
++                finishSetup(owner, HWNewOrActiveArgs(HWWalletEnrollment.Ledger))
++
++            is PairLedgerDeviceResult.Rebound -> finishSetup(owner, LedgerConnectedArgs)
++            is PairLedgerDeviceResult.AlreadyAdded -> showAlreadyAdded(ExistingLedgerAccount(result.account, owner))
++            PairLedgerDeviceResult.WrongLedger -> {
++                Twig.warn { "Ledger enrollment: the Ledger is not the account's" }
++                showIssue(LedgerIssue.wrongDevice)
++            }
++        }
++    }
+@@ -258,3 +288,10 @@ class LedgerHandshakeVM(
+-                is PairLedgerDeviceResult.AlreadyAdded -> {
+-                    showAlreadyAdded(result.account)
+-                }
++    private fun finishSetup(owner: WalletEnrollmentToken, destination: Any) {
++        navigationRouter.stageResultFrom(sourceEntryId) {
++            if (walletEnrollment.permits(owner)) {
++                NavigationCommand.Replace(listOf(destination))
++            } else {
++                showIssue(LedgerIssue.unknownWithoutRetry)
++                null
++            }
++        }
++    }
+@@ -262,4 +299,5 @@ class LedgerHandshakeVM(
+-                is PairLedgerDeviceResult.WrongLedger -> {
+-                    Twig.warn { "Ledger enrollment: the Ledger is not the account's" }
+-                    showIssue(LedgerIssue.wrongDevice)
+-                }
++    private fun showHandshakeFailure(failure: Exception) {
++        when (failure) {
++            is LedgerPairingTimedOutException -> {
++                Twig.warn { "Ledger enrollment failed: ${failure.javaClass.simpleName}" }
++                showIssue(LedgerIssue.disconnectedDuringSetup)
+@@ -267,14 +305,12 @@ class LedgerHandshakeVM(
+-        } catch (e: CancellationException) {
+-            throw e
 -        } catch (e: LedgerPairingTimedOutException) {
 -            Twig.warn { "Ledger enrollment failed: ${e.javaClass.simpleName}" }
 -            showIssue(LedgerIssue.disconnectedDuringSetup)
 -        } catch (e: LedgerException) {
 -            showIssue(e.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
-@@ -275,6 +282,23 @@ class LedgerHandshakeVM(
+-        } catch (e: Exception) {
 -            internalState.update {
 -                it.copy(
 -                    phase = LedgerHandshakePhase.IDLE,
 -                    issue = LedgerIssue.unknown,
 -                    isSheetShown = false,
 -                )
-+            currentCoroutineContext().ensureActive()
-+            showHandshakeFailure(e)
-+        }
-+    }
-+
-+    private fun showHandshakeFailure(failure: Exception) {
-+        when (failure) {
-+            is LedgerPairingTimedOutException -> {
-+                Twig.warn { "Ledger enrollment failed: ${failure.javaClass.simpleName}" }
-+                showIssue(LedgerIssue.disconnectedDuringSetup)
-+            }
 +
 +            is LedgerException -> showIssue(failure.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
 +
@@ -3138,11 +3182,34 @@ index b80b58884..02064a444 100644
 +                    )
 +                }
 +                navigateToError.showFrom(sourceEntryId, ErrorArgs.General(failure))
-@@ -282 +305,0 @@ class LedgerHandshakeVM(
+@@ -282 +317,0 @@ class LedgerHandshakeVM(
 -            navigateToError(ErrorArgs.General(e))
-@@ -289 +312 @@ class LedgerHandshakeVM(
+@@ -286 +321 @@ class LedgerHandshakeVM(
+-    private fun onGoToAccountClick(account: WalletAccount) =
++    private fun onGoToAccountClick(existing: ExistingLedgerAccount) =
+@@ -288,2 +323,11 @@ class LedgerHandshakeVM(
+-            selectWalletAccount(account, navigateBack = false)
 -            navigationRouter.backToRoot()
-+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
++            val selected = walletEnrollment.write(existing.owner) {
++                selectWalletAccount(existing.account, navigateBack = false)
++                true
++            }
++            if (selected == true) {
++                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(existing.owner) }) {
++                    NavigationCommand.BackToRoot
++                }
++            } else {
++                showIssue(LedgerIssue.unknownWithoutRetry)
++            }
+@@ -354 +398 @@ class LedgerHandshakeVM(
+-    private fun showAlreadyAdded(account: WalletAccount) {
++    private fun showAlreadyAdded(account: ExistingLedgerAccount) {
+@@ -369 +413 @@ private data class LedgerHandshakeInternalState(
+-    val alreadyAdded: WalletAccount? = null,
++    val alreadyAdded: ExistingLedgerAccount? = null,
+@@ -375,0 +420,2 @@ private data class LedgerHandshakeInternalState(
++private data class ExistingLedgerAccount(val account: WalletAccount, val owner: WalletEnrollmentToken)
++
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/openapp/LedgerOpenAppScreen.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/openapp/LedgerOpenAppScreen.kt
 index c6f43be81..c1ca0dac9 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/openapp/LedgerOpenAppScreen.kt
@@ -4645,12 +4712,14 @@ index 018fa19f5..676e1bd2b 100644
 @@ -136 +133,0 @@ class SubmitLedgerProposalUseCaseTest {
 -                ledgerProposalRepository = ledgerProposalRepository,
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
-index 817fc5154..98f8d1d61 100644
+index 817fc5154..7e9777bbc 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
-@@ -41,0 +42 @@ import kotlinx.coroutines.withContext
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.repository.LedgerSelectedDeviceRepository
++import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
+@@ -41,0 +43 @@ import kotlinx.coroutines.withContext
 +import java.io.IOException
-@@ -61,23 +62 @@ import kotlin.test.assertTrue
+@@ -61,23 +63 @@ import kotlin.test.assertTrue
 -class LedgerHandshakeVMTest {
 -    private val dispatcher = StandardTestDispatcher()
 -
@@ -4675,12 +4744,39 @@ index 817fc5154..98f8d1d61 100644
 -    }
 -
 +class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
-@@ -497,0 +477 @@ class LedgerHandshakeVMTest {
+@@ -100,0 +81,22 @@ class LedgerHandshakeVMTest {
++    @Test
++    fun losingTheOriginatingWalletStopsPairingAndOffersBack() = runTest(dispatcher) {
++        val pending = CompletableDeferred<PairLedgerDeviceResult>()
++        val pairing = mockk<PairLedgerDeviceUseCase> {
++            coEvery { invoke(any(), any()) } coAnswers { pending.await() }
++        }
++        val router = mockk<NavigationRouter>(relaxed = true)
++        val vm = vm(pairLedgerDevice = pairing, navigationRouter = router)
++        collect(vm)
++        runCurrent()
++
++        enrollment.replaceWallet()
++        pending.complete(PairLedgerDeviceResult.Paired)
++        runCurrent()
++
++        assertFalse(vm.state.value.isConnecting)
++        assertNotNull(vm.state.value.errorSheet)
++        verify(exactly = 0) { router.replace(*anyVararg()) }
++        vm.state.value.onBack()
++        verify(exactly = 1) { router.back() }
++    }
++
+@@ -152,0 +155 @@ class LedgerHandshakeVMTest {
++                    walletEnrollment = enrollment.access,
+@@ -497,0 +501 @@ class LedgerHandshakeVMTest {
 +}
-@@ -498,0 +479,2 @@ class LedgerHandshakeVMTest {
+@@ -498,0 +503,2 @@ class LedgerHandshakeVMTest {
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class LedgerHandshakeLifecycleVMTest : LedgerHandshakeVMFixture() {
-@@ -672,0 +655,27 @@ class LedgerHandshakeVMTest {
+@@ -534,0 +541 @@ class LedgerHandshakeVMTest {
++                    walletEnrollment = enrollment.access,
+@@ -672,0 +680,27 @@ class LedgerHandshakeVMTest {
 +    @Test
 +    fun aBindingFailureThatCompletesAfterBackDoesNotShowAnError() = runTest(dispatcher) {
 +        val router = mockk<NavigationRouter>(relaxed = true)
@@ -4708,11 +4804,12 @@ index 817fc5154..98f8d1d61 100644
 +        assertNull(vm.state.value.errorSheet)
 +    }
 +
-@@ -696,0 +706,25 @@ class LedgerHandshakeVMTest {
+@@ -696,0 +731,26 @@ class LedgerHandshakeVMTest {
 +}
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +abstract class LedgerHandshakeVMFixture {
++    internal val enrollment = LedgerEnrollmentFixture()
 +    protected val dispatcher = StandardTestDispatcher()
 +
 +    protected val device =
@@ -4734,21 +4831,23 @@ index 817fc5154..98f8d1d61 100644
 +    fun tearDown() {
 +        Dispatchers.resetMain()
 +    }
-@@ -698 +732 @@ class LedgerHandshakeVMTest {
+@@ -698 +758 @@ class LedgerHandshakeVMTest {
 -    private fun TestScope.failingWith(
 +    protected fun TestScope.failingWith(
-@@ -712 +746 @@ class LedgerHandshakeVMTest {
+@@ -712 +772 @@ class LedgerHandshakeVMTest {
 -    private fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
 +    protected fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
-@@ -718 +752 @@ class LedgerHandshakeVMTest {
+@@ -718 +778 @@ class LedgerHandshakeVMTest {
 -    private fun LedgerHandshakeVM.triggerOnCleared() {
 +    protected fun LedgerHandshakeVM.triggerOnCleared() {
-@@ -725 +759 @@ class LedgerHandshakeVMTest {
+@@ -725 +785 @@ class LedgerHandshakeVMTest {
 -    private fun TestScope.collect(vm: LedgerHandshakeVM) {
 +    protected fun TestScope.collect(vm: LedgerHandshakeVM) {
-@@ -729 +763 @@ class LedgerHandshakeVMTest {
+@@ -729 +789 @@ class LedgerHandshakeVMTest {
 -    private fun vm(
 +    protected fun vm(
+@@ -737,0 +798 @@ class LedgerHandshakeVMTest {
++        walletEnrollment = enrollment.access,
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/scan/LedgerDeviceScanVMAccountIndexTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/scan/LedgerDeviceScanVMAccountIndexTest.kt
 index 9513b5798..949b12a17 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/scan/LedgerDeviceScanVMAccountIndexTest.kt

@@ -18,6 +18,8 @@ import co.electriccoin.zcash.ui.common.model.LedgerIssueContext
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
 import co.electriccoin.zcash.ui.common.model.LedgerPairingTimedOutException
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.common.repository.LedgerSelectedDeviceRepository
 import co.electriccoin.zcash.ui.common.usecase.PairLedgerDeviceResult
 import co.electriccoin.zcash.ui.common.usecase.PairLedgerDeviceUseCase
@@ -66,6 +68,7 @@ class LedgerHandshakeVM(
     private val ledgerSelectedDeviceRepository: LedgerSelectedDeviceRepository,
     private val navigateToError: NavigateToErrorUseCase,
     private val navigationRouter: NavigationRouter,
+    private val walletEnrollment: WalletEnrollmentAccess,
     private val sourceEntryId: String? = null,
 ) : AndroidViewModel(application) {
     private val internalState = MutableStateFlow(LedgerHandshakeInternalState())
@@ -249,38 +252,47 @@ class LedgerHandshakeVM(
         device: LedgerBluetoothDevice,
         zip32AccountIndex: Zip32AccountIndex,
     ) {
+        val owner = walletEnrollment.capture()
+        if (owner == null) {
+            showIssue(LedgerIssue.unknownWithoutRetry)
+            return
+        }
         try {
             val result = pairLedgerDevice(device, zip32AccountIndex)
             currentCoroutineContext().ensureActive()
-            when (result) {
-                PairLedgerDeviceResult.Superseded -> Unit
-
-                is PairLedgerDeviceResult.Paired -> {
-                    navigationRouter.stageResultFrom(sourceEntryId) {
-                        NavigationCommand.Replace(listOf(HWNewOrActiveArgs(HWWalletEnrollment.Ledger)))
-                    }
-                }
-
-                is PairLedgerDeviceResult.Rebound -> {
-                    navigationRouter.stageResultFrom(sourceEntryId) {
-                        NavigationCommand.Replace(listOf(LedgerConnectedArgs))
-                    }
-                }
-
-                is PairLedgerDeviceResult.AlreadyAdded -> {
-                    showAlreadyAdded(result.account)
-                }
-
-                is PairLedgerDeviceResult.WrongLedger -> {
-                    Twig.warn { "Ledger enrollment: the Ledger is not the account's" }
-                    showIssue(LedgerIssue.wrongDevice)
-                }
-            }
+            if (walletEnrollment.permits(owner)) showPairingResult(result, owner)
+            else showIssue(LedgerIssue.unknownWithoutRetry)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             showHandshakeFailure(e)
+        }
+    }
+
+    private fun showPairingResult(result: PairLedgerDeviceResult, owner: WalletEnrollmentToken) {
+        when (result) {
+            PairLedgerDeviceResult.Superseded -> showIssue(LedgerIssue.unknownWithoutRetry)
+            PairLedgerDeviceResult.Paired ->
+                finishSetup(owner, HWNewOrActiveArgs(HWWalletEnrollment.Ledger))
+
+            is PairLedgerDeviceResult.Rebound -> finishSetup(owner, LedgerConnectedArgs)
+            is PairLedgerDeviceResult.AlreadyAdded -> showAlreadyAdded(ExistingLedgerAccount(result.account, owner))
+            PairLedgerDeviceResult.WrongLedger -> {
+                Twig.warn { "Ledger enrollment: the Ledger is not the account's" }
+                showIssue(LedgerIssue.wrongDevice)
+            }
+        }
+    }
+
+    private fun finishSetup(owner: WalletEnrollmentToken, destination: Any) {
+        navigationRouter.stageResultFrom(sourceEntryId) {
+            if (walletEnrollment.permits(owner)) {
+                NavigationCommand.Replace(listOf(destination))
+            } else {
+                showIssue(LedgerIssue.unknownWithoutRetry)
+                null
+            }
         }
     }
 
@@ -306,10 +318,19 @@ class LedgerHandshakeVM(
         }
     }
 
-    private fun onGoToAccountClick(account: WalletAccount) =
+    private fun onGoToAccountClick(existing: ExistingLedgerAccount) =
         viewModelScope.launch {
-            selectWalletAccount(account, navigateBack = false)
-            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+            val selected = walletEnrollment.write(existing.owner) {
+                selectWalletAccount(existing.account, navigateBack = false)
+                true
+            }
+            if (selected == true) {
+                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(existing.owner) }) {
+                    NavigationCommand.BackToRoot
+                }
+            } else {
+                showIssue(LedgerIssue.unknownWithoutRetry)
+            }
         }
 
     /**
@@ -374,7 +395,7 @@ class LedgerHandshakeVM(
         }
     }
 
-    private fun showAlreadyAdded(account: WalletAccount) {
+    private fun showAlreadyAdded(account: ExistingLedgerAccount) {
         internalState.update {
             it.copy(
                 phase = LedgerHandshakePhase.IDLE,
@@ -389,12 +410,14 @@ class LedgerHandshakeVM(
 private data class LedgerHandshakeInternalState(
     val phase: LedgerHandshakePhase = LedgerHandshakePhase.CONNECTING,
     val issue: LedgerIssue? = null,
-    val alreadyAdded: WalletAccount? = null,
+    val alreadyAdded: ExistingLedgerAccount? = null,
     val isSheetShown: Boolean = false,
     val canRequestPermissionsAgain: Boolean = false,
     val permissionRequestNonce: Int = 0,
     val enableBluetoothRequestNonce: Int = 0,
 )
+
+private data class ExistingLedgerAccount(val account: WalletAccount, val owner: WalletEnrollmentToken)
 
 private enum class LedgerHandshakePhase {
     PERMISSION,

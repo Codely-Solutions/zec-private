@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.LedgerPairingTimedOutException
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.LedgerSelectedDeviceRepository
+import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
 import co.electriccoin.zcash.ui.common.usecase.PairLedgerDeviceResult
 import co.electriccoin.zcash.ui.common.usecase.PairLedgerDeviceUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
@@ -78,6 +79,28 @@ class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
         }
 
     @Test
+    fun losingTheOriginatingWalletStopsPairingAndOffersBack() = runTest(dispatcher) {
+        val pending = CompletableDeferred<PairLedgerDeviceResult>()
+        val pairing = mockk<PairLedgerDeviceUseCase> {
+            coEvery { invoke(any(), any()) } coAnswers { pending.await() }
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = vm(pairLedgerDevice = pairing, navigationRouter = router)
+        collect(vm)
+        runCurrent()
+
+        enrollment.replaceWallet()
+        pending.complete(PairLedgerDeviceResult.Paired)
+        runCurrent()
+
+        assertFalse(vm.state.value.isConnecting)
+        assertNotNull(vm.state.value.errorSheet)
+        verify(exactly = 0) { router.replace(*anyVararg()) }
+        vm.state.value.onBack()
+        verify(exactly = 1) { router.back() }
+    }
+
+    @Test
     fun whileTheHandshakeRunsThePageWaitsBehindADisabledConnect() =
         runTest(dispatcher) {
             val pending = CompletableDeferred<PairLedgerDeviceResult>()
@@ -129,6 +152,7 @@ class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
                 LedgerHandshakeVM(
                     application = mockk<Application>(relaxed = true),
                     pairLedgerDevice = pairLedgerDevice,
+                    walletEnrollment = enrollment.access,
                     selectWalletAccount = mockk(relaxed = true),
                     ledgerSelectedDeviceRepository =
                         mockk<LedgerSelectedDeviceRepository>(relaxed = true) {
@@ -514,6 +538,7 @@ class LedgerHandshakeLifecycleVMTest : LedgerHandshakeVMFixture() {
                 LedgerHandshakeVM(
                     application = mockk<Application>(relaxed = true),
                     pairLedgerDevice = pairLedgerDevice,
+                    walletEnrollment = enrollment.access,
                     selectWalletAccount = mockk(relaxed = true),
                     ledgerSelectedDeviceRepository = ledgerSelectedDeviceRepository,
                     navigateToError = mockk(relaxed = true),
@@ -707,6 +732,7 @@ class LedgerHandshakeLifecycleVMTest : LedgerHandshakeVMFixture() {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 abstract class LedgerHandshakeVMFixture {
+    internal val enrollment = LedgerEnrollmentFixture()
     protected val dispatcher = StandardTestDispatcher()
 
     protected val device =
@@ -769,6 +795,7 @@ abstract class LedgerHandshakeVMFixture {
     ) = LedgerHandshakeVM(
         application = mockk<Application>(relaxed = true),
         pairLedgerDevice = pairLedgerDevice,
+        walletEnrollment = enrollment.access,
         selectWalletAccount = selectWalletAccount,
         ledgerSelectedDeviceRepository =
             mockk<LedgerSelectedDeviceRepository>(relaxed = true) {
