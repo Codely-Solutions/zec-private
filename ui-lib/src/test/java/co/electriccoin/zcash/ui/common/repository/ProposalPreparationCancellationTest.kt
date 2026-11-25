@@ -12,7 +12,7 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.model.SwapQuote
-import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProposalPreparationCancellationTest {
-    private val account = mockk<WalletAccount>()
+    private val account = EditAccountFixtures.keystone()
     private val accounts = mockk<AccountDataSource> {
         coEvery { getSelectedAccount() } returns account
     }

@@ -150,7 +150,7 @@ class NavigationResultDeliveryTest {
 }
 
 @Serializable
-private data class DeliveryMigrationArgs(val owner: String)
+internal data class DeliveryMigrationArgs(val owner: String)
 
 @Serializable
-private data object DeliveryOrigin
+internal data object DeliveryOrigin

@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -17,6 +18,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,7 +39,7 @@ class SendFiatProposalTest {
                 accountDataSource = mockk<AccountDataSource> {
                     coEvery { getSelectedAccount() } returns account
                 },
-                navigationRouter = mockk(relaxed = true),
+                navigationRouter = inactiveRouter(),
             )
             val send = ZecSend(
                 destination = WalletAddress.Unified.new("synthetic-recipient"),
@@ -134,6 +136,10 @@ class SendFiatProposalTest {
     private suspend fun CreateProposalUseCase.prepare(send: ZecSend, floor: Boolean) =
         invoke(send, floor, "fixture-send") { true }
 
+    private fun inactiveRouter() = mockk<NavigationRouter>(relaxed = true) {
+        every { activeEntry } returns MutableStateFlow(null)
+    }
+
     private fun softwareProposal(proposals: ZashiProposalRepository) = CreateProposalUseCase(
         keystoneProposalRepository = mockk(relaxed = true),
         ledgerProposalPipeline = mockk(relaxed = true),
@@ -141,6 +147,6 @@ class SendFiatProposalTest {
         accountDataSource = mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
         },
-        navigationRouter = mockk(relaxed = true),
+        navigationRouter = inactiveRouter(),
     )
 }

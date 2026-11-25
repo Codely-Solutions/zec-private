@@ -7976,70 +7976,74 @@ index 5a7def039..212c61948 100644
 @@ -44,0 +69 @@ object MigrationWorkerHeartbeat {
 +    private const val KEY_REMOVAL_PENDING = "removal_pending_"
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
-index 698a60fbd..be641e91a 100644
+index 698a60fbd..c59192f40 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
-@@ -50 +49,0 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
+@@ -32,0 +33 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+@@ -50 +50,0 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
 -import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-@@ -64,0 +64,2 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccess
+@@ -64,0 +65,2 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccess
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
-@@ -70,0 +72 @@ import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksV
+@@ -70,0 +73 @@ import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksV
 +import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
-@@ -76,0 +79 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
+@@ -76,0 +80 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
 +import co.electriccoin.zcash.ui.screen.migration.notification.MigrationNotificationArgs
-@@ -79,0 +83 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
+@@ -79,0 +84 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
 +import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
-@@ -82,0 +87 @@ import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
+@@ -82,0 +88 @@ import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
-@@ -83,0 +89 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
+@@ -83,0 +90 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
 +import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
-@@ -87,0 +94 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
+@@ -87,0 +95 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
 +import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
-@@ -89,0 +97 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -89,0 +98 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -96,0 +105 @@ import org.koin.core.KoinApplication
+@@ -96,0 +106 @@ import org.koin.core.KoinApplication
 +import org.koin.core.parameter.parametersOf
-@@ -133,0 +143 @@ class MigrationKoinGraphSmokeTest {
+@@ -133,0 +144 @@ class MigrationKoinGraphSmokeTest {
 +                single<ResetProgressStore> { mockk(relaxed = true) }
-@@ -153,0 +164 @@ class MigrationKoinGraphSmokeTest {
+@@ -153,0 +165 @@ class MigrationKoinGraphSmokeTest {
 +                factory { mockk<MigrationDriveOnce>(relaxed = true) }
-@@ -156 +166,0 @@ class MigrationKoinGraphSmokeTest {
+@@ -156 +167,0 @@ class MigrationKoinGraphSmokeTest {
 -                single<PendingMigrationTorFailureDecisionRepository> { mockk(relaxed = true) }
-@@ -183 +193 @@ class MigrationKoinGraphSmokeTest {
+@@ -162,0 +174 @@ class MigrationKoinGraphSmokeTest {
++                single<AccountDataSource> { mockk(relaxed = true) }
+@@ -183 +195 @@ class MigrationKoinGraphSmokeTest {
 -                factory { MigrationCustomServerTorArgs(mode = MigrationMode.AUTOMATIC) }
 +                factory { MigrationCustomServerTorArgs(MigrationMode.AUTOMATIC, "review-account") }
-@@ -186 +196,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -186 +198,3 @@ class MigrationKoinGraphSmokeTest {
 -                factory { MigrationPrivacyArgs(mode = MigrationMode.AUTOMATIC) }
 +                factory { MigrationBatteryArgs("review-account", useTor = true) }
 +                factory { MigrationNotificationArgs("review-account", useTor = true) }
 +                factory { MigrationPrivacyArgs(MigrationMode.AUTOMATIC, "review-account") }
-@@ -227 +239 @@ class MigrationKoinGraphSmokeTest {
+@@ -227 +241 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationProgressVM>()
 +        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner"), "fixture-entry") }
-@@ -232 +244,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -232 +246,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationReviewVM>()
 +        koin.koin.get<MigrationReviewVM> {
 +            parametersOf(MigrationReviewArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
 +        }
-@@ -242 +256,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -242 +258,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationKeystoneScanVM>()
 +        koin.koin.get<MigrationKeystoneScanVM> {
 +            parametersOf(MigrationKeystoneScanArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
 +        }
-@@ -247 +263 @@ class MigrationKoinGraphSmokeTest {
+@@ -247 +265 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationSendingVM>()
 +        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner"), "fixture-entry") }
-@@ -257 +273 @@ class MigrationKoinGraphSmokeTest {
+@@ -257 +275 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationScheduledVM>()
 +        koin.koin.get<MigrationScheduledVM> { parametersOf(MigrationScheduledArgs("fixture-owner")) }
-@@ -262 +278 @@ class MigrationKoinGraphSmokeTest {
+@@ -262 +280 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationCompleteVM>()
 +        koin.koin.get<MigrationCompleteVM> { parametersOf(MigrationCompleteArgs(), "fixture-entry") }
-@@ -292 +308 @@ class MigrationKoinGraphSmokeTest {
+@@ -292 +310 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationTorFailureVM>()
 +        koin.koin.get<MigrationTorFailureVM> { parametersOf(MigrationTorFailureArgs("fixture-owner")) }
-@@ -297 +313 @@ class MigrationKoinGraphSmokeTest {
+@@ -297 +315 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationTransferInvalidVM>()
 +        koin.koin.get<MigrationTransferInvalidVM> { parametersOf(MigrationTransferInvalidArgs("fixture-owner")) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
@@ -32943,7 +32947,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..12549bb0d 100644
+index 67c1e883c..ce7a80395 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -33004,8 +33008,8 @@ index 67c1e883c..12549bb0d 100644
 +        }
 +    }
 +
-+    internal fun removeFor(sourceEntryId: String?) {
-+        if (sourceEntryId != null) pending.update { it - sourceEntryId }
++    internal fun removeFor(sourceEntryId: String) {
++        pending.update { it - sourceEntryId }
 +    }
 +}
 +
@@ -33036,7 +33040,7 @@ index 67c1e883c..12549bb0d 100644
 +    }
 @@ -54,0 +137,81 @@ interface NavigationRouter {
 +fun NavigationRouter.discardResultFrom(sourceEntryId: String?) {
-+    pendingNavigation?.removeFor(sourceEntryId)
++    if (sourceEntryId != null) pendingNavigation?.removeFor(sourceEntryId)
 +}
 +
 +internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
@@ -45712,7 +45716,7 @@ index a893e714e..7c28a8ef9 100644
 @@ -66,0 +68 @@ class ShareQRUseCase(
 +            isAllowed = isAllowed,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
-index c6e75900c..e2bd0cefe 100644
+index c6e75900c..1d3cd2242 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 @@ -5,0 +6,2 @@ import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
@@ -45741,13 +45745,13 @@ index c6e75900c..e2bd0cefe 100644
 @@ -101,0 +109,5 @@ class ShieldFundsUseCase(
 +        } catch (e: CancellationException) {
 +            clearOwnedShield(
-+                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
++                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 +            throw e
 @@ -103 +115,3 @@ class ShieldFundsUseCase(
 -            keystoneProposalRepository.clear()
 +            clearOwnedShield(
-+                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
++                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 @@ -113,0 +128 @@ class ShieldFundsUseCase(
 +        var created: ShieldTransactionProposal? = null
@@ -45759,21 +45763,21 @@ index c6e75900c..e2bd0cefe 100644
 @@ -119 +135,3 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 +            clearOwnedShield(
-+                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
++                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
 +            )
 @@ -122 +140,3 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 +            clearOwnedShield(
-+                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
++                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
 +            )
 @@ -126,0 +147,8 @@ class ShieldFundsUseCase(
 +
 +private fun clearOwnedShield(
 +    created: ShieldTransactionProposal?,
-+    current: TransactionProposal?,
++    current: () -> TransactionProposal?,
 +    clear: () -> Unit,
 +) {
-+    if (created != null && current === created) clear()
++    if (created != null && current() === created) clear()
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmissionProgressStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmissionProgressStore.kt
 new file mode 100644
@@ -65215,7 +65219,7 @@ index 000000000..2ae836acd
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..ecb953e22
+index 000000000..cfc608c8a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 @@ -0,0 +1,156 @@
@@ -65371,10 +65375,10 @@ index 000000000..ecb953e22
 +}
 +
 +@Serializable
-+private data class DeliveryMigrationArgs(val owner: String)
++internal data class DeliveryMigrationArgs(val owner: String)
 +
 +@Serializable
-+private data object DeliveryOrigin
++internal data object DeliveryOrigin
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 index b983bc0a2..356240b3e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
@@ -74779,7 +74783,7 @@ index 918c80169..059bea271 100644
 +            assertFalse(repository.createOrUpdateTxNote("tx1", "note", owner, 0))
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt
 new file mode 100644
-index 000000000..6a2257335
+index 000000000..160bc71fc
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt
 @@ -0,0 +1,125 @@
@@ -74797,7 +74801,7 @@ index 000000000..6a2257335
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
-+import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import io.mockk.coEvery
 +import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
@@ -74815,7 +74819,7 @@ index 000000000..6a2257335
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class ProposalPreparationCancellationTest {
-+    private val account = mockk<WalletAccount>()
++    private val account = EditAccountFixtures.keystone()
 +    private val accounts = mockk<AccountDataSource> {
 +        coEvery { getSelectedAccount() } returns account
 +    }
@@ -89499,10 +89503,10 @@ index f2c1fe099..788056a4a 100644
 +                    navigationRouter = router,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
 new file mode 100644
-index 000000000..78091bcd3
+index 000000000..d8febd080
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,234 @@
 +package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -89523,6 +89527,7 @@ index 000000000..78091bcd3
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ParsePCZTException
 +import co.electriccoin.zcash.ui.common.usecase.InvalidKeystonePCZTQRException
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import co.electriccoin.zcash.ui.common.usecase.ParseKeystonePCZTUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneQrResult
 +import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
@@ -89605,7 +89610,9 @@ index 000000000..78091bcd3
 +    @Test
 +    fun completedScanSubmitsTheApprovedProposalOnceAndOpensProgress() = runTest {
 +        val signer = mockk<KeystoneSDKProvider>()
-+        val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns mockk() }
++        val accountDataSource = mockk<AccountDataSource> {
++            coEvery { getSelectedAccount() } returns EditAccountFixtures.keystone()
++        }
 +        val proposalDataSource = mockk<ProposalDataSource>()
 +        val sdkProposal = mockk<Proposal>()
 +        val repository = KeystoneProposalRepositoryImpl(accountDataSource, proposalDataSource, signer, mockk())
@@ -90187,16 +90194,17 @@ index 000000000..861d6a147
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt
 new file mode 100644
-index 000000000..8b0731ca9
+index 000000000..3253f0a51
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,152 @@
 +package co.electriccoin.zcash.ui.screen.send
 +
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.ZecSend
++import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 +import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -90210,6 +90218,7 @@ index 000000000..8b0731ca9
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
++import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.test.runTest
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
@@ -90230,7 +90239,7 @@ index 000000000..8b0731ca9
 +                accountDataSource = mockk<AccountDataSource> {
 +                    coEvery { getSelectedAccount() } returns account
 +                },
-+                navigationRouter = mockk(relaxed = true),
++                navigationRouter = inactiveRouter(),
 +            )
 +            val send = ZecSend(
 +                destination = WalletAddress.Unified.new("synthetic-recipient"),
@@ -90327,6 +90336,10 @@ index 000000000..8b0731ca9
 +    private suspend fun CreateProposalUseCase.prepare(send: ZecSend, floor: Boolean) =
 +        invoke(send, floor, "fixture-send") { true }
 +
++    private fun inactiveRouter() = mockk<NavigationRouter>(relaxed = true) {
++        every { activeEntry } returns MutableStateFlow(null)
++    }
++
 +    private fun softwareProposal(proposals: ZashiProposalRepository) = CreateProposalUseCase(
 +        keystoneProposalRepository = mockk(relaxed = true),
 +        ledgerProposalPipeline = mockk(relaxed = true),
@@ -90334,7 +90347,7 @@ index 000000000..8b0731ca9
 +        accountDataSource = mockk<AccountDataSource> {
 +            coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
 +        },
-+        navigationRouter = mockk(relaxed = true),
++        navigationRouter = inactiveRouter(),
 +    )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt

@@ -30,6 +30,7 @@ package co.electriccoin.zcash.di
 import android.content.Context
 import co.electriccoin.zcash.migration.di.featureMigrationModule
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
@@ -170,6 +171,7 @@ class MigrationKoinGraphSmokeTest {
                 single<BiometricRepository> { mockk(relaxed = true) }
 
                 // DataSources
+                single<AccountDataSource> { mockk(relaxed = true) }
                 single<ZashiSpendingKeyDataSource> { mockk(relaxed = true) }
                 single<ProposalDataSource> { mockk(relaxed = true) }
 

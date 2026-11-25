@@ -102,8 +102,8 @@ class PendingNavigation {
         }
     }
 
-    internal fun removeFor(sourceEntryId: String?) {
-        if (sourceEntryId != null) pending.update { it - sourceEntryId }
+    internal fun removeFor(sourceEntryId: String) {
+        pending.update { it - sourceEntryId }
     }
 }
 
@@ -135,7 +135,7 @@ fun NavigationRouter.stageResultFrom(
 }
 
 fun NavigationRouter.discardResultFrom(sourceEntryId: String?) {
-    pendingNavigation?.removeFor(sourceEntryId)
+    if (sourceEntryId != null) pendingNavigation?.removeFor(sourceEntryId)
 }
 
 internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {

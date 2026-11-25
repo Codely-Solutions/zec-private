@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.ParsePCZTException
 import co.electriccoin.zcash.ui.common.usecase.InvalidKeystonePCZTQRException
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystonePCZTUseCase
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneQrResult
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
@@ -100,7 +101,9 @@ class ScanKeystonePCZTViewModelTest {
     @Test
     fun completedScanSubmitsTheApprovedProposalOnceAndOpensProgress() = runTest {
         val signer = mockk<KeystoneSDKProvider>()
-        val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns mockk() }
+        val accountDataSource = mockk<AccountDataSource> {
+            coEvery { getSelectedAccount() } returns EditAccountFixtures.keystone()
+        }
         val proposalDataSource = mockk<ProposalDataSource>()
         val sdkProposal = mockk<Proposal>()
         val repository = KeystoneProposalRepositoryImpl(accountDataSource, proposalDataSource, signer, mockk())

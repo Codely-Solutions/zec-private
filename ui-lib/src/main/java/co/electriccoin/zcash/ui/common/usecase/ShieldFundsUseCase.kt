@@ -108,12 +108,12 @@ class ShieldFundsUseCase(
             navigationRouter.forward(SignKeystoneTransactionArgs)
         } catch (e: CancellationException) {
             clearOwnedShield(
-                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
+                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
             )
             throw e
         } catch (e: Exception) {
             clearOwnedShield(
-                created, keystoneProposalRepository.transactionProposal.value, keystoneProposalRepository::clear
+                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
             )
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
@@ -133,12 +133,12 @@ class ShieldFundsUseCase(
             ledgerNavigator.forwardToSign()
         } catch (e: CancellationException) {
             clearOwnedShield(
-                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
+                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
             )
             throw e
         } catch (e: Exception) {
             clearOwnedShield(
-                created, ledgerProposalPipeline.transactionProposal.value, ledgerProposalPipeline::clear
+                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
             )
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
@@ -147,8 +147,8 @@ class ShieldFundsUseCase(
 
 private fun clearOwnedShield(
     created: ShieldTransactionProposal?,
-    current: TransactionProposal?,
+    current: () -> TransactionProposal?,
     clear: () -> Unit,
 ) {
-    if (created != null && current === created) clear()
+    if (created != null && current() === created) clear()
 }
