@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ledger.R
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepositoryImpl
+import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
 import co.electriccoin.zcash.ui.common.usecase.ConnectLedgerDeviceUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveLedgerDevicesUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
@@ -479,7 +480,7 @@ class LedgerDeviceScanVMAccountIndexTest {
 
     private fun repairTarget(zip32AccountIndex: Zip32AccountIndex?) =
         LedgerRepairTargetRepositoryImpl().apply {
-            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex)
+            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex, LedgerEnrollmentFixture().owner)
         }
 
     private fun TestScope.listAndSelect(vm: LedgerDeviceScanVM) {

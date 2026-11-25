@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavContributor
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateLedgerAccountUseCase
@@ -34,16 +35,19 @@ import kotlinx.coroutines.flow.map
 class LedgerAccountImporterImpl(
     private val ledgerPairingRepository: LedgerPairingRepository,
     private val createLedgerAccount: CreateLedgerAccountUseCase,
+    private val walletEnrollment: WalletEnrollmentAccess,
 ) : LedgerAccountImporter {
-    override val committedBirthdays = ledgerPairingRepository.imported.map {
-        it?.let { account -> CommittedEnrollmentBirthday(account.birthday, account.account) }
-    }
+    override val committedBirthdays = ledgerPairingRepository.imported.map { committedBirthday() }
 
-    override fun committedBirthday() = ledgerPairingRepository.get()
+    override fun committedBirthday() = currentPairing()
         ?.let(ledgerPairingRepository::importedAccount)
         ?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
 
-    override fun hasPendingPairing(): Boolean = ledgerPairingRepository.get() != null
+    override fun hasPendingPairing(): Boolean = currentPairing() != null
+
+    private fun currentPairing() = ledgerPairingRepository.get()?.takeIf { pairing ->
+        ledgerPairingRepository.owner(pairing)?.let(walletEnrollment::permits) == true
+    }
 
     override suspend fun importAccount(birthday: BlockHeight?, sourceEntryId: String?) =
         createLedgerAccount(birthday, sourceEntryId)

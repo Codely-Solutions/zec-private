@@ -54,6 +54,7 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PairLedgerDeviceUseCaseTest {
+    private val enrollment = LedgerEnrollmentFixture()
     private val bindingProvider = mockk<LedgerAccountBindingProvider>(relaxed = true)
 
     private val firstAccount = Zip32AccountIndex.new(0)
@@ -266,7 +267,7 @@ class PairLedgerDeviceUseCaseTest {
 
         val oldAttempt = async { useCase(device, firstAccount) }
         entered.await()
-        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
+        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex, enrollment.owner)
         val newer = assertNotNull(repair.current())
         release.complete(Unit)
 
@@ -292,7 +293,7 @@ class PairLedgerDeviceUseCaseTest {
 
         val superseded = async { useCase(device, firstAccount) }
         writing.await()
-        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
+        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex, enrollment.owner)
         val newer = assertNotNull(repair.current())
         release.complete(Unit)
 
@@ -416,13 +417,33 @@ class PairLedgerDeviceUseCaseTest {
     fun anEarlierPairingIsReplacedRatherThanKept() =
         runTest {
             val repository = LedgerPairingRepositoryImpl()
-            repository.set(pairing(ufvk = "ufvk-stale"))
+            repository.set(pairing(ufvk = "ufvk-stale"), enrollment.owner)
             val fresh = pairing(ufvk = "ufvk-fresh")
 
             useCase(fresh, repository, existing = emptyList()).invoke(device, firstAccount)
 
             assertSame(fresh, repository.get())
         }
+
+    @Test
+    fun aDelayedRepairCannotBindAnAccountAfterWalletReplacement() = runTest {
+        val remaining = CompletableDeferred<LedgerAccountPairing>()
+        val dataSource = mockk<LedgerDeviceDataSource> {
+            coEvery { pair(any(), any()) } coAnswers { remaining.await() }
+        }
+        val existing = ledgerAccount("ufvk-existing", bound = true)
+        val repository = LedgerPairingRepositoryImpl()
+        val result = async {
+            useCase(dataSource, repository, listOf(existing), repairTarget(existing))(device, firstAccount)
+        }
+        runCurrent()
+        enrollment.replaceWallet()
+        remaining.complete(pairing("ufvk-existing"))
+
+        assertEquals(PairLedgerDeviceResult.Superseded, result.await())
+        assertNull(repository.get())
+        coVerify(exactly = 0) { bindingProvider.save(any(), any(), any()) }
+    }
 
     private fun useCase(
         pairing: LedgerAccountPairing,
@@ -437,16 +458,19 @@ class PairLedgerDeviceUseCaseTest {
         existing: List<WalletAccount>,
         repairTarget: LedgerRepairTargetRepository = LedgerRepairTargetRepositoryImpl(),
         provider: LedgerAccountBindingProvider = bindingProvider,
-    ) = PairLedgerDeviceUseCase(
-        ledgerDeviceDataSource = dataSource,
-        ledgerPairingRepository = repository,
-        ledgerRepairTargetRepository = repairTarget,
-        accountDataSource =
-            mockk<AccountDataSource> {
+    ): PairLedgerDeviceUseCase {
+        coEvery { enrollment.sdk.getAccounts() } returns existing.map { it.sdkAccount }
+        return PairLedgerDeviceUseCase(
+            ledgerDeviceDataSource = dataSource,
+            ledgerPairingRepository = repository,
+            ledgerRepairTargetRepository = repairTarget,
+            accountDataSource = mockk<AccountDataSource> {
                 coEvery { getAllAccounts() } returns existing
             },
-        ledgerAccountBindingProvider = provider,
-    )
+            ledgerAccountBindingProvider = provider,
+            walletEnrollment = enrollment.access,
+        )
+    }
 
     private fun dataSource(pairing: LedgerAccountPairing) =
         mockk<LedgerDeviceDataSource> {
@@ -467,7 +491,9 @@ class PairLedgerDeviceUseCaseTest {
         }
 
     private fun repairTarget(account: LedgerAccount) =
-        LedgerRepairTargetRepositoryImpl().apply { set(account.sdkAccount.accountUuid, account.zip32AccountIndex) }
+        LedgerRepairTargetRepositoryImpl().apply {
+            set(account.sdkAccount.accountUuid, account.zip32AccountIndex, enrollment.owner)
+        }
 
     /**
      * Each viewing key gets its own UUID, so accounts with different keys are different accounts.

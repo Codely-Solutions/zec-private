@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.model.toLedgerIssue
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.CancelLedgerSigningUseCase
+import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
 import co.electriccoin.zcash.ui.common.usecase.NavigateToLedgerRepairUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveLedgerSigningStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
@@ -622,6 +623,7 @@ class LedgerSignVMTest {
                             coEvery { getSelectedAccount() } coAnswers { selectedAccount.await() }
                         },
                     ledgerRepairTargetRepository = LedgerRepairTargetRepositoryImpl(),
+                    walletEnrollment = LedgerEnrollmentFixture().access,
                     cancelLedgerSigning = mockk(relaxed = true),
                     navigationRouter = navigationRouter,
                 )

@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -11,6 +12,8 @@ import kotlin.test.assertNull
  * binding holds no index, and both are replaced and cleared together.
  */
 class LedgerRepairTargetRepositoryTest {
+    private val owner = LedgerEnrollmentFixture().owner
+
     private val first = AccountUuid.new(ByteArray(16) { it.toByte() })
 
     private val second = AccountUuid.new(ByteArray(16) { (it + 1).toByte() })
@@ -27,7 +30,7 @@ class LedgerRepairTargetRepositoryTest {
     fun setHoldsTheAccountWithItsStoredIndex() {
         val repository = LedgerRepairTargetRepositoryImpl()
 
-        repository.set(first, Zip32AccountIndex.new(4))
+        repository.set(first, Zip32AccountIndex.new(4), owner)
 
         assertEquals(first, repository.get())
         assertEquals(Zip32AccountIndex.new(4), repository.getZip32AccountIndex())
@@ -37,7 +40,7 @@ class LedgerRepairTargetRepositoryTest {
     fun anAccountWithoutAStoredIndexIsHeldWithNone() {
         val repository = LedgerRepairTargetRepositoryImpl()
 
-        repository.set(first, null)
+        repository.set(first, null, owner)
 
         assertEquals(first, repository.get())
         assertNull(repository.getZip32AccountIndex())
@@ -46,9 +49,9 @@ class LedgerRepairTargetRepositoryTest {
     @Test
     fun setAgainReplacesTheIndexEvenWithNone() {
         val repository = LedgerRepairTargetRepositoryImpl()
-        repository.set(first, Zip32AccountIndex.new(4))
+        repository.set(first, Zip32AccountIndex.new(4), owner)
 
-        repository.set(second, null)
+        repository.set(second, null, owner)
 
         assertEquals(second, repository.get())
         assertNull(repository.getZip32AccountIndex())
@@ -57,7 +60,7 @@ class LedgerRepairTargetRepositoryTest {
     @Test
     fun clearForgetsTheAccountAndItsIndex() {
         val repository = LedgerRepairTargetRepositoryImpl()
-        repository.set(first, Zip32AccountIndex.new(4))
+        repository.set(first, Zip32AccountIndex.new(4), owner)
 
         repository.clear()
 

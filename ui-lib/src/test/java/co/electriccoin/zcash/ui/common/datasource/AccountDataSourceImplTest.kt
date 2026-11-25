@@ -459,7 +459,7 @@ class AccountDataSourceImplTest {
 
             val thrown =
                 assertFailsWith<RuntimeException> {
-                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
+                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
                 }
 
             assertEquals(bindingFailure.message, thrown.message)
@@ -497,7 +497,9 @@ class AccountDataSourceImplTest {
                 }
             val dataSource = dataSource(synchronizer, ledgerAccountBindingProvider)
 
-            val import = launch { dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null) }
+            val import = launch {
+                dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
+            }
             saving.await()
             import.cancel()
             import.join()
@@ -530,7 +532,7 @@ class AccountDataSourceImplTest {
 
             val thrown =
                 assertFailsWith<RuntimeException> {
-                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
+                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
                 }
 
             assertEquals(bindingFailure.message, thrown.message)
@@ -561,7 +563,7 @@ class AccountDataSourceImplTest {
                 }
 
             dataSource(synchronizer, ledgerAccountBindingProvider)
-                .importLedgerAccount(pairing = pairing, birthday = null)
+                .importLedgerAccount(synchronizer, pairing = pairing, birthday = null)
 
             coVerify(exactly = 1) {
                 ledgerAccountBindingProvider.save(importedUuid, "tpk0-deadbeef", 4L)

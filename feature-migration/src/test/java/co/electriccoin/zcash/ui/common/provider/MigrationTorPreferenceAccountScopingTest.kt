@@ -219,6 +219,7 @@ private class FakeAccountDataSource(
     ): cash.z.ecc.android.sdk.model.Account = error("unsupported")
 
     override suspend fun importLedgerAccount(
+        synchronizer: Synchronizer,
         pairing: LedgerAccountPairing,
         birthday: BlockHeight?
     ): cash.z.ecc.android.sdk.model.Account = error("unsupported")

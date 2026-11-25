@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
 import cash.z.ecc.android.sdk.model.BlockHeight
@@ -9,23 +10,24 @@ import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.common.repository.ImportedLedgerAccount
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 class CreateLedgerAccountUseCase(
     private val accountDataSource: AccountDataSource,
     private val ledgerPairingRepository: LedgerPairingRepository,
     private val synchronizerProvider: SynchronizerProvider,
     private val navigationRouter: NavigationRouter,
+    private val walletEnrollment: WalletEnrollmentAccess,
 ) {
     private val mutex = Mutex()
 
@@ -42,22 +44,30 @@ class CreateLedgerAccountUseCase(
     )
     suspend operator fun invoke(birthday: BlockHeight? = null, sourceEntryId: String? = null) {
         val pairing = ledgerPairingRepository.get() ?: throw LedgerPairingMissingException()
+        val owner = ledgerPairingRepository.owner(pairing)?.takeIf(walletEnrollment::permits)
+            ?: throw LedgerPairingMissingException()
         mutex.withLock {
             if (ledgerPairingRepository.get() !== pairing) return
             if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
-            val route = withContext(NonCancellable) { importAndSelect(pairing, birthday) }
+            val route = walletEnrollment.complete(owner) { sync ->
+                if (ledgerPairingRepository.owner(pairing) == owner) importAndSelect(sync, pairing, birthday, owner)
+                else null
+            }
             currentCoroutineContext().ensureActive()
             route?.let { destination ->
-                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
+                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) { NavigationCommand.Forward(listOf(destination)) }
             }
         }
     }
 
-    private suspend fun importAndSelect(pairing: LedgerAccountPairing, birthday: BlockHeight?): Any? {
-        val imported = ledgerPairingRepository.importedAccount(pairing) ?: importAccount(pairing, birthday)
-        if (imported == null) return null
-        accountDataSource.selectAccount(imported.account)
-        synchronizerProvider.resetSynchronizer()
+    private suspend fun importAndSelect(
+        sync: Synchronizer,
+        pairing: LedgerAccountPairing,
+        birthday: BlockHeight?,
+        owner: WalletEnrollmentToken,
+    ): Any? {
+        val imported = ledgerPairingRepository.importedAccount(pairing) ?: importAccount(sync, pairing, birthday, owner)
+        if (imported == null || !selectImported(pairing, imported, owner)) return null
         return when {
             !ledgerPairingRepository.clear(pairing) -> null
             imported.birthday == null -> LedgerConnectedArgs
@@ -65,13 +75,29 @@ class CreateLedgerAccountUseCase(
         }
     }
 
-    private suspend fun importAccount(pairing: LedgerAccountPairing, birthday: BlockHeight?): ImportedLedgerAccount? {
+    private suspend fun selectImported(
+        pairing: LedgerAccountPairing,
+        imported: ImportedLedgerAccount,
+        owner: WalletEnrollmentToken,
+    ): Boolean = walletEnrollment.write(owner) {
+        if (ledgerPairingRepository.owner(pairing) != owner) return@write false
+        accountDataSource.selectAccount(imported.account)
+        synchronizerProvider.resetSynchronizer()
+        true
+    } == true
+
+    private suspend fun importAccount(
+        sync: Synchronizer,
+        pairing: LedgerAccountPairing,
+        birthday: BlockHeight?,
+        owner: WalletEnrollmentToken,
+    ): ImportedLedgerAccount? {
         val imported = ImportedLedgerAccount(
-            account = accountDataSource.importLedgerAccount(pairing, birthday),
+            account = accountDataSource.importLedgerAccount(sync, pairing, birthday),
             birthday = birthday,
         )
         if (ledgerPairingRepository.recordImport(pairing, imported)) return imported
-        synchronizerProvider.resetSynchronizer()
+        if (walletEnrollment.permits(owner)) synchronizerProvider.resetSynchronizer()
         return null
     }
 }

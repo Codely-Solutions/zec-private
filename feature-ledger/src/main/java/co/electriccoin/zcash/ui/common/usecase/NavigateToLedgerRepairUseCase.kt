@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
 import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectArgs
 
@@ -22,14 +23,17 @@ class NavigateToLedgerRepairUseCase(
     private val ledgerRepairTargetRepository: LedgerRepairTargetRepository,
     private val cancelLedgerSigning: CancelLedgerSigningUseCase,
     private val navigationRouter: NavigationRouter,
+    private val walletEnrollment: WalletEnrollmentAccess,
 ) {
     suspend operator fun invoke(sourceEntryId: String? = null) {
+        val owner = walletEnrollment.capture() ?: return
         val account = accountDataSource.getSelectedAccount()
-        navigationRouter.stageResultFrom(sourceEntryId) {
+        navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) {
             cancelLedgerSigning(navigateBack = false)
             ledgerRepairTargetRepository.set(
                 accountUuid = account.sdkAccount.accountUuid,
                 zip32AccountIndex = (account as? LedgerAccount)?.zip32AccountIndex,
+                owner = owner,
             )
             NavigationCommand.Replace(listOf(LedgerConnectArgs))
         }

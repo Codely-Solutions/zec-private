@@ -23,6 +23,8 @@ import kotlin.test.assertNull
  * account, and its stored index, as the target of pairing again.
  */
 class NavigateToLedgerRepairUseCaseTest {
+    private val enrollment = LedgerEnrollmentFixture()
+
     @Test
     fun theSelectedAccountBecomesTheTargetBeforeTheConnectFlowOpens() =
         runTest {
@@ -44,6 +46,7 @@ class NavigateToLedgerRepairUseCaseTest {
                 ledgerRepairTargetRepository = repairTarget,
                 cancelLedgerSigning = cancelLedgerSigning,
                 navigationRouter = navigationRouter,
+                walletEnrollment = enrollment.access,
             ).invoke()
 
             assertEquals(accountUuid, repairTarget.get())
@@ -73,7 +76,7 @@ class NavigateToLedgerRepairUseCaseTest {
                 }
             listOf<WalletAccount>(unbound, keystone).forEach { account ->
                 val repairTarget = LedgerRepairTargetRepositoryImpl()
-                repairTarget.set(AccountUuid.new(ByteArray(16)), Zip32AccountIndex.new(9))
+                repairTarget.set(AccountUuid.new(ByteArray(16)), Zip32AccountIndex.new(9), enrollment.owner)
 
                 NavigateToLedgerRepairUseCase(
                     accountDataSource =
@@ -83,6 +86,7 @@ class NavigateToLedgerRepairUseCaseTest {
                     ledgerRepairTargetRepository = repairTarget,
                     cancelLedgerSigning = mockk(relaxed = true),
                     navigationRouter = mockk(relaxed = true),
+                    walletEnrollment = enrollment.access,
                 ).invoke()
 
                 assertEquals(accountUuid, repairTarget.get())

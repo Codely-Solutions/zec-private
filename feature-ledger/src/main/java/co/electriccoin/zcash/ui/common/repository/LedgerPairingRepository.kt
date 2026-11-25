@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.repository
 import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +18,9 @@ interface LedgerPairingRepository {
 
     val imported: StateFlow<ImportedLedgerAccount?>
 
-    fun set(pairing: LedgerAccountPairing)
+    fun set(pairing: LedgerAccountPairing, owner: WalletEnrollmentToken)
+
+    fun owner(pairing: LedgerAccountPairing): WalletEnrollmentToken?
 
     fun get(): LedgerAccountPairing?
 
@@ -36,11 +39,13 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
     private val mutablePairing = MutableStateFlow<LedgerAccountPairing?>(null)
     private val mutableImported = MutableStateFlow<ImportedLedgerAccount?>(null)
     override val imported = mutableImported.asStateFlow()
+    private var currentOwner: WalletEnrollmentToken? = null
 
     override val pairing: StateFlow<LedgerAccountPairing?> = mutablePairing.asStateFlow()
 
     @Synchronized
-    override fun set(pairing: LedgerAccountPairing) {
+    override fun set(pairing: LedgerAccountPairing, owner: WalletEnrollmentToken) {
+        currentOwner = owner
         mutableImported.value = null
         mutablePairing.value = pairing
     }
@@ -48,7 +53,12 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
     override fun get(): LedgerAccountPairing? = mutablePairing.value
 
     @Synchronized
+    override fun owner(pairing: LedgerAccountPairing): WalletEnrollmentToken? =
+        currentOwner.takeIf { mutablePairing.value === pairing }
+
+    @Synchronized
     override fun clear() {
+        currentOwner = null
         mutableImported.value = null
         mutablePairing.value = null
     }

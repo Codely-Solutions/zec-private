@@ -101,6 +101,7 @@ interface AccountDataSource {
      * later signing session knows which device and ZIP 32 account to sign with.
      */
     suspend fun importLedgerAccount(
+        synchronizer: Synchronizer,
         pairing: LedgerAccountPairing,
         birthday: BlockHeight? = null
     ): Account
@@ -302,11 +303,11 @@ class AccountDataSourceImpl(
      */
     @Suppress("TooGenericExceptionCaught")
     override suspend fun importLedgerAccount(
+        synchronizer: Synchronizer,
         pairing: LedgerAccountPairing,
         birthday: BlockHeight?
     ): Account =
         withContext(Dispatchers.IO) {
-            val synchronizer = synchronizerProvider.getSynchronizer()
             val created =
                 synchronizer.importAccountByUfvk(
                     pairing.accountImportSetup(

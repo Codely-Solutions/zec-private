@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -18,6 +19,7 @@ interface LedgerRepairTargetRepository {
     fun set(
         accountUuid: AccountUuid,
         zip32AccountIndex: Zip32AccountIndex?,
+        owner: WalletEnrollmentToken,
     )
 
     fun get(): AccountUuid? = current()?.accountUuid
@@ -40,7 +42,8 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
     override fun set(
         accountUuid: AccountUuid,
         zip32AccountIndex: Zip32AccountIndex?,
-    ) = target.update { LedgerRepairTarget(accountUuid, zip32AccountIndex) }
+        owner: WalletEnrollmentToken,
+    ) = target.update { LedgerRepairTarget(accountUuid, zip32AccountIndex, owner) }
 
     override fun current(): LedgerRepairTarget? = target.value
 
@@ -55,4 +58,5 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
 class LedgerRepairTarget(
     val accountUuid: AccountUuid,
     val zip32AccountIndex: Zip32AccountIndex?,
+    val owner: WalletEnrollmentToken,
 )
