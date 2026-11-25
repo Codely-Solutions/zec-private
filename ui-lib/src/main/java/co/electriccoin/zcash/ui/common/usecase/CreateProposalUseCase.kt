@@ -3,8 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
-import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
@@ -57,8 +57,6 @@ class CreateProposalUseCase(
                 }
             }
             forwardFromSend(sendEntryId, ReviewTransactionArgs, canReview)
-        } catch (e: CancellationException) {
-            throw e
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
             forwardFromSend(sendEntryId, TEXUnsupportedArgs(isLedger = isLedger), canReview)
@@ -67,7 +65,7 @@ class CreateProposalUseCase(
             clearIfCurrent(canReview)
             forwardFromSend(sendEntryId, InsufficientFundsArgs, canReview)
         } catch (e: Exception) {
-            clearIfCurrent(canReview)
+            if (e !is CancellationException) clearIfCurrent(canReview)
             throw e
         }
     }

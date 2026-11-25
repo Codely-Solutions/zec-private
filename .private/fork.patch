@@ -41042,15 +41042,14 @@ index c9908dc7c..7de65e02e 100644
 +        currentCoroutineContext().ensureActive()
 +        if (isSaved) navigationRouter.back()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
-index 01bc0c9c1..19f3642dc 100644
+index 01bc0c9c1..f4ad66df8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.WalletAddress
-@@ -4 +5,0 @@ import cash.z.ecc.android.sdk.model.ZecSend
+@@ -4 +6 @@ import cash.z.ecc.android.sdk.model.ZecSend
 -import cash.z.ecc.sdk.extension.floor
-@@ -5,0 +7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.NavigationCommand
 @@ -8,0 +11 @@ import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 +import co.electriccoin.zcash.ui.common.extension.normalizedSendAmount
@@ -41068,31 +41067,29 @@ index 01bc0c9c1..19f3642dc 100644
 +            val account = accountDataSource.getSelectedAccount()
 +            if (!canReview()) return
 +            when (account) {
-@@ -51 +59,3 @@ class CreateProposalUseCase(
+@@ -51 +59 @@ class CreateProposalUseCase(
 -            navigationRouter.forward(ReviewTransactionArgs)
 +            forwardFromSend(sendEntryId, ReviewTransactionArgs, canReview)
-+        } catch (e: CancellationException) {
-+            throw e
-@@ -54,4 +64,2 @@ class CreateProposalUseCase(
+@@ -54,4 +62,2 @@ class CreateProposalUseCase(
 -            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 -            zashiProposalRepository.clear()
 +            forwardFromSend(sendEntryId, TEXUnsupportedArgs(isLedger = isLedger), canReview)
 +            clearIfCurrent(canReview)
-@@ -59,4 +67,2 @@ class CreateProposalUseCase(
+@@ -59,4 +65,2 @@ class CreateProposalUseCase(
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 -            zashiProposalRepository.clear()
 -            navigationRouter.forward(InsufficientFundsArgs)
 +            clearIfCurrent(canReview)
 +            forwardFromSend(sendEntryId, InsufficientFundsArgs, canReview)
-@@ -64,3 +70 @@ class CreateProposalUseCase(
+@@ -64,3 +68 @@ class CreateProposalUseCase(
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 -            zashiProposalRepository.clear()
-+            clearIfCurrent(canReview)
-@@ -69,0 +74,28 @@ class CreateProposalUseCase(
++            if (e !is CancellationException) clearIfCurrent(canReview)
+@@ -69,0 +72,28 @@ class CreateProposalUseCase(
 +
 +    private fun forwardFromSend(sendEntryId: String, route: Any, canReview: () -> Boolean) {
 +        if (!canReview()) return

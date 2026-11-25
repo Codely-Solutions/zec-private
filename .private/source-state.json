@@ -1599,7 +1599,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt": "eb066854634fe332a9f086fc95e81137337cdfea798453876904ef21fdd21932",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneProposalPCZTEncoderUseCase.kt": "b89ab58bdd61bb52c53f71a057d663a92224e6b602b30c22aca225a5cad70194",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateOrUpdateTransactionNoteUseCase.kt": "8af7d2850fc14ec2cb0cb154e1fa5ce6973a411dd5e1cb822a9fa13a850859d0",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt": "f538182d6ad01bc1f288bdafe65eb2663294f144ecdbbfe161ef9960137136e2",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt": "3b65e3c1ecbdcf04fdbd9e9006b26e6bbf9702eeb52f49f239884ff0368510bd",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteABContactUseCase.kt": "eea5aa22574239e7d747255ba3b6579cdaebb39c6f9d67d0c630acdeb2306cf6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteLegacySharedExportsUseCase.kt": "faabfffcb9753f0bd4c6bb6326027f95e0b46413aad7c912d7f59f27b4681096",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteSharedQRImagesUseCase.kt": "8401acc6cad45121da39962becf06893e1172a04f6c46d03cf5dadd330eff4b5",
