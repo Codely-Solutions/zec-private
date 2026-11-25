@@ -96,7 +96,10 @@ interface SwapRepository {
         SwapAssetsUnavailableException::class,
         IllegalArgumentException::class
     )
-    suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus
+    suspend fun checkSwapStatus(
+        swapMetadata: TransactionSwapMetadata,
+        canRequest: (() -> Boolean)? = null,
+    ): SwapQuoteStatus
 
     fun clear()
 
@@ -553,9 +556,12 @@ class SwapRepositoryImpl(
         )
     }
 
-    override suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus {
+    override suspend fun checkSwapStatus(
+        swapMetadata: TransactionSwapMetadata,
+        canRequest: (() -> Boolean)?,
+    ): SwapQuoteStatus {
         val recovery = swapMetadata.requireNearRecovery()
-        val result = checkStatusUsingCatalog(recovery.reference)
+        val result = checkStatusUsingCatalog(recovery.reference, canRequest)
         require(result.depositAddress.address == recovery.reference) { "Swap status reference mismatch" }
         swapMetadata.reviewedIdentity?.let { expectedIdentity ->
             val response = requireNotNull((result as? NearSwapQuoteStatus)?.response?.quoteResponse)
@@ -583,14 +589,23 @@ class SwapRepositoryImpl(
         return result
     }
 
-    private suspend fun checkStatusUsingCatalog(reference: String): SwapQuoteStatus =
-        try {
-            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
+    private suspend fun checkStatusUsingCatalog(
+        reference: String,
+        canRequest: (() -> Boolean)?,
+    ): SwapQuoteStatus {
+        suspend fun request(): SwapQuoteStatus {
+            val tokens = getSupportedTokensForStatus()
+            check(canRequest?.invoke() != false) { "Swap status request is no longer active" }
+            return swapDataSource.checkSwapStatus(reference, tokens)
+        }
+        return try {
+            request()
         } catch (_: AssetNotFoundException) {
             // A partial historical cache must not prevent recovery when the live catalog returns.
             requestRefreshAssetsOnce()
-            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
+            request()
         }
+    }
 
     /**
      * Resolves the supported-token list the status lookup needs to map asset ids back to [SwapAsset]s.

@@ -43,8 +43,12 @@ class ExchangeRateOptInVM(
 
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-        preference.execute {
-            selectedCurrency.update { preferredFiatProvider.get() ?: FiatCurrency.USD }
+        retryRead()
+    }
+
+    fun retryRead() = preference.guardLoading {
+        if (selectedCurrency.value == null) {
+            preference.execute { selectedCurrency.update { preferredFiatProvider.get() ?: FiatCurrency.USD } }
         }
     }
 

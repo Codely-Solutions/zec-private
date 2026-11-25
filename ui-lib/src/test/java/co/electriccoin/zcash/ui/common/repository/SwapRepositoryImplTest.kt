@@ -763,6 +763,30 @@ class SwapRepositoryImplTest {
         repository(dataSource).also { it.requestRefreshAssetsOnce() }
 }
 
+class SwapStatusRequestAdmissionTest {
+    @Test
+    fun admissionIsRecheckedAfterTheCatalogBeforeSendingTheSavedReference() = runTest {
+        val allowed = java.util.concurrent.atomic.AtomicBoolean(true)
+        val zec = SwapAssetTestFixture.zecAsset()
+        val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
+        val dataSource = mockk<SwapDataSource> {
+            coEvery { getSupportedTokens() } coAnswers {
+                allowed.set(false)
+                listOf(zec, btc)
+            }
+        }
+        val repository = SwapRepositoryImpl(dataSource, mockk(relaxed = true)).apply { scope = backgroundScope }
+
+        val blocked = assertFailsWith<IllegalStateException> {
+            repository.checkSwapStatus(swapMetadata(), allowed::get)
+        }
+
+        assertEquals("Swap status request is no longer active", blocked.message)
+        coVerify(exactly = 1) { dataSource.getSupportedTokens() }
+        coVerify(exactly = 0) { dataSource.checkSwapStatus(any(), any()) }
+    }
+}
+
 private fun swapMetadata(
     address: String = "deposit-address",
     from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),

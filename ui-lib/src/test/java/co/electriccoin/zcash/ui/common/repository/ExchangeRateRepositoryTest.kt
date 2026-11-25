@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -30,6 +31,7 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,6 +44,46 @@ import kotlin.test.assertTrue
  * [ExchangeRateRepositoryImpl] when the CMC exchange-rate lookup fails or is unavailable (MOB-1124).
  */
 class ExchangeRateRepositoryTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun returningAfterAnInactiveOptOutWaitsForTheFreshConsentRead() = runTest {
+        var optedIn = true
+        var reads = 0
+        val readAgain = CompletableDeferred<Unit>()
+        val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
+            every { observe() } returns flow {
+                if (++reads > 1) readAgain.await()
+                emit(optedIn)
+                awaitCancellation()
+            }
+        }
+        val preferred = mockk<PreferredFiatProvider> {
+            every { observe() } returns flowOf(FiatCurrency.USD)
+        }
+        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(FiatCurrency.USD) } returns quote
+        }
+        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk(), backgroundScope)
+
+        val firstCollector = backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        assertEquals(quote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
+        firstCollector.cancel()
+        advanceTimeBy(3.minutes.inWholeMilliseconds)
+        optedIn = false
+
+        backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        assertEquals(2, reads)
+        coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
+
+        readAgain.complete(Unit)
+        runCurrent()
+        assertEquals(ExchangeRateState.OptedOut, repository.state.value)
+        coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun unreadablePreferredFiatLeavesHomeUsableAndRecoversWithTheSameCollector() = runTest {

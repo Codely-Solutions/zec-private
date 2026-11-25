@@ -58,7 +58,8 @@ class ExchangeRatePreferenceScreensTest {
         backgroundScope.launch { vm.state.collect { } }
         try {
             assertNull(vm.state.value.content)
-            assertIs<LceError.BottomSheet>(vm.state.value.error).state.primaryAction.onClick()
+            assertIs<LceError.BottomSheet>(vm.state.value.error)
+            vm.retryRead()
 
             assertNotNull(vm.state.value.content)
             assertNull(vm.state.value.error)
@@ -79,11 +80,11 @@ class ExchangeRatePreferenceScreensTest {
         backgroundScope.launch { vm.state.collect { } }
         try {
             assertNull(vm.state.value.content)
-            val error = assertIs<LceError.BottomSheet>(vm.state.value.error)
+            assertIs<LceError.BottomSheet>(vm.state.value.error)
             vm.onBack()
             verify(exactly = 1) { navigation.back() }
 
-            error.state.primaryAction.onClick()
+            vm.retryRead()
 
             assertNull(assertNotNull(vm.state.value.content).info)
             assertNull(vm.state.value.error)

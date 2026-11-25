@@ -1495,5 +1495,5 @@
     <string name="private_swap_refresh_unavailable">Status refresh unavailable.</string>
     <string name="private_swap_check_status">Check status</string>
     <string name="private_swap_refreshing">Refreshing status…</string>
-    <string name="currencyConversion_preferenceUnavailable">Currency conversion settings are unavailable. Try again.</string>
+    <string name="currencyConversion_preferenceUnavailable">Currency conversion settings are unavailable.</string>
 </resources>

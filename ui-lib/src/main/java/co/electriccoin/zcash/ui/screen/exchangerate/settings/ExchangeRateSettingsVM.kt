@@ -62,6 +62,11 @@ internal class ExchangeRateSettingsVM(
 
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
+        retryRead()
+    }
+
+    fun retryRead() = preference.guardLoading {
+        if (selectedCurrency.value != null) return@guardLoading
         preference.execute {
             val storedOptIn = isExchangeRateEnabledStorageProvider.get() == true
             val storedCurrency = preferredFiatProvider.get() ?: FiatCurrency.USD

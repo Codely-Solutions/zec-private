@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.exchangerate.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -28,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ZashiBaseSettingsOptIn
@@ -40,6 +43,52 @@ import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.common.LceRenderer
+
+@Composable
+internal fun <T : Any> ExchangeRatePreferenceScreen(
+    state: LceState<T>,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    content: @Composable (T) -> Unit,
+) {
+    BackHandler(onBack = onBack)
+    if (state.content == null) {
+        ExchangeRatePreferenceLoadView(state.isLoading, onBack, onRetry)
+    } else {
+        LceRenderer(state = state, content = content)
+    }
+}
+
+@Composable
+private fun ExchangeRatePreferenceLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
+    ZashiBaseSettingsOptIn(
+        header = stringResource(R.string.currencyConversion_title),
+        image = R.drawable.exchange_rate,
+        info = null,
+        onDismiss = onBack,
+        footer = {
+            if (!isLoading) {
+                ZashiButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
+                )
+            }
+        },
+        content = {
+            Spacer(modifier = Modifier.height(16.dp))
+            if (isLoading) {
+                CircularProgressIndicator(color = ZashiColors.Text.textPrimary)
+            } else {
+                Text(
+                    text = stringResource(R.string.currencyConversion_preferenceUnavailable),
+                    style = ZashiTypography.textSm,
+                    color = ZashiColors.Text.textTertiary,
+                )
+            }
+        },
+    )
+}
 
 @Composable
 internal fun ExchangeRateSettingsView(state: ExchangeRateSettingsState) {

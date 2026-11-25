@@ -32935,7 +32935,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..cab885775 100644
+index 7b9af8bf7..7ffc7a804 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -52,0 +53 @@
@@ -33379,7 +33379,7 @@ index 7b9af8bf7..cab885775 100644
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 @@ -1337,0 +1352 @@
-+    <string name="currencyConversion_preferenceUnavailable">La configuración de conversión de divisas no está disponible. Inténtalo de nuevo.</string>
++    <string name="currencyConversion_preferenceUnavailable">La configuración de conversión de divisas no está disponible.</string>
 diff --git a/ui-design-lib/src/main/res/ui/common/values/font_certs.xml b/ui-design-lib/src/main/res/ui/common/values/font_certs.xml
 deleted file mode 100644
 index 5ece3f5f9..000000000
@@ -33420,7 +33420,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..dc7dc5df2 100644
+index f41234151..8c26d8886 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -34085,7 +34085,7 @@ index f41234151..dc7dc5df2 100644
 +    <string name="private_swap_refresh_unavailable">Status refresh unavailable.</string>
 +    <string name="private_swap_check_status">Check status</string>
 +    <string name="private_swap_refreshing">Refreshing status…</string>
-+    <string name="currencyConversion_preferenceUnavailable">Currency conversion settings are unavailable. Try again.</string>
++    <string name="currencyConversion_preferenceUnavailable">Currency conversion settings are unavailable.</string>
 diff --git a/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextFieldTest.kt b/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextFieldTest.kt
 new file mode 100644
 index 000000000..488a5733f
@@ -42971,29 +42971,42 @@ index 58e408930..744105cfb 100644
 @@ -70,0 +67 @@ class EphemeralAddressRepositoryImpl(
 +        Twig.debug { "Stored a new ephemeral address" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
-index c4fa1b5f3..1018f68b7 100644
+index c4fa1b5f3..5551e3d1e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.retryConversionPreferenceRead
 @@ -14,0 +16 @@ import co.electriccoin.zcash.ui.common.wallet.StaleLock
 +import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
-@@ -53,0 +56 @@ class ExchangeRateRepositoryImpl(
+@@ -39,0 +42 @@ import java.net.UnknownHostException
++import kotlin.time.Duration
+@@ -53,0 +57 @@ class ExchangeRateRepositoryImpl(
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-@@ -55,2 +57,0 @@ class ExchangeRateRepositoryImpl(
+@@ -55,2 +58,0 @@ class ExchangeRateRepositoryImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 -
-@@ -71 +72,2 @@ class ExchangeRateRepositoryImpl(
+@@ -64 +66 @@ class ExchangeRateRepositoryImpl(
+-                started = SharingStarted.WhileSubscribed(),
++                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
+@@ -71 +73,2 @@ class ExchangeRateRepositoryImpl(
 -            .map { it ?: FiatCurrency.USD }
 +            .map<FiatCurrency?, FiatCurrency?> { it ?: FiatCurrency.USD }
 +            .retryConversionPreferenceRead(null)
-@@ -76 +78 @@ class ExchangeRateRepositoryImpl(
+@@ -75,2 +78,2 @@ class ExchangeRateRepositoryImpl(
+-                started = SharingStarted.WhileSubscribed(),
 -                initialValue = FiatCurrency.USD
++                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
 +                initialValue = null
-@@ -83 +85 @@ class ExchangeRateRepositoryImpl(
+@@ -83 +86 @@ class ExchangeRateRepositoryImpl(
 -                if (optedIn == true) {
 +                if (optedIn == true && fiat != null) {
-@@ -151,2 +153,8 @@ class ExchangeRateRepositoryImpl(
+@@ -132 +135,4 @@ class ExchangeRateRepositoryImpl(
+-                started = SharingStarted.WhileSubscribed(USD_EXCHANGE_REFRESH_LOCK_THRESHOLD),
++                started = SharingStarted.WhileSubscribed(
++                    USD_EXCHANGE_REFRESH_LOCK_THRESHOLD,
++                    replayExpiration = Duration.ZERO,
++                ),
+@@ -151,2 +157,8 @@ class ExchangeRateRepositoryImpl(
 -            lockDuration = USD_EXCHANGE_STALE_LOCK_THRESHOLD,
 -            onRefresh = { refreshExchangeRateUsdInternal().join() }
 +            lockDuration = WALLET_EXCHANGE_RATE_MAX_AGE,
@@ -43004,10 +43017,13 @@ index c4fa1b5f3..1018f68b7 100644
 +                    refreshPipeline.emit(Unit)
 +                }
 +            }
-@@ -183 +191 @@ class ExchangeRateRepositoryImpl(
+@@ -167 +179 @@ class ExchangeRateRepositoryImpl(
+-                started = SharingStarted.WhileSubscribed(5.seconds),
++                started = SharingStarted.WhileSubscribed(5.seconds, replayExpiration = Duration.ZERO),
+@@ -183 +195 @@ class ExchangeRateRepositoryImpl(
 -        expectedCurrency: FiatCurrency,
 +        expectedCurrency: FiatCurrency?,
-@@ -188,6 +196,6 @@ class ExchangeRateRepositoryImpl(
+@@ -188,6 +200,6 @@ class ExchangeRateRepositoryImpl(
 -                    isLoading = exchangeRate.observed.isLoading,
 -                    isStale = isStale,
 -                    isRefreshEnabled = isRefreshEnabled,
@@ -43020,14 +43036,14 @@ index c4fa1b5f3..1018f68b7 100644
 +                    currencyConversion = expectedCurrency?.let { exchangeRate.observed.currencyConversion },
 +                    expectedCurrency = expectedCurrency ?: FiatCurrency.USD,
 +                    error = expectedCurrency?.let { exchangeRate.error },
-@@ -208,4 +215,0 @@ class ExchangeRateRepositoryImpl(
+@@ -208,4 +219,0 @@ class ExchangeRateRepositoryImpl(
 -        refreshExchangeRateUsdInternal()
 -    }
 -
 -    private fun refreshExchangeRateUsdInternal() =
-@@ -217,0 +222 @@ class ExchangeRateRepositoryImpl(
+@@ -217,0 +226 @@ class ExchangeRateRepositoryImpl(
 +    }
-@@ -267 +271,0 @@ private val USD_EXCHANGE_REFRESH_LOCK_THRESHOLD = 2.minutes
+@@ -267 +275,0 @@ private val USD_EXCHANGE_REFRESH_LOCK_THRESHOLD = 2.minutes
 -private val USD_EXCHANGE_STALE_LOCK_THRESHOLD = 15.minutes
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/FlexaRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/FlexaRepository.kt
 deleted file mode 100644
@@ -44341,7 +44357,7 @@ index 000000000..15ea036e2
 +class UnsupportedSwapRecoveryException :
 +    IllegalArgumentException("This swap provider is not supported for recovery; the saved record has been preserved")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
-index 36d947b49..f1f8b5575 100644
+index 36d947b49..5bb8bbbbb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -44375,7 +44391,13 @@ index 36d947b49..f1f8b5575 100644
 -        slippage: BigDecimal
 +        slippage: BigDecimal,
 +        owner: IncomingSwapOwner? = null,
-@@ -87 +103,12 @@ interface SwapRepository {
+@@ -83 +99,4 @@ interface SwapRepository {
+-    suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus
++    suspend fun checkSwapStatus(
++        swapMetadata: TransactionSwapMetadata,
++        canRequest: (() -> Boolean)? = null,
++    ): SwapQuoteStatus
+@@ -87 +106,12 @@ interface SwapRepository {
 -    fun clearQuote()
 +    fun clearIfCurrent(expected: SwapQuoteData.Success): Boolean
 +
@@ -44389,10 +44411,10 @@ index 36d947b49..f1f8b5575 100644
 +
 +    /** Recheck after suspending between a navigation claim and opening Review. */
 +    fun isReviewCurrent(result: SwapQuoteData): Boolean
-@@ -89,0 +117,2 @@ interface SwapRepository {
+@@ -89,0 +120,2 @@ interface SwapRepository {
 +data class IncomingSwapOwner(val account: WalletAccount, val walletWriteToken: Long)
 +
-@@ -92,2 +121,22 @@ sealed interface SwapQuoteData {
+@@ -92,2 +124,22 @@ sealed interface SwapQuoteData {
 -        val quote: SwapQuote
 -    ) : SwapQuoteData
 +        val quote: SwapQuote,
@@ -44417,32 +44439,32 @@ index 36d947b49..f1f8b5575 100644
 +            return !fundingExpired
 +        }
 +    }
-@@ -107,0 +157,6 @@ sealed interface SwapQuoteData {
+@@ -107,0 +160,6 @@ sealed interface SwapQuoteData {
 +fun SwapTransactionProposal.requireFundingApproval(publication: SwapQuoteData.Success?) {
 +    check(publication != null && publication.quote === quote && publication.canFund()) {
 +        "The reviewed swap quote is unavailable or expired. Request a fresh quote before sending."
 +    }
 +}
 +
-@@ -112,0 +168 @@ data class SwapAssetsData(
+@@ -112,0 +171 @@ data class SwapAssetsData(
 +    val recoveryAssets: List<SwapAsset>? = null,
-@@ -117,0 +174,4 @@ data class SwapAssetsData(
+@@ -117,0 +177,4 @@ data class SwapAssetsData(
 +
 +    internal fun shouldRetryPrices(selectedAsset: SwapAsset?): Boolean =
 +        error != null || !isLoading && data != null &&
 +            (!hasUsableLivePrices || selectedAsset != null && selectedAsset.usdPrice?.signum() != 1)
-@@ -143,0 +204,4 @@ class SwapRepositoryImpl(
+@@ -143,0 +207,4 @@ class SwapRepositoryImpl(
 +    private val quoteGeneration = RequestGeneration()
 +    private var readyReview: SwapQuoteData? = null
 +    private var consumedReview: SwapQuoteData? = null
 +
-@@ -213,2 +276,0 @@ class SwapRepositoryImpl(
+@@ -213,2 +279,0 @@ class SwapRepositoryImpl(
 -        fun findZecSwapAsset(assets: List<SwapAsset>) = assets.find { asset -> asset.isZCashAsset }
 -
-@@ -221 +283 @@ class SwapRepositoryImpl(
+@@ -221 +286 @@ class SwapRepositoryImpl(
 -                        it.isZCashAsset || usdPrice == null || usdPrice == BigDecimal.ZERO
 +                        it.isZCashAsset || usdPrice == null || usdPrice <= BigDecimal.ZERO
-@@ -228,2 +290,6 @@ class SwapRepositoryImpl(
+@@ -228,2 +293,6 @@ class SwapRepositoryImpl(
 -            val filtered = filterSwapAssets(tokens)
 -            val zecAsset = findZecSwapAsset(tokens)
 +            // Price filtering must not turn an ambiguous raw ID into a selectable identity.
@@ -44451,27 +44473,27 @@ index 36d947b49..f1f8b5575 100644
 +            val selectable = tokens.filter { it.assetId in uniqueIds }
 +            val filtered = filterSwapAssets(selectable)
 +            val zecAsset = SwapPriceMarkets.findNativeZec(selectable)
-@@ -231,4 +297,2 @@ class SwapRepositoryImpl(
+@@ -231,4 +300,2 @@ class SwapRepositoryImpl(
 -                // Persist only assets that the live path can actually offer. Prices themselves are
 -                // stripped by the cache provider, but a cached selection will still exist in the
 -                // next live catalog instead of becoming a permanently disabled orphan.
 -                swapAssetCacheProvider.store(tokens.filter { it.isZCashAsset || it in filtered })
 +                // Historical identities must remain resolvable when a price or offer disappears.
 +                swapAssetCacheProvider.store(mergeRecoveryAssets(tokens, assets.value.recoveryAssets.orEmpty()))
-@@ -245 +309,2 @@ class SwapRepositoryImpl(
+@@ -245 +312,2 @@ class SwapRepositoryImpl(
 -                    isLoading = false
 +                    isLoading = false,
 +                    recoveryAssets = mergeRecoveryAssets(tokens, it.recoveryAssets.orEmpty()),
-@@ -269 +334 @@ class SwapRepositoryImpl(
+@@ -269 +337 @@ class SwapRepositoryImpl(
 -                zecAsset = cachedAssets.find(SwapAsset::isZCashAsset),
 +                zecAsset = SwapPriceMarkets.findNativeZec(cachedAssets),
-@@ -271,0 +337 @@ class SwapRepositoryImpl(
+@@ -271,0 +340 @@ class SwapRepositoryImpl(
 +                recoveryAssets = cachedAssets,
-@@ -316 +382,2 @@ class SwapRepositoryImpl(
+@@ -316 +385,2 @@ class SwapRepositoryImpl(
 -        slippage: BigDecimal
 +        slippage: BigDecimal,
 +        owner: IncomingSwapOwner?,
-@@ -318,42 +385,19 @@ class SwapRepositoryImpl(
+@@ -318,42 +388,19 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -44533,7 +44555,7 @@ index 36d947b49..f1f8b5575 100644
 +                        destinationAddress = destinationAddress,
 +                        destinationAsset = destinationAsset,
 +                        slippage = slippage
-@@ -361,5 +405,41 @@ class SwapRepositoryImpl(
+@@ -361,5 +408,41 @@ class SwapRepositoryImpl(
 -                    requireMatchingAddress(
 -                        name = "destinationAddress",
 -                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
@@ -44580,7 +44602,7 @@ index 36d947b49..f1f8b5575 100644
 +                    SwapQuoteData.Error(
 +                        mode = FLEX_INPUT,
 +                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
-@@ -367,14 +447,5 @@ class SwapRepositoryImpl(
+@@ -367,14 +450,5 @@ class SwapRepositoryImpl(
 -                    quote.update { SwapQuoteData.Success(quote = result) }
 -                } catch (e: SwapQuoteMismatchException) {
 -                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
@@ -44600,9 +44622,9 @@ index 36d947b49..f1f8b5575 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, e))
-@@ -381,0 +453 @@ class SwapRepositoryImpl(
+@@ -381,0 +456 @@ class SwapRepositoryImpl(
 +        }
-@@ -393,17 +465,29 @@ class SwapRepositoryImpl(
+@@ -393,17 +468,29 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -44649,7 +44671,7 @@ index 36d947b49..f1f8b5575 100644
 +                            quoted = result.amountInFormatted,
 +                            requested = amount,
 +                            decimals = result.originAsset.decimals
-@@ -411,18 +494,0 @@ class SwapRepositoryImpl(
+@@ -411,18 +497,0 @@ class SwapRepositoryImpl(
 -                    receivedQuote = result
 -                    when (mode) {
 -                        EXACT_INPUT,
@@ -44668,7 +44690,7 @@ index 36d947b49..f1f8b5575 100644
 -                                decimals = result.destinationAsset.decimals
 -                            )
 -                        }
-@@ -430,32 +496,6 @@ class SwapRepositoryImpl(
+@@ -430,32 +499,6 @@ class SwapRepositoryImpl(
 -                    requireExpectedAsset(
 -                        name = "originAsset",
 -                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -44707,12 +44729,12 @@ index 36d947b49..f1f8b5575 100644
 +                            quoted = result.amountOutFormatted,
 +                            requested = amount,
 +                            decimals = result.destinationAsset.decimals
-@@ -464,4 +503,0 @@ class SwapRepositoryImpl(
+@@ -464,4 +506,0 @@ class SwapRepositoryImpl(
 -                } catch (e: CancellationException) {
 -                    throw e
 -                } catch (e: Exception) {
 -                    quote.update { SwapQuoteData.Error(mode, e) }
-@@ -468,0 +505,40 @@ class SwapRepositoryImpl(
+@@ -468,0 +508,40 @@ class SwapRepositoryImpl(
 +                requireExpectedAsset(
 +                    name = "originAsset",
 +                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -44753,16 +44775,21 @@ index 36d947b49..f1f8b5575 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(mode, e))
-@@ -469,0 +546 @@ class SwapRepositoryImpl(
+@@ -469,0 +549 @@ class SwapRepositoryImpl(
 +        }
-@@ -480,5 +557,12 @@ class SwapRepositoryImpl(
+@@ -479,6 +559,16 @@ class SwapRepositoryImpl(
+-    override suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus {
 -        val result =
 -            swapDataSource.checkSwapStatus(
 -                depositAddress = swapMetadata.depositAddress,
 -                supportedTokens = getSupportedTokensForStatus()
 -            )
++    override suspend fun checkSwapStatus(
++        swapMetadata: TransactionSwapMetadata,
++        canRequest: (() -> Boolean)?,
++    ): SwapQuoteStatus {
 +        val recovery = swapMetadata.requireNearRecovery()
-+        val result = checkStatusUsingCatalog(recovery.reference)
++        val result = checkStatusUsingCatalog(recovery.reference, canRequest)
 +        require(result.depositAddress.address == recovery.reference) { "Swap status reference mismatch" }
 +        swapMetadata.reviewedIdentity?.let { expectedIdentity ->
 +            val response = requireNotNull((result as? NearSwapQuoteStatus)?.response?.quoteResponse)
@@ -44773,30 +44800,39 @@ index 36d947b49..f1f8b5575 100644
 +                require(result.quotedAmountOut.compareTo(approved) == 0) { "Swap status quoted output mismatch" }
 +            }
 +        }
-@@ -501,0 +586,9 @@ class SwapRepositoryImpl(
-+    private suspend fun checkStatusUsingCatalog(reference: String): SwapQuoteStatus =
-+        try {
-+            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
+@@ -501,0 +592,18 @@ class SwapRepositoryImpl(
++    private suspend fun checkStatusUsingCatalog(
++        reference: String,
++        canRequest: (() -> Boolean)?,
++    ): SwapQuoteStatus {
++        suspend fun request(): SwapQuoteStatus {
++            val tokens = getSupportedTokensForStatus()
++            check(canRequest?.invoke() != false) { "Swap status request is no longer active" }
++            return swapDataSource.checkSwapStatus(reference, tokens)
++        }
++        return try {
++            request()
 +        } catch (_: AssetNotFoundException) {
 +            // A partial historical cache must not prevent recovery when the live catalog returns.
 +            requestRefreshAssetsOnce()
-+            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
++            request()
 +        }
++    }
 +
-@@ -509,4 +602 @@ class SwapRepositoryImpl(
+@@ -509,4 +617 @@ class SwapRepositoryImpl(
 -        val loaded = assets.value
 -        if (loaded.data != null && loaded.zecAsset != null) {
 -            return loaded.data + loaded.zecAsset
 -        }
 +        assets.value.statusAssets()?.let { return it }
-@@ -515,5 +605 @@ class SwapRepositoryImpl(
+@@ -515,5 +620 @@ class SwapRepositoryImpl(
 -        if (refreshed?.data != null && refreshed.zecAsset != null) {
 -            return refreshed.data + refreshed.zecAsset
 -        }
 -        refreshed?.error?.let { throw it }
 -        throw SwapAssetsUnavailableException()
 +        return refreshed?.statusAssets() ?: throw (refreshed?.error ?: SwapAssetsUnavailableException())
-@@ -533,4 +619,70 @@ class SwapRepositoryImpl(
+@@ -533,4 +634,70 @@ class SwapRepositoryImpl(
 -    override fun clearQuote() {
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob = null
@@ -44871,7 +44907,7 @@ index 36d947b49..f1f8b5575 100644
 +            is SwapQuoteData.Error -> true
 +            SwapQuoteData.Loading -> false
 +        }
-@@ -539,0 +692,20 @@ class SwapRepositoryImpl(
+@@ -539,0 +707,20 @@ class SwapRepositoryImpl(
 +private fun SwapAssetsData.admits(quote: SwapQuote): Boolean =
 +    admits(quote.originAsset) && admits(quote.destinationAsset)
 +
@@ -44892,23 +44928,23 @@ index 36d947b49..f1f8b5575 100644
 +    recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }
 +        ?: data?.let { tokens -> zecAsset?.let { tokens + it } }
 +
-@@ -566,3 +738,2 @@ private fun requireExpectedAsset(
+@@ -566,3 +753,2 @@ private fun requireExpectedAsset(
 - * Looks the user-selected asset up in the currently-supported assets by id (requiring it to still be
 - * supported) and matches the quote against that canonical record — catching a stale/unknown selection
 - * and a selection whose ticker/chain disagrees with the supported record.
 + * Rechecks both sides against the current catalog before accepting the response, then checks the
 + * response's asset against the selected route.
-@@ -576 +747 @@ private fun requireSupportedSelectedAsset(
+@@ -576 +762 @@ private fun requireSupportedSelectedAsset(
 -    supportedAssets: List<SwapAsset>?,
 +    catalog: SwapAssetsData,
-@@ -580,4 +751,2 @@ private fun requireSupportedSelectedAsset(
+@@ -580,4 +766,2 @@ private fun requireSupportedSelectedAsset(
 -    val supported = supportedAssets?.firstOrNull { it.assetId == selectedAsset.assetId }
 -    requireNotNull(supported) {
 -        "Swap quote asset mismatch: $name=${selectedAsset.assetId} is not a currently-supported swap asset"
 -    }
 +    require(catalog.zecAsset?.isCanonicalNativeZec == true) { "Swap quote requires native ZEC" }
 +    val supported = requireSelectableAsset(catalog.data, selectedAsset)
-@@ -592,0 +762,9 @@ private fun requireSupportedSelectedAsset(
+@@ -592,0 +777,9 @@ private fun requireSupportedSelectedAsset(
 +private fun requireSelectableAsset(supportedAssets: List<SwapAsset>?, selectedAsset: SwapAsset): SwapAsset {
 +    require(SwapPriceMarkets.reference(selectedAsset) != null && !selectedAsset.isZCashAsset) {
 +        "Swap quote selection does not match a pinned counter-asset"
@@ -47694,7 +47730,7 @@ index f37946f70..11382bc0e 100644
 +        )
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..476cc637b 100644
+index a33c847ad..b5ce18237 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -47736,7 +47772,7 @@ index a33c847ad..476cc637b 100644
 +    internal fun observeForAccount(
 +        depositAddress: String,
 +        account: WalletAccount,
-+        canRefresh: () -> Boolean = { true },
++        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> = observe(depositAddress, null, account, canRefresh)
 +
 @@ -23 +57,6 @@ class GetSwapStatusUseCase(
@@ -47745,7 +47781,7 @@ index a33c847ad..476cc637b 100644
 +        depositAddress: String,
 +        initial: TransactionSwapMetadata?,
 +        account: WalletAccount? = null,
-+        canRefresh: () -> Boolean = { true },
++        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> =
 @@ -32 +71,4 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
@@ -47844,16 +47880,16 @@ index a33c847ad..476cc637b 100644
 +    private suspend fun refresh(
 +        depositAddress: String,
 +        expected: TransactionSwapMetadata,
-+        canRefresh: () -> Boolean,
++        canRefresh: (() -> Boolean)?,
 +    ): Pair<SwapQuoteStatus, TransactionSwapMetadata> {
 +        val refresh = synchronized(refreshes) {
 +            refreshes.getOrPut(depositAddress, ::RefreshLock).also { it.users++ }
 +        }
 +        try {
 +            return refresh.mutex.withLock {
-+                check(canRefresh()) { "Swap status refresh is no longer active" }
-+                val result = swapRepository.checkSwapStatus(expected)
-+                check(canRefresh()) { "Swap status refresh is no longer active" }
++                check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
++                val result = swapRepository.checkSwapStatus(expected, canRefresh)
++                check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
 +                val saved = metadataRepository.updateSwap(expected, result)
 +                    ?: throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
 +                result to saved
@@ -55586,27 +55622,28 @@ index c7058657a..e1bb4d0f0 100644
 @@ -92,0 +105 @@ class SyncErrorVM(
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt
-index a39feddb9..8aac44475 100644
+index a39feddb9..330006cf9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt
-@@ -6,0 +7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import co.electriccoin.zcash.ui.screen.common.LceRenderer
-@@ -8,0 +10 @@ import org.koin.androidx.compose.koinViewModel
+@@ -3 +2,0 @@ package co.electriccoin.zcash.ui.screen.exchangerate.optin
+-import androidx.activity.compose.BackHandler
+@@ -6,0 +6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import co.electriccoin.zcash.ui.screen.exchangerate.settings.ExchangeRatePreferenceScreen
+@@ -8,0 +9 @@ import org.koin.androidx.compose.koinViewModel
 +import org.koin.core.parameter.parametersOf
-@@ -11,2 +13,2 @@ import org.koin.androidx.compose.koinViewModel
+@@ -11,2 +12,2 @@ import org.koin.androidx.compose.koinViewModel
 -fun ExchangeRateOptInScreen() {
 -    val vm = koinViewModel<ExchangeRateOptInVM>()
 +fun ExchangeRateOptInScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<ExchangeRateOptInVM> { parametersOf(sourceEntryId) }
-@@ -14,2 +16,4 @@ fun ExchangeRateOptInScreen() {
+@@ -14,2 +15,3 @@ fun ExchangeRateOptInScreen() {
 -    BackHandler { state?.onBack() }
 -    state?.let { ExchangeRateOptInView(state = it) }
-+    BackHandler { vm.onBack() }
-+    LceRenderer(state = state) { content ->
++    ExchangeRatePreferenceScreen(state, vm::onBack, vm::retryRead) { content ->
 +        ExchangeRateOptInView(state = content)
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInVM.kt
-index b52dae825..9933edcdf 100644
+index b52dae825..ac97ff157 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInVM.kt
 @@ -6 +5,0 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -55648,26 +55685,32 @@ index b52dae825..9933edcdf 100644
 +            .withLce(preference) { error ->
 +                errorMapper.mapToState(error, message = stringRes(R.string.currencyConversion_preferenceUnavailable))
 +            }.stateIn(this)
-@@ -44 +45,2 @@ class ExchangeRateOptInVM(
+@@ -44,2 +45,7 @@ class ExchangeRateOptInVM(
 -        viewModelScope.launch {
+-            selectedCurrency.update { preferredFiatProvider.get() ?: FiatCurrency.USD }
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-+        preference.execute {
-@@ -61 +63 @@ class ExchangeRateOptInVM(
++        retryRead()
++    }
++
++    fun retryRead() = preference.guardLoading {
++        if (selectedCurrency.value == null) {
++            preference.execute { selectedCurrency.update { preferredFiatProvider.get() ?: FiatCurrency.USD } }
+@@ -61 +67 @@ class ExchangeRateOptInVM(
 -            onBack = ::dismissOptInExchangeRateUsd,
 +            onBack = ::onBack,
-@@ -66 +68,3 @@ class ExchangeRateOptInVM(
+@@ -66 +72 @@ class ExchangeRateOptInVM(
 -    private fun onSkipClick() = viewModelScope.launch { optInExchangeRate(false) }
 +    private fun onSkipClick() = save(optIn = false)
-+
-+    private fun optInExchangeRateUsd() = save(optIn = true)
-@@ -68,2 +72,4 @@ class ExchangeRateOptInVM(
+@@ -68,2 +74,6 @@ class ExchangeRateOptInVM(
 -    private fun optInExchangeRateUsd() =
 -        viewModelScope.launch { optInExchangeRate(true, selectedCurrency.value) }
++    private fun optInExchangeRateUsd() = save(optIn = true)
++
 +    private fun save(optIn: Boolean) = preference.guardLoading {
 +        val currency = selectedCurrency.value.takeIf { optIn }
 +        preference.execute { optInExchangeRate(optIn, currency, sourceEntryId = sourceEntryId) }
 +    }
-@@ -71 +77 @@ class ExchangeRateOptInVM(
+@@ -71 +81 @@ class ExchangeRateOptInVM(
 -    private fun dismissOptInExchangeRateUsd() = navigationRouter.back()
 +    fun onBack() = navigationRouter.back()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/picker/CurrencyConversionPickerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/picker/CurrencyConversionPickerView.kt
@@ -55681,27 +55724,26 @@ index 5448c8223..f874fa657 100644
 +            contentDescription = null,
 +            colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsScreen.kt
-index 0bae8adfd..4ccafee19 100644
+index 0bae8adfd..a0d0af563 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsScreen.kt
-@@ -6,0 +7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import co.electriccoin.zcash.ui.screen.common.LceRenderer
-@@ -8,0 +10 @@ import org.koin.androidx.compose.koinViewModel
+@@ -3 +2,0 @@ package co.electriccoin.zcash.ui.screen.exchangerate.settings
+-import androidx.activity.compose.BackHandler
+@@ -8,0 +8 @@ import org.koin.androidx.compose.koinViewModel
 +import org.koin.core.parameter.parametersOf
-@@ -11,2 +13,2 @@ import org.koin.androidx.compose.koinViewModel
+@@ -11,2 +11,2 @@ import org.koin.androidx.compose.koinViewModel
 -fun ExchangeRateSettingsScreen() {
 -    val vm = koinViewModel<ExchangeRateSettingsVM>()
 +fun ExchangeRateSettingsScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<ExchangeRateSettingsVM> { parametersOf(sourceEntryId) }
-@@ -14,2 +16,4 @@ fun ExchangeRateSettingsScreen() {
+@@ -14,2 +14,3 @@ fun ExchangeRateSettingsScreen() {
 -    BackHandler { state?.onBack() }
 -    state?.let { ExchangeRateSettingsView(state = it) }
-+    BackHandler { vm.onBack() }
-+    LceRenderer(state = state) { content ->
++    ExchangeRatePreferenceScreen(state, vm::onBack, vm::retryRead) { content ->
 +        ExchangeRateSettingsView(state = content)
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsVM.kt
-index 6efb88e63..1aa319504 100644
+index 6efb88e63..a6fd29424 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsVM.kt
 @@ -7 +6,0 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -55748,28 +55790,33 @@ index 6efb88e63..1aa319504 100644
 +        }.withLce(preference) { error ->
 +            errorMapper.mapToState(error, message = stringRes(R.string.currencyConversion_preferenceUnavailable))
 +        }.stateIn(this)
-@@ -58,3 +64,6 @@ internal class ExchangeRateSettingsVM(
+@@ -58,3 +64,11 @@ internal class ExchangeRateSettingsVM(
 -        viewModelScope.launch {
 -            isOptedInOriginal = isExchangeRateEnabledStorageProvider.get() == true
 -            selectedCurrencyOriginal = preferredFiatProvider.get() ?: FiatCurrency.USD
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
++        retryRead()
++    }
++
++    fun retryRead() = preference.guardLoading {
++        if (selectedCurrency.value != null) return@guardLoading
 +        preference.execute {
 +            val storedOptIn = isExchangeRateEnabledStorageProvider.get() == true
 +            val storedCurrency = preferredFiatProvider.get() ?: FiatCurrency.USD
 +            isOptedInOriginal = storedOptIn
 +            selectedCurrencyOriginal = storedCurrency
-@@ -69 +78 @@ internal class ExchangeRateSettingsVM(
+@@ -69 +83 @@ internal class ExchangeRateSettingsVM(
 -        isTorEnabled: Boolean?
 +        torPreference: Result<Boolean?>?
-@@ -93,2 +102,2 @@ internal class ExchangeRateSettingsVM(
+@@ -93,2 +107,2 @@ internal class ExchangeRateSettingsVM(
 -                !VersionInfo.IS_CMC_AVAILABLE -> null
 -                isTorEnabled == true -> stringRes(R.string.currencyConversion_torOnInfo)
 +                !VersionInfo.IS_CMC_AVAILABLE || torPreference == null || torPreference.isFailure -> null
 +                torPreference.getOrNull() == true -> stringRes(R.string.currencyConversion_torOnInfo)
-@@ -99 +108 @@ internal class ExchangeRateSettingsVM(
+@@ -99 +113 @@ internal class ExchangeRateSettingsVM(
 -    private fun onBack() = navigationRouter.back()
 +    fun onBack() = navigationRouter.back()
-@@ -103,2 +112,5 @@ internal class ExchangeRateSettingsVM(
+@@ -103,2 +117,5 @@ internal class ExchangeRateSettingsVM(
 -    private fun onOptInExchangeRateUsdClick() =
 -        viewModelScope.launch { optInExchangeRate(isOptedIn.value, selectedCurrency.value) }
 +    private fun onOptInExchangeRateUsdClick() = preference.guardLoading {
@@ -55778,14 +55825,67 @@ index 6efb88e63..1aa319504 100644
 +        preference.execute { optInExchangeRate(optIn, currency, sourceEntryId = sourceEntryId) }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsView.kt
-index 1ff687453..d86122c8a 100644
+index 1ff687453..363beb343 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/settings/ExchangeRateSettingsView.kt
-@@ -22,0 +23 @@ import androidx.compose.ui.draw.clip
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.exchangerate.settings
++import androidx.activity.compose.BackHandler
+@@ -17,0 +19 @@ import androidx.compose.material3.Text
++import androidx.compose.material3.CircularProgressIndicator
+@@ -22,0 +25 @@ import androidx.compose.ui.draw.clip
 +import androidx.compose.ui.graphics.ColorFilter
-@@ -33,0 +35 @@ import co.electriccoin.zcash.ui.design.component.ZashiButton
+@@ -29,0 +33 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.LceState
+@@ -33,0 +38 @@ import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiSelectionIndicator
-@@ -132,11 +134 @@ fun Option(
+@@ -40,0 +46,46 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.common.LceRenderer
++
++@Composable
++internal fun <T : Any> ExchangeRatePreferenceScreen(
++    state: LceState<T>,
++    onBack: () -> Unit,
++    onRetry: () -> Unit,
++    content: @Composable (T) -> Unit,
++) {
++    BackHandler(onBack = onBack)
++    if (state.content == null) {
++        ExchangeRatePreferenceLoadView(state.isLoading, onBack, onRetry)
++    } else {
++        LceRenderer(state = state, content = content)
++    }
++}
++
++@Composable
++private fun ExchangeRatePreferenceLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
++    ZashiBaseSettingsOptIn(
++        header = stringResource(R.string.currencyConversion_title),
++        image = R.drawable.exchange_rate,
++        info = null,
++        onDismiss = onBack,
++        footer = {
++            if (!isLoading) {
++                ZashiButton(
++                    modifier = Modifier.fillMaxWidth(),
++                    state = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
++                )
++            }
++        },
++        content = {
++            Spacer(modifier = Modifier.height(16.dp))
++            if (isLoading) {
++                CircularProgressIndicator(color = ZashiColors.Text.textPrimary)
++            } else {
++                Text(
++                    text = stringResource(R.string.currencyConversion_preferenceUnavailable),
++                    style = ZashiTypography.textSm,
++                    color = ZashiColors.Text.textTertiary,
++                )
++            }
++        },
++    )
++}
+@@ -132,11 +183 @@ fun Option(
 -        Image(
 -            painter =
 -                painterResource(
@@ -55798,7 +55898,7 @@ index 1ff687453..d86122c8a 100644
 -            contentDescription = null
 -        )
 +        ZashiSelectionIndicator(isChecked = isChecked, circular = true, useDot = true)
-@@ -205 +197,2 @@ internal fun CurrencyField(
+@@ -205 +246,2 @@ internal fun CurrencyField(
 -                contentDescription = null
 +                contentDescription = null,
 +                colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
@@ -82962,7 +83062,7 @@ index 000000000..50d91b699
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepositoryTest.kt
-index 64a93296c..0e732f683 100644
+index 64a93296c..cacb90dd8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepositoryTest.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -82973,10 +83073,11 @@ index 64a93296c..0e732f683 100644
 +import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 @@ -5,0 +10 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 +import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
-@@ -12,0 +18,11 @@ import kotlinx.coroutines.test.runTest
+@@ -12,0 +18,12 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.advanceTimeBy
@@ -82985,11 +83086,52 @@ index 64a93296c..0e732f683 100644
 +import io.mockk.coEvery
 +import io.mockk.every
 +import io.mockk.mockk
-@@ -15,0 +32 @@ import java.net.UnknownHostException
+@@ -15,0 +33,2 @@ import java.net.UnknownHostException
 +import kotlin.time.Clock
-@@ -18,0 +36 @@ import kotlin.test.assertFalse
++import kotlin.time.Duration.Companion.minutes
+@@ -18,0 +38 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertIs
-@@ -26,0 +45,39 @@ class ExchangeRateRepositoryTest {
+@@ -26,0 +47,79 @@ class ExchangeRateRepositoryTest {
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun returningAfterAnInactiveOptOutWaitsForTheFreshConsentRead() = runTest {
++        var optedIn = true
++        var reads = 0
++        val readAgain = CompletableDeferred<Unit>()
++        val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
++            every { observe() } returns flow {
++                if (++reads > 1) readAgain.await()
++                emit(optedIn)
++                awaitCancellation()
++            }
++        }
++        val preferred = mockk<PreferredFiatProvider> {
++            every { observe() } returns flowOf(FiatCurrency.USD)
++        }
++        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
++        val rates = mockk<ExchangeRateDataSource> {
++            coEvery { getExchangeRate(FiatCurrency.USD) } returns quote
++        }
++        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk(), backgroundScope)
++
++        val firstCollector = backgroundScope.launch { repository.state.collect { } }
++        runCurrent()
++        assertEquals(quote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
++        firstCollector.cancel()
++        advanceTimeBy(3.minutes.inWholeMilliseconds)
++        optedIn = false
++
++        backgroundScope.launch { repository.state.collect { } }
++        runCurrent()
++        assertEquals(2, reads)
++        coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
++
++        readAgain.complete(Unit)
++        runCurrent()
++        assertEquals(ExchangeRateState.OptedOut, repository.state.value)
++        coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
++    }
++
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun unreadablePreferredFiatLeavesHomeUsableAndRecoversWithTheSameCollector() = runTest {
@@ -83959,7 +84101,7 @@ index fb0bd4b18..c3ec06f61 100644
 +            assertEquals(listOf(btc), repository.assets.value.data)
 +            assertEquals(listOf(zec, btc, unpriced), repository.assets.value.recoveryAssets)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..a9661ee09 100644
+index d55620b20..ae535c12c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +4 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -84036,7 +84178,31 @@ index d55620b20..a9661ee09 100644
 @@ -764 +758 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
-@@ -770,0 +765,17 @@ class SwapRepositoryImplTest {
+@@ -770,0 +765,41 @@ class SwapRepositoryImplTest {
++
++class SwapStatusRequestAdmissionTest {
++    @Test
++    fun admissionIsRecheckedAfterTheCatalogBeforeSendingTheSavedReference() = runTest {
++        val allowed = java.util.concurrent.atomic.AtomicBoolean(true)
++        val zec = SwapAssetTestFixture.zecAsset()
++        val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
++        val dataSource = mockk<SwapDataSource> {
++            coEvery { getSupportedTokens() } coAnswers {
++                allowed.set(false)
++                listOf(zec, btc)
++            }
++        }
++        val repository = SwapRepositoryImpl(dataSource, mockk(relaxed = true)).apply { scope = backgroundScope }
++
++        val blocked = assertFailsWith<IllegalStateException> {
++            repository.checkSwapStatus(swapMetadata(), allowed::get)
++        }
++
++        assertEquals("Swap status request is no longer active", blocked.message)
++        coVerify(exactly = 1) { dataSource.getSupportedTokens() }
++        coVerify(exactly = 0) { dataSource.checkSwapStatus(any(), any()) }
++    }
++}
 +
 +private fun swapMetadata(
 +    address: String = "deposit-address",
@@ -96328,10 +96494,10 @@ index 5544e91f2..85c88f172 100644
 +                reportAccess = noReportAccess(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/ExchangeRatePreferenceScreensTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/ExchangeRatePreferenceScreensTest.kt
 new file mode 100644
-index 000000000..3d4e4da03
+index 000000000..2ef6c3eed
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/ExchangeRatePreferenceScreensTest.kt
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,101 @@
 +package co.electriccoin.zcash.ui.screen.exchangerate
 +
 +import androidx.lifecycle.viewModelScope
@@ -96392,7 +96558,8 @@ index 000000000..3d4e4da03
 +        backgroundScope.launch { vm.state.collect { } }
 +        try {
 +            assertNull(vm.state.value.content)
-+            assertIs<LceError.BottomSheet>(vm.state.value.error).state.primaryAction.onClick()
++            assertIs<LceError.BottomSheet>(vm.state.value.error)
++            vm.retryRead()
 +
 +            assertNotNull(vm.state.value.content)
 +            assertNull(vm.state.value.error)
@@ -96413,11 +96580,11 @@ index 000000000..3d4e4da03
 +        backgroundScope.launch { vm.state.collect { } }
 +        try {
 +            assertNull(vm.state.value.content)
-+            val error = assertIs<LceError.BottomSheet>(vm.state.value.error)
++            assertIs<LceError.BottomSheet>(vm.state.value.error)
 +            vm.onBack()
 +            verify(exactly = 1) { navigation.back() }
 +
-+            error.state.primaryAction.onClick()
++            vm.retryRead()
 +
 +            assertNull(assertNotNull(vm.state.value.content).info)
 +            assertNull(vm.state.value.error)

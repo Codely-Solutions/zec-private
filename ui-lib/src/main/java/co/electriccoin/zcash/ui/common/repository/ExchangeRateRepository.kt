@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.net.UnknownHostException
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,7 +63,7 @@ class ExchangeRateRepositoryImpl(
             .observe()
             .stateIn(
                 scope = scope,
-                started = SharingStarted.WhileSubscribed(),
+                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
                 initialValue = null
             )
 
@@ -74,7 +75,7 @@ class ExchangeRateRepositoryImpl(
             .distinctUntilChanged()
             .stateIn(
                 scope = scope,
-                started = SharingStarted.WhileSubscribed(),
+                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
                 initialValue = null
             )
 
@@ -131,7 +132,10 @@ class ExchangeRateRepositoryImpl(
                 }
             }.stateIn(
                 scope = scope,
-                started = SharingStarted.WhileSubscribed(USD_EXCHANGE_REFRESH_LOCK_THRESHOLD),
+                started = SharingStarted.WhileSubscribed(
+                    USD_EXCHANGE_REFRESH_LOCK_THRESHOLD,
+                    replayExpiration = Duration.ZERO,
+                ),
                 initialValue = ExchangeRateResult(ObserveFiatCurrencyResult(isLoading = true))
             )
 
@@ -172,7 +176,7 @@ class ExchangeRateRepositoryImpl(
         }.distinctUntilChanged()
             .stateIn(
                 scope = scope,
-                started = SharingStarted.WhileSubscribed(5.seconds),
+                started = SharingStarted.WhileSubscribed(5.seconds, replayExpiration = Duration.ZERO),
                 initialValue =
                     createState(
                         isOptedIn = isExchangeRateOptedIn.value,
