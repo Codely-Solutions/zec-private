@@ -424,15 +424,7 @@ class MigrationReviewVM(
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        val committed = committedMigration?.takeIf { it.reviewed === reviewed }
-        if (committed != null) {
-            if (sdk.hasCommitted(reviewed.schedule)) {
-                finishCommittedMigration(committed, accountKeyId)
-            } else {
-                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-            }
-            return
-        }
+        if (resumeCommittedMigration(sdk, reviewed, accountKeyId)) return
         val nativePlanActive = sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         val pending = pendingMigrationScheduleRepository.review(accountKeyId)
         check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
@@ -489,6 +481,20 @@ class MigrationReviewVM(
         } else {
             failure.value = result
         }
+    }
+
+    private suspend fun resumeCommittedMigration(
+        sdk: OrchardMigrationSdk,
+        reviewed: ReviewedMigrationSchedule,
+        accountKeyId: String,
+    ): Boolean {
+        val committed = committedMigration?.takeIf { it.reviewed === reviewed } ?: return false
+        if (sdk.hasCommitted(reviewed.schedule)) {
+            finishCommittedMigration(committed, accountKeyId)
+        } else {
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+        }
+        return true
     }
 
     @Suppress("TooGenericExceptionCaught") // After native commit, retry only the app's scheduling work.

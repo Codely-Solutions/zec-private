@@ -57,8 +57,11 @@ class ShieldFundsUseCase(
         return { shield(approval, closeCurrentScreen, sourceEntryId) }
     }
 
+    private fun canStartShield(approval: ShieldingApproval, sourceEntryId: String?): Boolean =
+        approval.isCurrent() && navigationRouter.isAtEntry(sourceEntryId)
+
     private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean, sourceEntryId: String?) {
-        if (job?.isActive == true || !approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return
+        if (job?.isActive == true || !canStartShield(approval, sourceEntryId)) return
         val outcomeEntryId =
             if (closeCurrentScreen && sourceEntryId != null) {
                 navigationRouter.activeEntry.value?.contentEntryId ?: sourceEntryId
@@ -67,10 +70,10 @@ class ShieldFundsUseCase(
             }
         job =
             scope.launch {
-                if (!approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return@launch
+                if (!canStartShield(approval, sourceEntryId)) return@launch
                 messageAvailabilityDataSource.onShieldingInitiated()
 
-                if (!approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return@launch
+                if (!canStartShield(approval, sourceEntryId)) return@launch
                 when (approval.account) {
                     is KeystoneAccount -> {
                         navigationRouter.whileAtEntry(sourceEntryId) {
