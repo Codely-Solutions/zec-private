@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.TransactionPool
@@ -34,7 +33,6 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
 import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
-import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
 import co.electriccoin.zcash.ui.design.util.imageRes
@@ -126,32 +124,11 @@ class TransactionDetailVM(
                     header = createTransactionHeaderState(transaction, info),
                     primaryButton = refresh ?: createPrimaryButtonState(transaction, support),
                     secondaryButton = if (refresh != null) support else createSecondaryButtonState(transaction),
-                    bookmarkButton =
-                        IconButtonState(
-                            icon =
-                                if (transaction.metadata.isBookmarked) {
-                                    R.drawable.ic_transaction_detail_bookmark
-                                } else {
-                                    R.drawable.ic_transaction_detail_no_bookmark
-                                },
-                            contentDescription = stringRes(
-                                if (transaction.metadata.isBookmarked) {
-                                    co.electriccoin.zcash.ui.design.R.string.accessibility_remove_bookmark
-                                } else {
-                                    co.electriccoin.zcash.ui.design.R.string.accessibility_add_bookmark
-                                },
-                            ),
-                            onClick = { onBookmarkClick(transaction) },
-                            hapticFeedbackType =
-                                if (transaction.metadata.isBookmarked) {
-                                    HapticFeedbackType.ToggleOff
-                                } else {
-                                    HapticFeedbackType.ToggleOn
-                                }
-                        ).takeIf {
-                            transaction.transaction.accountUuid != null &&
-                                transaction.metadata.bookmarkWriteToken != null
-                        },
+                    bookmarkButton = mapper.createBookmarkButton(transaction.metadata.isBookmarked) {
+                        onBookmarkClick(transaction)
+                    }.takeIf {
+                        transaction.transaction.accountUuid != null && transaction.metadata.bookmarkWriteToken != null
+                    },
                     errorFooter = if (refreshFailed) null else createErrorFooter(transaction),
                     infoFooter = if (refreshFailed) {
                         stringRes(R.string.private_swap_refresh_unavailable)

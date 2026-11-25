@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -13,6 +14,7 @@ import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
+import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
 import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
 import co.electriccoin.zcash.ui.design.util.ImageResource
@@ -39,6 +41,20 @@ internal fun SwapQuoteStatusData.settlementCheckButton(reloadHandle: ReloadHandl
 }
 
 class CommonTransactionDetailMapper {
+    fun createBookmarkButton(bookmarked: Boolean, onClick: () -> Unit) = IconButtonState(
+        icon = if (bookmarked) {
+            R.drawable.ic_transaction_detail_bookmark
+        } else {
+            R.drawable.ic_transaction_detail_no_bookmark
+        },
+        contentDescription = stringRes(
+            if (bookmarked) co.electriccoin.zcash.ui.design.R.string.accessibility_remove_bookmark
+            else co.electriccoin.zcash.ui.design.R.string.accessibility_add_bookmark,
+        ),
+        hapticFeedbackType = if (bookmarked) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+        onClick = onClick,
+    )
+
     fun createTransactionDetailTimestamp(timestamp: Instant?) =
         timestamp
             ?.atZone(ZoneId.systemDefault())

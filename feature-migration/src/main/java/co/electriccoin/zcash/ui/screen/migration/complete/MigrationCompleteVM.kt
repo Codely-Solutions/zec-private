@@ -218,7 +218,7 @@ class MigrationCompleteVM(
     private fun onLockBalance(reviewedDust: Long) =
         lockLce.execute {
             val key = activeCompletionOwner().sdkAccount.accountUuid.toStorageKeyId()
-            val locked = ownsCompletionEntry() && lockOrchardBalance(key) {
+            val locked = ownsCompletionEntry && lockOrchardBalance(key) {
                 matchesReviewedResidue(reviewedDust)
             }
             if (locked) hasLockedOrchardDustStorageProvider.store(key, true)
@@ -230,7 +230,7 @@ class MigrationCompleteVM(
     private fun onMigrateAnyway(reviewedDust: Long) =
         migrateAnywayLce.execute {
             val owner = activeCompletionOwner()
-            if (!ownsCompletionEntry()) return@execute
+            if (!ownsCompletionEntry) return@execute
             if (owner is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
             owner.requireSpendable()
             if (!matchesReviewedResidue(reviewedDust)) return@execute
@@ -270,10 +270,11 @@ class MigrationCompleteVM(
         val balance = getOrchardBalance(account).value
         activeCompletionOwner()
         if (balance != reviewed) refreshedDust.value = balance
-        return ownsCompletionEntry() && balance == reviewed && reviewed > 0
+        return ownsCompletionEntry && balance == reviewed && reviewed > 0
     }
 
-    private fun ownsCompletionEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
+    private val ownsCompletionEntry
+        get() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
 
     private suspend fun authenticateMigrateAnyway(): Boolean =
         try {
