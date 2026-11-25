@@ -3563,7 +3563,7 @@ index b50298078..66398d786 100644
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
-index 4ae26a42d..6375450fc 100644
+index 4ae26a42d..9c4d123cf 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 @@ -6,0 +7,5 @@ import cash.z.ecc.android.sdk.model.Pczt
@@ -3880,9 +3880,55 @@ index 4ae26a42d..6375450fc 100644
 @@ -370 +632 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
 +            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
-@@ -395 +657 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -390,31 +652,17 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+-    fun aSignedSessionWithoutAProposalFailsWithoutARetry() =
+-        runTest(dispatcher) {
+-            givenPczt(ledgerAccount())
+-            runCurrent()
+-            every { ledgerSigningDataSource.isLinked } returns true
 -            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
-+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
+-            repository.startSigning()
+-            runCurrent()
+-            assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+-
+-            repository.failSignedSessionWithoutProposal()
+-
+-            val failed = repository.signingState.value
+-            assertTrue(failed is LedgerSigningState.Failed)
+-            assertEquals(LedgerIssueKind.UNKNOWN, failed.issue.kind)
+-            assertEquals(LedgerIssueRetry.NONE, failed.issue.retry)
+-        }
+-
+-    @Test
+-    fun failingASessionThatIsNotSignedChangesNothing() =
+-        runTest(dispatcher) {
+-            givenPczt(ledgerAccount())
+-            runCurrent()
+-            repository.startSigning()
+-            runCurrent()
+-            assertEquals(LedgerSigningState.Scanning, repository.signingState.value)
+-
+-            repository.failSignedSessionWithoutProposal()
+-
+-            assertEquals(LedgerSigningState.Scanning, repository.signingState.value)
+-        }
++    fun losingTheProposalDuringDeviceSigningCannotAdmitAHandoff() = runTest(dispatcher) {
++        every { ledgerSigningDataSource.isLinked } returns true
++        val deviceResult = CompletableDeferred<Pczt>()
++        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers { deviceResult.await() }
++        givenPczt(ledgerAccount())
++        val accepted = mutableListOf<SignedLedgerSubmission>()
++        repository.startSigning { accepted.add(it) }
++        runCurrent()
++
++        repository.transactionProposal.value = null
++        deviceResult.complete(Pczt(byteArrayOf(5)))
++        runCurrent()
++
++        assertEquals(emptyList(), accepted)
++        val failed = assertIs<LedgerSigningState.Failed>(repository.signingState.value)
++        assertEquals(LedgerIssueRetry.NONE, failed.issue.retry)
++    }
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt
 index 457a98c1b..45e97d628 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt

@@ -512,7 +512,7 @@
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt": "d49d1986acaf86cabee0b632ae3061a5851fdb095517978207c297be3142e6e7",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryConnectTest.kt": "04c7ecd1945105c9fa0474cf08a65ace5fbb1b112bcf0141df571ea57f73e97c",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryScanTest.kt": "e86800d554f7642dc4a9a3dd44f63d16d64ce180011bcc718deddb1e8e97ec6d",
-  "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt": "8670c468791dc5fdac122c7bc32034c419b0f27c1c0e88689513f93b954b8d32",
+  "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt": "3569b56f3f9762116d36fc4ccfa72624223020aa3c943f3cbc370fd91fb8b5a6",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt": "2f6302fa2ff1fa77b3a40a80951c135166b0b35035797e340901d44251b0efd1",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerRepairTargetRepositoryTest.kt": "d2ef7cc4f21761e998712040900447d7d986f9b46d3c1555ca3ac73bcb1fd262",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerSelectedDeviceRepositoryTest.kt": "cf2bf9504073a42877d2d641c80524e90a79694772bffafecb2b8d07a069e290",

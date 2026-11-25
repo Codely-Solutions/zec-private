@@ -649,37 +649,23 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         }
 
     @Test
-    fun aSignedSessionWithoutAProposalFailsWithoutARetry() =
-        runTest(dispatcher) {
-            givenPczt(ledgerAccount())
-            runCurrent()
-            every { ledgerSigningDataSource.isLinked } returns true
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
-            repository.startSigning()
-            runCurrent()
-            assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+    fun losingTheProposalDuringDeviceSigningCannotAdmitAHandoff() = runTest(dispatcher) {
+        every { ledgerSigningDataSource.isLinked } returns true
+        val deviceResult = CompletableDeferred<Pczt>()
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers { deviceResult.await() }
+        givenPczt(ledgerAccount())
+        val accepted = mutableListOf<SignedLedgerSubmission>()
+        repository.startSigning { accepted.add(it) }
+        runCurrent()
 
-            repository.failSignedSessionWithoutProposal()
+        repository.transactionProposal.value = null
+        deviceResult.complete(Pczt(byteArrayOf(5)))
+        runCurrent()
 
-            val failed = repository.signingState.value
-            assertTrue(failed is LedgerSigningState.Failed)
-            assertEquals(LedgerIssueKind.UNKNOWN, failed.issue.kind)
-            assertEquals(LedgerIssueRetry.NONE, failed.issue.retry)
-        }
-
-    @Test
-    fun failingASessionThatIsNotSignedChangesNothing() =
-        runTest(dispatcher) {
-            givenPczt(ledgerAccount())
-            runCurrent()
-            repository.startSigning()
-            runCurrent()
-            assertEquals(LedgerSigningState.Scanning, repository.signingState.value)
-
-            repository.failSignedSessionWithoutProposal()
-
-            assertEquals(LedgerSigningState.Scanning, repository.signingState.value)
-        }
+        assertEquals(emptyList(), accepted)
+        val failed = assertIs<LedgerSigningState.Failed>(repository.signingState.value)
+        assertEquals(LedgerIssueRetry.NONE, failed.issue.retry)
+    }
 
     @Test
     fun signingWithoutAPcztFailsWithoutARetry() =
