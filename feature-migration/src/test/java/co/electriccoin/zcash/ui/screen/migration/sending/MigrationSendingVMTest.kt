@@ -139,7 +139,7 @@ class MigrationSendingVMTest {
         }
 
     @Test
-    fun successExecutedRoutsToSuccessScreen() =
+    fun successReplacesSendingWithTheResult() =
         runTest {
             val txId = TransactionId.new("txid123".toByteArray())
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
@@ -150,8 +150,62 @@ class MigrationSendingVMTest {
 
             advanceUntilIdle()
 
-            assertEquals<List<Any>>(listOf(MigrationSuccessArgs(txId.txIdString())), router.forwardedRoutes)
+            assertEquals<List<Any>>(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
         }
+
+    @Test
+    fun followUpFailuresKeepTheAcceptedTransactionAndDoNotRetrySubmission() = runTest {
+        val txId = TransactionId.new("accepted-transaction".toByteArray())
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { executeNextPendingTransfer(any(), any()) } returns
+                TransferAttemptOutcome.Executed(TransferResult.Success(txId))
+        }
+        val marker = mockk<PendingMigrationTorFailureStorageProvider> {
+            coEvery { store("fixture-owner", false) } throws IllegalStateException("synthetic storage failure")
+        }
+        val schedule = mockk<ScheduleNextMigrationWindowUseCase> {
+            coEvery { this@mockk("fixture-owner") } throws IllegalStateException("synthetic scheduling failure")
+        }
+        val snapshot = mockk<GetMigrationSnapshotUseCase> {
+            coEvery { this@mockk("fixture-owner") } throws IllegalStateException("synthetic SDK read failure")
+        }
+        val router = FakeNavigationRouter()
+        val vm = vm(
+            sdk = sdk,
+            router = router,
+            pendingMigrationTorFailureStorageProvider = marker,
+            scheduleNextMigrationWindow = schedule,
+            getMigrationSnapshot = snapshot,
+        )
+        val collectJob = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
+        assertEquals(null, vm.state.value.error)
+        coVerify(exactly = 1) { schedule("fixture-owner") }
+        coVerify(exactly = 1) { snapshot("fixture-owner") }
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), any()) }
+        collectJob.cancel()
+    }
+
+    @Test
+    fun torDialogDismissalLeavesSendingClosable() = runTest {
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { executeNextPendingTransfer(any(), any()) } returns
+                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
+        }
+        val router = FakeNavigationRouter()
+        val vm = vm(sdk = sdk, router = router, useTor = true)
+        val collectJob = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
+        assertTrue(vm.state.value.content?.canGoBack == true)
+        vm.onBack()
+        assertEquals(1, router.backCount)
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), any()) }
+        collectJob.cancel()
+    }
 
     @Test
     fun sendIsTriggeredAutomaticallyOnConstructionWithoutAnExternalCall() =
@@ -428,6 +482,7 @@ class MigrationSendingVMTest {
             },
         args: MigrationSendingArgs = MigrationSendingArgs("fixture-owner"),
         accounts: AccountDataSource? = null,
+        scheduleNextMigrationWindow: ScheduleNextMigrationWindowUseCase = mockk(relaxed = true),
     ) = MigrationSendingVM(
         args = args,
         getOrchardMigrationSdk =
@@ -435,7 +490,7 @@ class MigrationSendingVMTest {
                 coEvery { this@mockk(args.accountKeyId) } returns sdk
             },
         getMigrationSnapshot = getMigrationSnapshot,
-        scheduleNextMigrationWindow = mockk<ScheduleNextMigrationWindowUseCase>(relaxed = true),
+        scheduleNextMigrationWindow = scheduleNextMigrationWindow,
         navigationRouter = router,
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         isMigrationTorEnabledStorageProvider =
@@ -450,13 +505,16 @@ class MigrationSendingVMTest {
 
     private class FakeNavigationRouter : NavigationRouter {
         val forwardedRoutes = mutableListOf<Any>()
+        val replacedRoutes = mutableListOf<Any>()
         var backCount = 0
 
         override fun forward(vararg routes: Any) {
             forwardedRoutes.addAll(routes.toList())
         }
 
-        override fun replace(vararg routes: Any) = Unit
+        override fun replace(vararg routes: Any) {
+            replacedRoutes.addAll(routes.toList())
+        }
 
         override fun replaceAll(vararg routes: Any) = Unit
 

@@ -11,6 +11,7 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
@@ -63,6 +64,7 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignArgs
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.ui.stageResultFrom
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -448,12 +450,14 @@ class MigrationReviewVM(
             }
             sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
             finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
-            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
+            }
         } catch (e: RuntimeException) {
             if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
                 // The SDK owns the already-committed plan. Do not draw or sign a replacement.
-                navigationRouter.backToRoot()
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
             } else {
                 loadProposal()
             }
@@ -469,7 +473,7 @@ class MigrationReviewVM(
         if (result is TransferResult.NetworkError && result.retryable && sdk.hasCommitted(reviewed.schedule)) {
             requireReviewAccount()
             finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, false)
-            navigationRouter.backToRoot()
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
         } else {
             failure.value = result
         }
@@ -487,13 +491,17 @@ class MigrationReviewVM(
         val existingPlan = pendingMigrationScheduleRepository.review(accountKeyId)
         val existingSignatures = pendingKeystone.peek(accountKeyId)
         if (existingPlan === reviewed && existingSignatures?.isFullySigned == true) {
-            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
+            }
         } else {
             if (existingPlan !== reviewed && existingSignatures != null) {
                 pendingKeystone.clear(accountKeyId, existingSignatures)
             }
             pendingMigrationScheduleRepository.set(accountKeyId, reviewed)
-            navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(MigrationKeystoneSignArgs(args.mode, accountKeyId)))
+            }
         }
     }
 
@@ -535,7 +543,11 @@ class MigrationReviewVM(
                 keystoneProposalRepository.createPCZTFromProposal(account)
                 requireReviewAccount()
                 keystoneProposalRepository.approveForSigning(reviewed)
-                navigationRouter.forward(SignKeystoneTransactionArgs)
+                navigationRouter.stageResultFrom(sourceEntryId, {
+                    keystoneProposalRepository.transactionProposal.value === reviewed
+                }) {
+                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+                }
             } else {
                 val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
                 submitProposal(reviewed, sourceEntryId = sourceEntryId)

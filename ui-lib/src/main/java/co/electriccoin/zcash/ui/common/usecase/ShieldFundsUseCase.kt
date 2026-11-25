@@ -4,6 +4,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -12,7 +13,9 @@ import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
@@ -34,24 +37,37 @@ class ShieldFundsUseCase(
     private val accountDataSource: AccountDataSource,
     private val navigateToError: NavigateToErrorUseCase,
     private val messageAvailabilityDataSource: MessageAvailabilityDataSource,
+    private val walletWriteAccess: WalletWriteAccess,
 ) {
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
     private var job: Job? = null
 
-    operator fun invoke(closeCurrentScreen: Boolean) {
-        if (job?.isActive == true) return
+    fun confirm(account: WalletAccount, closeCurrentScreen: Boolean): () -> Unit {
+        val wallet = walletWriteAccess.token()
+        val owner = account.sdkAccount.accountUuid
+        val approval = ShieldingApproval(account) {
+            walletWriteAccess.permits(wallet) &&
+                accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
+        }
+        return { shield(approval, closeCurrentScreen) }
+    }
+
+    private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean) {
+        if (job?.isActive == true || !approval.isCurrent()) return
         job =
             scope.launch {
+                if (!approval.isCurrent()) return@launch
                 messageAvailabilityDataSource.onShieldingInitiated()
 
-                when (accountDataSource.getSelectedAccount()) {
+                if (!approval.isCurrent()) return@launch
+                when (approval.account) {
                     is KeystoneAccount -> {
-                        createKeystoneShieldProposal()
+                        createKeystoneShieldProposal(approval)
                     }
 
                     is LedgerAccount -> {
-                        createLedgerShieldProposal()
+                        createLedgerShieldProposal(approval)
                     }
 
                     is ViewOnlyAccount -> {
@@ -66,17 +82,17 @@ class ShieldFundsUseCase(
                         if (closeCurrentScreen) {
                             navigationRouter.back()
                         }
-                        shieldZashiFunds()
+                        shieldZashiFunds(approval)
                     }
                 }
             }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun shieldZashiFunds() {
+    private suspend fun shieldZashiFunds(approval: ShieldingApproval) {
         var created: ShieldTransactionProposal? = null
         try {
-            val proposal = zashiProposalRepository.createShieldProposal().also { created = it }
+            val proposal = zashiProposalRepository.createShieldProposal(approval).also { created = it }
             when (val result = zashiProposalRepository.submit(proposal)) {
                 is SubmitResult.Failure,
                 is SubmitResult.GrpcFailure,
@@ -92,18 +108,19 @@ class ShieldFundsUseCase(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            navigateToError(ErrorArgs.ShieldingGeneralError(e))
+            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
         } finally {
             created?.let(zashiProposalRepository::clear)
         }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createKeystoneShieldProposal() {
+    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval) {
         var created: ShieldTransactionProposal? = null
         try {
-            val proposal = keystoneProposalRepository.createShieldProposal().also { created = it }
-            keystoneProposalRepository.createPCZTFromProposal()
+            val proposal = keystoneProposalRepository.createShieldProposal(approval).also { created = it }
+            keystoneProposalRepository.createPCZTFromProposal(approval.account)
+            approval.requireCurrent()
             keystoneProposalRepository.approveForSigning(proposal)
             navigationRouter.forward(SignKeystoneTransactionArgs)
         } catch (e: CancellationException) {
@@ -115,7 +132,7 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
             )
-            navigateToError(ErrorArgs.ShieldingGeneralError(e))
+            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
     }
 
@@ -124,11 +141,12 @@ class ShieldFundsUseCase(
      * and propagates the cancellation instead of reporting it as a shielding error.
      */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createLedgerShieldProposal() {
+    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval) {
         var created: ShieldTransactionProposal? = null
         try {
-            val proposal = ledgerProposalPipeline.createShieldProposal().also { created = it }
+            val proposal = ledgerProposalPipeline.createShieldProposal(approval).also { created = it }
             ledgerProposalPipeline.createPCZTFromProposal()
+            approval.requireCurrent()
             ledgerProposalPipeline.approveForSigning(proposal)
             ledgerNavigator.forwardToSign()
         } catch (e: CancellationException) {
@@ -140,7 +158,7 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
             )
-            navigateToError(ErrorArgs.ShieldingGeneralError(e))
+            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
         }
     }
 }

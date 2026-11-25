@@ -57,7 +57,7 @@ class SpendableBalanceVM(
             positive = createPositiveButton(canShield),
             onBack = ::onBack,
             rows = createInfoRows(balances),
-            shieldButton = createShieldButtonState(balances, canShield)
+            shieldButton = createShieldButtonState(account, balances, canShield)
         )
     }
 
@@ -159,15 +159,18 @@ class SpendableBalanceVM(
     }
 
     private fun createShieldButtonState(
+        account: WalletAccount,
         balances: LoadedAccountBalances,
         canShield: Boolean
     ): SpendableBalanceShieldButtonState? =
-        SpendableBalanceShieldButtonState(
-            amount = balances.transparentBalance,
-            onShieldClick = ::onShieldClick
-        ).takeIf { canShield }
+        if (canShield) {
+            SpendableBalanceShieldButtonState(
+                amount = balances.transparentBalance,
+                onShieldClick = shieldFunds.confirm(account, closeCurrentScreen = true)
+            )
+        } else {
+            null
+        }
 
     private fun onBack() = navigationRouter.back()
-
-    private fun onShieldClick() = shieldFunds(closeCurrentScreen = true)
 }

@@ -6,9 +6,9 @@ import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SubmitResult
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
@@ -93,7 +93,7 @@ class ShieldFundsUseCaseTest {
             )(false)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { ledgerProposalPipeline.createShieldProposal() }
+            coVerify(exactly = 1) { ledgerProposalPipeline.createShieldProposal(any()) }
             coVerify(exactly = 1) { ledgerProposalPipeline.createPCZTFromProposal() }
             verify(exactly = 1) { ledgerNavigator.forwardToSign() }
             coVerify(exactly = 0) { ledgerProposalPipeline.clear() }
@@ -104,7 +104,7 @@ class ShieldFundsUseCaseTest {
         runTest(dispatcher) {
             val ledgerProposalPipeline =
                 mockk<LedgerProposalPipeline>(relaxed = true) {
-                    coEvery { createShieldProposal() } throws RuntimeException("boom")
+                    coEvery { createShieldProposal(any()) } throws RuntimeException("boom")
                 }
             val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
 
@@ -124,7 +124,7 @@ class ShieldFundsUseCaseTest {
             val shield = mockk<ShieldTransactionProposal>()
             val ledgerProposalPipeline =
                 mockk<LedgerProposalPipeline>(relaxed = true) {
-                    coEvery { createShieldProposal() } returns shield
+                    coEvery { createShieldProposal(any()) } returns shield
                     every { transactionProposal } returns MutableStateFlow(shield)
                     coEvery { createPCZTFromProposal() } throws CancellationException("cancelled")
                 }
@@ -143,39 +143,87 @@ class ShieldFundsUseCaseTest {
             verify(exactly = 0) { ledgerNavigator.forwardToSign() }
         }
 
+    @Test
+    fun oldHardwareConfirmationIsRejectedAfterAccountOrWalletChanges() = runTest(dispatcher) {
+        val hardware = EditAccountFixtures.ledger(isSelected = true)
+        val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(hardware))
+        val softwareProposals = mockk<ZashiProposalRepository>()
+        val ledgerProposals = mockk<LedgerProposalPipeline>()
+        val marker = mockk<MessageAvailabilityDataSource>(relaxed = true)
+        val wallet = WalletWriteAccess()
+        val operations = ShieldFundsUseCase(
+            keystoneProposalRepository = mockk(),
+            ledgerProposalPipeline = ledgerProposals,
+            ledgerNavigator = mockk(),
+            zashiProposalRepository = softwareProposals,
+            navigationRouter = mockk(),
+            accountDataSource = mockk { every { allAccounts } returns accounts },
+            navigateToError = mockk(),
+            messageAvailabilityDataSource = marker,
+            walletWriteAccess = wallet,
+        )
+        val confirm = operations.confirm(hardware, closeCurrentScreen = true)
+        accounts.value = listOf(EditAccountFixtures.zodl())
+        confirm()
+        advanceUntilIdle()
+
+        accounts.value = listOf(hardware)
+        wallet.beginReset()
+        wallet.finishReset()
+        wallet.replaceWallet { }
+        confirm()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { marker.onShieldingInitiated() }
+        coVerify(exactly = 0) { softwareProposals.createShieldProposal(any()) }
+        coVerify(exactly = 0) { ledgerProposals.createShieldProposal(any()) }
+    }
+
     private fun useCase(
         submitResult: SubmitResult,
         navigateToError: NavigateToErrorUseCase
-    ) = ShieldFundsUseCase(
-        keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
-        ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true),
-        ledgerNavigator = mockk<LedgerNavigator>(relaxed = true),
-        zashiProposalRepository =
-            mockk<ZashiProposalRepository>(relaxed = true) {
-                val shield = mockk<ShieldTransactionProposal>()
-                coEvery { createShieldProposal() } returns shield
-                coEvery { submit(shield) } returns submitResult
-            },
-        navigationRouter = mockk<NavigationRouter>(relaxed = true),
-        accountDataSource =
-            mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns mockk<ZodlAccount>() },
-        navigateToError = navigateToError,
-        messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true)
-    )
+    ): (Boolean) -> Unit {
+        val account = EditAccountFixtures.zodl()
+        val useCase = ShieldFundsUseCase(
+            keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
+            ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true),
+            ledgerNavigator = mockk<LedgerNavigator>(relaxed = true),
+            zashiProposalRepository =
+                mockk<ZashiProposalRepository>(relaxed = true) {
+                    val shield = mockk<ShieldTransactionProposal>()
+                    coEvery { createShieldProposal(any()) } returns shield
+                    coEvery { submit(shield) } returns submitResult
+                },
+            navigationRouter = mockk<NavigationRouter>(relaxed = true),
+            accountDataSource = selectedAccount(account),
+            navigateToError = navigateToError,
+            messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true),
+            walletWriteAccess = WalletWriteAccess(),
+        )
+        return { close -> useCase.confirm(account, close)() }
+    }
 
     private fun ledgerUseCase(
         ledgerProposalPipeline: LedgerProposalPipeline,
         ledgerNavigator: LedgerNavigator = mockk(relaxed = true),
         navigateToError: NavigateToErrorUseCase = mockk(relaxed = true),
-    ) = ShieldFundsUseCase(
-        keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
-        ledgerProposalPipeline = ledgerProposalPipeline,
-        ledgerNavigator = ledgerNavigator,
-        zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true),
-        navigationRouter = mockk<NavigationRouter>(relaxed = true),
-        accountDataSource =
-            mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns mockk<LedgerAccount>() },
-        navigateToError = navigateToError,
-        messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true)
-    )
+    ): (Boolean) -> Unit {
+        val account = EditAccountFixtures.ledger(isSelected = true)
+        val useCase = ShieldFundsUseCase(
+            keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
+            ledgerProposalPipeline = ledgerProposalPipeline,
+            ledgerNavigator = ledgerNavigator,
+            zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true),
+            navigationRouter = mockk<NavigationRouter>(relaxed = true),
+            accountDataSource = selectedAccount(account),
+            navigateToError = navigateToError,
+            messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true),
+            walletWriteAccess = WalletWriteAccess(),
+        )
+        return { close -> useCase.confirm(account, close)() }
+    }
+
+    private fun selectedAccount(account: WalletAccount) = mockk<AccountDataSource> {
+        every { allAccounts } returns MutableStateFlow(listOf(account))
+    }
 }

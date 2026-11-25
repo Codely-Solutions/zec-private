@@ -48,6 +48,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -300,7 +301,11 @@ class MigrationCompleteVMTest {
                 mockk<OrchardMigrationSdk> {
                     coEvery { proposeImmediateMigration() } returns proposal
                 }
-            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
+            val adopted = MigrationSweepTransactionProposal(proposal)
+            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
+                every { setMigrationSweepProposal(proposal) } returns adopted
+                every { transactionProposal } returns MutableStateFlow(adopted)
+            }
             val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
 
             val vm =

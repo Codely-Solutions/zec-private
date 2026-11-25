@@ -10,12 +10,14 @@ import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionPropo
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -30,6 +32,7 @@ import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.time.Duration.Companion.seconds
@@ -69,6 +72,29 @@ class ZashiProposalRepositoryTest {
         assertSame(draftState, repository.submitState.value)
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
+    }
+
+    @Test
+    fun aShieldWhoseOwnerChangesBeforeFirstSdkSubmissionCannotBroadcast() = runBlocking {
+        val account = EditAccountFixtures.zodl()
+        val sdkProposal = mockk<Proposal>()
+        val key = mockk<UnifiedSpendingKey>()
+        var current = true
+        val approval = ShieldingApproval(account) { current }
+        coEvery { proposals.createShieldProposal(account) } returns ShieldTransactionProposal(sdkProposal)
+        coEvery { keys.getZashiSpendingKey() } returns key
+        var broadcast = false
+        coEvery { proposals.submitTransaction(sdkProposal, key, any()) } coAnswers {
+            current = false
+            thirdArg<() -> Unit>().invoke()
+            broadcast = true
+            SubmitResult.Success(listOf("synthetic-tx"))
+        }
+
+        val shield = repository.createShieldProposal(approval)
+        assertSame(approval, shield.approval)
+        assertFailsWith<IllegalStateException> { repository.submit(shield) }
+        assertFalse(broadcast)
     }
 
     @Test

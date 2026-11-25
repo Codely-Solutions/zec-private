@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -200,14 +201,15 @@ class ViewOnlySpendGuardTest {
                     accountDataSource = accountDataSource,
                     navigateToError = navigateToError,
                     messageAvailabilityDataSource = mockk(relaxed = true),
+                    walletWriteAccess = WalletWriteAccess(),
                 )
 
-            useCase(closeCurrentScreen = true)
+            useCase.confirm(viewOnly, closeCurrentScreen = true)()
 
             verifyViewOnlyErrorShown()
-            coVerify(exactly = 0) { zashiProposalRepository.createShieldProposal() }
-            coVerify(exactly = 0) { keystoneProposalRepository.createShieldProposal() }
-            coVerify(exactly = 0) { ledgerProposalPipeline.createShieldProposal() }
+            coVerify(exactly = 0) { zashiProposalRepository.createShieldProposal(any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.createShieldProposal(any()) }
+            coVerify(exactly = 0) { ledgerProposalPipeline.createShieldProposal(any()) }
             coVerify(exactly = 0) { zashiProposalRepository.submit() }
         }
 

@@ -10,6 +10,8 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
+import co.electriccoin.zcash.ui.common.datasource.requireCurrentShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -80,7 +82,7 @@ interface KeystoneProposalRepository {
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createShieldProposal(): ShieldTransactionProposal
+    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
 
     /**
      * Adopts an already-built migration send-max [Proposal] (see
@@ -225,11 +227,10 @@ class KeystoneProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal(): ShieldTransactionProposal =
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
         createProposalInternal {
-            proposalDataSource.createShieldProposal(
-                account = accountDataSource.getSelectedAccount(),
-            )
+            approval.requireCurrent()
+            proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
         }
 
     override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
@@ -242,6 +243,7 @@ class KeystoneProposalRepositoryImpl(
 
     private suspend fun createAccountBoundPczt(resolveAccount: suspend () -> WalletAccount) {
         val transactionProposal = getTransactionProposal()
+        transactionProposal.requireCurrentShieldingApproval()
         val owner = resolveAccount()
         val result =
             try {
@@ -322,6 +324,7 @@ class KeystoneProposalRepositoryImpl(
                 val proofs = prepared.proofs.await()
                 val proposal = prepared.proposal
                 val validateFunding: () -> Unit = {
+                    proposal.requireCurrentShieldingApproval()
                     requireCurrentApproval(prepared)
                     if (proposal is SwapTransactionProposal) {
                         proposal.requireFundingApproval(prepared.reviewedQuote)

@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.FloatingWindow
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
@@ -206,19 +207,28 @@ internal suspend fun LaunchNavigationRequests.deliverOnChanges(
 @Composable
 private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
     DisposableEffect(navController, navigationRouter) {
-        val observer = navigationRouter.registerEntryObserver()
-        val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
-            observer.update(controller.currentBackStackEntry?.toActiveNavigationEntry())
-        }
-        navController.addOnDestinationChangedListener(listener)
-        onDispose {
-            navController.removeOnDestinationChangedListener(listener)
-            observer.close()
-        }
+        val stopTracking = navController.trackActiveEntry(navigationRouter)
+        onDispose(stopTracking)
     }
 }
 
-internal fun NavBackStackEntry.toActiveNavigationEntry() = ActiveNavigationEntry(
+internal fun NavController.trackActiveEntry(navigationRouter: NavigationRouter): () -> Unit {
+    val observer = navigationRouter.registerEntryObserver()
+    var contentEntryId: String? = null
+    val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
+        val entry = controller.currentBackStackEntry
+        if (entry?.destination !is FloatingWindow) contentEntryId = entry?.id
+        observer.update(entry?.toActiveNavigationEntry(contentEntryId))
+    }
+    addOnDestinationChangedListener(listener)
+    return {
+        removeOnDestinationChangedListener(listener)
+        observer.close()
+    }
+}
+
+internal fun NavBackStackEntry.toActiveNavigationEntry(contentEntryId: String? = id) = ActiveNavigationEntry(
+    contentEntryId = contentEntryId,
     id = id,
     route = destination.route,
     refundWarningRequestId = if (destination.hasRoute<SwapRefundWarningArgs>()) {

@@ -68,6 +68,10 @@ class LedgerSignVM(
     private val navigationRouter: NavigationRouter,
     private val sourceEntryId: String? = null,
 ) : AndroidViewModel(application) {
+    private val contentEntryId = sourceEntryId?.let { source ->
+        navigationRouter.activeEntry.value?.takeIf { it.id == source }?.contentEntryId
+    }
+
     private val permissionDenial = MutableStateFlow<PermissionDenial?>(null)
 
     private val permissionRequestNonce = MutableStateFlow(0)
@@ -345,7 +349,7 @@ class LedgerSignVM(
     }
 
     override fun onCleared() {
-        navigationRouter.discardResultFrom(sourceEntryId)
+        navigationRouter.discardResultFrom(sourceEntryId, contentEntryId)
         cancelLedgerSigning.stopSession()
         super.onCleared()
     }

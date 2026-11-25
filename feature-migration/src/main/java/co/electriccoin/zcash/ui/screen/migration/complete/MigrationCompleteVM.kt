@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
@@ -42,6 +43,7 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExplainerArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.ui.stageResultFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -238,7 +240,11 @@ class MigrationCompleteVM(
                 keystoneProposalRepository.createPCZTFromProposal(owner)
                 activeCompletionOwner()
                 keystoneProposalRepository.approveForSigning(reviewed)
-                navigationRouter.forward(SignKeystoneTransactionArgs)
+                navigationRouter.stageResultFrom(sourceEntryId, {
+                    keystoneProposalRepository.transactionProposal.value === reviewed
+                }) {
+                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+                }
             } else {
                 // The normal transaction progress path retains submission identity and lets
                 // the SDK reconcile its original transaction after an uncertain result.

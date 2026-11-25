@@ -12,6 +12,8 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
+import co.electriccoin.zcash.ui.common.datasource.requireCurrentShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -212,17 +214,20 @@ class LedgerProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal(): ShieldTransactionProposal =
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
         createProposalInternal {
-            proposalDataSource.createShieldProposal(
-                account = accountDataSource.getSelectedAccount(),
-            )
+            approval.requireCurrent()
+            proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
         }
 
     override suspend fun createPCZTFromProposal() {
         val transactionProposal = getTransactionProposal()
-        val owner = (transactionProposal as? SwapTransactionProposal)?.fundingAccount
-            ?: accountDataSource.getSelectedAccount()
+        transactionProposal.requireCurrentShieldingApproval()
+        val owner = when (transactionProposal) {
+            is ShieldTransactionProposal -> checkNotNull(transactionProposal.approval).account
+            is SwapTransactionProposal -> transactionProposal.fundingAccount
+            else -> accountDataSource.getSelectedAccount()
+        }
         val result =
             try {
                 proposalDataSource.createPcztFromProposal(
@@ -570,6 +575,7 @@ class LedgerProposalRepositoryImpl(
                 val proofs = prepared.proofs.await()
                 val proposal = prepared.proposal
                 val validateFunding: () -> Unit = {
+                    proposal.requireCurrentShieldingApproval()
                     requireCurrentApproval(prepared)
                     if (proposal is SwapTransactionProposal) {
                         proposal.requireFundingApproval(prepared.reviewedQuote)

@@ -35,11 +35,15 @@ class ShieldFundsInfoVM(
             shieldFundsInfoProvider.observe(),
         ) { account, infoEnabled ->
             val transparentAmount = account?.transparentBalance ?: Zatoshi(0)
+            val confirm = account?.takeIf { it.isSpendable }?.let {
+                shieldFunds.confirm(it, closeCurrentScreen = true)
+            }
             ShieldFundsInfoState(
                 onBack = ::onBack,
                 primaryButton =
                     ButtonState(
-                        onClick = ::onShieldClick,
+                        onClick = confirm ?: {},
+                        isEnabled = confirm != null,
                         text = stringRes(R.string.smartBanner_content_shield_button),
                         hapticFeedbackType = HapticFeedbackType.Confirm
                     ),
@@ -72,6 +76,4 @@ class ShieldFundsInfoVM(
     private fun onNotNowClick() = navigationRouter.back()
 
     private fun onBack() = navigationRouter.back()
-
-    private fun onShieldClick() = shieldFunds(closeCurrentScreen = true)
 }

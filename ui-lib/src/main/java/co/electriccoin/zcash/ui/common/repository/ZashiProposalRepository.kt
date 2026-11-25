@@ -7,6 +7,8 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
+import co.electriccoin.zcash.ui.common.datasource.requireCurrentShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -63,7 +65,7 @@ interface ZashiProposalRepository {
     ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createShieldProposal(): ShieldTransactionProposal
+    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
 
     /**
      * Adopt an already-built IMMEDIATE send-max migration [proposal] as the current transaction, so
@@ -146,11 +148,10 @@ class ZashiProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal(): ShieldTransactionProposal =
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
         createProposalInternal {
-            proposalDataSource.createShieldProposal(
-                account = accountDataSource.getSelectedAccount(),
-            )
+            approval.requireCurrent()
+            proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
         }
 
     override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
@@ -179,6 +180,7 @@ class ZashiProposalRepositoryImpl(
                         check(swapWasReviewed) {
                             "Review the prepared swap transaction before sending."
                         }
+                        transactionProposal.requireCurrentShieldingApproval()
                         val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
                         if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
                             require(transactionProposal.destination.address ==
@@ -195,6 +197,7 @@ class ZashiProposalRepositoryImpl(
                         }
                         val validateFunding: () -> Unit = {
                             requireCurrentProposal(transactionProposal)
+                            transactionProposal.requireCurrentShieldingApproval()
                             if (transactionProposal is SwapTransactionProposal) {
                                 transactionProposal.requireFundingApproval(reviewedQuote)
                                 ZecSwapComposition.validate(transactionProposal.quote)

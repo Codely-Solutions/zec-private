@@ -113,7 +113,7 @@ class GetHomeMessageUseCase(
                         .map { canShowShieldMessage ->
                             when {
                                 !canShowShieldMessage -> null
-                                else -> HomeMessageData.ShieldFunds(transparentBalance)
+                                else -> HomeMessageData.ShieldFunds(transparentBalance, account)
                             }
                         }
                 }

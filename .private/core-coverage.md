@@ -242,6 +242,8 @@ The resumed navigator retains a prepared form result until its exact entry can r
 
 The submission progress tests keep the original proposal and its outcome together across late completion, a different account, replacement and reset. The real Navigator fixture keeps an already admitted result with its covered entry until the scanner above it closes. The software Shield regression refuses a replacement draft before loading a spending key and preserves that draft and its state. Migration Sending shares its Back availability between the toolbar and the system. Automatic migration recovery presents the current owner-bound Progress. `MigrationSendingVMTest` verifies that explicit retry uses the saved Tor setting, refuses a replacement transfer or changed account, and leaves the recovery marker intact when retry is superseded.
 
+The shielding tests bind the displayed account and wallet generation through the native submission callback. The floating-dialog fixture opens a real scanner over signing and delivers the committed result once Review resumes. Migration retries preserve a known transaction ID when scheduling or a status lookup fails. Automatic schedule results return to their originating Review entry.
+
 ## Historical funded coverage
 
 See [published status](STATUS.md) for the current release and its bound acceptance record.

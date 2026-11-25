@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.repository
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.model.SynchronizerError
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -76,7 +77,8 @@ sealed interface HomeMessageData {
     data object Updating : RuntimeMessage()
 
     data class ShieldFunds(
-        val zatoshi: Zatoshi
+        val zatoshi: Zatoshi,
+        val account: WalletAccount,
     ) : RuntimeMessage()
 
     data object EnableTor : Prioritized {

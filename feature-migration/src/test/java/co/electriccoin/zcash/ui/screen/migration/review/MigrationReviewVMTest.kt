@@ -41,6 +41,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -65,6 +66,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
@@ -119,7 +121,11 @@ class MigrationReviewVMTest {
                     coEvery { totalFeeRequired() } returns Zatoshi(1_000L)
                 }
             val router = FakeNavigationRouter()
-            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
+            val adopted = MigrationSweepTransactionProposal(proposal)
+            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
+                every { setMigrationSweepProposal(proposal) } returns adopted
+                every { transactionProposal } returns MutableStateFlow(adopted)
+            }
             val vm =
                 vm(
                     router = router,
@@ -292,6 +298,7 @@ class MigrationReviewVMTest {
                     zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
                     finalizeMigrationSchedule = finalizeMigrationSchedule,
                     mode = MigrationMode.AUTOMATIC,
+                    sourceEntryId = "scheduled-review",
                 )
 
             val review = vm.currentReview()
@@ -306,6 +313,11 @@ class MigrationReviewVMTest {
                 sdk.proposeMigrationTransfersFromSplit(splitProposal)
                 sdk.submitNoteSplit(splitProposal, usk)
             }
+            val handoff = router.scopedCommands.single()
+            assertEquals("scheduled-review", handoff.sourceEntryId)
+            val route = assertIs<NavigationCommand.Forward>(handoff.buildCommand()).routes.single()
+            assertIs<MigrationScheduledArgs>(route)
+            assertTrue(router.forwardedRoutes.isEmpty())
         }
 
     @Test
@@ -609,6 +621,7 @@ class MigrationReviewVMTest {
         restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
             mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
         synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
+        sourceEntryId: String? = null,
     ) = MigrationReviewVM(
         args = MigrationReviewArgs(mode = mode, useTor = draftTor),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
@@ -630,10 +643,12 @@ class MigrationReviewVMTest {
         keystoneProposalRepository = keystoneProposalRepository,
         submitProposal = submitProposal,
         synchronizerProvider = synchronizerProvider,
+        sourceEntryId = sourceEntryId,
     )
 
     private class FakeNavigationRouter : NavigationRouter {
         val forwardedRoutes = mutableListOf<Any>()
+        val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
 
         override fun forward(vararg routes: Any) {
             forwardedRoutes.addAll(routes)
@@ -649,7 +664,9 @@ class MigrationReviewVMTest {
 
         override fun backTo(route: KClass<*>) = Unit
 
-        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
+        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
+            (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
+        }
 
         override fun backToRoot() = Unit
 

@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.NetworkPrivacyOptions
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.TransferResult
+import cash.z.ecc.android.sdk.model.TransactionId
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -15,6 +16,7 @@ import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LceState
+import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.migration.migrationFailureMessage
@@ -33,6 +35,7 @@ import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,7 +96,7 @@ class MigrationSendingVM(
     }
 
     val state: StateFlow<LceState<MigrationSendingState>> =
-        combine(sendLce.state, failure) { _, f ->
+        combine(sendLce.state, failure) { send, f ->
             MigrationSendingState(
                 failureSheet =
                     f?.let {
@@ -109,7 +112,7 @@ class MigrationSendingVM(
                         )
                     },
                 onBack = ::onBack,
-                canGoBack = f != null,
+                canGoBack = !send.loading,
             )
         }.withLce(sendLce, errorStateMapper::mapToState)
             .stateIn(this)
@@ -118,12 +121,12 @@ class MigrationSendingVM(
         sendOnce(useTor = isMigrationTorEnabledStorageProvider.get(args.accountKeyId))
     }
 
-    fun onBack() {
-        if (failure.value != null) navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+    fun onBack() = sendLce.guardLoading {
+        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
     }
 
-    private fun openResult(route: Any) = navigationRouter.stageResultFrom(sourceEntryId) {
-        NavigationCommand.Forward(listOf(route))
+    private fun openResult(route: Any, replace: Boolean = false) = navigationRouter.stageResultFrom(sourceEntryId) {
+        if (replace) NavigationCommand.Replace(listOf(route)) else NavigationCommand.Forward(listOf(route))
     }
 
     override fun onCleared() {
@@ -169,27 +172,7 @@ class MigrationSendingVM(
         when (val o = outcome) {
             is TransferAttemptOutcome.Executed -> {
                 when (val r = o.result) {
-                    is TransferResult.Success -> {
-                        // The one unambiguous "problem resolved" signal — clears a pending background Tor
-                        // failure (see PendingMigrationTorFailureStorageProvider) so app-open reconciliation
-                        // stops re-routing through this screen. Left `true` on every other outcome
-                        // (including a renewed Tor failure below), so it keeps re-surfacing until an actual
-                        // successful send happens. A no-op if nothing was pending.
-                        pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
-                        // Re-arms the next window for a resumed/manually-confirmed transfer in a
-                        // multi-transfer AUTOMATIC plan; no-ops once the plan is already complete.
-                        scheduleNextMigrationWindow(args.accountKeyId)
-                        // Acknowledging broadcast does not establish that every transfer mined.
-                        val snapshot = getMigrationSnapshot(args.accountKeyId)
-                        if (snapshot?.areAllMined == true) {
-                            // This was the plan's last transfer — one Migration Complete screen covers
-                            // both this (foreground, just confirmed) and the background-completion case
-                            // (CheckMigrationRecoveryUseCase, on next app open), rather than two.
-                            openResult(MigrationCompleteArgs(accountKeyId = args.accountKeyId))
-                        } else {
-                            openResult(MigrationSuccessArgs(r.txId.txIdString()))
-                        }
-                    }
+                    is TransferResult.Success -> reportSubmitted(r.txId)
 
                     // A NetworkError whose failure is specifically Tor-attributable is routed to its own
                     // sheet (offering "continue without Tor") instead of the generic "Couldn't Send" one,
@@ -217,6 +200,22 @@ class MigrationSendingVM(
             // The foreground sync + Lane A hook will prove it; the user can retry later.
             else -> reportNotReady()
         }
+    }
+
+    private suspend fun reportSubmitted(txId: TransactionId) {
+        // Recovery bookkeeping can be retried by the driver. A failure here must keep the known broadcast result.
+        migrationFollowUp("clear Tor failure") {
+            pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+        }
+        migrationFollowUp("schedule next transfer") { scheduleNextMigrationWindow(args.accountKeyId) }
+        val snapshot = migrationFollowUp("read completion") { getMigrationSnapshot(args.accountKeyId) }
+        val route =
+            if (snapshot?.areAllMined == true) {
+                MigrationCompleteArgs(accountKeyId = args.accountKeyId)
+            } else {
+                MigrationSuccessArgs(txId.txIdString())
+            }
+        openResult(route, replace = true)
     }
 
     private suspend fun reportNotReady() {
@@ -275,3 +274,14 @@ class MigrationSendingVM(
         private const val SEND_RETRY_DELAY_MS = 1500L
     }
 }
+
+@Suppress("TooGenericExceptionCaught") // Ancillary storage, scheduler and SDK read failures leave the broadcast intact.
+private suspend fun <T> migrationFollowUp(stage: String, block: suspend () -> T): T? =
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        migrationLog("Migration follow-up ($stage) unavailable: ${e.javaClass.simpleName}.")
+        null
+    }

@@ -3,10 +3,10 @@ package co.electriccoin.zcash.ui
 import android.app.Activity
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.design.KeyboardManager
@@ -114,6 +114,43 @@ class NavigationResultDeliveryTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun poppedSigningDialogKeepsItsCommittedResultWithTheUnderlyingReview() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                var resumed = false
+                val router = collectOwnedNavigation { resumed }
+                controller.navigate(DeliveryOrigin)
+                val review = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(DeliverySigningSheet)
+                val dialog = checkNotNull(router.activeEntry.value)
+                assertEquals(review, dialog.contentEntryId)
+                assertTrue(dialog.id != review)
+
+                var deliveries = 0
+                router.stageResultFrom(dialog.id) {
+                    deliveries++
+                    NavigationCommand.Replace(listOf(ActivityHistoryArgs))
+                }
+                runCurrent()
+                controller.navigate(ScanGiftCardArgs(true))
+                assertEquals(review, controller.previousBackStackEntry?.id)
+                router.discardResultFrom(dialog.id, dialog.contentEntryId)
+
+                resumed = true
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertEquals(0, deliveries)
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                assertEquals(1, deliveries)
+            }
+        }
+    }
+
     private fun install() {
         compose.setContent {
             controller = rememberNavController()
@@ -121,6 +158,7 @@ class NavigationResultDeliveryTest {
                 composable<HomeArgs> { Text("Wallet home") }
                 composable<DeliveryMigrationArgs> { Text("Migration progress") }
                 composable<DeliveryOrigin> { Text("Signing") }
+                dialog<DeliverySigningSheet> { Text("Hardware signing") }
                 composable<ScanGiftCardArgs> { Text("External scan") }
                 composable<ActivityHistoryArgs> { Text("Activity history") }
             }
@@ -128,21 +166,16 @@ class NavigationResultDeliveryTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun TestScope.collectOwnedNavigation(): NavigationRouterImpl {
+    private fun TestScope.collectOwnedNavigation(canCommit: () -> Boolean = { true }): NavigationRouterImpl {
         val router = NavigationRouterImpl()
-        val observer = router.registerEntryObserver()
-        val listener = NavController.OnDestinationChangedListener { nav, _, _ ->
-            observer.update(nav.currentBackStackEntry?.toActiveNavigationEntry())
-        }
-        controller.addOnDestinationChangedListener(listener)
+        val stopTracking = controller.trackActiveEntry(router)
         val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
         val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {
-                router.collectPendingForwards(navigator) { true }
+                router.collectPendingForwards(navigator, canCommit)
             } finally {
-                controller.removeOnDestinationChangedListener(listener)
-                observer.close()
+                stopTracking()
             }
         }
         return router
@@ -154,3 +187,6 @@ internal data class DeliveryMigrationArgs(val owner: String)
 
 @Serializable
 internal data object DeliveryOrigin
+
+@Serializable
+internal data object DeliverySigningSheet

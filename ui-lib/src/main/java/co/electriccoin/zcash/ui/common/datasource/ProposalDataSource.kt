@@ -505,9 +505,22 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
         get() = quote.getTotalFeesUsd(proposal)
 }
 
+class ShieldingApproval(val account: WalletAccount, private val remainsCurrent: () -> Boolean) {
+    fun isCurrent(): Boolean = remainsCurrent()
+
+    fun requireCurrent() {
+        check(isCurrent()) { "The shielding account changed. Review the current balance before shielding." }
+    }
+}
+
 data class ShieldTransactionProposal(
     override val proposal: Proposal,
+    val approval: ShieldingApproval? = null,
 ) : TransactionProposal
+
+fun TransactionProposal.requireCurrentShieldingApproval() {
+    if (this is ShieldTransactionProposal) checkNotNull(approval).requireCurrent()
+}
 
 data class RegularTransactionProposal(
     override val destination: WalletAddress,

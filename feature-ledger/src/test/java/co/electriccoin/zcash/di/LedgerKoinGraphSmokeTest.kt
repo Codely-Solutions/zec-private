@@ -28,9 +28,11 @@ import co.electriccoin.zcash.ui.screen.connectledger.scan.LedgerDeviceScanVM
 import co.electriccoin.zcash.ui.screen.connectledger.turnon.LedgerTurnOnVM
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignVM
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -61,7 +63,9 @@ class LedgerKoinGraphSmokeTest {
             module {
                 single<Context> { mockk(relaxed = true) }
                 single<Application> { mockk(relaxed = true) }
-                single<NavigationRouter> { mockk(relaxed = true) }
+                single<NavigationRouter> {
+                    mockk(relaxed = true) { every { activeEntry } returns MutableStateFlow(null) }
+                }
 
                 factory { mockk<SelectWalletAccountUseCase>(relaxed = true) }
                 factory { mockk<NavigateToErrorUseCase>(relaxed = true) }

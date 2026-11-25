@@ -79,6 +79,7 @@ data class ActiveNavigationEntry(
     val route: String?,
     val refundWarningRequestId: String? = null,
     val genericScanRequestId: String? = null,
+    val contentEntryId: String? = id,
 )
 
 interface ActiveNavigationEntryObserver {
@@ -99,6 +100,17 @@ class PendingNavigation {
     internal fun remove(command: NavigationCommand.ForEntry) {
         pending.update { current ->
             if (current[command.sourceEntryId] === command) current - command.sourceEntryId else current
+        }
+    }
+
+    internal fun retainFor(sourceEntryId: String, contentEntryId: String) {
+        pending.update { current ->
+            val command = current[sourceEntryId]
+            when {
+                command == null -> current
+                contentEntryId in current -> current - sourceEntryId
+                else -> current - sourceEntryId + (contentEntryId to command.copy(sourceEntryId = contentEntryId))
+            }
         }
     }
 
@@ -134,8 +146,14 @@ fun NavigationRouter.stageResultFrom(
     }
 }
 
-fun NavigationRouter.discardResultFrom(sourceEntryId: String?) {
-    if (sourceEntryId != null) pendingNavigation?.removeFor(sourceEntryId)
+fun NavigationRouter.discardResultFrom(sourceEntryId: String?, retainedContentEntryId: String? = null) {
+    if (sourceEntryId != null) {
+        if (retainedContentEntryId != null && retainedContentEntryId != sourceEntryId) {
+            pendingNavigation?.retainFor(sourceEntryId, retainedContentEntryId)
+        } else {
+            pendingNavigation?.removeFor(sourceEntryId)
+        }
+    }
 }
 
 internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
@@ -144,19 +162,18 @@ internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigato
         .filterNotNull()
         .collect { command ->
             if (canCommit() && queue.commands.value[command.sourceEntryId] === command) {
-                var handled = false
                 val currentCommand = command.copy(
                     isStillAllowed = {
                         canCommit() && queue.commands.value[command.sourceEntryId] === command &&
                             command.isStillAllowed()
                     },
                     buildCommand = {
-                        handled = true
+                        queue.remove(command)
                         command.buildCommand()
                     },
                 )
                 navigator.executeCommand(currentCommand)
-                if (handled || !command.isStillAllowed()) queue.remove(command)
+                if (!command.isStillAllowed()) queue.remove(command)
             }
         }
 }

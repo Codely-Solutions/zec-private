@@ -293,11 +293,13 @@ class HomeVM(
             }
 
             is HomeMessageData.ShieldFunds -> {
+                val shield = shieldFundsFromMessage.action(data.account)
+                val onShield: () -> Unit = { viewModelScope.launch { shield() } }
                 homeMessageMapper.createState(
                     data = data,
                     isShieldFundsInfoEnabled = isShieldFundsInfoEnabled,
-                    onClick = ::onShieldFundsMessageClick,
-                    onButtonClick = ::onShieldFundsMessageButtonClick,
+                    onClick = onShield,
+                    onButtonClick = onShield,
                 )
             }
 
@@ -360,11 +362,6 @@ class HomeVM(
 
     private fun onWalletBackupMessageButtonClick() =
         navigationRouter.forward(WalletBackupDetail(false))
-
-    private fun onShieldFundsMessageClick() = viewModelScope.launch { shieldFundsFromMessage() }
-
-    private fun onShieldFundsMessageButtonClick() =
-        viewModelScope.launch { shieldFundsFromMessage() }
 
     private fun onWalletErrorMessageClick(homeMessageData: HomeMessageData.Error) =
         navigateToError(ErrorArgs.SyncError(homeMessageData.synchronizerError))
