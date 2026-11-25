@@ -3,12 +3,16 @@ package co.electriccoin.zcash.ui.screen.hotfix.ephemeral
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
+import co.electriccoin.zcash.ui.common.usecase.DiscoveryOutcome
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.TextFieldState
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -19,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -34,7 +39,7 @@ class EphemeralHotfixVM(
 
     private val isError = MutableStateFlow(false)
     private val isLoading = MutableStateFlow(false)
-    private val isComplete = MutableStateFlow(false)
+    private val completion = MutableStateFlow<DiscoveryOutcome.Confirmed?>(null)
     private val torReadAttempts = MutableStateFlow(0L)
 
     init {
@@ -45,6 +50,9 @@ class EphemeralHotfixVM(
     private val torPreference = torReadAttempts.flatMapLatest {
         isTorEnabledStorageProvider.observe().recoverableReads()
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val isComplete = completion.flatMapLatest { it?.ownership ?: flowOf(false) }
 
     val state: StateFlow<EphemeralHotfixState?> =
         combine(
@@ -124,17 +132,22 @@ class EphemeralHotfixVM(
 
     private fun retryTorRead() = torReadAttempts.update { it + 1 }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (navigationRouter.isForegroundAtEntry(sourceEntryId)) {
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+        }
+    }
 
     private fun onRecoverFundsClick() {
-        if (isComplete.value || !isLoading.compareAndSet(expect = false, update = true)) return
+        if (completion.value?.isCurrent?.invoke() == true || !isLoading.compareAndSet(false, true)) return
+        completion.value = null
         isError.value = false
         val address = text.value.orEmpty()
         viewModelScope.launch {
             try {
-                val discovered = fixEphemeralAddressUseCase(address, sourceEntryId)
-                isComplete.value = discovered
-                isError.value = !discovered
+                val result = fixEphemeralAddressUseCase(address, sourceEntryId)
+                completion.value = result as? DiscoveryOutcome.Confirmed
+                isError.value = result == DiscoveryOutcome.Unconfirmed
             } finally {
                 isLoading.value = false
             }

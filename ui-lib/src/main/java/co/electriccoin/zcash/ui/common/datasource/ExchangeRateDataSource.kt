@@ -6,18 +6,16 @@ import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.ObserveFiatCurrencyResult
 import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.common.provider.CMCApiProvider
-import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import io.ktor.client.plugins.ResponseException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transformLatest
 import kotlin.time.Clock
 
 interface ExchangeRateDataSource {
@@ -29,7 +27,7 @@ interface ExchangeRateDataSource {
     @Throws(ExchangeRateUnavailable::class, ResponseException::class)
     suspend fun getExchangeRate(fiatCurrency: FiatCurrency): FiatCurrencyConversion
 
-    fun observeSynchronizerRoute(): Flow<ObserveFiatCurrencyResult>
+    fun observeSynchronizerRoute(permitsRateRequests: suspend () -> Boolean): Flow<ObserveFiatCurrencyResult>
 }
 
 class ExchangeRateUnavailable(
@@ -69,28 +67,20 @@ class ExchangeRateDataSourceImpl(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeSynchronizerRoute(): Flow<ObserveFiatCurrencyResult> =
-        channelFlow {
-            val exchangeRate =
-                synchronizerProvider
-                    .synchronizer
-                    .flatMapLatest { synchronizer ->
-                        synchronizer?.exchangeRateUsd ?: flowOf(ObserveFiatCurrencyResult())
-                    }.stateIn(this)
-
-            launch {
-                synchronizerProvider
-                    .synchronizer
-                    .flatMapLatest { it?.status ?: flowOf(null) }
-                    .flatMapLatest {
-                        when (it) {
-                            null -> flowOf(ObserveFiatCurrencyResult())
-                            Synchronizer.Status.STOPPED -> emptyFlow()
-                            else -> exchangeRate
-                        }
-                    }.collect { send(it) }
-            }
-
-            awaitClose()
+    override fun observeSynchronizerRoute(permitsRateRequests: suspend () -> Boolean): Flow<ObserveFiatCurrencyResult> =
+        synchronizerProvider.synchronizer.flatMapLatest { synchronizer ->
+            if (synchronizer == null) return@flatMapLatest flowOf(ObserveFiatCurrencyResult(isLoading = false))
+            synchronizer.status
+                .map { it != Synchronizer.Status.STOPPED }
+                .distinctUntilChanged()
+                .transformLatest { ready ->
+                    // Collecting the SDK's rate StateFlow can start a Tor price request on its own.
+                    if (ready && permitsRateRequests() && synchronizerProvider.synchronizer.value === synchronizer) {
+                        synchronizer.refreshExchangeRateUsd()
+                        emitAll(synchronizer.exchangeRateUsd)
+                    } else {
+                        emit(ObserveFiatCurrencyResult(isLoading = false))
+                    }
+                }
         }
 }

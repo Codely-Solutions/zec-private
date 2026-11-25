@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -36,15 +37,22 @@ import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.PendingNavigation
 import java.io.IOException
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FixEphemeralAddressUseCaseTest {
     @Test
-    fun backgroundedSuccessfulScanKeepsAnOwnerBoundCompletionForTheDialog() = runTest {
+    fun backgroundedSuccessfulScanKeepsAnOwnerBoundCompletionForTheDialog() = backgroundedScan(false)
+
+    @Test
+    fun aLateSuccessfulScanReturningAfterRelockIsSuperseded() = backgroundedScan(true)
+
+    private fun backgroundedScan(relockBeforeCompletion: Boolean) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val owner = mockk<WalletAccount> {
@@ -79,16 +87,28 @@ class FixEphemeralAddressUseCaseTest {
             val completion = async { recover("synthetic-address", entry.id) }
             scanStarted.await()
             active.value = entry.copy(hostResumed = false)
+            if (relockBeforeCompletion) {
+                access.lock()
+                access.unlock()
+            }
             finishScan.complete(true)
 
-            assertTrue(completion.await())
+            val outcome = completion.await()
             verify(exactly = 0) { navigation.back() }
-            val result = assertNotNull(pending.commands.value[entry.id])
-            active.value = entry
-            assertTrue(result.isStillAllowed())
-            access.lock()
-            access.unlock()
-            assertFalse(result.isStillAllowed())
+            if (relockBeforeCompletion) {
+                assertEquals(DiscoveryOutcome.Superseded, outcome)
+                assertTrue(pending.commands.value.isEmpty())
+            } else {
+                val confirmed = assertIs<DiscoveryOutcome.Confirmed>(outcome)
+                val result = assertNotNull(pending.commands.value[entry.id])
+                active.value = entry
+                assertTrue(confirmed.ownership.first())
+                assertTrue(result.isStillAllowed())
+                access.lock()
+                access.unlock()
+                assertFalse(confirmed.ownership.first())
+                assertFalse(result.isStillAllowed())
+            }
             coVerify(exactly = 1) { sdk.fetchUtxosByAddress(any(), any()) }
         } finally {
             Dispatchers.resetMain()
@@ -143,7 +163,7 @@ class FixEphemeralAddressUseCaseTest {
                 walletWriteAccess = WalletWriteAccess(),
                 isTorEnabled = tor,
             )
-            assertFalse(recovery("synthetic-address", sourceEntryId = null))
+            assertEquals(DiscoveryOutcome.Unconfirmed, recovery("synthetic-address", sourceEntryId = null))
 
             coVerify(exactly = failure.expectedReads) { tor.get() }
             val lookups = if (failure == Failure.SDK_FALSE || failure == Failure.SDK_THROW) 1 else 0
@@ -230,7 +250,7 @@ class FixEphemeralAddressUseCaseTest {
         active.value = ActiveNavigationEntry("reopened", "Discover")
         val second = async { recover("synthetic-reference", "reopened") }
         advanceTimeBy(30_001)
-        assertFalse(second.await())
+        assertEquals(DiscoveryOutcome.Unconfirmed, second.await())
     }
 
     private enum class Failure(val expectedReads: Int, val failedRead: Int? = null) {

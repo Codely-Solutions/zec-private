@@ -67,7 +67,11 @@ fun StyledExchangeBalance(
         is ExchangeRateState.Data -> {
             if ((state.isStale && !state.isLoading) || (!state.isLoading && state.currencyConversion == null)) {
                 Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-                    ExchangeRateUnavailableButton(textColor = textColor, style = style)
+                    ExchangeRateUnavailableButton(
+                        textColor = textColor,
+                        style = style,
+                        modifier = if (state.isRefreshEnabled) Modifier.weight(1f, fill = false) else Modifier,
+                    )
                     if (state.isRefreshEnabled) ExchangeRateRefreshButton(state, textColor)
                 }
             } else {
@@ -187,6 +191,7 @@ private fun ExchangeRateUnavailableButton(
     val scope = rememberCoroutineScope()
     val tooltipState = rememberTooltipState(isPersistent = true)
     ZashiTooltipBox(
+        modifier = modifier,
         state = tooltipState,
         tooltip = {
             StyledExchangeUnavailablePopup(
@@ -199,7 +204,6 @@ private fun ExchangeRateUnavailableButton(
         }
     ) {
         TextButton(
-            modifier = modifier,
             onClick = {
                 scope.launch {
                     if (tooltipState.isVisible) tooltipState.dismiss() else tooltipState.show()
@@ -211,7 +215,7 @@ private fun ExchangeRateUnavailableButton(
             Text(
                 text = stringResource(id = R.string.tooltip_exchangeRate_title),
                 style = style,
-                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
                 color = textColor
             )
 

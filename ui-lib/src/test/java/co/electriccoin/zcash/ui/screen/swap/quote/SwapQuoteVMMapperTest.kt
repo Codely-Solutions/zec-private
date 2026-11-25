@@ -35,6 +35,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -256,6 +257,34 @@ class SwapQuoteVMMapperTest {
         ).items.last()
         val zeroFiat = (zeroAllowance.subtitle as StyledStringResource.ByStringResource).resource
         assertEquals("$0.00", zeroFiat.getString(RuntimeEnvironment.getApplication(), Locale.US))
+    }
+
+    @Test
+    fun exactOutputKeepsTheZecFeeWhenItsFiatEstimateIsUnavailable() {
+        val quote = FakeSwapQuote(
+            destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
+            originAsset = SwapAssetTestFixture.zecAsset(),
+            mode = SwapMode.EXACT_OUTPUT,
+            amountInFormatted = BigDecimal("0.01"),
+            amountInUsd = BigDecimal.ZERO,
+        )
+        val fundingAccount = zashi()
+        val fee = Zatoshi(15_000L)
+        val proposal = ExactOutputSwapTransactionProposal(
+            destination = mockk(),
+            amount = Zatoshi(1_000_000L),
+            memo = Memo(""),
+            proposal = mockk<Proposal> { every { totalFeeRequired() } returns fee },
+            quote = quote,
+            fundingAccount = fundingAccount,
+        )
+        val details = mapper.createState(SwapQuoteInternalState(proposal, quote, fundingAccount), {}, {}, {})
+        val feeRow = details.items.single { it.description.resourceId() == R.string.private_wallet_transaction_fee }
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes(fee).withStyle(), feeRow.title)
+        assertEquals(
+            co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable).withStyle(),
+            feeRow.subtitle,
+        )
     }
 
     @get:Rule

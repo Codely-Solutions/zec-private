@@ -126,11 +126,11 @@ internal class SwapQuoteVMMapper {
             SwapQuoteInfoItem(
                 description = stringRes(R.string.private_wallet_transaction_fee),
                 title = stringRes(totalFeesZatoshi).withStyle(),
-                subtitle =
-                    stringResByDynamicCurrencyNumber(totalFeesUsd, FiatCurrency.USD.symbol)
-                        .takeIf {
-                            quote.mode == EXACT_OUTPUT
-                        }?.withStyle()
+                subtitle = if (quote.mode == EXACT_OUTPUT) {
+                    quoteFiatAmount(totalFeesUsd, quote.amountInUsd.signum() > 0).withStyle()
+                } else {
+                    null
+                }
             ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
             SwapQuoteInfoItem(
                 description = stringRes(R.string.private_provider_costs),

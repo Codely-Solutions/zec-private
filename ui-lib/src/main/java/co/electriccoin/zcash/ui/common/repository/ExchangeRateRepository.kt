@@ -8,7 +8,6 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.ConversionRequestWithdrawn
 import co.electriccoin.zcash.ui.common.provider.CurrencyConversionPreference
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
@@ -53,7 +52,6 @@ interface ExchangeRateRepository {
 class ExchangeRateRepositoryImpl(
     private val isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     private val exchangeRateDataSource: ExchangeRateDataSource,
-    private val synchronizerProvider: SynchronizerProvider,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     private val isCmcAvailable: Boolean = VersionInfo.IS_CMC_AVAILABLE,
 ) : ExchangeRateRepository {
@@ -138,19 +136,12 @@ class ExchangeRateRepositoryImpl(
     private fun CurrencyConversionPreference.withSupportedFiat(): CurrencyConversionPreference =
         if (isCmcAvailable || fiat == null) this else copy(fiat = FiatCurrency.USD)
 
-    private fun trySynchronizerRoute(fiat: FiatCurrency) = flow {
-        val synchronizer = synchronizerProvider.getSynchronizer()
-        val selection = runCatchingRecoverable { isExchangeRateEnabledStorageProvider.readSelection() }
-            .getOrNull()?.withSupportedFiat()
-        if (selection == CurrencyConversionPreference(enabled = true, fiat = fiat)) {
-            synchronizer.refreshExchangeRateUsd()
-            emitAll(exchangeRateDataSource.observeSynchronizerRoute().map {
-                ExchangeRateResult(observed = it, requestedFiat = fiat)
-            })
-        } else {
-            emit(ExchangeRateResult(observed = ObserveFiatCurrencyResult(isLoading = false), requestedFiat = fiat))
-        }
-    }
+    private fun trySynchronizerRoute(fiat: FiatCurrency) =
+        exchangeRateDataSource.observeSynchronizerRoute {
+            val selection = runCatchingRecoverable { isExchangeRateEnabledStorageProvider.readSelection() }
+                .getOrNull()?.withSupportedFiat()
+            selection == CurrencyConversionPreference(enabled = true, fiat = fiat)
+        }.map { ExchangeRateResult(observed = it, requestedFiat = fiat) }
 
     private val usdExchangeRateTimestamp =
         combine(conversionPreference, exchangeRateUsdInternal) { preference, exchangeRate ->

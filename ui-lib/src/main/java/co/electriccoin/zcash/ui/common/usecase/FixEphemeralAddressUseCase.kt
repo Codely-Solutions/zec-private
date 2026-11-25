@@ -19,6 +19,8 @@ import co.electriccoin.zcash.ui.common.provider.TorOnlyRequest
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -34,17 +36,27 @@ class FixEphemeralAddressUseCase(
     private val walletWriteAccess: WalletWriteAccess,
     private val isTorEnabled: IsTorEnabledStorageProvider,
 ) {
-    suspend operator fun invoke(address: String, sourceEntryId: String?): Boolean {
-        val account = selectedAccount() ?: return false
+    suspend operator fun invoke(address: String, sourceEntryId: String?): DiscoveryOutcome {
+        val account = selectedAccount() ?: return DiscoveryOutcome.Unconfirmed
         val grant = appAccessSession.grant.value
         val token = walletWriteAccess.token()
         val canRecover = {
             appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
                 selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
         }
-        return runCatchingRecoverable {
+        val confirmed = runCatchingRecoverable {
             recover(address, sourceEntryId, account, canRecover)
         }.getOrDefault(false)
+        return when {
+            !canRecover() -> DiscoveryOutcome.Superseded
+            !confirmed -> DiscoveryOutcome.Unconfirmed
+            else -> DiscoveryOutcome.Confirmed(
+                isCurrent = canRecover,
+                ownership = combine(
+                    appAccessSession.grant, walletWriteAccess.version, accountDataSource.allAccounts,
+                ) { _, _, _ -> canRecover() },
+            )
+        }
     }
 
     private suspend fun recover(
@@ -113,4 +125,13 @@ class FixEphemeralAddressUseCase(
     private companion object {
         val PRE_SCAN_TIMEOUT = 30.seconds
     }
+}
+
+sealed interface DiscoveryOutcome {
+    data object Unconfirmed : DiscoveryOutcome
+    data object Superseded : DiscoveryOutcome
+    class Confirmed internal constructor(
+        internal val isCurrent: () -> Boolean,
+        internal val ownership: Flow<Boolean>,
+    ) : DiscoveryOutcome
 }
