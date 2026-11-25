@@ -59,8 +59,10 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
@@ -333,19 +335,28 @@ class SwapVMTest {
         }
 
     @Test
-    fun requestingQuoteTogglesRequestingFlag() =
+    fun requestingQuoteTemporarilyDisablesInfoAndRejectsRetainedClick() =
         runTest {
             val harness = harness()
             harness.collectState(this)
             val gate = harness.makeQuoteHang()
 
             harness.onAddressChange(BTC_ADDRESS)
+            val retainedInfo = harness.vm.state.value.swapInfoButton
+            assertTrue(retainedInfo.isEnabled)
 
             harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             assertEquals(true, harness.capturedState.isRequestingQuote)
+            assertFalse(harness.vm.state.value.swapInfoButton.isEnabled)
+            retainedInfo.onClick()
+            verify(exactly = 0) { harness.navigateToSwapInfo() }
 
             gate.complete(Unit)
             assertEquals(false, harness.capturedState.isRequestingQuote)
+            val currentInfo = harness.vm.state.value.swapInfoButton
+            assertTrue(currentInfo.isEnabled)
+            currentInfo.onClick()
+            verify(exactly = 1) { harness.navigateToSwapInfo() }
         }
 
     @Test
@@ -873,6 +884,7 @@ class SwapVMTest {
         }
         val cancelSwap = mockk<CancelSwapUseCase>(relaxed = true)
         val navigateToSwapQuoteIfAvailable = mockk<NavigateToSwapQuoteIfAvailableUseCase>(relaxed = true)
+        val navigateToSwapInfo = mockk<NavigateToSwapInfoUseCase>(relaxed = true)
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
         val catalog = MutableStateFlow(assets)
         val getSwapAssets =
@@ -898,6 +910,7 @@ class SwapVMTest {
                 requestSwapQuote = requestSwapQuote,
                 cancelSwap = cancelSwap,
                 navigateToSwapQuoteIfAvailable = navigateToSwapQuoteIfAvailable,
+                navigateToSwapInfo = navigateToSwapInfo,
                 navigationRouter = navigationRouter,
                 selectedAccount = selectedAccount,
                 assets = catalog
@@ -909,7 +922,7 @@ class SwapVMTest {
                 getSelectedWalletAccount = getSelectedWalletAccount,
                 getPreselectedSwapAsset = getPreselectedSwapAsset,
                 swapRepository = swapRepository,
-                navigateToSwapInfo = mockk<NavigateToSwapInfoUseCase>(relaxed = true),
+                navigateToSwapInfo = navigateToSwapInfo,
                 cancelSwap = cancelSwap,
                 navigationRouter = navigationRouter,
                 requestSwapQuote = requestSwapQuote,
@@ -932,6 +945,7 @@ class SwapVMTest {
         val requestSwapQuote: RequestSwapQuoteUseCase,
         val cancelSwap: CancelSwapUseCase,
         val navigateToSwapQuoteIfAvailable: NavigateToSwapQuoteIfAvailableUseCase,
+        val navigateToSwapInfo: NavigateToSwapInfoUseCase,
         val navigationRouter: NavigationRouter,
         val selectedAccount: MutableStateFlow<WalletAccount?>,
         val assets: MutableStateFlow<SwapAssetsData>,

@@ -402,12 +402,15 @@ class VKDetailVMTest {
         }
 
     @Test
-    fun missingKeyNavigatesBackWithoutAState() =
+    fun missingKeyOffersExplicitBackWithoutAKeyState() =
         runTest(dispatcher) {
             val router = FakeNavigationRouter()
             val vm = startedVm(key = null, router = router)
 
             assertNull(vm.state.value)
+            assertTrue(vm.isUnavailable.value)
+            assertEquals(0, router.guardedBackCount)
+            vm.onBack()
             assertEquals(1, router.guardedBackCount)
         }
 

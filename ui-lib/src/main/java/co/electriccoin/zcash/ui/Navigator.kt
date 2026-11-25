@@ -171,6 +171,8 @@ class NavigatorImpl(
     }
 
     private suspend fun forward(command: NavigationCommand.Forward) {
+        if (command.sourceEntryId != null && navController.currentBackStackEntry?.id != command.sourceEntryId) return
+        if (command.isStillAllowed?.invoke() == false) return
         command.routes.forEach { route ->
             when (route) {
                 is ExternalUrl -> startWebBrowser(route)

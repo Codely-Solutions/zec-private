@@ -34,6 +34,7 @@ class SendViewIntegrationTest {
 
         restorationTester.setContent {
             WrapSend(
+                sendEntryId = "fixture-send",
                 args = Send(),
             )
         }

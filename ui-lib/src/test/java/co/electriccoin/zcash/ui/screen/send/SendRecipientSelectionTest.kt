@@ -87,6 +87,7 @@ class SendRecipientSelectionTest {
         val getWalletAccounts = GetWalletAccountsUseCase(accountDataSource)
         val selection = ObserveABContactPickedUseCase(synchronizerProvider)
         val send = SendViewModel(
+            sendEntryId = "fixture-send",
             exchangeRateRepository = mockk(relaxed = true),
             observeContactByAddress = ObserveContactByAddressUseCase(addressBook),
             observeContactPicked = selection,

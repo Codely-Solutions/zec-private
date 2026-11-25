@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
@@ -19,6 +20,9 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
 import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class CreateProposalUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
@@ -28,7 +32,7 @@ class CreateProposalUseCase(
     private val navigationRouter: NavigationRouter,
 ) {
     @Suppress("TooGenericExceptionCaught")
-    suspend operator fun invoke(zecSend: ZecSend, floor: Boolean, canReview: () -> Boolean = { true }) {
+    suspend operator fun invoke(zecSend: ZecSend, floor: Boolean, sendEntryId: String, canReview: () -> Boolean) {
         try {
             val normalized by lazy { zecSend.normalize(floor) }
             val account = accountDataSource.getSelectedAccount()
@@ -52,24 +56,39 @@ class CreateProposalUseCase(
                     zashiProposalRepository.createProposal(normalized)
                 }
             }
-            if (canReview()) navigationRouter.forward(ReviewTransactionArgs)
+            forwardFromSend(sendEntryId, ReviewTransactionArgs, canReview)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            if (canReview()) navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            zashiProposalRepository.clear()
+            forwardFromSend(sendEntryId, TEXUnsupportedArgs(isLedger = isLedger), canReview)
+            clearIfCurrent(canReview)
         } catch (_: InsufficientFundsException) {
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            zashiProposalRepository.clear()
-            if (canReview()) navigationRouter.forward(InsufficientFundsArgs)
+            clearIfCurrent(canReview)
+            forwardFromSend(sendEntryId, InsufficientFundsArgs, canReview)
         } catch (e: Exception) {
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            zashiProposalRepository.clear()
+            clearIfCurrent(canReview)
             throw e
         }
+    }
+
+    private fun forwardFromSend(sendEntryId: String, route: Any, canReview: () -> Boolean) {
+        if (!canReview()) return
+        navigationRouter.custom { current ->
+            if (current?.id == sendEntryId && canReview()) {
+                NavigationCommand.Forward(listOf(route), sendEntryId, canReview)
+            } else {
+                null
+            }
+        }
+    }
+
+    private suspend fun clearIfCurrent(canReview: () -> Boolean) {
+        currentCoroutineContext().ensureActive()
+        if (!canReview()) return
+        keystoneProposalRepository.clear()
+        ledgerProposalPipeline.clear()
+        zashiProposalRepository.clear()
     }
 
     private fun ZecSend.normalize(floor: Boolean): ZecSend {

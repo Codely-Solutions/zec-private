@@ -45,14 +45,14 @@ class SendFiatProposalTest {
                 memo = Memo(""),
                 proposal = null,
             )
-            assertFailsWith<IllegalArgumentException> { createProposal(send, floor = true) }
+            assertFailsWith<IllegalArgumentException> { createProposal.prepare(send, floor = true) }
             coVerify(exactly = 0) { proposals.createProposal(any()) }
             coVerify(exactly = 0) { keystone.createProposal(any()) }
             coVerify(exactly = 0) { ledger.createProposal(any()) }
 
             val expected = send.copy(amount = Zatoshi(5_000))
-            createProposal(expected, floor = true)
-            createProposal(send.copy(amount = Zatoshi(5_001)), floor = true)
+            createProposal.prepare(expected, floor = true)
+            createProposal.prepare(send.copy(amount = Zatoshi(5_001)), floor = true)
             when (account) {
                 is ZodlAccount -> coVerify(exactly = 2) { proposals.createProposal(expected) }
                 is KeystoneAccount -> coVerify(exactly = 2) { keystone.createProposal(expected) }
@@ -73,12 +73,13 @@ class SendFiatProposalTest {
             memo = Memo("Memo only"),
             proposal = null,
         )
-        assertFailsWith<IllegalArgumentException> { createProposal(send, floor = true) }
-        assertFailsWith<IllegalArgumentException> { createProposal(send.copy(memo = Memo("")), floor = false) }
+        assertFailsWith<IllegalArgumentException> { createProposal.prepare(send, floor = true) }
+        assertFailsWith<IllegalArgumentException> { createProposal.prepare(send.copy(memo = Memo("")), floor = false) }
         assertFailsWith<IllegalArgumentException> {
-            createProposal(send.copy(destination = WalletAddress.Tex.new("synthetic-tex-recipient")), floor = false)
+            val tex = send.copy(destination = WalletAddress.Tex.new("synthetic-tex-recipient"))
+            createProposal.prepare(tex, floor = false)
         }
-        createProposal(send, floor = false)
+        createProposal.prepare(send, floor = false)
         coVerify(exactly = 1) { proposals.createProposal(any()) }
         coVerify(exactly = 1) { proposals.createProposal(send) }
         assertEquals(Zatoshi(0), send.amount)
@@ -99,7 +100,7 @@ class SendFiatProposalTest {
         val transparent = send.copy(destination = WalletAddress.Transparent.new("synthetic-transparent-recipient"))
         val tex = send.copy(destination = WalletAddress.Tex.new("synthetic-tex-recipient"))
 
-        listOf(send, sapling, transparent, tex).forEach { createProposal(it, floor = false) }
+        listOf(send, sapling, transparent, tex).forEach { createProposal.prepare(it, floor = false) }
 
         coVerify(exactly = 4) { proposals.createProposal(any()) }
         coVerify(exactly = 1) { proposals.createProposal(send) }
@@ -122,13 +123,16 @@ class SendFiatProposalTest {
         val beyondSupply = mockk<Zatoshi> { every { value } returns 2_100_000_000_000_001L }
         listOf(false, true).forEach { fiat ->
             assertFailsWith<IllegalArgumentException> {
-                createProposal(maxSend.copy(amount = beyondSupply), floor = fiat)
+                createProposal.prepare(maxSend.copy(amount = beyondSupply), floor = fiat)
             }
-            createProposal(maxSend, floor = fiat)
+            createProposal.prepare(maxSend, floor = fiat)
         }
         coVerify(exactly = 2) { proposals.createProposal(any()) }
         coVerify(exactly = 2) { proposals.createProposal(maxSend) }
     }
+
+    private suspend fun CreateProposalUseCase.prepare(send: ZecSend, floor: Boolean) =
+        invoke(send, floor, "fixture-send") { true }
 
     private fun softwareProposal(proposals: ZashiProposalRepository) = CreateProposalUseCase(
         keystoneProposalRepository = mockk(relaxed = true),

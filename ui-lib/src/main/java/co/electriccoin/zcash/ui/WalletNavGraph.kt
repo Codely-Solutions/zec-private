@@ -301,7 +301,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<TransactionNote> { AndroidTransactionNote(it.toRoute()) }
         composable<TaxExport> { AndroidTaxExport() }
         composable<ReceiveArgs> { ReceiveScreen() }
-        composable<Send> { WrapSend(it.toRoute()) }
+        composable<Send> { WrapSend(it.toRoute(), it.id) }
         dialogComposable<TEXUnsupportedArgs> { AndroidTEXUnsupported(it.toRoute()) }
         dialogComposable<InsufficientFundsArgs> { InsufficientFundsScreen() }
         dialogComposable<SeedInfo> { AndroidSeedInfo() }

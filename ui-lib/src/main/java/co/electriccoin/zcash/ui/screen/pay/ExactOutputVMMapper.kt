@@ -49,7 +49,8 @@ internal class ExactOutputVMMapper {
             info =
                 IconButtonState(
                     icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
-                    onClick = callbacks.onSwapInfoClick
+                    onClick = callbacks.onSwapInfoClick,
+                    isEnabled = !state.isRequestingQuote,
                 ),
             address = createAddressState(state, callbacks.onAddressChange),
             asset = createAssetState(state, callbacks.onSwapAssetPickerClick),

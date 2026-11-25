@@ -102,7 +102,9 @@ data class CustomNavigationCommand(
 
 sealed interface NavigationCommand : BaseNavigationCommand {
     data class Forward(
-        val routes: List<Any>
+        val routes: List<Any>,
+        val sourceEntryId: String? = null,
+        val isStillAllowed: (() -> Boolean)? = null,
     ) : NavigationCommand
 
     data class Replace(

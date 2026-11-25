@@ -361,7 +361,9 @@ internal class PayVM(
             current.asset?.assetId == snapshot.asset?.assetId && current.amount == snapshot.amount
     }
 
-    private fun onInfoClick() = navigationRouter.forward(PayInfoArgs)
+    private fun onInfoClick() {
+        if (!quoteActionInProgress && canNavigateToReview()) navigationRouter.forward(PayInfoArgs)
+    }
 
     private fun onAddressChange(new: String) =
         internalState.update { state ->

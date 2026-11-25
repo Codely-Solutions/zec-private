@@ -105,7 +105,9 @@ class ViewOnlySpendGuardTest {
                     navigationRouter = navigationRouter,
                 )
 
-            assertViewOnly(assertFailsWith { useCase(zecSend = mockk(relaxed = true), floor = false) })
+            assertViewOnly(assertFailsWith {
+                useCase(mockk(relaxed = true), floor = false, sendEntryId = "fixture-send") { true }
+            })
             assertNoProposalCreated()
             verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
         }

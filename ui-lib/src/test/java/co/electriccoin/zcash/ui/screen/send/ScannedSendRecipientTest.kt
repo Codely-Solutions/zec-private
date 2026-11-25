@@ -136,6 +136,7 @@ class ScannedSendRecipientTest {
         val testModule = module {
             viewModel {
                 SendViewModel(
+                    sendEntryId = "fixture-send",
                     exchangeRateRepository = mockk<ExchangeRateRepository>(relaxed = true) {
                         every { state } returns rates
                     },
@@ -164,6 +165,7 @@ class ScannedSendRecipientTest {
                     ZcashTheme {
                         CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
                             WrapSend(
+                                sendEntryId = "fixture-send",
                                 balanceWidgetState = BalanceWidgetState.loadingPreview,
                                 exchangeRateState = rates.collectAsState().value,
                                 goToQrScanner = {},

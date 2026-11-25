@@ -50,6 +50,8 @@
     <string name="private_error_unavailable_message">Close this message to return to the previous screen.</string>
     <string name="private_review_unavailable_title">Payment review expired</string>
     <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
+    <string name="private_viewing_key_unavailable_title">Viewing key unavailable</string>
+    <string name="private_viewing_key_unavailable_message">Go back to review the viewing key again.</string>
     <string name="private_swap_funding_unconfirmed" translatable="false">Funding unconfirmed</string>
     <string name="private_swap_funding_not_sent" translatable="false">Funding not sent</string>
 </resources>

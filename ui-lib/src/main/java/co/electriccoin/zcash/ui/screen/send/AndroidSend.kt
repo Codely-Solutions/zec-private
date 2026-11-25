@@ -48,7 +48,7 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun WrapSend(args: Send) {
+internal fun WrapSend(args: Send, sendEntryId: String) {
     val activity = LocalActivity.current
 
     val navigationRouter = koinInject<NavigationRouter>()
@@ -76,9 +76,8 @@ internal fun WrapSend(args: Send) {
 
     val exchangeRateState = exchangeRateRepository.state.collectAsStateWithLifecycle().value
 
-    BackHandler { navigationRouter.back() }
-
     WrapSend(
+        sendEntryId = sendEntryId,
         balanceWidgetState = balanceState,
         exchangeRateState = exchangeRateState,
         goToQrScanner = {
@@ -100,6 +99,7 @@ internal fun WrapSend(args: Send) {
 @VisibleForTesting
 @Composable
 internal fun WrapSend(
+    sendEntryId: String,
     balanceWidgetState: BalanceWidgetState,
     exchangeRateState: ExchangeRateState,
     goToQrScanner: () -> Unit,
@@ -108,8 +108,12 @@ internal fun WrapSend(
     sendArguments: Send,
     selectedAccount: WalletAccount?,
 ) {
-    val viewModel = koinViewModel<SendViewModel>()
+    val viewModel = koinViewModel<SendViewModel> { parametersOf(sendEntryId) }
 
+    BackHandler {
+        viewModel.cancelProposalPreparation()
+        goBack()
+    }
 
     val sendAddressBookState by viewModel.sendAddressBookState.collectAsStateWithLifecycle()
 
@@ -124,7 +128,7 @@ internal fun WrapSend(
 
     val (zecSend, setZecSend) = rememberSaveable(stateSaver = ZecSend.Saver) { mutableStateOf(null) }
 
-    val recipientAddressState by viewModel.recipientAddressState.collectAsStateWithLifecycle()
+    val recipientAddressState = viewModel.recipientAddressState.collectAsStateWithLifecycle().value
 
     val observeClearSend = koinInject<ObserveClearSendUseCase>()
     val prefillSend = koinInject<PrefillSendUseCase>()
@@ -168,10 +172,11 @@ internal fun WrapSend(
         }
 
     // Memo computation:
-    val (memoState, setMemoState) =
+    val memoDraftState =
         rememberSaveable(stateSaver = MemoState.Saver) {
             mutableStateOf(MemoState.new(zecSend?.memo?.value ?: ""))
         }
+    val (memoState, setMemoState) = memoDraftState
 
     LaunchedEffect(Unit) {
         observeClearSend().collect {
@@ -229,6 +234,7 @@ internal fun WrapSend(
     val onBackAction = {
         when (sendStage) {
             SendStage.Form -> {
+                viewModel.cancelProposalPreparation()
                 goBack()
             }
 
@@ -252,7 +258,7 @@ internal fun WrapSend(
             balanceWidgetState = balanceWidgetState,
             sendStage = sendStage,
             onCreateZecSend = { newZecSend ->
-                if (amountState.lastFieldChangedByUser == AmountField.FIAT && amountDraftState.value != amountDraft) {
+                if (amountDraftState.value != amountDraft || memoDraftState.value != memoState) {
                     return@Send
                 }
                 viewModel.onCreateZecSendClick(
@@ -263,13 +269,22 @@ internal fun WrapSend(
                 )
             },
             onBack = onBackAction,
-            onQrScannerOpen = goToQrScanner,
+            onQrScannerOpen = {
+                viewModel.cancelProposalPreparation()
+                goToQrScanner()
+            },
             hasCameraFeature = hasCameraFeature,
             recipientAddressState = recipientAddressState,
             onRecipientAddressChange = viewModel::validateRecipient,
-            setAmountState = setAmountState,
+            setAmountState = {
+                if (amountDraftState.value != it) viewModel.cancelProposalPreparation()
+                setAmountState(it)
+            },
             amountState = amountState,
-            setMemoState = setMemoState,
+            setMemoState = {
+                if (memoDraftState.value != it) viewModel.cancelProposalPreparation()
+                setMemoState(it)
+            },
             memoState = memoState,
             selectedAccount = selectedAccount,
             exchangeRateState = exchangeRateState,

@@ -53,8 +53,11 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
 
 /**
  * [PayVM] owns the selected asset + slippage. Selecting an asset atomically recomputes the fiat
@@ -363,19 +366,27 @@ class PayVMTest {
         }
 
     @Test
-    fun requestingQuoteTogglesRequestingFlag() =
+    fun requestingQuoteTemporarilyDisablesInfoAndRejectsRetainedClick() =
         runTest {
             val harness = harness()
             harness.collectState(this)
             val gate = harness.makeQuoteHang()
 
             harness.onAddressChange(BTC_ADDRESS)
+            val retainedInfo = harness.info
+            assertTrue(retainedInfo.isEnabled)
 
             harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             assertEquals(true, harness.capturedState.isRequestingQuote)
+            assertFalse(harness.info.isEnabled)
+            retainedInfo.onClick()
+            verify(exactly = 0) { harness.navigationRouter.forward(PayInfoArgs) }
 
             gate.complete(Unit)
             assertEquals(false, harness.capturedState.isRequestingQuote)
+            assertTrue(harness.info.isEnabled)
+            harness.info.onClick()
+            verify(exactly = 1) { harness.navigationRouter.forward(PayInfoArgs) }
         }
 
     @Test
@@ -749,6 +760,7 @@ class PayVMTest {
             every { mapper.createState(any(), any()) } answers {
                 val callbacks = arg<ExactOutputStateCallbacks>(1)
                 harness.capturedState = firstArg()
+                harness.capturedCallbacks = callbacks
                 harness.onBack = callbacks.onBack
                 harness.onSwapAssetPickerClick = callbacks.onSwapAssetPickerClick
                 harness.onSlippageClick = callbacks.onSlippageClick
@@ -797,6 +809,8 @@ class PayVMTest {
     ) {
         lateinit var vm: PayVM
         lateinit var capturedState: InternalState
+        lateinit var capturedCallbacks: ExactOutputStateCallbacks
+        val info get() = ExactOutputVMMapper().createState(capturedState, capturedCallbacks).info
         var onBack: () -> Unit = {}
         var onSlippageClick: (BigDecimal?) -> Unit = {}
         var onSwapAssetPickerClick: () -> Unit = {}

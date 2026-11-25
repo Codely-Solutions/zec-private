@@ -17,7 +17,6 @@ import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
-import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import co.electriccoin.zcash.ui.screen.send.model.AmountState
 import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
 import co.electriccoin.zcash.ui.screen.send.model.SendStage
@@ -30,17 +29,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertNotSame
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -68,7 +70,8 @@ class SendViewModelLedgerTest {
                 vm(
                     createProposal =
                         mockk<CreateProposalUseCase> {
-                            coEvery { this@mockk.invoke(any(), any(), any()) } throws RuntimeException("boom")
+                            coEvery { this@mockk.invoke(any(), any(), "fixture-send", any()) } throws
+                                RuntimeException("boom")
                         },
                 )
 
@@ -81,7 +84,7 @@ class SendViewModelLedgerTest {
     @Test
     fun cancelledProposalKeepsTheFormUsableForAnotherReview() = runTest {
         val createProposal = mockk<CreateProposalUseCase> {
-            coEvery { this@mockk.invoke(any(), any(), any()) } throws CancellationException("cancelled")
+            coEvery { this@mockk.invoke(any(), any(), "fixture-send", any()) } throws CancellationException("cancelled")
         }
         val vm = vm(createProposal)
         val stages = mutableListOf<SendStage>()
@@ -91,10 +94,10 @@ class SendViewModelLedgerTest {
         runCurrent()
         assertEquals(emptyList(), stages)
 
-        coEvery { createProposal(any(), any(), any()) } returns Unit
+        coEvery { createProposal(any(), any(), "fixture-send", any()) } returns Unit
         vm.onCreateZecSendClick(payment, amountState(), vm.recipientAddressState.value) { stages += it }
         runCurrent()
-        coVerify(exactly = 2) { createProposal(payment, any(), any()) }
+        coVerify(exactly = 2) { createProposal(payment, any(), "fixture-send", any()) }
         assertEquals(emptyList(), stages)
     }
 
@@ -131,11 +134,11 @@ class SendViewModelLedgerTest {
         review()
         rates.value = rate(200.0)
         review()
-        coVerify(exactly = 0) { createProposal(any(), any(), any()) }
+        coVerify(exactly = 0) { createProposal(any(), any(), "fixture-send", any()) }
 
         rates.value = rate(100.0)
         review()
-        coVerify(exactly = 1) { createProposal(payment, true, any()) }
+        coVerify(exactly = 1) { createProposal(payment, true, "fixture-send", any()) }
     }
 
     @Test
@@ -154,7 +157,7 @@ class SendViewModelLedgerTest {
         vm.onCreateZecSendClick(payment(), amountState(), previous) {}
         vm.onCreateZecSendClick(payment(replacement), amountState(), vm.recipientAddressState.value) {}
         runCurrent()
-        coVerify(exactly = 0) { createProposal(any(), any(), any()) }
+        coVerify(exactly = 0) { createProposal(any(), any(), "fixture-send", any()) }
 
         validation.complete(AddressType.Unified)
         runCurrent()
@@ -162,17 +165,37 @@ class SendViewModelLedgerTest {
         val accepted = payment(replacement)
         vm.onCreateZecSendClick(accepted, amountState(), vm.recipientAddressState.value) {}
         runCurrent()
-        coVerify(exactly = 1) { createProposal(accepted, false, any()) }
-        coVerify(exactly = 0) { createProposal(match { it.destination.address != replacement }, any(), any()) }
+        coVerify(exactly = 1) { createProposal(accepted, false, "fixture-send", any()) }
+        coVerify(exactly = 0) {
+            createProposal(match { it.destination.address != replacement }, any(), "fixture-send", any())
+        }
     }
 
     @Test
-    fun proposalFinishingAfterAnotherRecipientIsChosenCannotOpenReview() = runTest {
+    fun equalRevalidatedRecipientAcceptsTheStillDisplayedReview() = runTest {
+        val validate = mockk<ValidateAddressUseCase>()
+        coEvery { validate(ORIGINAL_ADDRESS) } returns AddressType.Unified
+        val createProposal = mockk<CreateProposalUseCase>(relaxed = true)
+        val vm = vm(createProposal, validateAddress = validate)
+        val rendered = vm.recipientAddressState.value
+
+        vm.validateRecipient(ORIGINAL_ADDRESS)
+        runCurrent()
+        assertNotSame(rendered, vm.recipientAddressState.value)
+        assertEquals(rendered, vm.recipientAddressState.value)
+
+        val payment = payment()
+        vm.onCreateZecSendClick(payment, amountState(), rendered) {}
+        coVerify(exactly = 1) { createProposal(payment, false, "fixture-send", any()) }
+    }
+
+    @Test
+    fun leavingTheFormCancelsPreparationWithoutClearingANewerProposal() = runTest {
         val proposalReady = CompletableDeferred<Unit>()
         val proposals = mockk<ZashiProposalRepository> {
             coEvery { createProposal(any()) } coAnswers {
-                proposalReady.await()
-                mockk()
+                withContext(NonCancellable) { proposalReady.await() }
+                error("Synthetic late failure")
             }
         }
         val router = mockk<NavigationRouter>(relaxed = true)
@@ -186,14 +209,17 @@ class SendViewModelLedgerTest {
             navigationRouter = router,
         )
         val vm = vm(create)
-        vm.onCreateZecSendClick(payment(), amountState(), vm.recipientAddressState.value) {}
+        val stages = mutableListOf<SendStage>()
+        vm.onCreateZecSendClick(payment(), amountState(), vm.recipientAddressState.value) { stages += it }
         runCurrent()
         coVerify(exactly = 1) { proposals.createProposal(any()) }
-        vm.onRecipientAddressChanged(RecipientAddressState.new("synthetic-replacement", AddressType.Unified))
+        vm.cancelProposalPreparation()
         proposalReady.complete(Unit)
         runCurrent()
 
-        verify(exactly = 0) { router.forward(ReviewTransactionArgs) }
+        assertEquals(emptyList(), stages)
+        verify(exactly = 0) { router.custom(any()) }
+        verify(exactly = 0) { proposals.clear() }
     }
 
     private suspend fun payment(address: String = ORIGINAL_ADDRESS, amount: Long = 10_000L) =
@@ -207,6 +233,7 @@ class SendViewModelLedgerTest {
         validateAddress: ValidateAddressUseCase = mockk(),
     ) =
         SendViewModel(
+            sendEntryId = "fixture-send",
             exchangeRateRepository = rates,
             observeContactByAddress = mockk(relaxed = true),
             observeContactPicked = mockk(relaxed = true),

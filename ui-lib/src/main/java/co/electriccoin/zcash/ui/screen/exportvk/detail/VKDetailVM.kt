@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -44,6 +45,8 @@ internal class VKDetailVM(
     private val appAccessSession: AppAccessSession,
 ) : ViewModel() {
     private val key = MutableStateFlow<String?>(null)
+    private val unavailable = MutableStateFlow(false)
+    val isUnavailable = unavailable.asStateFlow()
     private val shareFilePrefix = "$VK_QR_FILENAME_PREFIX${UUID.randomUUID()}_"
 
     private val reveal = SensitiveReveal(appAccessSession)
@@ -70,15 +73,7 @@ internal class VKDetailVM(
                 if (loaded == null) {
                     reveal.hide()
                     getVK.endReview(args.reviewId)
-                    navigationRouter.custom { entry ->
-                        if (entry?.destination?.hasRoute<VKDetailArgs>() == true &&
-                            entry.toRoute<VKDetailArgs>() == args
-                        ) {
-                            NavigationCommand.Back
-                        } else {
-                            null
-                        }
-                    }
+                    unavailable.value = true
                 }
                 loaded == null
             }
@@ -222,7 +217,13 @@ internal class VKDetailVM(
         super.onCleared()
     }
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.custom { entry ->
+        if (entry?.destination?.hasRoute<VKDetailArgs>() == true && entry.toRoute<VKDetailArgs>() == args) {
+            NavigationCommand.Back
+        } else {
+            null
+        }
+    }
 
     private enum class Tab {
         QR,

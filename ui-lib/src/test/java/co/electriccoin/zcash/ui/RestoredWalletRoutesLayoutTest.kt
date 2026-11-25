@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui
 
+import android.app.Activity
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -37,6 +39,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCa
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarNavigationTag
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -48,6 +51,8 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
+import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeState
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
@@ -74,6 +79,10 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -155,6 +164,49 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle { controller.navigate(SignKeystoneTransactionArgs) }
         compose.onNodeWithText(context.getString(R.string.private_keystone_unavailable_message)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.general_back), ignoreCase = true).assertIsEnabled()
+    }
+
+    @Test
+    fun expiredViewingKeyReviewOffersBackAtLargeText() {
+        install()
+        val route = VKDetailArgs(VKType.INCOMING, "expired-review")
+        compose.runOnIdle { controller.navigate(route) }
+        compose.onNodeWithText(context.getString(R.string.private_viewing_key_unavailable_title)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.general_back), ignoreCase = true).performClick()
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+
+        compose.runOnIdle { controller.navigate(route) }
+        compose.runOnIdle { backDispatcher.onBackPressed() }
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun guardedForwardChecksTheActualDestinationAfterKeyboardClose() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val originalEntry = checkNotNull(controller.currentBackStackEntry).id
+                val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
+                val command = CustomNavigationCommand { NavigationCommand.Forward(listOf(request), originalEntry) }
+                val pending = launch { navigator.executeCommand(command) }
+                runCurrent()
+                assertTrue(pending.isActive)
+                controller.navigate(SignKeystoneTransactionArgs)
+                keyboard.onKeyboardClosed()
+                pending.join()
+                assertEquals(
+                    SignKeystoneTransactionArgs,
+                    controller.currentBackStackEntry?.toRoute<SignKeystoneTransactionArgs>()
+                )
+
+                assertTrue(controller.popBackStack())
+                navigator.executeCommand(command)
+                assertEquals(request, controller.currentBackStackEntry?.toRoute<RequestArgs>())
+            }
+        }
     }
 
     @Test
@@ -300,6 +352,11 @@ class RestoredWalletRoutesLayoutTest {
                                 QrCodeScreenContent(QrCodeState.Loading(loadingBack))
                             }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+                            composable<VKDetailArgs> {
+                                VKDetailScreenContent(
+                                    state = null, unavailable = true, isRevealed = { false }, onBack = loadingBack
+                                )
+                            }
                             composable<ScanKeystonePCZTRequest> {
                                 KeystoneSignatureScanner(it.toRoute(), koinViewModel(), true) {
                                     controller.popBackStack()

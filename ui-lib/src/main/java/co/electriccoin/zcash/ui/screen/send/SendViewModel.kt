@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
 class SendViewModel(
+    private val sendEntryId: String,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val observeContactByAddress: ObserveContactByAddressUseCase,
     private val observeContactPicked: ObserveABContactPickedUseCase,
@@ -55,6 +56,7 @@ class SendViewModel(
     val recipientAddressState = recipientState.asStateFlow()
 
     private var onCreateZecSendClickJob: Job? = null
+    private var pendingReview: Any? = null
     private var recipientValidationJob: Job? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -130,6 +132,7 @@ class SendViewModel(
     }
 
     private fun onAddressBookButtonClicked(mode: SendAddressBookState.Mode, recipient: RecipientAddressState) {
+        cancelProposalPreparation()
         when (mode) {
             SendAddressBookState.Mode.PICK_FROM_ADDRESS_BOOK -> {
                 viewModelScope.launch { navigateToSelectRecipient() }
@@ -155,6 +158,7 @@ class SendViewModel(
     }
 
     fun onRecipientAddressChanged(state: RecipientAddressState) {
+        cancelProposalPreparation()
         recipientValidationJob?.cancel()
         saveRecipient(state)
     }
@@ -175,6 +179,11 @@ class SendViewModel(
         recipientState.value = state
     }
 
+    internal fun cancelProposalPreparation() {
+        pendingReview = null
+        onCreateZecSendClickJob?.cancel()
+    }
+
     @Suppress("TooGenericExceptionCaught")
     fun onCreateZecSendClick(
         newZecSend: ZecSend,
@@ -182,10 +191,14 @@ class SendViewModel(
         renderedRecipient: RecipientAddressState,
         setSendStage: (SendStage) -> Unit
     ) {
-        val canReview = { recipientState.value === renderedRecipient }
+        val admittedRecipient = recipientState.value
         val matchesRecipient = renderedRecipient.type is AddressType.Valid &&
             newZecSend.destination.address == renderedRecipient.address
-        if (!canReview() || !matchesRecipient || onCreateZecSendClickJob?.isActive == true) return
+        val matchesForm = admittedRecipient == renderedRecipient && matchesRecipient
+        if (!matchesForm || onCreateZecSendClickJob?.isActive == true) return
+        val attempt = Any()
+        pendingReview = attempt
+        val canReview = { pendingReview === attempt && recipientState.value === admittedRecipient }
         onCreateZecSendClickJob =
             viewModelScope.launch {
                 try {
@@ -196,7 +209,7 @@ class SendViewModel(
                             ?.normalizedFiatAt(exchangeRateRepository.state.value)
                         if (current != newZecSend.amount) return@launch
                     }
-                    createProposal(newZecSend, enteredInFiat, canReview)
+                    createProposal(newZecSend, enteredInFiat, sendEntryId, canReview)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

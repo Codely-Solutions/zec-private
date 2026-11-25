@@ -457,7 +457,9 @@ internal class SwapVM(
         navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode()) &&
             currentQuoteDraft(rendered, checkAction = false) != null
 
-    private fun onSwapInfoClick() = navigateToSwapInfo()
+    private fun onSwapInfoClick() {
+        if (!quoteActionInProgress && canNavigateToReview()) navigateToSwapInfo()
+    }
 
     private fun onAddressChange(new: String) =
         internalState.update { it.copy(selectedContact = null, addressText = new) }

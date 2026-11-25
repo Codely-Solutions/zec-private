@@ -83,7 +83,8 @@ internal class SwapVMMapper {
             swapInfoButton =
                 IconButtonState(
                     co.electriccoin.zcash.ui.design.R.drawable.ic_info,
-                    onClick = callbacks.onSwapInfoClick
+                    onClick = callbacks.onSwapInfoClick,
+                    isEnabled = !state.isRequestingQuote,
                 ),
             infoItems = createListItems(state),
             qrScannerButton =
