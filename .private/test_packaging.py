@@ -102,6 +102,11 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('artifact/task-timing.jsonl', production)
         self.assertIn('artifact/task-timing.jsonl', emulator)
 
+    def test_pinned_tor_ci_bundle_uses_the_official_version_archive(self):
+        script = (Path(__file__).resolve().parent / 'run_tor_ci.sh').read_text()
+        self.assertIn('url="https://archive.torproject.org/tor-package-archive/torbrowser/$version/$base"', script)
+        self.assertIn('"$scratch/bundle.asc" "$url.asc"', script)
+
     def test_early_bridge_has_no_release_authority_and_quotes_receive_explicit_ids(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root/'.github/workflows/build-release.yml').read_text()
