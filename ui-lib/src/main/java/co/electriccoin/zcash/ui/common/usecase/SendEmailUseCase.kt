@@ -306,6 +306,7 @@ internal fun grpcFailureReportDescription(
 ): String? =
     when (reason) {
         SubmitResult.GrpcFailure.Reason.TIMEOUT -> timeoutCopy()
+        SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN -> "SDK submission status is uncertain."
         null -> description
     }
 

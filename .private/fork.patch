@@ -48655,7 +48655,7 @@ index 78850d5f3..0df46a173 100644
 -            navigationRouter.back()
 +            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
-index 51caa9e19..3feb251f0 100644
+index 51caa9e19..9bdcccb81 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -48806,6 +48806,8 @@ index 51caa9e19..3feb251f0 100644
 +        context.getString(R.string.transaction_detail_support_email_body, depositAddress, origin, destination)
 +
 +    private fun swapAssetLabel(tokenTicker: String, chainTicker: String) =
+@@ -278,0 +309 @@ internal fun grpcFailureReportDescription(
++        SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN -> "SDK submission status is uncertain."
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendSupportEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendSupportEmailUseCase.kt
 deleted file mode 100644
 index b63a9a929..000000000
@@ -86299,6 +86301,23 @@ index 000000000..5f59de00c
 +        coEvery { markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt
+index 46c7cddae..ec993c1c1 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt
+@@ -39,0 +40,12 @@ class SendEmailUseCaseTest {
++    @Test
++    fun uncertainSdkStateHasItsOwnReportDetail() {
++        assertEquals(
++            "SDK submission status is uncertain.",
++            grpcFailureReportDescription(
++                SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
++                description = null,
++                timeoutCopy = { error("Unexpected timeout copy") },
++            )
++        )
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCaseTest.kt
 new file mode 100644
 index 000000000..837115518

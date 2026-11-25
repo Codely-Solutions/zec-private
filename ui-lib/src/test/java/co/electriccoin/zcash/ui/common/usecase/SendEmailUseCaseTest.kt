@@ -38,6 +38,18 @@ class SendEmailUseCaseTest {
     }
 
     @Test
+    fun uncertainSdkStateHasItsOwnReportDetail() {
+        assertEquals(
+            "SDK submission status is uncertain.",
+            grpcFailureReportDescription(
+                SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
+                description = null,
+                timeoutCopy = { error("Unexpected timeout copy") },
+            )
+        )
+    }
+
+    @Test
     fun nullReasonUsesDescriptionAndDoesNotResolveTimeoutCopy() {
         var timeoutCopyResolved = false
         val result =
