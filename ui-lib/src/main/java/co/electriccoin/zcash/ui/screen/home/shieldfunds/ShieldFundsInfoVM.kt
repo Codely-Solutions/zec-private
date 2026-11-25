@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.screen.home.shieldfunds
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
@@ -41,8 +40,7 @@ class ShieldFundsInfoVM(
             getSelectedWalletAccount.observe(),
             shieldFundsInfoProvider.observe(),
         ) { account, infoEnabled ->
-            val transparentAmount = account?.transparentBalance ?: Zatoshi(0)
-            val confirm = account?.takeIf { it.isSpendable }?.let {
+            val confirm = account?.takeIf { it.isSpendable && it.isShieldingAvailable == true }?.let {
                 shieldFunds.confirm(it, closeCurrentScreen = true, sourceEntryId)
             }
             ShieldFundsInfoState(
@@ -60,11 +58,13 @@ class ShieldFundsInfoVM(
                         text = stringRes(R.string.smartBanner_help_shield_notNow),
                     ),
                 subtitle =
-                    stringRes(
-                        R.string.home_message_transparent_balance_subtitle,
-                        stringRes(transparentAmount, HIDDEN).asPrivacySensitive(),
-                        CURRENCY_TICKER
-                    ),
+                    account?.transparentBalance?.let { amount ->
+                        stringRes(
+                            R.string.home_message_transparent_balance_subtitle,
+                            stringRes(amount, HIDDEN).asPrivacySensitive(),
+                            CURRENCY_TICKER
+                        )
+                    } ?: stringRes(R.string.shield_balance_unavailable),
                 checkbox =
                     CheckboxState(
                         title = stringRes(R.string.smartBanner_help_shield_doNotShowAgain),

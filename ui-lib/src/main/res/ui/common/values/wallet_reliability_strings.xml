@@ -7,6 +7,7 @@
     <string name="private_balance_pending_confirmations">Some shielded funds are pending. Wait for confirmation and keep your wallet synced.</string>
     <string name="private_balance_not_yet_spendable">Some funds are not yet spendable. Check synchronization and pending transactions.</string>
     <string name="private_balance_unavailable_row">Not yet spendable</string>
+    <string name="shield_balance_unavailable">Balance unavailable</string>
     <string name="private_restore_funds_available">Funds available. Recovering transaction history.</string>
     <string name="private_insufficient_spendable_balance">Your spendable balance cannot cover the amount and Zcash network fee. Lower the amount and try again.</string>
 </resources>

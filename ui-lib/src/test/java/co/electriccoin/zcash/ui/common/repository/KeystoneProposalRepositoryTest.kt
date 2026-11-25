@@ -141,7 +141,7 @@ class KeystoneProposalRepositoryTest {
         val grant = appAccess.grant.value
         val account = mockk<WalletAccount>(relaxed = true)
         val approval = ShieldingApproval(account) { appAccess.permits(grant) }
-        coEvery { proposalDataSource.createShieldProposal(account) } returns ShieldTransactionProposal(mockk())
+        coEvery { proposalDataSource.createShieldProposal(approval) } returns ShieldTransactionProposal(mockk())
         coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
         val proposal = repository.createShieldProposal(approval)

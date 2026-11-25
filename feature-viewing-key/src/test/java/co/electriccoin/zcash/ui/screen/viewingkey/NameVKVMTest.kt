@@ -677,8 +677,15 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
     @Test
     fun refusedBackKeepsNameEditableAndAllowsTheOwnedBackToRetry() = runTest {
         val nameEntry = mockk<NavBackStackEntry> { every { id } returns "name" }
-        var top = mockk<NavBackStackEntry> { every { id } returns "scanner" }
+        var top = nameEntry
         var committedBacks = 0
+        every { pickerRouter.custom(any()) } answers {
+            val owned = assertIs<NavigationCommand.ForEntry>(
+                firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
+            )
+            pickerRequests.addAll(assertIs<NavigationCommand.Forward>(owned.buildCommand()).routes.filterIsInstance())
+            owned.acknowledge(true)
+        }
         every { navigationRouter.custom(any()) } answers {
             val command = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
             if (command != null) {
@@ -694,6 +701,7 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         openPicker(vm)
         val picker = pickerRequests.single()
 
+        top = mockk<NavBackStackEntry> { every { id } returns "scanner" }
         vm.content().onBack()
         runCurrent()
         assertEquals(0, committedBacks)
@@ -737,14 +745,13 @@ internal abstract class NameVKVMFixture {
 
     protected val pickerRequests = mutableListOf<ColorPickerArgs>()
 
-    protected val navigateToColorPicker =
-        NavigateToColorPickerUseCase(
-            mockk(relaxed = true) {
-                every { forward(*anyVararg()) } answers {
-                    (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
-                }
-            }
-        )
+    protected val pickerRouter = mockk<NavigationRouter>(relaxed = true) {
+        every { forward(*anyVararg()) } answers {
+            (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
+        }
+    }
+
+    protected val navigateToColorPicker = NavigateToColorPickerUseCase(pickerRouter)
 
     protected val accounts =
         MutableStateFlow<List<WalletAccount>?>(

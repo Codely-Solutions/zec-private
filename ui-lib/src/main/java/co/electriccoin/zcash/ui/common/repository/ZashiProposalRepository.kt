@@ -159,7 +159,7 @@ class ZashiProposalRepositoryImpl(
 
     override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
         approval.requireCurrent()
-        return proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
+        return proposalDataSource.createShieldProposal(approval).copy(approval = approval)
     }
 
     override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =

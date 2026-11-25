@@ -60,7 +60,7 @@ interface ProposalDataSource {
     ): ExactOutputSwapTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
-    suspend fun createShieldProposal(account: WalletAccount): ShieldTransactionProposal
+    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
 
     /**
      * Propagates the SDK's [PcztException.MultiStepProposalUnsupportedException] untouched: whether a
@@ -235,10 +235,12 @@ class ProposalDataSourceImpl(
             }
         }
 
-    override suspend fun createShieldProposal(account: WalletAccount): ShieldTransactionProposal =
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
         withContext(Dispatchers.IO) {
+            val account = approval.account
             account.requireSpendable()
             getOrThrow { synchronizer ->
+                approval.requireReadyToPropose()
                 val newProposal =
                     synchronizer.proposeShielding(
                         account = account.sdkAccount,
@@ -519,11 +521,21 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
         get() = quote.getTotalFeesUsd(proposal)
 }
 
-class ShieldingApproval(val account: WalletAccount, private val remainsCurrent: () -> Boolean) {
+class ShieldingApproval(
+    val account: WalletAccount,
+    private val hasShieldableBalance: () -> Boolean = { true },
+    private val remainsCurrent: () -> Boolean,
+) {
     fun isCurrent(): Boolean = remainsCurrent()
 
     fun requireCurrent() {
         check(isCurrent()) { "The shielding account changed. Review the current balance before shielding." }
+    }
+
+    fun isReadyToPropose() = isCurrent() && hasShieldableBalance()
+
+    fun requireReadyToPropose() {
+        check(isReadyToPropose()) { "Shielding requires the current account and an available transparent balance." }
     }
 }
 

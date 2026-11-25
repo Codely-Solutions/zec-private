@@ -7,6 +7,7 @@
     <string name="private_balance_pending_confirmations">Hay fondos protegidos pendientes. Espera la confirmación y mantén la billetera sincronizada.</string>
     <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
     <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
+    <string name="shield_balance_unavailable">Saldo no disponible</string>
     <string name="private_restore_funds_available">Fondos disponibles. Recuperando el historial de transacciones.</string>
     <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 </resources>

@@ -64,7 +64,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         var approved = true
         val approval = ShieldingApproval(account) { approved }
         coEvery { accountDataSource.getSelectedAccount() } returns account
-        coEvery { proposalDataSource.createShieldProposal(account) } returns ShieldTransactionProposal(mockk())
+        coEvery { proposalDataSource.createShieldProposal(approval) } returns ShieldTransactionProposal(mockk())
         coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
         every { ledgerSigningDataSource.isLinked } returns true

@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
@@ -374,7 +375,7 @@ class ViewOnlySpendGuardTest {
                 )
 
             assertViewOnly(assertFailsWith { dataSource.createProposal(viewOnly, mockk(relaxed = true)) })
-            assertViewOnly(assertFailsWith { dataSource.createShieldProposal(viewOnly) })
+            assertViewOnly(assertFailsWith { dataSource.createShieldProposal(ShieldingApproval(viewOnly) { true }) })
             assertViewOnly(assertFailsWith { dataSource.createZip321Proposal(viewOnly, "zcash:t1") })
             assertViewOnly(assertFailsWith { dataSource.createPcztFromProposal(viewOnly, mockk()) })
             coVerify(exactly = 0) { synchronizerProvider.getSynchronizer() }

@@ -303,7 +303,7 @@ class SignKeystoneTransactionVMTest {
     }
 
     private fun approvedShield(isCurrent: () -> Boolean = { true }) =
-        ShieldTransactionProposal(mockk(), ShieldingApproval(mockk(), isCurrent))
+        ShieldTransactionProposal(mockk(), ShieldingApproval(mockk(), remainsCurrent = isCurrent))
 
     private fun encoder() = UREncoder(UR.fromBytes("zcash-pczt", ByteArray(30) { it.toByte() }), 20, 10, 0L)
 

@@ -84,7 +84,7 @@ class ZashiProposalRepositoryTest {
         val approval = ShieldingApproval(account) { true }
         val started = CompletableDeferred<Unit>()
         val ready = CompletableDeferred<ShieldTransactionProposal>()
-        coEvery { proposals.createShieldProposal(account) } coAnswers {
+        coEvery { proposals.createShieldProposal(approval) } coAnswers {
             started.complete(Unit)
             ready.await()
         }
@@ -116,7 +116,7 @@ class ZashiProposalRepositoryTest {
         val key = mockk<UnifiedSpendingKey>()
         var current = true
         val approval = ShieldingApproval(account) { current }
-        coEvery { proposals.createShieldProposal(account) } returns ShieldTransactionProposal(sdkProposal)
+        coEvery { proposals.createShieldProposal(approval) } returns ShieldTransactionProposal(sdkProposal)
         coEvery { keys.getZashiSpendingKey() } returns key
         var broadcast = false
         coEvery { proposals.submitTransaction(sdkProposal, key, any(), any()) } coAnswers {

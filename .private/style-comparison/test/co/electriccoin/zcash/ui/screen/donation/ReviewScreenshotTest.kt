@@ -69,6 +69,16 @@ class ReviewScreenshotTest {
     }
 
     @Test
+    fun captureUnavailableShieldBalance() {
+        val scene = Scene("shield-balance-unavailable", "dark")
+        show(mutableStateOf(scene))
+        val balance = text(R.string.shield_balance_unavailable)
+        compose.onNodeWithText(balance).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.smartBanner_content_shield_button)).assertIsNotEnabled()
+        capture(scene, "disabled", balance)
+    }
+
+    @Test
     fun captureGiftResetRestart() = captureGiftResetRestart("light", 1f)
 
     @Test

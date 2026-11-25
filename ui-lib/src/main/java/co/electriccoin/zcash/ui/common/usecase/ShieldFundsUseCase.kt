@@ -54,7 +54,14 @@ class ShieldFundsUseCase(
         val owner = account.sdkAccount.accountUuid
         return {
             val grant = appAccessSession.grant.value
-            val approval = ShieldingApproval(account) {
+            val approval = ShieldingApproval(
+                account = account,
+                hasShieldableBalance = {
+                    accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.let {
+                        it.sdkAccount.accountUuid == owner && it.isShieldingAvailable == true
+                    } == true
+                },
+            ) {
                 appAccessSession.permits(grant) && walletWriteAccess.permits(wallet) &&
                     accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
             }
@@ -63,7 +70,8 @@ class ShieldFundsUseCase(
     }
 
     private fun canStartShield(approval: ShieldingApproval, sourceEntryId: String?): Boolean =
-        approval.isCurrent() && navigationRouter.isAtEntry(sourceEntryId)
+        navigationRouter.isAtEntry(sourceEntryId) &&
+            if (approval.account is ViewOnlyAccount) approval.isCurrent() else approval.isReadyToPropose()
 
     private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean, sourceEntryId: String?) {
         if (job?.isActive == true || !canStartShield(approval, sourceEntryId)) return

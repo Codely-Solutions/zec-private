@@ -234,7 +234,7 @@ class LedgerProposalRepositoryImpl(
     override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
         val preceding = transactionProposal.value
         approval.requireCurrent()
-        val shield = proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
+        val shield = proposalDataSource.createShieldProposal(approval).copy(approval = approval)
         currentCoroutineContext().ensureActive()
         approval.requireCurrent()
         check(transactionProposal.value === preceding && transactionProposal.compareAndSet(preceding, shield)) {

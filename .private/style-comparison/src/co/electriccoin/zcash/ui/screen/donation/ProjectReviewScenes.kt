@@ -13,6 +13,8 @@ import co.electriccoin.zcash.ui.screen.authentication.view.AppAccessAuthenticati
 import co.electriccoin.zcash.ui.screen.contact.ABContactView
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiState
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
+import co.electriccoin.zcash.ui.screen.home.shieldfunds.ShieldFundsInfoState
+import co.electriccoin.zcash.ui.screen.home.shieldfunds.ShieldFundsInfoView
 
 /** Synthetic failure and recovery layouts; every storage and destructive callback is inert. */
 @Composable
@@ -86,6 +88,26 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                 onBack = {},
                 operationError = stringRes(R.string.contact_error_saveFailed).takeIf { screen == "contact-save-error" },
             )
+        )
+        "shield-balance-unavailable" -> ShieldFundsInfoView(
+            ShieldFundsInfoState(
+                subtitle = stringRes(R.string.shield_balance_unavailable),
+                onBack = {},
+                checkbox = CheckboxState(
+                    title = stringRes(R.string.smartBanner_help_shield_doNotShowAgain),
+                    isChecked = false,
+                    onClick = {},
+                ),
+                primaryButton = ButtonState(
+                    text = stringRes(R.string.smartBanner_content_shield_button),
+                    isEnabled = false,
+                    onClick = {},
+                ),
+                secondaryButton = ButtonState(
+                    text = stringRes(R.string.smartBanner_help_shield_notNow),
+                    onClick = {},
+                ),
+            ),
         )
         "reset-pending", "reset-restart", "reset-retention", "reset-retention-off" -> {
             val pending = screen == "reset-pending" || screen == "reset-restart"

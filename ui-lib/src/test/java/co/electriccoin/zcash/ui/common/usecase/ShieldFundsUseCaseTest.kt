@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -150,8 +151,8 @@ class ShieldFundsUseCaseTest {
         }
 
     @Test
-    fun oldHardwareConfirmationIsRejectedAfterAccountOrWalletChanges() = runTest(dispatcher) {
-        val hardware = EditAccountFixtures.ledger(isSelected = true)
+    fun heldHardwareConfirmationRequiresCurrentBalanceAccountAndWallet() = runTest(dispatcher) {
+        val hardware = shieldableLedger()
         val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(hardware))
         val softwareProposals = mockk<ZashiProposalRepository>()
         val ledgerProposals = mockk<LedgerProposalPipeline>()
@@ -170,6 +171,13 @@ class ShieldFundsUseCaseTest {
             appAccessSession = AppAccessSession().apply { unlock() },
         )
         val confirm = operations.confirm(hardware, closeCurrentScreen = true)
+        accounts.value = listOf(hardware.copy(transparentBalance = null))
+        confirm()
+        advanceUntilIdle()
+        accounts.value = listOf(hardware.copy(transparentBalance = Zatoshi(100_000)))
+        confirm()
+        advanceUntilIdle()
+
         accounts.value = listOf(EditAccountFixtures.zodl())
         confirm()
         advanceUntilIdle()
@@ -188,7 +196,7 @@ class ShieldFundsUseCaseTest {
 
     @Test
     fun dismissedShieldDoesNotOpenTheHardwareSigner() = runTest(dispatcher) {
-        val hardware = EditAccountFixtures.ledger(isSelected = true)
+        val hardware = shieldableLedger()
         val entries = MutableStateFlow<ActiveNavigationEntry?>(
             ActiveNavigationEntry("shield-dialog", null, contentEntryId = "home")
         )
@@ -223,7 +231,7 @@ class ShieldFundsUseCaseTest {
 
     @Test
     fun softwareShieldApprovalCannotEnterSubmissionAfterRelockAndUnlock() = runTest(dispatcher) {
-        val software = EditAccountFixtures.zodl()
+        val software = shieldableSoftware()
         val access = AppAccessSession().apply { unlock() }
         val reviewed = CompletableDeferred<ShieldingApproval>()
         val preparingKey = CompletableDeferred<Unit>()
@@ -269,7 +277,7 @@ class ShieldFundsUseCaseTest {
 
     @Test
     fun oldSoftwareFailureDoesNotOpenAnErrorAfterAnAccountSwitch() = runTest(dispatcher) {
-        val software = EditAccountFixtures.zodl()
+        val software = shieldableSoftware()
         val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(software))
         val result = CompletableDeferred<SubmitResult>()
         val shield = mockk<ShieldTransactionProposal>()
@@ -304,7 +312,7 @@ class ShieldFundsUseCaseTest {
         submitResult: SubmitResult,
         navigateToError: NavigateToErrorUseCase
     ): (Boolean) -> Unit {
-        val account = EditAccountFixtures.zodl()
+        val account = shieldableSoftware()
         val useCase = ShieldFundsUseCase(
             keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
             ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true),
@@ -330,7 +338,7 @@ class ShieldFundsUseCaseTest {
         ledgerNavigator: LedgerNavigator = mockk(relaxed = true),
         navigateToError: NavigateToErrorUseCase = mockk(relaxed = true),
     ): (Boolean) -> Unit {
-        val account = EditAccountFixtures.ledger(isSelected = true)
+        val account = shieldableLedger()
         val useCase = ShieldFundsUseCase(
             keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
             ledgerProposalPipeline = ledgerProposalPipeline,
@@ -345,6 +353,11 @@ class ShieldFundsUseCaseTest {
         )
         return { close -> useCase.confirm(account, close)() }
     }
+
+    private fun shieldableSoftware() = EditAccountFixtures.zodl().copy(transparentBalance = Zatoshi(200_000))
+
+    private fun shieldableLedger() =
+        EditAccountFixtures.ledger(isSelected = true).copy(transparentBalance = Zatoshi(200_000))
 
     private fun selectedAccount(account: WalletAccount) = mockk<AccountDataSource> {
         every { allAccounts } returns MutableStateFlow(listOf(account))

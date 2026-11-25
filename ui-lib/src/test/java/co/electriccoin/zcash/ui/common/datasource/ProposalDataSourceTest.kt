@@ -35,6 +35,28 @@ class ProposalDataSourceTest {
         }
 
     @Test
+    fun shieldingCannotProposeAfterItsBalanceStopsQualifyingDuringSdkLookup() = runBlocking {
+        val synchronizer = mockk<Synchronizer>()
+        var eligible = true
+        val source = ProposalDataSourceImpl(
+            synchronizerProvider = mockk {
+                coEvery { getSynchronizer() } coAnswers {
+                    eligible = false
+                    synchronizer
+                }
+            },
+            lightWalletEndpointProvider = mockk(),
+            walletServerSelectionProvider = mockk(),
+        )
+        val approval = ShieldingApproval(account, hasShieldableBalance = { eligible }) { true }
+        assertTrue(approval.isReadyToPropose())
+
+        assertFailsWith<TransactionProposalNotCreatedException> { source.createShieldProposal(approval) }
+
+        coVerify(exactly = 0) { synchronizer.proposeShielding(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun multipleZip321PaymentsAreRejectedBeforeSdkProposal() =
         runBlocking {
             val synchronizer = mockk<Synchronizer>()
