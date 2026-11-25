@@ -126,6 +126,11 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
     fun getPrepared(current: TransactionProposal?): PreparedHardwareProposal? =
         prepared?.takeIf { it.proposal === current && walletWriteAccess.permits(it.walletGeneration) }
 
+    fun requireProofOwner(expected: PreparedHardwareProposal, current: TransactionProposal?) {
+        check(getPrepared(current) === expected) { "The transaction changed before proof preparation." }
+        expected.proposal.requireCurrentShieldingApproval()
+    }
+
     @Synchronized
     fun clear() {
         approval.value = null

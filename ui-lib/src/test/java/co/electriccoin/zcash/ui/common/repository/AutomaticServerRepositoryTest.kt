@@ -60,7 +60,10 @@ class AutomaticServerRepositoryTest {
     private val serverSelectionProvider = mockk<WalletServerSelectionProvider> {
         every { serverSelection } returns MutableStateFlow(null)
         every { writeVersion } returns 7L
-        coEvery { storeServerSelection(any(), any(), any()) } returns true
+        coEvery { storeServerSelection(any(), any(), any(), any()) } coAnswers {
+            arg<() -> Unit>(3).invoke()
+            true
+        }
     }
     private val persistedWallet = MutableStateFlow<PersistableWallet?>(null)
     private val persistableWalletProvider =
@@ -310,7 +313,7 @@ class AutomaticServerRepositoryTest {
 
             coVerify(exactly = 1) {
                 serverSelectionProvider.storeServerSelection(
-                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true), any()
                 )
             }
             coVerify(exactly = 1) { synchronizer.confirmServerSwitch(known.last()) }
@@ -333,7 +336,7 @@ class AutomaticServerRepositoryTest {
         runCurrent()
 
         assertEquals(listOf(known.last()), processed)
-        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) }
         coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
     }
 
@@ -348,7 +351,7 @@ class AutomaticServerRepositoryTest {
         localBalances.value = emptyMap()
         assertEquals(known.last(), transition.await())
 
-        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) }
         coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
     }
 
@@ -357,9 +360,10 @@ class AutomaticServerRepositoryTest {
         stubSwitchDecision(balances = emptyMap())
         val writing = CompletableDeferred<Unit>()
         val durable = CompletableDeferred<Unit>()
-        coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } coAnswers {
+        coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) } coAnswers {
             writing.complete(Unit)
             durable.await()
+            arg<() -> Unit>(3).invoke()
             true
         }
         val transition = async { repository.observeSwitchCandidates(flowOf(Unit)).first() }
@@ -382,7 +386,7 @@ class AutomaticServerRepositoryTest {
     fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =
         runTest {
             stubSwitchDecision(balances = emptyMap())
-            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } returns false
+            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) } returns false
             val foregroundEdges = MutableSharedFlow<Unit>()
             repository.observeSwitchCandidates(foregroundEdges).launchIn(backgroundScope)
             runCurrent()
@@ -392,7 +396,7 @@ class AutomaticServerRepositoryTest {
 
             coVerify(exactly = 1) {
                 serverSelectionProvider.storeServerSelection(
-                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true), any()
                 )
             }
             coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
@@ -412,7 +416,7 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) }
             coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
         }
 
@@ -432,7 +436,7 @@ class AutomaticServerRepositoryTest {
             runCurrent()
             lane.cancelAndJoin()
 
-            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) }
             coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
         }
 
@@ -469,7 +473,7 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any(), any()) }
 
             coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns known.last()
             timeSource += MINIMUM_EVALUATION_INTERVAL
@@ -478,7 +482,7 @@ class AutomaticServerRepositoryTest {
 
             coVerify(exactly = 1) {
                 serverSelectionProvider.storeServerSelection(
-                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true), any()
                 )
             }
         }
@@ -488,7 +492,7 @@ class AutomaticServerRepositoryTest {
         runTest {
             stubSwitchDecision(balances = emptyMap())
             coEvery {
-                serverSelectionProvider.storeServerSelection(any(), any(), any())
+                serverSelectionProvider.storeServerSelection(any(), any(), any(), any())
             } throws IllegalStateException("prefs failed")
 
             val foregroundEdges = MutableSharedFlow<Unit>()
@@ -500,7 +504,7 @@ class AutomaticServerRepositoryTest {
 
             coVerify(exactly = 1) {
                 serverSelectionProvider.storeServerSelection(
-                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true), any()
                 )
             }
         }

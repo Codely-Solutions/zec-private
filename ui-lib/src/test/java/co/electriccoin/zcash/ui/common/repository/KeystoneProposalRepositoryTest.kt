@@ -112,7 +112,7 @@ class KeystoneProposalRepositoryTest {
         givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
         val approved = repository.getTransactionProposal()
         coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
-        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
         repository.createPCZTFromProposal()
         repository.approveForSigning(approved)
         val redactionStarted = CompletableDeferred<Unit>()
@@ -143,7 +143,7 @@ class KeystoneProposalRepositoryTest {
         val approval = ShieldingApproval(account) { appAccess.permits(grant) }
         coEvery { proposalDataSource.createShieldProposal(approval) } returns ShieldTransactionProposal(mockk())
         coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
-        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
         val proposal = repository.createShieldProposal(approval)
         repository.createPCZTFromProposal(account)
         repository.approveForSigning(proposal)
@@ -162,7 +162,7 @@ class KeystoneProposalRepositoryTest {
         givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
         val proposal = repository.getTransactionProposal()
         coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
-        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
         repository.createPCZTFromProposal()
         var permitted = true
         repository.approveForSigning(proposal, canSign = { permitted })

@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 
-/** Keeps automatic endpoint writes disjoint from admitted wallet operations and their broadcasts. */
+/** Keeps endpoint writes disjoint from admitted wallet operations and their broadcasts. */
 class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? = null) {
     private val endpointWrite = Mutex()
     private val activeOperations = AtomicInteger()

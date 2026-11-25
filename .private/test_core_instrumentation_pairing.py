@@ -96,7 +96,7 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
 
     def test_installed_upgrade_rejects_any_other_mode_before_adb(self):
         for flag in ('use_tor', 'transport_only', 'repeat_cold_start', 'upgrade_probe',
-                     'preclaim_check', 'preclaim_only', 'live_tor_probe'):
+                     'preclaim_check', 'preclaim_only', 'live_tor_probe', 'tor_mode_preparation'):
             with self.subTest(flag=flag):
                 adb = Mock()
                 options = {'use_tor': False, flag: True}
@@ -106,7 +106,7 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
 
     def test_candidate_only_rejects_upgrade_and_probe_modes_before_adb(self):
         for flag in ('use_tor', 'transport_only', 'repeat_cold_start', 'upgrade_probe',
-                     'preclaim_only', 'live_tor_probe', 'installed_upgrade'):
+                     'preclaim_only', 'live_tor_probe', 'installed_upgrade', 'tor_mode_preparation'):
             with self.subTest(flag=flag):
                 adb = Mock()
                 options = {'use_tor': False, flag: True}

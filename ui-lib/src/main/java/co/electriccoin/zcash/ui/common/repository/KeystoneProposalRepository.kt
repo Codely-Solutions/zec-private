@@ -294,7 +294,11 @@ class KeystoneProposalRepositoryImpl(
     private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
         val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
-        pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
+        pcztWithProofsJob = prepared.startProofs(scope) { pczt ->
+            proposalDataSource.addProofsToPczt(pczt) {
+                hardwareProposal.requireProofOwner(prepared, transactionProposal.value)
+            }
+        }
     }
 
 

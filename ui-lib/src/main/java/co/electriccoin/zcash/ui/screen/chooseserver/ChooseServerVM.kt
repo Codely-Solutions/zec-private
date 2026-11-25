@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveFastestServersUseCase
 import co.electriccoin.zcash.ui.common.usecase.PersistEndpointException
 import co.electriccoin.zcash.ui.common.usecase.PersistServerSelectionUseCase
 import co.electriccoin.zcash.ui.common.usecase.RefreshFastestServersUseCase
+import co.electriccoin.zcash.ui.common.usecase.ServerSelectionWalletBusyException
 import co.electriccoin.zcash.ui.design.component.AlertDialogState
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.RadioButtonState
@@ -412,9 +413,12 @@ class ChooseServerVM(
                 isSaveRetryPending = false
             } catch (e: PersistEndpointException) {
                 showValidationErrorDialog(e.message)
+            } catch (_: ServerSelectionWalletBusyException) {
+                isSaveRetryPending = true
+                showSaveFailureDialog(R.string.server_selection_wallet_busy)
             } catch (_: IOException) {
                 isSaveRetryPending = true
-                showSaveFailureDialog()
+                showSaveFailureDialog(R.string.choose_server_save_error_text)
             } finally {
                 innerState.update {
                     it.copy(
@@ -444,13 +448,13 @@ class ChooseServerVM(
         }
     }
 
-    private fun showSaveFailureDialog() {
+    private fun showSaveFailureDialog(@StringRes reason: Int) {
         innerState.update {
             it.copy(
                 dialogState = ServerDialogState.SaveFailure(
                     createErrorDialog(
                         title = R.string.choose_server_save_error_title,
-                        text = R.string.choose_server_save_error_text,
+                        text = reason,
                     )
                 )
             )

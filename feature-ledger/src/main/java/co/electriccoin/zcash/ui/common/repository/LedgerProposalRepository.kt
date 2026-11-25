@@ -277,7 +277,11 @@ class LedgerProposalRepositoryImpl(
         cancelSigning()
         val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
-        pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
+        pcztWithProofsJob = prepared.startProofs(scope) { pczt ->
+            proposalDataSource.addProofsToPczt(pczt) {
+                hardwareProposal.requireProofOwner(prepared, transactionProposal.value)
+            }
+        }
     }
 
 

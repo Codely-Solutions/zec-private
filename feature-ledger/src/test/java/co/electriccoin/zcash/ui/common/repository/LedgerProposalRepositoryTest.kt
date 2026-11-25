@@ -71,7 +71,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         coEvery { accountDataSource.getSelectedAccount() } returns account
         coEvery { proposalDataSource.createShieldProposal(approval) } returns ShieldTransactionProposal(mockk())
         coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
-        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
         every { ledgerSigningDataSource.isLinked } returns true
         val proposal = repository.createShieldProposal(approval)
         repository.createPCZTFromProposal()
@@ -435,7 +435,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             runCurrent()
 
             assertEquals(submitResult, repository.submit())
-            coVerify(exactly = 1) { proposalDataSource.addProofsToPczt(any()) }
+            coVerify(exactly = 1) { proposalDataSource.addProofsToPczt(any(), any()) }
         }
 
     @Test

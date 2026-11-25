@@ -71,7 +71,7 @@ class ProposalPreparationCancellationTest {
 
         val replacement = Pczt(byteArrayOf(2))
         coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal, any()) } returns replacement
-        coEvery { dataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(3))
+        coEvery { dataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(3))
         try {
             repository.createPCZTFromProposal()
         } finally {

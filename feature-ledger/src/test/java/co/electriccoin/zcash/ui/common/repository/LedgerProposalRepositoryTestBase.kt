@@ -87,7 +87,7 @@ abstract class LedgerProposalRepositoryTestBase {
                 proposal = mockk<Proposal>()
             )
         coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns pczt
-        coEvery { proposalDataSource.addProofsToPczt(any()) } coAnswers {
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } coAnswers {
             try {
                 proofsGate?.await()
             } catch (e: CancellationException) {

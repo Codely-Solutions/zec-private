@@ -130,7 +130,7 @@ class ScanKeystonePCZTViewModelTest {
         val send = ZecSend(destination = destination, amount = amount, memo = memo, proposal = null)
         coEvery { proposalDataSource.createProposal(any(), send) } returns approved
         coEvery { proposalDataSource.createPcztFromProposal(any(), sdkProposal, any()) } returns unsigned
-        coEvery { proposalDataSource.addProofsToPczt(any()) } returns proven
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns proven
         coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) } coAnswers {
             arg<() -> Unit>(3).invoke()
             submitted.complete(firstArg<Pczt>().toByteArray() to secondArg<Pczt>().toByteArray())

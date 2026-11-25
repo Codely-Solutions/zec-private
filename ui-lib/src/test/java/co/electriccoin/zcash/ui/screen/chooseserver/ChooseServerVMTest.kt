@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
@@ -237,6 +238,36 @@ class ChooseServerVMTest {
         }
     }
 
+    @Test
+    fun activeWalletWorkKeepsTheSelectedServerAndOffersARetry() = runTest {
+        val previous = initialSelection(true)
+        val next = initialSelection(false)
+        val disk = PreferenceDisk(previous.endpoint, true)
+        withScreen(disk) { screen ->
+            val release = CompletableDeferred<Unit>()
+            val walletWork = launch {
+                screen.transport.whileOperating { release.await() }
+            }
+            runCurrent()
+            selectOtherMode(screen, initiallyAutomatic = true)
+            screen.state.saveButton.onClick()
+            runCurrent()
+
+            val dialog = assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
+            assertEquals(stringRes(R.string.server_selection_wallet_busy), dialog.state.text)
+            assertEquals(previous, screen.walletProvider.getServerSelection())
+            assertEquals(0, disk.attempts)
+            assertTrue(screen.state.saveButton.isEnabled)
+
+            release.complete(Unit)
+            walletWork.join()
+            screen.dismissError()
+            screen.state.saveButton.onClick()
+            runCurrent()
+            screen.assertSelected(next)
+        }
+    }
+
     private suspend fun TestScope.assertFailedSaveRecovery(initiallyAutomatic: Boolean) {
         val previous = initialSelection(initiallyAutomatic)
         val next = initialSelection(!initiallyAutomatic)
@@ -334,6 +365,7 @@ class ChooseServerVMTest {
 
     private inner class Screen(val disk: PreferenceDisk) {
         val writeAccess = WalletWriteAccess()
+        val transport = WalletTransportAccess()
         val navigation = mockk<NavigationRouter>(relaxed = true)
         val synchronizer = mockk<Synchronizer> {
             coEvery { validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
@@ -354,8 +386,12 @@ class ChooseServerVMTest {
         private val persist = PersistServerSelectionUseCase(
             application,
             walletProvider,
-            mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns this@Screen.synchronizer },
+            mockk<SynchronizerProvider> {
+                coEvery { getSynchronizer() } returns this@Screen.synchronizer
+                every { synchronizer } returns MutableStateFlow(this@Screen.synchronizer)
+            },
             automaticEndpoint,
+            transport,
         )
         val vm = ChooseServerVM(
             application,

@@ -4,18 +4,22 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.exception.PcztException
 import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.repository.HardwareProposalBinding
 import co.electriccoin.zcash.ui.fixture.Zip321MemoFixture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -77,6 +81,42 @@ class ProposalDataSourceTest {
         }
 
         coVerify(exactly = 0) { replacement.createPcztFromProposal(any(), any()) }
+    }
+
+    @Test
+    fun detachedHardwareProofChecksItsOwnerAfterTheSuspendedSdkLookup() = runBlocking {
+        val reached = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val replacement = mockk<Synchronizer>()
+        val source = ProposalDataSourceImpl(
+            synchronizerProvider = mockk {
+                coEvery { getSynchronizer() } coAnswers {
+                    reached.complete(Unit)
+                    resume.await()
+                    replacement
+                }
+            },
+            lightWalletEndpointProvider = mockk(),
+            walletServerSelectionProvider = mockk(),
+        )
+        var original = true
+        val approval = ShieldingApproval(account, hasShieldableBalance = { true }) { original }
+        val proposal = ShieldTransactionProposal(mockk(), approval)
+        val binding = HardwareProposalBinding()
+        val prepared = binding.prepare(proposal, Pczt(byteArrayOf(1)))
+
+        withTimeout(5_000) {
+            val proofs = prepared.startProofs(this) { pczt ->
+                source.addProofsToPczt(pczt) { binding.requireProofOwner(prepared, proposal) }
+            }
+            reached.await()
+            original = false
+            resume.complete(Unit)
+            assertFailsWith<IllegalStateException> { prepared.awaitProofs() }
+            proofs.join()
+        }
+
+        coVerify(exactly = 0) { replacement.addProofsToPczt(any()) }
     }
 
     @Test

@@ -13,6 +13,7 @@
     <string name="ephemeral_recovery_success">Se encontraron fondos.</string>
     <string name="tor_protection_save_failed">No se pudo guardar la configuración de Tor. Inténtalo de nuevo.</string>
     <string name="tor_protection_wallet_busy">Termina la operación en curso o cierra la tarjeta regalo y vuelve a intentarlo.</string>
+    <string name="server_selection_wallet_busy">Espera a que termine la operación actual de la billetera y vuelve a intentarlo.</string>
     <string name="tor_protection_gift_restart">Fuerza la detención de ZEC Private, vuelve a abrirla e intenta cambiar el ajuste de Tor.</string>
     <string name="tor_protection_restart_title">Vuelve a abrir la app para aplicar el ajuste de Tor</string>
     <string name="tor_protection_restart_message">Fuerza la detención de ZEC Private en los ajustes de Android y vuelve a abrirla.</string>

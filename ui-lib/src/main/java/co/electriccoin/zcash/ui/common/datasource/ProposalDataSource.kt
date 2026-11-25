@@ -83,7 +83,7 @@ interface ProposalDataSource {
     ): Pczt
 
     @Throws(PcztException.AddProofsToPcztException::class)
-    suspend fun addProofsToPczt(pczt: Pczt): Pczt
+    suspend fun addProofsToPczt(pczt: Pczt, beforeProofs: () -> Unit): Pczt
 
     /** Checks ownership before SDK creation and enters the funding gate once before any broadcast. */
     suspend fun submitTransaction(
@@ -284,9 +284,14 @@ class ProposalDataSourceImpl(
             }
         }
 
-    override suspend fun addProofsToPczt(pczt: Pczt): Pczt =
+    override suspend fun addProofsToPczt(pczt: Pczt, beforeProofs: () -> Unit): Pczt =
         withContext(Dispatchers.IO) {
-            walletTransport.whileOperating { requireActiveSynchronizer().addProofsToPczt(pczt) }
+            walletTransport.whileOperating {
+                val synchronizer = requireActiveSynchronizer()
+                currentCoroutineContext().ensureActive()
+                beforeProofs()
+                synchronizer.addProofsToPczt(pczt)
+            }
         }
 
     override suspend fun submitTransaction(

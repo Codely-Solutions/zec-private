@@ -7,7 +7,10 @@ import re
 import shutil
 import stat
 
-from acceptance_policy import direct_core_build_fingerprint, input_fingerprint, needs_live_tor_probe, validate_core_sources
+from acceptance_policy import (
+    direct_core_build_fingerprint, input_fingerprint, needs_live_tor_probe, needs_tor_mode_transition,
+    validate_core_sources,
+)
 from core_testnet_driver import INSTALLED_UPGRADE_STAGES, PACKAGE, run as lifecycle, select_apk_roles
 from emulator_session import SDK
 from hosted_claim import binding, verify
@@ -241,11 +244,13 @@ def run(session, root, fixture, candidate, result):
         build_input_fingerprint=(input_fingerprint(source, profile='core-build') if use_tor else
                                  direct_core_build_fingerprint(source, prepared['harness_controller'])))
     apk_preparation = prepare(apks, root, SDK)
+    direct_lifecycle = not use_tor and not installed_upgrade
+    tor_transition = direct_lifecycle and needs_tor_mode_transition(source, baseline=selected['source_sha'])
     try:
         lifecycle(session.adb, root, apks, manifest, transport_only=bool(upgrade_probe), upgrade_probe=upgrade_probe,
                   preclaim_check=not (upgrade_probe or installed_upgrade), use_tor=use_tor,
-                  live_tor_probe=not use_tor and not installed_upgrade and needs_live_tor_probe(source),
-                  installed_upgrade=installed_upgrade)
+                  live_tor_probe=direct_lifecycle and (tor_transition or needs_live_tor_probe(source)),
+                  installed_upgrade=installed_upgrade, tor_mode_preparation=apk_preparation if tor_transition else None)
     except Exception:
         report = root / 'core-testnet-result.json'
         if report.exists():

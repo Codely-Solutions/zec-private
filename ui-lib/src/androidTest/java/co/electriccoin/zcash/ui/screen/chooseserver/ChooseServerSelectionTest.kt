@@ -25,6 +25,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedEndpointUseCase
@@ -224,6 +225,7 @@ private fun createViewModel(
                 walletServerSelectionProvider = persistableWalletProvider,
                 synchronizerProvider = FakeSynchronizerProvider(),
                 getAutomaticEndpoint = getAutomaticEndpoint,
+                walletTransport = WalletTransportAccess(),
             ),
         navigationRouter = FakeNavigationRouter,
         getAutomaticEndpoint = getAutomaticEndpoint
@@ -248,10 +250,12 @@ private class FakePersistableWalletProvider(
         selection: WalletServerSelection,
         version: Long,
         expected: WalletServerSelection?,
+        onCommitted: () -> Unit,
     ): Boolean {
         endpointUpdateStarted.complete(Unit)
         continueEndpointUpdate?.await()
         serverSelection.value = selection
+        onCommitted()
         return true
     }
 

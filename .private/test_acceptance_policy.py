@@ -14,7 +14,9 @@ import unittest
 from unittest.mock import patch
 from test_support import patch_environment
 from acceptance_policy import profile_input, changed_inputs, input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
-from acceptance_policy import needs_live_tor_probe
+from acceptance_policy import (
+    TOR_MODE_GATE, TOR_MODE_STAGES, needs_live_tor_probe, needs_tor_mode_transition, validate_tor_mode_transition,
+)
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -476,6 +478,42 @@ class AcceptancePolicyTest(unittest.TestCase):
                 with self.subTest(path=changed), patch('acceptance_policy.input_manifest',
                                                        side_effect=[{changed: 'old'}, {changed: 'new'}]):
                     self.assertIs(needs_live_tor_probe('b'*40, root), expected)
+
+    def test_tor_mode_transition_only_keys_on_the_installed_restart_contract(self):
+        cases = (
+            ({}, {'gradle.properties': 'changed'}, False),
+            ({}, {TOR_MODE_GATE: 'new'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'gradle.properties': 'changed'}, False),
+            ({TOR_MODE_GATE: 'old'}, {TOR_MODE_GATE: 'changed'}, True),
+            ({TOR_MODE_GATE: 'old'}, {}, True),
+        )
+        for previous, current, expected in cases:
+            with self.subTest(current=current), patch('acceptance_policy.input_manifest',
+                                                      side_effect=[previous, current]):
+                self.assertIs(needs_tor_mode_transition('b'*40, baseline='a'*40), expected)
+
+    def test_tor_mode_transition_requires_both_real_process_restarts_on_the_exact_pair(self):
+        candidate = dict(original_sha256='a'*64, executed_sha256='b'*64, source_sha='c'*40, app_version_code=42)
+        apk, installed = 'd'*64, 'e'*64
+        preparations = {'candidate.apk': dict(originalSha256=apk, testedSha256=installed,
+                                              executionEntriesUnchanged=True)}
+        steps = []
+        for pid, (stage, tor) in enumerate(TOR_MODE_STAGES, start=100):
+            saving = stage == 'torModeSave'
+            steps.append(dict(candidate, stage=stage, tor_enabled=tor, passed=True, network='zcash-testnet',
+                              saved_mode=not tor if saving else tor, wallet_preserved=True, process_id=pid,
+                              admission_blocked_until_restart=saving, role='candidate', installed_hash_verified=True))
+        probe = dict(installed_apk_sha256=installed, steps=steps)
+        validate_tor_mode_transition(probe, candidate, apk, preparations)
+        for invalid in (None, dict(probe, installed_apk_sha256='f'*64), dict(probe, steps=steps[:2])):
+            with self.assertRaises(ValueError):
+                validate_tor_mode_transition(invalid, candidate, apk, preparations)
+        for field, invalid in (('process_id', 100), ('process_id', True), ('tor_enabled', False),
+                               ('executed_sha256', 'f'*64), ('wallet_preserved', False),
+                               ('admission_blocked_until_restart', True)):
+            with self.subTest(field=field, invalid=invalid), self.assertRaises(ValueError):
+                mismatched = [steps[0], dict(steps[1], **{field: invalid}), *steps[2:]]
+                validate_tor_mode_transition(dict(probe, steps=mismatched), candidate, apk, preparations)
 
     def test_quotes_need_real_repeated_evidence_on_the_requested_route(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',

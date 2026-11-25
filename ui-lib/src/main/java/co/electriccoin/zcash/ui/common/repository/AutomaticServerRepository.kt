@@ -19,10 +19,8 @@ import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -206,12 +204,12 @@ class AutomaticServerRepositoryImpl(
             }
             currentCoroutineContext().ensureActive()
             Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
-            val applied = withContext(NonCancellable) {
-                walletServerSelectionProvider.storeServerSelection(
-                    WalletServerSelection(endpoint, isAutomatic = true),
-                    version = candidate.version,
-                    expected = candidate.current,
-                ).also { if (it) walletTransport.retire(synchronizer) }
+            val applied = walletServerSelectionProvider.storeServerSelection(
+                WalletServerSelection(endpoint, isAutomatic = true),
+                version = candidate.version,
+                expected = candidate.current,
+            ) {
+                walletTransport.retire(synchronizer)
             }
             if (applied) synchronizer.confirmServerSwitch(endpoint)
         }

@@ -19,6 +19,19 @@ CORE_BINDING = 'core-runtime-v1'
 CORE_STAGES = {'fund', 'upgrade', 'send', 'restart', 'restore', 'interruption'}
 BASELINE_INSTRUMENTATION_STAGES = {'networkTargets', 'recipient', 'sender', 'fund'}
 CANDIDATE_INSTRUMENTATION_STAGES = {'upgrade', 'transport', 'send', 'restart', 'restore'}
+TOR_MODE_GATE = 'ui-lib/src/main/java/co/electriccoin/zcash/global/WalletSdkTransportGate.kt'
+TOR_MODE_STAGES = (('torModeSave', False), ('torModeResume', True),
+                   ('torModeSave', True), ('torModeResume', False))
+TOR_MODE_INPUTS = {
+    TOR_MODE_GATE,
+    'ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsTorEnabledStorageProvider.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateAndTorUseCase.kt',
+}
+TOR_MODE_SETTINGS_PATH = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/tor/settings/'
 
 # Unknown product changes retain live Tor acceptance. Keep this list limited
 # to reviewed presentation and fiat refresh scheduling inputs.
@@ -50,6 +63,41 @@ def needs_live_tor_probe(source, root=ROOT, *, baseline=None):
         if previous.get(path) != current.get(path):
             return True
     return False
+
+
+def needs_tor_mode_transition(source, root=ROOT, *, baseline):
+    """Require installed-app mode transitions when the restart-based contract changes."""
+    previous = input_manifest(baseline, root=root, profile='core-runtime')
+    current = input_manifest(source, root=root, profile='core-runtime')
+    if TOR_MODE_GATE not in current and TOR_MODE_GATE not in previous:
+        return False
+    return any(previous.get(path) != current.get(path) for path in previous.keys() | current.keys()
+               if path in TOR_MODE_INPUTS or path.startswith(TOR_MODE_SETTINGS_PATH))
+
+
+def validate_tor_mode_transition(probe, candidate, original_apk, preparations):
+    if not isinstance(probe, dict):
+        raise ValueError('Missing exact installed wallet Tor transition')
+    installed = probe.get('installed_apk_sha256')
+    steps = probe.get('steps')
+    if (not isinstance(installed, str) or not re.fullmatch('[0-9a-f]{64}', installed) or
+            sum(entry.get('originalSha256') == original_apk and entry.get('testedSha256') == installed
+                and entry.get('executionEntriesUnchanged') is True for entry in preparations.values()) != 1 or
+            not isinstance(steps, list) or len(steps) != len(TOR_MODE_STAGES)):
+        raise ValueError('Missing exact installed wallet Tor transition')
+    for step, (stage, tor) in zip(steps, TOR_MODE_STAGES, strict=True):
+        saving = stage == 'torModeSave'
+        if (not isinstance(step, dict) or step.get('stage') != stage or step.get('tor_enabled') is not tor or
+                step.get('network') != 'zcash-testnet' or step.get('passed') is not True or
+                step.get('wallet_preserved') is not True or
+                step.get('admission_blocked_until_restart') is not saving or
+                step.get('saved_mode') is not (not tor if saving else tor) or
+                type(step.get('process_id')) is not int or step['process_id'] < 1 or
+                step.get('role') != 'candidate' or step.get('installed_hash_verified') is not True or
+                any(step.get(key) != value for key, value in candidate.items())):
+            raise ValueError('Wrong stage or candidate in installed wallet Tor transition')
+    if any(steps[i]['process_id'] == steps[i + 1]['process_id'] for i in (0, 2)):
+        raise ValueError('Installed wallet Tor transition did not restart the Android process')
 
 
 def validate_instrumentation_pairing(receipt, baseline, *, use_tor=True, prepared=None):
@@ -322,6 +370,10 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
                     or probe.get('installed_hash_verified') is not True
                     or any(probe.get(key) != value for key, value in candidate.items())):
                 raise ValueError('Changed transport inputs require a passing native Tor probe on the exact candidate')
+        if needs_tor_mode_transition(product_revision, root, baseline=receipt['baseline_source_sha']):
+            validate_tor_mode_transition(receipt.get('tor_mode_transition'),
+                                         receipt['instrumentation_pairing']['candidate'],
+                                         receipt['candidate_apk_sha256'], receipt['apk_preparation'])
         return runtime
     for revision in (acceptance_revision, receipt['build_source_sha']):
         if input_fingerprint(revision, root=root, profile='core-build') != compiled:

@@ -6,6 +6,9 @@ import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.IOException
 
 class PersistServerSelectionUseCase(
@@ -13,6 +16,7 @@ class PersistServerSelectionUseCase(
     private val walletServerSelectionProvider: WalletServerSelectionProvider,
     private val synchronizerProvider: SynchronizerProvider,
     private val getAutomaticEndpoint: GetAutomaticEndpointUseCase,
+    private val walletTransport: WalletTransportAccess,
 ) {
     suspend fun persistAutomatic() {
         val version = walletServerSelectionProvider.writeVersion
@@ -31,13 +35,26 @@ class PersistServerSelectionUseCase(
     }
 
     private suspend fun persistSelection(selection: WalletServerSelection, version: Long) {
-        if (!walletServerSelectionProvider.storeServerSelection(selection, version)) {
+        val saved = walletTransport.ifIdleSwitch {
+            val previous = walletServerSelectionProvider.getServerSelection() ?: return@ifIdleSwitch false
+            val replaced =
+                if (previous.endpoint != selection.endpoint) synchronizerProvider.synchronizer.value else null
+            currentCoroutineContext().ensureActive()
+            walletServerSelectionProvider.storeServerSelection(selection, version) {
+                if (replaced != null) walletTransport.retire(replaced)
+            }
+        } ?: throw ServerSelectionWalletBusyException()
+        if (!saved) {
             throw IOException("The wallet changed before saving the server selection")
         }
     }
 
     private suspend fun validateServerEndpoint(endpoint: LightWalletEndpoint) =
-        synchronizerProvider
-            .getSynchronizer()
-            .validateServerEndpoint(application, endpoint)
+        walletTransport.whileOperating {
+            val synchronizer =
+                walletTransport.current(synchronizerProvider) ?: throw ServerSelectionWalletBusyException()
+            synchronizer.validateServerEndpoint(application, endpoint)
+        }
 }
+
+internal class ServerSelectionWalletBusyException : IOException("A wallet operation is still running")

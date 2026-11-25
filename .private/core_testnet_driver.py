@@ -15,12 +15,15 @@ import threading
 import time
 from pathlib import Path
 from core_faucet import FundingWindowExpired, PAYOUT_POLL_SECONDS, ready_session as faucet_ready_session
-from acceptance_policy import BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
+from acceptance_policy import (
+    BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES, TOR_MODE_STAGES, validate_tor_mode_transition,
+)
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
 RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 INSTALLED_UPGRADE_STAGES = {'receiptProbe': 'candidate', 'recipient': 'baseline', 'restoreProbe': 'candidate'}
 WALLET_PREFERENCES = 'shared_prefs/co.electriccoin.zcash.encrypted.xml'
+TOR_MODE_STAGE_NAMES = {name for name, _ in TOR_MODE_STAGES}
 STAGE_START_SECONDS = 1600
 INSTRUMENTATION_DEADLINE_SECONDS = 1700
 FUNDED_RESERVE_SECONDS = {False: PAYOUT_POLL_SECONDS + 670, True: PAYOUT_POLL_SECONDS + 820}
@@ -29,7 +32,8 @@ FUNDED_RESERVE_SECONDS = {False: PAYOUT_POLL_SECONDS + 670, True: PAYOUT_POLL_SE
 def instrumentation_role(stage):
     if stage in BASELINE_INSTRUMENTATION_STAGES:
         return 'baseline'
-    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe', 'receiptProbe', 'rpcProbe'):
+    if (stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in TOR_MODE_STAGE_NAMES
+            or stage in ('transportProbe', 'restoreProbe', 'receiptProbe', 'rpcProbe')):
         return 'candidate'
     raise ValueError('Unknown version-paired instrumentation stage: ' + stage)
 
@@ -98,14 +102,17 @@ def claim_after_readiness(check_readiness, submit_claim):
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
         preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False, installed_upgrade=False,
-        candidate_only=False, before_faucet_post=None):
+        tor_mode_preparation=None, candidate_only=False, before_faucet_post=None):
     started = time.monotonic()
+    tor_mode_transition = tor_mode_preparation is not None
     if candidate_only and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_only
-                           or live_tor_probe or installed_upgrade):
+                           or live_tor_probe or tor_mode_transition or installed_upgrade):
         raise ValueError('Candidate-only lifecycle requires direct testnet with one app/instrumentation pair')
     if installed_upgrade and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_check
-                              or preclaim_only or live_tor_probe):
+                              or preclaim_only or live_tor_probe or tor_mode_transition):
         raise ValueError('Installed-upgrade verification requires the dedicated direct unfunded path')
+    if tor_mode_transition and (use_tor or not live_tor_probe):
+        raise ValueError('Tor mode transitions require direct acceptance with a native Tor probe')
     if not use_tor and (transport_only or repeat_cold_start or upgrade_probe or preclaim_only):
         raise ValueError('Tor-specific unfunded probes require the Tor transport')
     if preclaim_only and (not transport_only or upgrade_probe or repeat_cold_start):
@@ -168,7 +175,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     active_instrumentation={}
     operation_lock=threading.Lock()
 
-    def stage(name, timeout=700, *, readiness_only=False):
+    def stage(name, timeout=700, *, readiness_only=False, tor_mode=None):
         nonlocal current_stage
         current_stage = 'preclaim_readiness' if readiness_only else name
         if time.monotonic() - started > STAGE_START_SECONDS:
@@ -179,7 +186,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             role = INSTALLED_UPGRADE_STAGES[name]
         else:
             role = 'baseline' if readiness_only or (not use_tor and name == 'restoreProbe') else instrumentation_role(name)
-        stage_uses_tor = use_tor or name == 'rpcProbe'
+        stage_uses_tor = (use_tor or name == 'rpcProbe') if tor_mode is None else tor_mode
         expected = pairing[role]
         verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
         if not readiness_only:
@@ -263,6 +270,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             raise RuntimeError('Instrumentation did not establish the expected Tor setting')
         if name == 'rpcProbe':
             report['live_tor_probe'] = dict(pairing['stages'].pop(name), passed=True, tor_enabled=True)
+        if name in TOR_MODE_STAGE_NAMES:
+            fields = ('stage', 'passed', 'network', 'tor_enabled', 'wallet_preserved', 'process_id',
+                      'saved_mode', 'admission_blocked_until_restart')
+            return dict(pairing['stages'].pop(name), **{key: rows[0][key] for key in fields})
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
         if installed_upgrade or (candidate_only and name in ('receiptProbe', 'recipient', 'restoreProbe', 'sender')):
@@ -387,14 +398,24 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if not transport_only or upgrade_probe:
             adb('install', '-r', str(candidate), timeout=90)
             adb('install', '-r', '-t', str(test), timeout=90)
-            if candidate_only:
+            if candidate_only or tor_mode_transition:
                 candidate_hash = installed_apk_hash(shell, PACKAGE)
                 if candidate_hash != hashlib.sha256(candidate.read_bytes()).hexdigest():
                     raise RuntimeError('Installed candidate bytes differ from the prepared app APK')
-                report['candidate_installed_sha256'] = candidate_hash
+                if candidate_only:
+                    report['candidate_installed_sha256'] = candidate_hash
             stage('receiptProbe', 50)
             if live_tor_probe:
                 stage('rpcProbe', 120)
+            if tor_mode_transition:
+                mode_steps = []
+                for name, tor in TOR_MODE_STAGES:
+                    shell('am', 'force-stop', PACKAGE)
+                    mode_steps.append(stage(name, 120, tor_mode=tor))
+                transition = dict(installed_apk_sha256=candidate_hash, steps=mode_steps)
+                validate_tor_mode_transition(transition, pairing['candidate'], report['candidate_apk_sha256'],
+                                             tor_mode_preparation)
+                report['tor_mode_transition'] = transition
             if not candidate_only:
                 adb('uninstall', PACKAGE + '.test', timeout=30)
                 adb('uninstall', PACKAGE, timeout=30)

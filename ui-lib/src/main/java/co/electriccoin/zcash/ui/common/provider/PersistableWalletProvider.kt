@@ -10,6 +10,7 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 interface PersistableWalletProvider {
@@ -76,6 +78,7 @@ interface WalletServerSelectionProvider {
         selection: WalletServerSelection,
         version: Long,
         expected: WalletServerSelection? = null,
+        onCommitted: () -> Unit = {},
     ): Boolean
 }
 
@@ -160,6 +163,7 @@ class PersistableWalletProviderImpl(
         selection: WalletServerSelection,
         version: Long,
         expected: WalletServerSelection?,
+        onCommitted: () -> Unit,
     ): Boolean =
         walletWriteAccess.write(version) {
             val current = persistableWalletStorageProvider.get()
@@ -167,12 +171,15 @@ class PersistableWalletProviderImpl(
                 false
             } else {
                 currentCoroutineContext().ensureActive()
-                persistableWalletStorageProvider.store(
-                    WalletRecord(
-                        wallet = current.wallet.copy(endpoint = selection.endpoint),
-                        isAutomatic = checkNotNull(selection.isAutomatic)
+                withContext(NonCancellable) {
+                    persistableWalletStorageProvider.store(
+                        WalletRecord(
+                            wallet = current.wallet.copy(endpoint = selection.endpoint),
+                            isAutomatic = checkNotNull(selection.isAutomatic)
+                        )
                     )
-                )
+                    onCommitted()
+                }
                 true
             }
         } ?: false

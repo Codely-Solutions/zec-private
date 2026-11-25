@@ -1,15 +1,15 @@
 package co.electriccoin.zcash.app
 
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.graphics.Color
 import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiArgs
-import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
+import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsArgs
 import co.electriccoin.zcash.ui.screen.updates.AppUpdateRepository
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
@@ -83,6 +83,7 @@ import org.koin.core.context.GlobalContext
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.Proxy
+import java.security.MessageDigest
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -114,8 +115,12 @@ class CoreWalletAcceptance {
         val started = System.nanoTime()
         withTimeout(900_000) {
             val preference = dependency<IsTorEnabledStorageProvider>()
-            preference.store(useTor)
-            check(preference.get() == useTor)
+            val modeProbe = stage == "torModeSave" || stage == "torModeResume"
+            val walletProvider = dependency<PersistableWalletProvider>()
+            if (!modeProbe || (stage == "torModeSave" && walletProvider.getPersistableWallet() == null)) {
+                preference.store(useTor)
+                check(preference.get() == useTor)
+            }
             if (stage !in listOf("networkTargets", "rpcProbe", "receiptProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -124,6 +129,8 @@ class CoreWalletAcceptance {
             }
             when (stage) {
                 "receiptProbe" -> check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
+                "torModeSave" -> saveOppositeTorMode(useTor)
+                "torModeResume" -> verifyTorModeAfterRestart(useTor)
                 "recipient" -> createWallet("recipient")
                 "sender" -> createWallet("sender")
                 "fund" -> {
@@ -432,12 +439,18 @@ class CoreWalletAcceptance {
                 }
                 else -> error("Unsupported core stage")
             }
-            check(preference.get() == useTor)
+            if (stage != "torModeSave") check(preference.get() == useTor)
         }
         val receipt = JSONObject().put("stage", stage).put("passed", true)
             .put("network", "zcash-testnet").put("tor_enabled", useTor)
             .put("transport", if (useTor) "Tor sensitive RPCs; upstream direct bulk" else "direct")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+        if (stage == "torModeSave" || stage == "torModeResume") {
+            receipt.put("process_id", android.os.Process.myPid())
+                .put("saved_mode", if (stage == "torModeSave") !useTor else useTor)
+                .put("wallet_preserved", true)
+                .put("admission_blocked_until_restart", stage == "torModeSave")
+        }
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (useTor && stage in listOf("rpcProbe", "networkTargets", "fund")) {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
@@ -1310,7 +1323,7 @@ class CoreWalletAcceptance {
         check(walletDb.isFile)
 
         dependency<AddressBookRepository>().saveContact("Synthetic reset contact", address, null)
-        check(dependency<MetadataRepository>().createOrUpdateTxNote("0".repeat(64), "Synthetic reset note"))
+        check(dependency<MetadataRepository>().setAccountColor(account, Color.Red))
         val contactKey = checkNotNull(dependency<AddressBookKeyStorageProvider>().getAddressBookKey())
         val contacts = checkNotNull(dependency<AddressBookStorageProvider>().getStorageFile(contactKey))
         val metadataKey = checkNotNull(dependency<MetadataKeyStorageProvider>().get(account.sdkAccount.accountUuid))
@@ -1326,18 +1339,12 @@ class CoreWalletAcceptance {
             }
         }
         withTimeout(10_000) { observerReady.await() }
-        val progress = dependency<ResetProgressStore>()
-        val reset = dependency<ResetZashiUseCase>()
         suspend fun trace(phase: String, error: Exception? = null) {
             val freshWallet = runCatching { walletProvider.getPersistableWallet() != null }.getOrNull()
-            val stage = runCatching { progress.getStage()?.name }.getOrNull()
             android.util.Log.i("ProjectReviewReset", JSONObject()
                 .put("phase", phase)
                 .put("fresh_wallet_present", freshWallet ?: JSONObject.NULL)
                 .put("observed_wallet_present", observedWalletPresent.value)
-                .put("pending", progress.isPending.value)
-                .put("stage", stage ?: "none")
-                .put("running", reset.isRunning.value)
                 .put("sdk_open", syncProvider.synchronizer.value != null)
                 .put("sdk_file_present", walletDb.exists())
                 .put("contacts_present", contacts.exists())
@@ -1355,24 +1362,15 @@ class CoreWalletAcceptance {
             clickUi(confirm, "reset_request_confirmation")
             clickUi(context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_actionButtonTitle), "reset_confirm")
             trace("confirmation_tapped")
-            withTimeout(10_000) {
-                combine(observedWalletPresent, progress.isPending, reset.isRunning) { present, pending, running ->
-                    !present || pending || running
-                }.first { it }
-            }
-            trace("reset_started_or_finished")
-            withTimeout(90_000) {
-                observedWalletPresent.first { !it }
-                progress.isPending.first { !it }
-            }
+            withTimeout(90_000) { observedWalletPresent.first { !it } }
+            val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
+            waitUi(restore, "reset_returned_to_onboarding")
             trace("reset_completed")
 
             check(!walletDb.exists()) { "The settings reset left the SDK wallet database on disk" }
             check(!contacts.exists() && metadataFiles.none { it.exists() })
-            val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
-            waitUi(restore, "reset_returned_to_onboarding")
             val transportPreference = dependency<IsTorEnabledStorageProvider>()
-            check(transportPreference.getStoredMode() == null) { "Reset retained the previous transport preference" }
+            check(transportPreference.observe().first() == null) { "Reset retained the previous transport preference" }
             // Reset deliberately clears preferences. Select this isolated probe's transport again before restore.
             transportPreference.store(useTor)
             dependency<RestoreWalletUseCase>()(wallet.seedPhrase, useTor, checkNotNull(wallet.birthday))
@@ -1388,6 +1386,56 @@ class CoreWalletAcceptance {
             observer.cancel()
             observer.join()
         }
+    }
+
+    private suspend fun saveOppositeTorMode(originalTor: Boolean) {
+        val walletProvider = dependency<PersistableWalletProvider>()
+        val preference = dependency<IsTorEnabledStorageProvider>()
+        val synchronizer = dependency<SynchronizerProvider>()
+        check(preference.observe().first() == originalTor) { "Unexpected original stored Tor choice" }
+        if (walletProvider.getPersistableWallet() == null) dependency<WalletRepository>().createNewWallet()
+        val walletId = withTimeout(45_000) {
+            walletProvider.persistableWallet.filterNotNull().first()
+            dependency<WalletRepository>().secretState.first {
+                it == co.electriccoin.zcash.ui.common.viewmodel.SecretState.READY
+            }
+            torModeWalletId(synchronizer.getSynchronizer())
+        }
+        check(dependency<HttpClientProvider>().supportsKtorTimeouts() == !originalTor)
+        dependency<NavigationRouter>().forward(TorSettingsArgs)
+        val choice = if (originalTor) co.electriccoin.zcash.ui.R.string.currencyConversion_learnMoreOptionDisable
+        else co.electriccoin.zcash.ui.R.string.torSetup_ccSheet_enable
+        clickUi(context.getString(choice), "tor_mode_opposite_choice")
+        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.currencyConversion_saveBtn), "tor_mode_save")
+        waitUi("Open Android Settings", "tor_mode_restart_notice")
+        check(preference.observe().first() == !originalTor) { "Tor choice was not durably stored" }
+        withTimeout(30_000) { synchronizer.synchronizer.first { it == null } }
+        check(runCatching { dependency<HttpClientProvider>().supportsKtorTimeouts() }.isFailure) {
+            "A new request was admitted before restarting the wallet"
+        }
+        save(fixture().put("torModeWalletId", walletId))
+    }
+
+    private suspend fun verifyTorModeAfterRestart(usesTor: Boolean) {
+        val preference = dependency<IsTorEnabledStorageProvider>()
+        check(preference.observe().first() == usesTor) { "Reopened wallet did not retain the original choice" }
+        check(dependency<PersistableWalletProvider>().getPersistableWallet() != null) {
+            "Wallet was absent after the app process restart"
+        }
+        val synchronizer = withTimeout(45_000) { dependency<SynchronizerProvider>().getSynchronizer() }
+        val walletId = withTimeout(30_000) { torModeWalletId(synchronizer) }
+        check(walletId == fixture().getString("torModeWalletId")) { "Tor change replaced the test wallet" }
+        check(dependency<HttpClientProvider>().supportsKtorTimeouts() == !usesTor)
+        check(!hasUiText("Open Android Settings")) { "Tor restart notice is still visible after restarting" }
+        requireEndpointReady(synchronizer, "after_tor_mode_restart")
+    }
+
+    private suspend fun torModeWalletId(synchronizer: Synchronizer): String {
+        val account = dependency<AccountDataSource>().getZashiAccount()
+        val address = synchronizer.getUnifiedAddress(account.sdkAccount)
+        check(address.startsWith("utest1"))
+        return MessageDigest.getInstance("SHA-256").digest(address.toByteArray())
+            .joinToString("") { "%02x".format(it) }
     }
 
     @Suppress("DEPRECATION")

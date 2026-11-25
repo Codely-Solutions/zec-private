@@ -13,6 +13,7 @@
     <string name="ephemeral_recovery_success">Funds were successfully discovered.</string>
     <string name="tor_protection_save_failed">Could not save Tor protection. Try again.</string>
     <string name="tor_protection_wallet_busy">Finish the current wallet operation or close the gift card, then try again.</string>
+    <string name="server_selection_wallet_busy">Wait for the current wallet operation to finish, then try again.</string>
     <string name="tor_protection_gift_restart">Force stop and reopen ZEC Private, then try changing Tor again.</string>
     <string name="tor_protection_restart_title">Reopen to apply Tor setting</string>
     <string name="tor_protection_restart_message">Force stop ZEC Private in Android Settings, then reopen it.</string>
