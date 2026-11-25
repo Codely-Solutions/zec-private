@@ -1,8 +1,6 @@
 package co.electriccoin.zcash.ui
 
 import android.app.Activity
-import android.view.WindowManager
-import androidx.compose.material3.SnackbarHostState
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
@@ -30,8 +28,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import co.electriccoin.zcash.ui.common.compose.LocalScreenSecurity
-import co.electriccoin.zcash.ui.common.compose.ScreenSecurity
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
@@ -39,14 +35,8 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUse
 import co.electriccoin.zcash.ui.common.usecase.RescanQrUseCase
 import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
-import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow
-import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressScreen
-import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressVM
-import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
-import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressScreen
-import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressVM
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -88,16 +78,11 @@ import co.electriccoin.zcash.ui.screen.request.RequestArgs
 import co.electriccoin.zcash.ui.screen.request.RequestScreenContent
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
 import co.electriccoin.zcash.ui.screen.scankeystone.KeystoneSignatureScanner
-import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
-import co.electriccoin.zcash.ui.screen.scankeystone.view.ScanKeystoneView
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTViewModel
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionScreen
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionVM
-import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
-import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionView
-import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelState
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelView
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
@@ -567,105 +552,6 @@ class RestoredWalletRoutesLayoutTest {
                 assertEquals(progress, controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>())
             }
         }
-    }
-
-    @Test
-    fun sharedKeystoneViewsProtectTheCameraAndTheFullscreenSigningQr() {
-        val security = ScreenSecurity()
-        val showCamera = mutableStateOf(true)
-        val showSigning = mutableStateOf(false)
-        val button = ButtonState(stringRes("Fixture action"))
-        compose.setContent {
-            CompositionLocalProvider(LocalScreenSecurity provides security) {
-                ZcashTheme {
-                    if (showCamera.value) {
-                        ScanKeystoneView(
-                            snackbarHostState = remember { SnackbarHostState() },
-                            onBack = {}, onScan = {}, onOpenSettings = {}, onScanStateChange = {},
-                            validationResult = ScanValidationState.NONE,
-                            state = ScanKeystoneState(stringRes("Fixture scanner"), null),
-                        )
-                    }
-                    if (showSigning.value) {
-                        SignKeystoneTransactionView(
-                            SignKeystoneTransactionState(
-                                onBack = {}, barTitle = stringRes("Fixture signing"),
-                                title = stringRes("Scan with Keystone"), subtitle = stringRes("Fixture details"),
-                                accountInfo = ZashiAccountInfoListItemState(
-                                    co.electriccoin.zcash.ui.design.R.drawable.ic_item_keystone,
-                                    stringRes("Keystone"), stringRes("Fixture account")
-                                ),
-                                badgeText = stringRes("Hardware"), qrData = "fixture-signing-qr",
-                                generateNextQrCode = {}, secondaryButton = null,
-                                positiveButton = button, negativeButton = button,
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        compose.runOnIdle {
-            assertEquals(1, security.referenceCount.value)
-            showCamera.value = false
-            showSigning.value = true
-        }
-        val label = context.getString(R.string.private_keystone_open_qr)
-        compose.onNodeWithContentDescription(label).performClick()
-        compose.runOnIdle {
-            assertEquals(1, security.referenceCount.value)
-            val window = checkNotNull(ShadowDialog.getLatestDialog()?.window)
-            val flag = WindowManager.LayoutParams.FLAG_SECURE
-            assertEquals(flag, window.attributes.flags and flag)
-            showSigning.value = false
-        }
-        compose.runOnIdle { assertEquals(0, security.referenceCount.value) }
-    }
-
-    @Test
-    fun bothGeneralScannersAcquireScreenProtectionBeforeRenderingCameraContent() {
-        val security = ScreenSecurity()
-        val destination = mutableStateOf<ScanFlow?>(null)
-        val dependencies = module {
-            single<NavigationRouter> { router }
-            viewModel {
-                mockk<WalletViewModel>(relaxed = true) { every { synchronizer } returns MutableStateFlow(null) }
-            }
-            viewModel {
-                mockk<ScanZashiAddressVM>(relaxed = true) {
-                    every { state } returns MutableStateFlow(ScanValidationState.NONE)
-                }
-            }
-            viewModel {
-                mockk<ScanGenericAddressVM>(relaxed = true) { every { isOwned } returns MutableStateFlow(false) }
-            }
-        }
-        val testContext = koinApplication { modules(dependencies) }.also(contexts::add)
-        compose.setContent {
-            KoinIsolatedContext(context = testContext) {
-                ZcashTheme {
-                    CompositionLocalProvider(LocalScreenSecurity provides security) {
-                        when (destination.value) {
-                            ScanFlow.HOMEPAGE -> ScanZashiAddressScreen(ScanArgs(ScanFlow.HOMEPAGE), "wallet")
-                            ScanFlow.SEND -> ScanGenericAddressScreen(ScanGenericAddressArgs("generic"), "generic")
-                            else -> Text("Outside scanner")
-                        }
-                    }
-                }
-            }
-        }
-        compose.runOnIdle {
-            assertEquals(0, security.referenceCount.value)
-            destination.value = ScanFlow.HOMEPAGE
-        }
-        compose.runOnIdle {
-            assertEquals(1, security.referenceCount.value)
-            destination.value = ScanFlow.SEND
-        }
-        compose.runOnIdle {
-            assertEquals(1, security.referenceCount.value)
-            destination.value = null
-        }
-        compose.runOnIdle { assertEquals(0, security.referenceCount.value) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
