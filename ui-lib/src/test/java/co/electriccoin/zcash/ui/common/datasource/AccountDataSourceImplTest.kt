@@ -35,7 +35,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -84,6 +87,8 @@ class AccountDataSourceImplTest {
         sdkAccount: Account = account,
         ledgerBinding: LedgerAccountBindingData? = null,
         scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+        storedSelection: Flow<AccountUuid?> = flowOf(null),
+        accountPreferenceReads: Flow<Long> = flowOf(0L),
         deriveAddress: suspend () -> String = { "unified-address" },
     ): AccountDataSourceImpl {
         val synchronizer =
@@ -100,7 +105,7 @@ class AccountDataSourceImplTest {
             }
         val selectedAccountUUIDProvider =
             mockk<SelectedAccountUUIDProvider> {
-                every { uuid } returns MutableStateFlow(null)
+                every { uuid } returns storedSelection
             }
         val persistableWalletProvider =
             mockk<PersistableWalletProvider> {
@@ -118,7 +123,39 @@ class AccountDataSourceImplTest {
             viewOnlyContent = viewOnlyContent,
             context = mockk(relaxed = true),
             scope = scope,
+            accountPreferenceReads = accountPreferenceReads,
         )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun failedSelectionReadWithholdsAccountUntilVerifiedRetry() = runTest {
+        val readGeneration = MutableStateFlow(0L)
+        var isReadable = true
+        val source = dataSource(
+            MutableStateFlow(null),
+            scope = backgroundScope,
+            storedSelection = flow {
+                check(isReadable) { "Synthetic selection read failure" }
+                emit(accountUuid)
+            },
+            accountPreferenceReads = readGeneration,
+        )
+        runCurrent()
+        assertTrue(assertNotNull(source.allAccounts.value).single().isSelected)
+
+        isReadable = false
+        readGeneration.value++
+        runCurrent()
+        assertTrue(source.isAccountSelectionUnavailable.first())
+        assertFalse(assertNotNull(source.allAccounts.value).single().isSelected)
+        assertNull(source.selectedAccount.first())
+
+        isReadable = true
+        readGeneration.value++
+        runCurrent()
+        assertFalse(source.isAccountSelectionUnavailable.first())
+        assertEquals(accountUuid, assertNotNull(source.selectedAccount.first()).sdkAccount.accountUuid)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

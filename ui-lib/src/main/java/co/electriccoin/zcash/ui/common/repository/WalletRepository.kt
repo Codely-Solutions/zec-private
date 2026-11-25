@@ -15,6 +15,7 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.global.WalletSdkTransportGate
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.FastestServersState
 import co.electriccoin.zcash.ui.common.model.OnboardingState
@@ -112,6 +113,7 @@ class WalletRepositoryImpl(
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val resetProgressStore: ResetProgressStore,
     transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
+    accountDataSource: AccountDataSource? = null,
 ) : WalletRepository {
     /**
      * Scope the repository's `stateIn`-shared flows run on. Captured by those flows at
@@ -161,9 +163,15 @@ class WalletRepositoryImpl(
             }
 
     private val onboardingWithWallet =
-        combine(onboardingState, persistableWalletProvider.availability, transportGate.unavailable) {
-            state, availability, transportUnavailable ->
-            val walletAvailability = if (transportUnavailable && availability == StoredWalletAvailability.PRESENT) {
+        combine(
+            onboardingState,
+            persistableWalletProvider.availability,
+            transportGate.unavailable,
+            accountDataSource?.isAccountSelectionUnavailable ?: flowOf(false),
+        ) { state, availability, transportUnavailable, accountUnavailable ->
+            val walletAvailability = if (availability == StoredWalletAvailability.PRESENT &&
+                (transportUnavailable || accountUnavailable)
+            ) {
                 StoredWalletAvailability.UNAVAILABLE
             } else {
                 availability

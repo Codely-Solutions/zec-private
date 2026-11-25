@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.model.WalletSnapshot
 import co.electriccoin.zcash.ui.common.provider.CrashReportingStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
@@ -215,7 +216,9 @@ class GetHomeMessageUseCase(
             .distinctUntilChanged()
 
     private fun observeIsTorMessageVisible() =
-        isTorEnabledStorageProvider.observe().map { it == null }.distinctUntilChanged()
+        isTorEnabledStorageProvider.observe().recoverableReads()
+            .map { it.isSuccess && it.getOrNull() == null }
+            .distinctUntilChanged()
 
     private fun prioritizeMessage(message: HomeMessageData?): HomeMessageData? {
         val result =

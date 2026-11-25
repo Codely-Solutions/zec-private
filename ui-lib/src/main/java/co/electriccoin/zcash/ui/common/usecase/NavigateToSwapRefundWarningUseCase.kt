@@ -166,7 +166,7 @@ private sealed interface SwapRefundWarningPipelineResult {
     ) : SwapRefundWarningPipelineResult
 }
 
-/** NEAR only refunds user error - a wrong address or a wrong network - above this USD value. */
+/** Provider threshold below which discretionary wrong-deposit recovery is unavailable. */
 val SWAP_REFUND_WARNING_THRESHOLD_USD = BigDecimal("300")
 
 internal suspend fun NavigationRouter.awaitQuoteOrigin(sourceEntryId: String?): Boolean {

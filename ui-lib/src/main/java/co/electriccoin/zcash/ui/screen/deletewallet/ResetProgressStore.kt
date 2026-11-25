@@ -48,7 +48,7 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
 
     internal fun observeMigrationSyncBlock(observe: () -> Flow<Boolean>): Flow<Boolean> = flow {
         migrationInput.withLock {
-            if (sdkInputSuppressed.value) emit(false) else emitAll(observe())
+            if (sdkInputSuppressed.value) emit(true) else emitAll(observe())
         }
     }
 

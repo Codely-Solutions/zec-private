@@ -5,7 +5,9 @@ from pathlib import Path
 import time
 
 from emulator_session import EmulatorSession
+from release_metadata import require_acceptance_checks
 
+require_acceptance_checks()
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
 slot = int(os.environ['CODEX_EMULATOR_SLOT'])
 name = os.environ['CODEX_EMULATOR_WORKER']

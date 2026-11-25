@@ -26,7 +26,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
 ): WalletCoordinator {
     val generation = persistableWalletProvider.readGeneration
     val sdkWallet = transportGate.walletInput(
-        persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore),
+        persistableWalletProvider.sdkWalletReads.hideResetWallet(resetProgressStore),
         generation,
     )
     return WalletCoordinator(
@@ -45,7 +45,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
  * of the SDK from initialization. Reopen the cold flow after clearing to read the current store.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun Flow<PersistableWallet?>.hideResetWallet(resetProgressStore: ResetProgressStore) =
+internal fun <T> Flow<T?>.hideResetWallet(resetProgressStore: ResetProgressStore) =
     resetProgressStore.isSdkInputSuppressed
         .flatMapLatest { suppressed -> if (suppressed) flowOf(null) else this }
         .buffer(0)

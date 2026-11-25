@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.util.combineToFlow
@@ -68,6 +69,8 @@ interface AccountDataSource {
     val allAccounts: StateFlow<List<WalletAccount>?>
 
     val selectedAccount: Flow<WalletAccount?>
+
+    val isAccountSelectionUnavailable: Flow<Boolean> get() = flowOf(false)
 
     val zashiAccount: Flow<ZodlAccount?>
 
@@ -147,10 +150,23 @@ class AccountDataSourceImpl(
     private val viewOnlyContent: ViewOnlyContent,
     private val context: Context,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val accountPreferenceReads: Flow<Long> = flowOf(0L),
 ) : AccountDataSource {
     private val log = loggableNot("AccountDataSource")
 
     private val requestNextShieldedAddressChannel = MutableSharedFlow<AddressRequest>()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val selectedAccountRead = synchronizerProvider.synchronizer.flatMapLatest { synchronizer ->
+        if (synchronizer == null) {
+            flowOf(null)
+        } else {
+            accountPreferenceReads.flatMapLatest { selectedAccountUUIDProvider.uuid.recoverableReads() }
+        }
+    }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    override val isAccountSelectionUnavailable =
+        selectedAccountRead.map { it?.isFailure == true }.distinctUntilChanged()
 
     /**
      * A null balances snapshot from the synchronizer propagates as null all the way through each
@@ -538,9 +554,12 @@ class AccountDataSourceImpl(
             }
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeLedgerBinding(sdkAccount: Account): Flow<LedgerAccountBindingData?> =
         if (isLedgerAccount(sdkAccount)) {
-            ledgerAccountBindingProvider.observe(sdkAccount.accountUuid)
+            accountPreferenceReads.flatMapLatest {
+                ledgerAccountBindingProvider.observe(sdkAccount.accountUuid).recoverableReads().map { it.getOrNull() }
+            }
         } else {
             flowOf(null)
         }
@@ -551,17 +570,15 @@ class AccountDataSourceImpl(
      * process died between the SDK deletion and the clear.
      */
     private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
-        selectedAccountUUIDProvider
-            .uuid
-            .map { storedUuid ->
-                storedUuid?.takeIf { stored -> allAccounts.any { it.accountUuid == stored } }
-            }.map { uuid ->
-                if (isOrchardOnlyAccount(sdkAccount)) {
-                    sdkAccount.accountUuid == uuid || allAccounts.size == 1
-                } else {
-                    uuid == null || sdkAccount.accountUuid == uuid || allAccounts.size == 1
-                }
+        selectedAccountRead.filterNotNull().map { selection ->
+            if (selection.isFailure) return@map false
+            val uuid = selection.getOrThrow()?.takeIf { stored -> allAccounts.any { it.accountUuid == stored } }
+            if (isOrchardOnlyAccount(sdkAccount)) {
+                sdkAccount.accountUuid == uuid || allAccounts.size == 1
+            } else {
+                uuid == null || sdkAccount.accountUuid == uuid || allAccounts.size == 1
             }
+        }
 
     @Suppress("TooGenericExceptionCaught")
     private fun observeUnifiedAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> {

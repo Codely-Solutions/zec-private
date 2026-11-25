@@ -27,11 +27,13 @@ class TorSettingsVM(
         isTorEnabledUseCase
             .observe()
             .map { isEnabled ->
-                TorSettingsState(
-                    isOptedIn = isEnabled,
-                    onSaveClick = ::onOptInClick,
-                    onDismiss = ::onBack
-                )
+                isEnabled?.let {
+                    TorSettingsState(
+                        isOptedIn = it,
+                        onSaveClick = ::onOptInClick,
+                        onDismiss = ::onBack,
+                    )
+                }
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),

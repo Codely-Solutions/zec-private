@@ -72,7 +72,8 @@ data class SupportInfo(
         suspend fun new(
             context: Context,
             androidConfigurationProvider: ConfigurationProvider,
-            isTorEnabled: Boolean?
+            isTorEnabled: Boolean?,
+            isTorPreferenceAvailable: Boolean = true,
         ): SupportInfo {
             val applicationContext = context.applicationContext
             val packageInfo = applicationContext.packageManager.getPackageInfoCompatSuspend(context.packageName, 0L)
@@ -84,7 +85,7 @@ data class SupportInfo(
                 OperatingSystemInfo.new(),
                 DeviceInfo.new(),
                 EnvironmentInfo.new(applicationContext),
-                TorInfo(isTorEnabled),
+                TorInfo(isTorEnabled, isTorPreferenceAvailable),
                 PermissionInfo.all(applicationContext).toPersistentList(),
                 CrashInfo.all(context).toPersistentList()
             )

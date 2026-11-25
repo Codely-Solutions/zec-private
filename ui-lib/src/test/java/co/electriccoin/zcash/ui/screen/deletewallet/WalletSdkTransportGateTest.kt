@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.global.WalletSdkTransportGate
+import co.electriccoin.zcash.ui.common.provider.WalletSdkRead
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,7 @@ class WalletSdkTransportGateTest {
     fun unreadableTransportWithholdsWalletAndRetryDeliversOnlyVerifiedChoice() = runTest {
         val gate = WalletSdkTransportGate()
         val wallet = mockk<PersistableWallet>()
-        val wallets = MutableStateFlow<PersistableWallet?>(wallet)
+        val wallets = MutableStateFlow(WalletSdkRead(0, wallet))
         val generation = MutableStateFlow(0L)
         var nextRead = Result.failure<Boolean?>(IllegalStateException("Synthetic unavailable preference holder"))
         val transportReads = flow { emit(nextRead.getOrThrow()) }
@@ -43,6 +44,9 @@ class WalletSdkTransportGateTest {
         runCurrent()
 
         assertFalse(gate.unavailable.value)
+        assertEquals(null to true, sdkInputs.last())
+        wallets.value = WalletSdkRead(generation.value, wallet)
+        runCurrent()
         assertEquals(wallet to true, sdkInputs.last())
 
         nextRead = Result.failure(IllegalStateException("Synthetic unavailable transport setting"))
@@ -58,6 +62,9 @@ class WalletSdkTransportGateTest {
         runCurrent()
 
         assertFalse(gate.unavailable.value)
+        assertEquals(null to false, sdkInputs.last())
+        wallets.value = WalletSdkRead(generation.value, wallet)
+        runCurrent()
         assertEquals(wallet to false, sdkInputs.last())
     }
 }

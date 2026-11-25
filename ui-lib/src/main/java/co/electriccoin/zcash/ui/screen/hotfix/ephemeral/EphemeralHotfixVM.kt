@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.TextFieldState
@@ -33,8 +34,10 @@ class EphemeralHotfixVM(
             text,
             fixEphemeralAddressUseCase.observeIsLoading(),
             isError,
-            isTorEnabledStorageProvider.observe()
-        ) { text, isLoading, isError, isTorEnabled ->
+            isTorEnabledStorageProvider.observe().recoverableReads()
+        ) { text, isLoading, isError, torPreference ->
+            if (torPreference.isFailure) return@combine null
+            val isTorEnabled = torPreference.getOrNull()
             EphemeralHotfixState(
                 address =
                     TextFieldState(

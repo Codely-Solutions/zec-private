@@ -1,9 +1,12 @@
 package co.electriccoin.zcash.ui.screen.transactionprogress
 
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
+import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -44,6 +47,19 @@ class TransactionProgressPendingDescriptionTest {
     @Test
     fun nonTimeoutWithoutDescriptionFallsThrough() {
         assertNull(SubmitResult.GrpcFailure(txIds = listOf("a"), description = null).pendingDescription())
+    }
+
+    @Test
+    fun proposalFallbackDistinguishesSwapFromPaymentAndKeepsTypedReason() {
+        val swap = mockk<ExactInputSwapTransactionProposal>()
+        val payment = mockk<ExactOutputSwapTransactionProposal>()
+        val unacknowledged = SubmitResult.GrpcFailure(txIds = listOf("a"))
+        assertEquals(stringRes(R.string.swapAndPay_pendingSwapInfo).withStyle(), unacknowledged.pendingSubtitle(swap))
+        assertEquals(stringRes(R.string.swapAndPay_pendingPayInfo).withStyle(), unacknowledged.pendingSubtitle(payment))
+        assertEquals(
+            stringRes(R.string.send_pendingSdkStateInfo).withStyle(),
+            unacknowledged.copy(reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN).pendingSubtitle(payment),
+        )
     }
 
     @Test

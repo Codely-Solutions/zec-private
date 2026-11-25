@@ -1,11 +1,13 @@
 package co.electriccoin.zcash.ui.screen.support.model
 
 data class TorInfo(
-    val isTorEnabled: Boolean?
+    val isTorEnabled: Boolean?,
+    val isAvailable: Boolean = true,
 ) {
     fun toSupportString() =
         buildString {
-            appendLine("Tor enabled: ${isTorEnabled.toSupportValue()}")
+            val value = if (isAvailable) isTorEnabled.toSupportValue() else "Unavailable"
+            appendLine("Tor enabled: $value")
         }
 }
 

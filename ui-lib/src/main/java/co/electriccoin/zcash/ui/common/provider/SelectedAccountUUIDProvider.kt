@@ -58,7 +58,11 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
     override val key: PreferenceKey = PreferenceKey("selected_account_uuid")
 
     override suspend fun getValue(preferenceProvider: PreferenceProvider) =
-        preferenceProvider.getString(key)?.decode()?.let { AccountUuid.new(it) }
+        preferenceProvider.getString(key)?.let { encoded ->
+            runCatchingRecoverable { AccountUuid.new(encoded.decode()) }.getOrElse {
+                error("Could not read the selected account")
+            }
+        }
 
     override suspend fun putValue(
         preferenceProvider: PreferenceProvider,
@@ -69,10 +73,5 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
     private fun ByteArray.encode() = Base64.encode(this)
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun String?.decode() =
-        if (this != null) {
-            Base64.decode(this)
-        } else {
-            null
-        }
+    private fun String.decode() = Base64.decode(this)
 }

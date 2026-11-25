@@ -150,7 +150,8 @@ class WalletCoordinatorResetGateTest {
             assertFalse(erase.isCompleted)
             drained.complete(Unit)
             assertTrue(erase.await())
-            assertFalse(states.receive())
+            runCurrent()
+            assertTrue(states.tryReceive().isFailure)
         } finally {
             drained.complete(Unit)
         }
@@ -202,7 +203,9 @@ class WalletCoordinatorResetGateTest {
 
         store.store(ResetStage.ERASE_SDK)
         store.suppressSdkInput()
-        assertFalse(states.receive())
+        runCurrent()
+        assertTrue(states.tryReceive().isFailure)
+        assertTrue(gate.isBlocked.value)
         assertNull(gate.error.value)
     }
 

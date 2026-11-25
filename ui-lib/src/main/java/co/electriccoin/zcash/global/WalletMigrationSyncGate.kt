@@ -36,7 +36,7 @@ class WalletMigrationSyncGate {
     ): Flow<Boolean> = sdkWallet.flatMapLatest { wallet ->
         blocked.value = true
         failure.value = null
-        if (wallet == null) flowOf(false) else resetProgressStore.observeMigrationSyncBlock {
+        if (wallet == null) flowOf(true) else resetProgressStore.observeMigrationSyncBlock {
             flow { emitAll(observe(wallet)) }
                 .onEach { failure.value = null }
                 .retryWhen { cause, attempt ->

@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSource
 import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSourceImpl
+import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -32,6 +33,7 @@ val dataSourceModule =
                 ledgerAccountBindingProvider = get(),
                 viewOnlyContent = get(),
                 context = get(),
+                accountPreferenceReads = get<PersistableWalletProvider>().readGeneration,
             )
         }
         singleOf(::ZashiSpendingKeyDataSourceImpl) bind ZashiSpendingKeyDataSource::class

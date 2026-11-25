@@ -5,7 +5,9 @@ import os
 from pathlib import Path
 
 from emulator_batch import execute, read_plan
+from release_metadata import require_acceptance_checks
 
+require_acceptance_checks()
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
 source = Path(__file__).parent
 manifest = source / 'emulator-smoke-manifest.json'

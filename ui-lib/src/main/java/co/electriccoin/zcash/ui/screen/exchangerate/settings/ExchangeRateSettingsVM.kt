@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
+import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectFiatCurrencyUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -47,9 +48,9 @@ internal class ExchangeRateSettingsVM(
         combine(
             isOptedIn,
             selectedCurrency.filterNotNull(),
-            isTorEnabledStorageProvider.observe()
-        ) { isOptedIn, selectedCurrency, isTorEnabled ->
-            createState(isOptedIn, selectedCurrency, isTorEnabled)
+            isTorEnabledStorageProvider.observe().recoverableReads()
+        ) { isOptedIn, selectedCurrency, torPreference ->
+            if (torPreference.isSuccess) createState(isOptedIn, selectedCurrency, torPreference.getOrNull()) else null
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),

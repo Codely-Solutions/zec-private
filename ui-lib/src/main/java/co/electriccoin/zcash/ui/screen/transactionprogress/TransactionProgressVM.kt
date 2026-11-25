@@ -343,26 +343,7 @@ class TransactionProgressVM(
                         stringRes(R.string.send_pendingShieldingTitle)
                     }
                 },
-            subtitle =
-                result.pendingDescription()
-                    ?: when (proposal) {
-                        // Same shape as this block's RegularTransactionProposal/default arm — a
-                        // send-max sweep has no destination/memo of its own to show.
-                        is Zip321TransactionProposal,
-                        is RegularTransactionProposal,
-                        is MigrationSweepTransactionProposal -> {
-                            stringRes(R.string.send_pendingInfo)
-                        }
-
-                        is ExactInputSwapTransactionProposal,
-                        is ExactOutputSwapTransactionProposal -> {
-                            stringRes(R.string.swapAndPay_pendingSwapInfo)
-                        }
-
-                        is ShieldTransactionProposal -> {
-                            stringRes(R.string.send_pendingShieldingInfo)
-                        }
-                    }.withStyle(),
+            subtitle = result.pendingSubtitle(proposal),
             middleButton =
                 when (proposal) {
                     is ExactInputSwapTransactionProposal,
@@ -538,6 +519,18 @@ internal fun SubmitResult.GrpcFailure.pendingDescription(): StyledStringResource
                 ?.let { stringRes(it).withStyle() }
         }
     }
+
+internal fun SubmitResult.GrpcFailure.pendingSubtitle(proposal: TransactionProposal): StyledStringResource =
+    pendingDescription() ?: stringRes(
+        when (proposal) {
+            is Zip321TransactionProposal,
+            is RegularTransactionProposal,
+            is MigrationSweepTransactionProposal -> R.string.send_pendingInfo
+            is ExactInputSwapTransactionProposal -> R.string.swapAndPay_pendingSwapInfo
+            is ExactOutputSwapTransactionProposal -> R.string.swapAndPay_pendingPayInfo
+            is ShieldTransactionProposal -> R.string.send_pendingShieldingInfo
+        }
+    ).withStyle()
 
 // MOB-385 / MOB-1616: TransactionEncoderException.AnchorNotFoundException is the SDK's typed
 // signal for this failure (zodl-inc/zodl-android-wallet-sdk#26) — thrown directly from

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -33,6 +34,8 @@ interface PersistableWalletProvider {
         }
     val writeVersion: Long get() = 0L
     val readGeneration: StateFlow<Long> get() = initialWalletReadGeneration
+    val sdkWalletReads: Flow<WalletSdkRead>
+        get() = persistableWallet.map { WalletSdkRead(readGeneration.value, it) }
 
     fun retryRead() = Unit
 
@@ -47,6 +50,8 @@ interface PersistableWalletProvider {
 }
 
 private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
+
+data class WalletSdkRead(val generation: Long, val wallet: PersistableWallet?)
 
 enum class StoredWalletAvailability {
     PRESENT,
@@ -83,19 +88,21 @@ class PersistableWalletProviderImpl(
     override val readGeneration = readRequests.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val records = combine(readsSuppressed ?: flowOf(false), readRequests) { suppressed, _ -> suppressed }
-        .flatMapLatest { suppressed ->
-            if (suppressed) {
-                flowOf(Result.success(null))
-            } else {
-                persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
-                    if (failure !is Exception || failure is CancellationException) throw failure
-                    emit(Result.failure(failure))
-                }
+    private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
+        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
+        .buffer(0)
+
+    private fun observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
+        if (suppressed) {
+            flowOf(Result.success(null))
+        } else {
+            persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
+                if (failure !is Exception || failure is CancellationException) throw failure
+                emit(Result.failure(failure))
             }
         }
 
-    override val availability = records.map { result ->
+    override val availability = records.map { (_, result) ->
         when {
             result.isFailure -> StoredWalletAvailability.UNAVAILABLE
             result.getOrNull() != null -> StoredWalletAvailability.PRESENT
@@ -103,16 +110,18 @@ class PersistableWalletProviderImpl(
         }
     }.distinctUntilChanged()
 
-    override val persistableWallet: Flow<PersistableWallet?> =
-        records.map { result ->
-            val wallet = result.getOrNull()?.wallet
-            wallet?.copy(
-                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
-            )
-        }.distinctUntilChanged()
+    override val sdkWalletReads = records.map { (generation, result) ->
+        val wallet = result.getOrNull()?.wallet
+        WalletSdkRead(
+            generation,
+            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
+        )
+    }
+
+    override val persistableWallet = sdkWalletReads.map { it.wallet }.distinctUntilChanged()
 
     override val serverSelection =
-        records.map { it.getOrNull()?.serverSelection() }.distinctUntilChanged()
+        records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
 
     override fun retryRead() = readRequests.update { it + 1 }
 

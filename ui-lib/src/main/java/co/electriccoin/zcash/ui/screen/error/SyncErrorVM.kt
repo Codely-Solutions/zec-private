@@ -43,7 +43,7 @@ class SyncErrorVM(
             .observe()
             .take(1)
             .map { isTorEnabled ->
-                createState(isTorEnabled)
+                createState(isTorEnabled == true)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),

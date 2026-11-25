@@ -29,6 +29,14 @@ class ArtifactTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Wallet acceptance requires Python assertions enabled', result.stderr)
 
+    def test_live_batch_smoke_rejects_optimized_python_before_reading_guest_inputs(self):
+        for script in ('test_emulator_batch_live.py', 'emulator_smoke.py'):
+            with self.subTest(script=script):
+                result = subprocess.run([sys.executable, '-O', '-B', script],
+                                        cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Wallet acceptance requires Python assertions enabled', result.stderr)
+
     def test_fresh_preparation_verifies_all_execution_entries_and_abi(self):
         for change, error in (
             ({}, None),

@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import uuid
 
+from release_metadata import require_acceptance_checks
+
 ROOT = Path(__file__).resolve().parents[1]
 PARENT = ROOT.parent
 GUARDS = Path(r'C:\Users\User\.codex\workflow-guards')
@@ -72,6 +74,7 @@ def main():
     parser.add_argument('--worker', nargs=3, action='append', metavar=('NAME', 'JOB_JSON', 'MANIFEST_JSON'))
     parser.add_argument('--smoke', action='store_true', help='Two blank guests; intentional failure and cleanup probe')
     args = parser.parse_args()
+    require_acceptance_checks()
     if args.smoke and args.worker or not args.smoke and not 1 <= len(args.worker or []) <= 2:
         parser.error('Use --smoke or one/two --worker NAME JOB_JSON MANIFEST_JSON entries')
     count = 2 if args.smoke else len(args.worker)
@@ -82,7 +85,7 @@ def main():
     record = PARENT / 'emulator-batch-records' / uuid.uuid4().hex
     record.mkdir(parents=True)
     sources = [str(p) for p in (Path(__file__), ROOT / '.private/emulator_batch.py',
-        ROOT / '.private/emulator_session.py', ROOT / '.private/run_tor_emulator.py',
+        ROOT / '.private/emulator_session.py', ROOT / '.private/release_metadata.py', ROOT / '.private/run_tor_emulator.py',
         ROOT / '.private/tor_resident_ui_driver.py')]
     from emulator_session import SDK
     sources += [str(SDK / 'emulator/emulator.exe'), str(SDK / 'platform-tools/adb.exe')]

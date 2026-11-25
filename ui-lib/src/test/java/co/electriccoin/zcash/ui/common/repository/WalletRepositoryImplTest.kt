@@ -20,6 +20,7 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.spackle.AndroidApiVersion
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.OnboardingState
@@ -984,6 +985,22 @@ class WalletRepositoryImplTest {
     }
 
     @Test
+    fun unreadableAccountSelectionUsesAuthenticatedWalletRecovery() = runTest {
+        val selectionUnavailable = MutableStateFlow(true)
+        val accounts = mockk<AccountDataSource> {
+            every { isAccountSelectionUnavailable } returns selectionUnavailable
+        }
+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet(), accountDataSource = accounts)
+
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it == SecretState.UNAVAILABLE })
+        assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
+        assertTrue(harness.events.isEmpty())
+
+        selectionUnavailable.value = false
+        assertEquals(SecretState.READY, repository.secretState.first { it == SecretState.READY })
+    }
+
+    @Test
     fun retryFromUnreadableToAbsentRunsStartupRecoveryBeforeSetup() = runTest {
         val walletAvailability = MutableStateFlow(StoredWalletAvailability.UNAVAILABLE)
         val walletProvider = mockk<PersistableWalletProvider> {
@@ -1037,7 +1054,7 @@ class WalletRepositoryImplTest {
             val restartedTor = IsTorEnabledStorageProviderImpl(encrypted)
             val (restarted, restartedHarness) = newRepository(OnboardingState.NONE, null, torPreference = restartedTor)
             restarted.useTestScope(testScheduler)
-            assertTrue(IsTorEnabledUseCase(restartedTor).observe().first())
+            assertEquals(true, IsTorEnabledUseCase(restartedTor).observe().first())
             restartedPreferences.beforeStringCommit = { _, _ -> throw IOException("Cannot persist Tor setting") }
             assertFailsWith<IllegalStateException> { restarted.restoreFixture(enableTor = false).await() }
             restarted.walletInitialization.first { it == WalletInitializationState.FAILED }
@@ -1081,7 +1098,7 @@ class WalletRepositoryImplTest {
             repository.restoreFixture(enableTor = true).await()
             repository.secretState.first { it == SecretState.READY }
             coEvery { encrypted() } returns torPreferences.reopen()
-            assertTrue(IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
+            assertEquals(true, IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
         }
 
     @Test
@@ -1118,6 +1135,7 @@ class WalletRepositoryImplTest {
         torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
         resetPending: Boolean = false,
         transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
+        accountDataSource: AccountDataSource? = null,
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()
 
@@ -1192,6 +1210,7 @@ class WalletRepositoryImplTest {
                 isTorEnabledStorageProvider = torPreference,
                 resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
                 transportGate = transportGate,
+                accountDataSource = accountDataSource,
             )
 
         scopes += repository.scope

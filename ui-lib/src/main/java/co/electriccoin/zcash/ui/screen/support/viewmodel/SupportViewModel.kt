@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.configuration.api.ConfigurationProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +25,6 @@ class SupportViewModel(
     // care about is capturing a snapshot of the app, OS, and device state.
     val supportInfo: StateFlow<SupportInfo?> =
         flow<SupportInfo?> {
-            val isTorEnabled = isTorEnabledStorageProvider.get()
-            emit(SupportInfo.new(application, androidConfigurationProvider, isTorEnabled))
+            emit(GetSupportUseCase(application, androidConfigurationProvider, isTorEnabledStorageProvider)())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, Duration.ZERO), null)
 }
