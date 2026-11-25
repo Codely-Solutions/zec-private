@@ -87325,10 +87325,10 @@ index 1d445dd11..61c8436c5 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..410e77a88
+index 000000000..76a19c6d7
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,580 @@
+@@ -0,0 +1,581 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
@@ -87692,6 +87692,7 @@ index 000000000..410e77a88
 +            )
 +        }
 +        for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
++            val payment = parse(memo)
 +            val wallet = WalletWriteAccess()
 +            val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
 +            var queued: NavigationCommand.ForEntry? = null
@@ -87710,7 +87711,7 @@ index 000000000..410e77a88
 +            )
 +            var delivered: Boolean? = null
 +            val operation = launch {
-+                delivered = fallback(parse(memo), ScanArgs(ScanFlow.HOMEPAGE), "scanner")
++                delivered = fallback(payment, ScanArgs(ScanFlow.HOMEPAGE), "scanner")
 +            }
 +            runCurrent()
 +            val command = assertNotNull(queued)

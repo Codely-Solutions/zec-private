@@ -361,6 +361,7 @@ class Zip321MemoScanTest {
             )
         }
         for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
+            val payment = parse(memo)
             val wallet = WalletWriteAccess()
             val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
             var queued: NavigationCommand.ForEntry? = null
@@ -379,7 +380,7 @@ class Zip321MemoScanTest {
             )
             var delivered: Boolean? = null
             val operation = launch {
-                delivered = fallback(parse(memo), ScanArgs(ScanFlow.HOMEPAGE), "scanner")
+                delivered = fallback(payment, ScanArgs(ScanFlow.HOMEPAGE), "scanner")
             }
             runCurrent()
             val command = assertNotNull(queued)
