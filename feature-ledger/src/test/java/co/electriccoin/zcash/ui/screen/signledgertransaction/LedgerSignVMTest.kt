@@ -33,6 +33,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -267,7 +268,8 @@ class LedgerSignVMTest {
     fun aClearedSheetStopsItsSessionWithoutNavigating() =
         runTest(dispatcher) {
             val cancelLedgerSigning = mockk<CancelLedgerSigningUseCase>(relaxed = true)
-            val vm = vm(cancelLedgerSigning = cancelLedgerSigning)
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val vm = vm(cancelLedgerSigning = cancelLedgerSigning, navigationRouter = router, sourceEntryId = "sign")
             runCurrent()
 
             LedgerSignVM::class.java
@@ -275,7 +277,10 @@ class LedgerSignVMTest {
                 .apply { isAccessible = true }
                 .invoke(vm)
 
-            verify(exactly = 1) { cancelLedgerSigning.stopSession() }
+            verifyOrder {
+                cancelLedgerSigning.stopSession()
+                router.pendingNavigation
+            }
             verify(exactly = 0) { cancelLedgerSigning.invoke() }
         }
 
@@ -600,7 +605,7 @@ class LedgerSignVMTest {
                         },
                     ledgerRepairTargetRepository = LedgerRepairTargetRepositoryImpl(),
                     walletEnrollment = LedgerEnrollmentFixture().access,
-                    cancelLedgerSigning = mockk(relaxed = true),
+                    cancelLedgerSigning = mockk { every { invoke(navigateBack = false) } returns true },
                     navigationRouter = navigationRouter,
                 )
             val signingState = MutableStateFlow<LedgerSigningState?>(LedgerSigningState.Failed(LedgerIssue.unbound))
@@ -708,6 +713,7 @@ class LedgerSignVMTest {
         cancelLedgerSigning: CancelLedgerSigningUseCase = mockk(relaxed = true),
         navigateToLedgerRepair: NavigateToLedgerRepairUseCase = mockk(relaxed = true),
         navigationRouter: NavigationRouter = mockk(relaxed = true),
+        sourceEntryId: String? = null,
     ) = LedgerSignVM(
         application = mockk<Application>(relaxed = true),
         observeLedgerSigningState =
@@ -725,5 +731,6 @@ class LedgerSignVMTest {
         cancelLedgerSigning = cancelLedgerSigning,
         navigateToLedgerRepair = navigateToLedgerRepair,
         navigationRouter = navigationRouter,
+        sourceEntryId = sourceEntryId,
     )
 }

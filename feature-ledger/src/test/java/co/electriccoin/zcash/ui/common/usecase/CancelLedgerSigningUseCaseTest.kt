@@ -1,15 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import cash.z.ecc.android.sdk.model.Proposal
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
-import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
-import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.Test
 
 /**
@@ -20,43 +15,39 @@ import kotlin.test.Test
  */
 class CancelLedgerSigningUseCaseTest {
     @Test
-    fun aShieldProposalClearsTheRepositoryInsteadOfJustCancellingTheSession() {
-        val repository = repository(ShieldTransactionProposal(mockk<Proposal>()))
-        val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-        val useCase = CancelLedgerSigningUseCase(repository, navigationRouter)
+    fun cancelNavigatesBackAfterRepositoryAdmission() {
+        val repository = repository(admitted = true)
+        val router = mockk<NavigationRouter>(relaxed = true)
 
-        useCase()
+        CancelLedgerSigningUseCase(repository, router)()
 
-        verify(exactly = 1) { repository.clear() }
-        verify(exactly = 0) { repository.cancelSigning() }
-        verify(exactly = 1) { navigationRouter.back() }
+        verify(exactly = 1) { repository.cancelUnsignedTransaction() }
+        verify(exactly = 1) { router.back() }
     }
 
     @Test
-    fun anyOtherProposalOnlyCancelsTheSession() {
-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true))
-        val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-        val useCase = CancelLedgerSigningUseCase(repository, navigationRouter)
+    fun aRefusedCancellationDoesNotNavigateBack() {
+        val repository = repository(admitted = false)
+        val router = mockk<NavigationRouter>(relaxed = true)
 
-        useCase()
+        CancelLedgerSigningUseCase(repository, router)()
 
-        verify(exactly = 1) { repository.cancelSigning() }
-        verify(exactly = 0) { repository.clear() }
-        verify(exactly = 1) { navigationRouter.back() }
+        verify(exactly = 1) { repository.cancelUnsignedTransaction() }
+        verify(exactly = 0) { router.back() }
     }
 
     @Test
     fun stoppingTheSheetRequestsCancellationOfOnlyAnUnsignedSession() {
-        val repository = repository(mockk<RegularTransactionProposal>(relaxed = true))
-        val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+        val repository = repository(admitted = true)
+        val router = mockk<NavigationRouter>(relaxed = true)
 
-        CancelLedgerSigningUseCase(repository, navigationRouter).stopSession()
+        CancelLedgerSigningUseCase(repository, router).stopSession()
 
         verify(exactly = 1) { repository.cancelSigning(onlyUnsigned = true) }
-        verify(exactly = 0) { navigationRouter.back() }
+        verify(exactly = 0) { router.back() }
     }
 
-    private fun repository(proposal: TransactionProposal) = mockk<LedgerProposalRepository>(relaxed = true) {
-        every { transactionProposal } returns MutableStateFlow(proposal)
+    private fun repository(admitted: Boolean) = mockk<LedgerProposalRepository>(relaxed = true) {
+        every { cancelUnsignedTransaction() } returns admitted
     }
 }

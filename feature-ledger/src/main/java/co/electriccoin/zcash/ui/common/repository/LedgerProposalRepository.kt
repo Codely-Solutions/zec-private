@@ -111,6 +111,8 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
      */
     fun cancelSigning(onlyUnsigned: Boolean = false)
 
+    fun cancelUnsignedTransaction(): Boolean
+
     fun getProposalPCZT(): Pczt?
 }
 
@@ -140,12 +142,12 @@ class LedgerProposalRepositoryImpl(
 
     override val transactionProposal = MutableStateFlow<TransactionProposal?>(null)
 
-    override val submitState = MutableStateFlow<SubmitProposalState?>(null)
 
     override val signingState = MutableStateFlow<LedgerSigningState?>(null)
 
 
     private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
+    override val submitState = hardwareProposal.submissionState
 
     private var pcztWithProofsJob: Job? = null
 
@@ -269,7 +271,6 @@ class LedgerProposalRepositoryImpl(
 
     private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
         cancelSigning()
-        submitState.update { null }
         val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
@@ -629,6 +630,12 @@ class LedgerProposalRepositoryImpl(
         }
     }
 
+    override fun cancelUnsignedTransaction(): Boolean = synchronized(lock) {
+        if (signingState.value == LedgerSigningState.Signed) return@synchronized false
+        if (transactionProposal.value is ShieldTransactionProposal) clear() else cancelSigning()
+        true
+    }
+
     @VisibleForTesting
     internal suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult =
         submitPrepared(expectedProposal)
@@ -640,6 +647,7 @@ class LedgerProposalRepositoryImpl(
         expectedSignature: Pczt? = null,
     ): SubmitResult =
         scope.async {
+            var admitted: PreparedHardwareProposal? = null
             try {
                 val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
                 check(expectedPreparation == null || prepared === expectedPreparation) {
@@ -649,8 +657,9 @@ class LedgerProposalRepositoryImpl(
                 check(expectedSignature == null || signed === expectedSignature) {
                     "The Ledger signature changed before submission."
                 }
-                submitState.update { SubmitProposalState.Submitting }
-                val proofs = prepared.proofs.await()
+                admitted = prepared
+                hardwareProposal.recordSubmission(prepared, SubmitProposalState.Submitting)
+                val proofs = prepared.awaitProofs()
                 val proposal = prepared.proposal
                 val validateFunding: () -> Unit = {
                     proposal.requireCurrentShieldingApproval()
@@ -675,10 +684,12 @@ class LedgerProposalRepositoryImpl(
                     validateFunding()
                     submit(validateFunding, validateFunding)
                 }
-                submitState.update { SubmitProposalState.Result(result) }
+                hardwareProposal.recordSubmission(prepared, SubmitProposalState.Result(result))
                 result
             } catch (e: Exception) {
-                submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                admitted?.let {
+                    hardwareProposal.recordSubmission(it, SubmitProposalState.Result(SubmitResult.Error(e)))
+                }
                 throw e
             }
         }.await()
@@ -704,7 +715,6 @@ class LedgerProposalRepositoryImpl(
         pcztWithProofsJob = null
 
         if (expected == null) transactionProposal.update { null }
-        submitState.update { null }
         hardwareProposal.clear()
     }
 

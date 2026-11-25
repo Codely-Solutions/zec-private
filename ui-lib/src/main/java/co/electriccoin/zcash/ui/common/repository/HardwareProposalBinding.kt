@@ -11,6 +11,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -24,7 +26,7 @@ class PreparedHardwareProposal(
     internal val walletGeneration: Long,
 ) {
     internal val id = UUID.randomUUID().toString()
-    val proofs = CompletableDeferred<Pczt>()
+    private val proofs = CompletableDeferred<Pczt>()
 
     @Volatile
     var reviewedQuote: SwapQuoteData.Success? = null
@@ -32,6 +34,14 @@ class PreparedHardwareProposal(
 
     @Volatile
     var signatures: Pczt? = null
+
+    suspend fun awaitProofs(): Pczt =
+        try {
+            proofs.await()
+        } catch (_: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            error("The reviewed transaction changed while preparing the proof.")
+        }
 
     @Suppress("TooGenericExceptionCaught")
     fun startProofs(scope: CoroutineScope, addProofs: suspend (Pczt) -> Pczt): Job =
@@ -56,11 +66,19 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
     private var canSign: (() -> Boolean)? = null
     private val approval = MutableStateFlow<PreparedHardwareProposal?>(null)
     internal val approved = approval.asStateFlow()
+    private val submission = MutableStateFlow<SubmitProposalState?>(null)
+    val submissionState = submission.asStateFlow()
+
+    @Synchronized
+    fun recordSubmission(owner: PreparedHardwareProposal, state: SubmitProposalState) {
+        if (prepared === owner) submission.value = state
+    }
 
     @Synchronized
     fun prepare(proposal: TransactionProposal, pczt: Pczt, owner: AccountUuid? = null): PreparedHardwareProposal {
         approval.value = null
         canSign = null
+        submission.value = null
         val generation = walletWriteAccess.token()
         check(walletWriteAccess.permits(generation)) { "The wallet changed before signing preparation." }
         return PreparedHardwareProposal(proposal, pczt, owner, generation).also { prepared = it }
@@ -113,5 +131,6 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
         approval.value = null
         canSign = null
         prepared = null
+        submission.value = null
     }
 }

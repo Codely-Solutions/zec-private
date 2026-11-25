@@ -183,9 +183,9 @@ class KeystoneProposalRepositoryImpl(
 
     override val transactionProposal = MutableStateFlow<TransactionProposal?>(null)
 
-    override val submitState = MutableStateFlow<SubmitProposalState?>(null)
 
     private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
+    override val submitState = hardwareProposal.submissionState
 
     override val signingPreparationIds = combine(
         transactionProposal, hardwareProposal.approved, appAccessSession.grant,
@@ -352,12 +352,14 @@ class KeystoneProposalRepositoryImpl(
     @Suppress("TooGenericExceptionCaught")
     override suspend fun submit(expectedProposal: TransactionProposal?, preparationId: String?): SubmitResult =
         scope.async {
+            var admitted: PreparedHardwareProposal? = null
             try {
                 val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
                 if (preparationId != null && prepared.id != preparationId) throw MissingKeystoneSigningPreparation()
                 val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
-                submitState.update { SubmitProposalState.Submitting }
-                val proofs = prepared.proofs.await()
+                admitted = prepared
+                hardwareProposal.recordSubmission(prepared, SubmitProposalState.Submitting)
+                val proofs = prepared.awaitProofs()
                 val proposal = prepared.proposal
                 val validateFunding: () -> Unit = {
                     proposal.requireCurrentShieldingApproval()
@@ -381,10 +383,12 @@ class KeystoneProposalRepositoryImpl(
                     validateFunding()
                     submit(validateFunding, validateFunding)
                 }
-                submitState.update { SubmitProposalState.Result(result) }
+                hardwareProposal.recordSubmission(prepared, SubmitProposalState.Result(result))
                 result
             } catch (e: Exception) {
-                submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                admitted?.let {
+                    hardwareProposal.recordSubmission(it, SubmitProposalState.Result(SubmitResult.Error(e)))
+                }
                 throw e
             }
         }.await()
@@ -410,7 +414,6 @@ class KeystoneProposalRepositoryImpl(
         pcztWithProofsJob = null
 
         if (expected == null) transactionProposal.update { null }
-        submitState.update { null }
         hardwareProposal.clear()
     }
 

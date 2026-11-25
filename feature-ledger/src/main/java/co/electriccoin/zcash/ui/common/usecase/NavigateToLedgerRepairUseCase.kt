@@ -29,7 +29,7 @@ class NavigateToLedgerRepairUseCase(
         val owner = walletEnrollment.capture() ?: return
         val account = accountDataSource.getSelectedAccount()
         navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) {
-            cancelLedgerSigning(navigateBack = false)
+            if (!cancelLedgerSigning(navigateBack = false)) return@stageResultFrom null
             ledgerRepairTargetRepository.set(
                 accountUuid = account.sdkAccount.accountUuid,
                 zip32AccountIndex = (account as? LedgerAccount)?.zip32AccountIndex,

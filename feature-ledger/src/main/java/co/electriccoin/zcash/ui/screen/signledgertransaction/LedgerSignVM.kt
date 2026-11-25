@@ -335,7 +335,9 @@ class LedgerSignVM(
         )
     }
 
-    private fun onCancelClick() = cancelLedgerSigning()
+    private fun onCancelClick() {
+        cancelLedgerSigning()
+    }
 
     /**
      * Back acts as Cancel Transaction once the session has failed or the permissions were denied.
@@ -345,8 +347,8 @@ class LedgerSignVM(
     }
 
     override fun onCleared() {
-        navigationRouter.discardResultFrom(sourceEntryId, contentEntryId)
         cancelLedgerSigning.stopSession()
+        navigationRouter.discardResultFrom(sourceEntryId, contentEntryId)
         super.onCleared()
     }
 

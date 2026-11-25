@@ -35,7 +35,9 @@ class NavigateToLedgerRepairUseCaseTest {
                     every { zip32AccountIndex } returns Zip32AccountIndex.new(4)
                 }
             val repairTarget = LedgerRepairTargetRepositoryImpl()
-            val cancelLedgerSigning = mockk<CancelLedgerSigningUseCase>(relaxed = true)
+            val cancelLedgerSigning = mockk<CancelLedgerSigningUseCase> {
+                every { invoke(navigateBack = false) } returns true
+            }
             val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 
             NavigateToLedgerRepairUseCase(
@@ -84,7 +86,7 @@ class NavigateToLedgerRepairUseCaseTest {
                             coEvery { getSelectedAccount() } returns account
                         },
                     ledgerRepairTargetRepository = repairTarget,
-                    cancelLedgerSigning = mockk(relaxed = true),
+                    cancelLedgerSigning = mockk { every { invoke(navigateBack = false) } returns true },
                     navigationRouter = mockk(relaxed = true),
                     walletEnrollment = enrollment.access,
                 ).invoke()

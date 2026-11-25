@@ -22,13 +22,18 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmissionProgress
+import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
+import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -98,6 +103,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         assertEquals(account.sdkAccount.accountUuid, signed.owner)
         assertEquals(LedgerSigningState.Signed, repository.signingState.value)
         repository.cancelSigning(onlyUnsigned = true)
+        assertFalse(repository.cancelUnsignedTransaction())
         assertEquals(LedgerSigningState.Signed, repository.signingState.value)
         repository.startSigning { accepted.add(it) }
         runCurrent()
@@ -105,6 +111,30 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 
         givenPczt(account, proposal = original)
         assertFailsWith<IllegalStateException> { signed.submit() }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
+    }
+
+    @Test
+    fun aSupersededProofCancelsTheArtifactAndTerminatesItsAwaitingSubmission() = runTest(dispatcher) {
+        every { ledgerSigningDataSource.isLinked } returns true
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        val account = ledgerAccount()
+        givenPczt(account, proofsGate = CompletableDeferred())
+        val original = repository.getTransactionProposal()
+        val progress = mockk<SubmissionProgress>(relaxed = true)
+        val store = mockk<SubmissionProgressStore> { every { begin(original, any()) } returns progress }
+        val submit = SubmitLedgerProposalUseCase(
+            mockk(relaxed = true), mockk(relaxed = true), processSwapTransaction, mockk(relaxed = true), store,
+        ).apply { scope = CoroutineScope(dispatcher) }
+        repository.startSigning { submit(it, "sign") }
+        runCurrent()
+        verify(exactly = 0) { progress.recordFailure(any()) }
+
+        repository.clear(original)
+        runCurrent()
+
+        assertNull(repository.submitState.value)
+        verify(exactly = 1) { progress.recordFailure(any<IllegalStateException>()) }
         coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
     }
 
