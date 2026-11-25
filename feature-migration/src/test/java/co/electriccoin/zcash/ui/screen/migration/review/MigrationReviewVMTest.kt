@@ -101,10 +101,7 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
-                    getSelectedWalletAccount = mockk {
-                        coEvery { this@mockk() } returns account
-                        every { observe() } returns flowOf(account)
-                    },
+                    getSelectedWalletAccount = selectedAccount(account),
                     getOrchardMigrationSdk = mockk {
                         val sdk = mockk<OrchardMigrationSdk> {
                             coEvery { proposeImmediateMigration() } returns proposal
@@ -655,10 +652,7 @@ class MigrationReviewVMTest {
 
     private fun viewOnlySelected(): GetSelectedWalletAccountUseCase {
         val viewOnly = mockk<ViewOnlyAccount>(relaxed = true) { every { isSpendable } returns false }
-        return mockk {
-            coEvery { this@mockk() } returns viewOnly
-            every { observe() } returns flowOf(viewOnly)
-        }
+        return selectedAccount(viewOnly)
     }
 
     /** The confirm action ended in the view-only refusal, read from the VM's private confirm LCE. */
@@ -689,11 +683,7 @@ class MigrationReviewVMTest {
 
     private fun vm(
         router: NavigationRouter,
-        getSelectedWalletAccount: GetSelectedWalletAccountUseCase =
-            mockk {
-                coEvery { this@mockk() } returns spendable<ZodlAccount>()
-                every { observe() } returns flowOf(spendable<ZodlAccount>())
-            },
+        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = selectedAccount(spendable<ZodlAccount>()),
         zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource =
             mockk {
                 coEvery { getZashiSpendingKey() } returns mockk<UnifiedSpendingKey>()
@@ -766,4 +756,9 @@ class MigrationReviewVMTest {
 
     private inline fun <reified T : WalletAccount> spendable(): T =
         mockk<T>(relaxed = true) { every { isSpendable } returns true }
+}
+
+private fun selectedAccount(account: WalletAccount): GetSelectedWalletAccountUseCase = mockk {
+    coEvery { this@mockk() } returns account
+    every { observe() } returns flowOf(account)
 }
