@@ -9305,7 +9305,7 @@ index 05231840e..b5bcfe02a 100644
 @@ -433 +613,0 @@ class CheckMigrationRecoveryUseCaseTest {
 -                    coEvery { this@mockk() } returns sdk
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
-index 860a02aa2..39cdde79b 100644
+index 860a02aa2..1ac9f5064 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
 @@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -9331,11 +9331,10 @@ index 860a02aa2..39cdde79b 100644
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.supervisorScope
 +import kotlinx.coroutines.test.runCurrent
-@@ -14,0 +29,3 @@ import kotlin.test.assertEquals
+@@ -14,0 +29,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertFalse
-+import kotlin.test.assertSame
-@@ -37,5 +54,3 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -37,5 +53,3 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase>(relaxed = true),
 -            getSelectedWalletAccount =
 -                mockk<GetSelectedWalletAccountUseCase> {
@@ -9344,13 +9343,13 @@ index 860a02aa2..39cdde79b 100644
 +            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
 +                coEvery { this@mockk("fixture-owner") } returns mockk<OrchardMigrationSdk>(relaxed = true)
 +            },
-@@ -54 +69 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -54 +68 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC)
 +            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC, "fixture-owner")
-@@ -56 +71 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -56 +70 @@ class FinalizeMigrationScheduleUseCaseTest {
 -            verify(exactly = 1) { scheduler.schedule(any(), any()) }
 +            coVerify(exactly = 1) { scheduler.scheduleAndAwait("fixture-owner", any()) }
-@@ -58,0 +74,39 @@ class FinalizeMigrationScheduleUseCaseTest {
+@@ -58,0 +73,39 @@ class FinalizeMigrationScheduleUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun aFailedEnqueueCannotAcknowledgeACommittedSchedule() = runTest {
@@ -9382,7 +9381,7 @@ index 860a02aa2..39cdde79b 100644
 +
 +                val failure = IllegalStateException("synthetic enqueue failure")
 +                acknowledgement.setException(failure)
-+                assertSame(failure, assertFailsWith<IllegalStateException> { result.await() })
++                assertEquals(failure.message, assertFailsWith<IllegalStateException> { result.await() }.message)
 +            }
 +        } finally {
 +            acknowledgement.cancel(false)

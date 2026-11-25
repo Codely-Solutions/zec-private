@@ -677,7 +677,7 @@
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/repository/MigrationHandoffAccountGuardTest.kt": "bf5b7995d280a4154d9f5bd2b2ea7dbf6742b5cee533e2d865fbff371fe4b7ff",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/repository/MigrationTransferStateRepositoryTest.kt": "64dc9292ef412db786527c6b63e4f99ac4d544a5d58ac3eb82e0fd4bf7935e3f",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt": "05d5400b3af90219c4638ac6f6c8b0f056d19f774e336b7b5318f74e5331a194",
-  "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt": "0284151eb208bf6a9022af778903079a65e3b426b7b2a5a42a3c1290a351e153",
+  "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt": "93942c373624cd8e403332cfe6aa409392ae78af3b83823b6a4b1c79be090a96",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FindAccountByKeyIdTest.kt": "133b9ea7b8764c57f7f173571fbea4fd3045179f6f86cf90cfb586adf1d2493f",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseMigrationTest.kt": "f83222a2ede77a5b7dd46c8140912bfcf637d04f2fc9232cf470e1537f39fb31",
   "feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetMigrationGateInfoUseCaseTest.kt": "bb30b83450092fe7da2c5f319996e108c29c741d2148ad2228923c270f009022",

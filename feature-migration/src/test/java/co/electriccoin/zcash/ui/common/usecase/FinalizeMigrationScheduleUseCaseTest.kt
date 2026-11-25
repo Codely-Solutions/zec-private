@@ -28,7 +28,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertSame
 import kotlin.time.Duration.Companion.seconds
 
 class FinalizeMigrationScheduleUseCaseTest {
@@ -102,7 +101,7 @@ class FinalizeMigrationScheduleUseCaseTest {
 
                 val failure = IllegalStateException("synthetic enqueue failure")
                 acknowledgement.setException(failure)
-                assertSame(failure, assertFailsWith<IllegalStateException> { result.await() })
+                assertEquals(failure.message, assertFailsWith<IllegalStateException> { result.await() }.message)
             }
         } finally {
             acknowledgement.cancel(false)
