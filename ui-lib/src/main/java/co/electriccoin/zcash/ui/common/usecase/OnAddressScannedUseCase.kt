@@ -1,7 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.type.AddressType
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.screen.contact.AddZashiABContactArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow.ADDRESS_BOOK
@@ -21,35 +24,40 @@ class OnAddressScannedUseCase(
     suspend operator fun invoke(
         address: String,
         addressType: AddressType,
-        scanArgs: ScanArgs
-    ) {
+        scanArgs: ScanArgs,
+        sourceEntryId: String? = null,
+    ): Boolean {
         require(addressType is AddressType.Valid)
 
-        when (scanArgs.flow) {
-            SEND -> {
+        return when (scanArgs.flow) {
+            SEND -> navigationRouter.commitFrom(sourceEntryId) {
                 prefillSend.request(PrefillSendData.FromAddressScan(address = address))
-                navigationRouter.back()
+                NavigationCommand.Back
             }
 
-            ADDRESS_BOOK -> {
-                navigationRouter.replace(AddZashiABContactArgs(address))
+            ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
+                NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
             }
 
-            HOMEPAGE -> {
-                if (rejectIfSelectedAccountCannotSpend { replace(it) }) return
-                navigationRouter.replace(
-                    Send(
-                        address,
-                        when (addressType) {
-                            AddressType.Shielded -> cash.z.ecc.sdk.model.AddressType.UNIFIED
-                            AddressType.Tex -> cash.z.ecc.sdk.model.AddressType.TEX
-                            AddressType.Transparent -> cash.z.ecc.sdk.model.AddressType.TRANSPARENT
-                            AddressType.Unified -> cash.z.ecc.sdk.model.AddressType.UNIFIED
-                            else -> cash.z.ecc.sdk.model.AddressType.UNIFIED
-                        }
-                    )
-                )
-            }
+            HOMEPAGE -> openSend(address, addressType, sourceEntryId)
         }
+    }
+
+    private suspend fun openSend(address: String, addressType: AddressType.Valid, sourceEntryId: String?): Boolean {
+        var errorRoute: Any? = null
+        val rejected = navigationRouter.whileAtEntry(sourceEntryId) {
+            rejectIfSelectedAccountCannotSpend { errorRoute = it }
+        } ?: return false
+        val route = if (rejected) {
+            errorRoute
+        } else {
+            val type = when (addressType) {
+                AddressType.Tex -> cash.z.ecc.sdk.model.AddressType.TEX
+                AddressType.Transparent -> cash.z.ecc.sdk.model.AddressType.TRANSPARENT
+                else -> cash.z.ecc.sdk.model.AddressType.UNIFIED
+            }
+            Send(address, type)
+        }
+        return route != null && navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(route)) }
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -274,9 +275,14 @@ internal class SwapVM(
 
     private fun onQrCodeScannerClick() =
         viewModelScope.launch {
-            val result = navigateToScanAddress()
+            if (!canOpenInfo()) return@launch
+            val result = if (sourceEntryId == null) {
+                navigateToScanAddress()
+            } else {
+                navigateToScanAddress.scanFrom(sourceEntryId)
+            }
             if (result != null) {
-                navigationRouter.back()
+                if (sourceEntryId == null) navigationRouter.back()
                 internalState.update {
                     it.copy(
                         selectedContact = null,
@@ -301,7 +307,9 @@ internal class SwapVM(
 
     private fun onBack() =
         viewModelScope.launch {
-            if (isCancellingQuote || cancelSheetDismissal.isPending) return@launch
+            if (isCancellingQuote || cancelSheetDismissal.isPending || !navigationRouter.isAtEntry(sourceEntryId)) {
+                return@launch
+            }
             val owner = cancelSheet.value
             when {
                 internalState.value.isRequestingQuote -> {
@@ -313,7 +321,11 @@ internal class SwapVM(
                 owner != null -> continueQuote(owner)
                 else -> {
                     isCancellingQuote = true
-                    cancelSwap()
+                    try {
+                        if (sourceEntryId == null) cancelSwap() else cancelSwap.cancelFrom(sourceEntryId)
+                    } finally {
+                        isCancellingQuote = false
+                    }
                 }
             }
         }
@@ -321,9 +333,14 @@ internal class SwapVM(
     private fun onCancelSwapClick(owner: () -> Boolean) =
         viewModelScope.launch {
             if (isCancellingQuote || cancelSheet.value !== owner || !owner()) return@launch
+            if (!navigationRouter.isAtEntry(sourceEntryId)) return@launch
             isCancellingQuote = true
             quoteRequestJob?.cancel()
-            cancelSwap.afterDismissal(owner) { dismissCancelSheet() }
+            try {
+                cancelSwap.afterDismissal(owner, sourceEntryId) { dismissCancelSheet() }
+            } finally {
+                isCancellingQuote = false
+            }
         }
 
     private fun onDismissCancelClick(owner: () -> Boolean) =
@@ -460,7 +477,7 @@ internal class SwapVM(
         fiatAmount: BigDecimal?,
         direction: SwapDirection,
     ): Boolean =
-        navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode()) &&
+        navigateToSwapRefundWarning(fiatAmount, direction.toSwapMode(), sourceEntryId) &&
             navigationRouter.awaitQuoteOrigin(sourceEntryId) &&
             currentQuoteDraft(rendered, checkAction = false) != null
 

@@ -69,6 +69,7 @@ class ScanGiftCardLinkTest {
                     onAddressScanned = onAddressScanned,
                     zip321Scanned = onZip321Scanned,
                     navigateToRedeemGiftCard = navigateToRedeemGiftCard,
+                    navigationRouter = router,
                 )
 
             vm.onScanned(" $LINK\n")
@@ -93,6 +94,7 @@ class ScanGiftCardLinkTest {
                     parseZip321 = zip321Parser,
                     navigateToScanAddress = navigateToScanAddress,
                     navigateToRedeemGiftCard = navigateToRedeemGiftCard,
+                    navigationRouter = router,
                 )
 
             vm.onScanned(LINK)

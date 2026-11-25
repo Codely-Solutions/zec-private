@@ -3,6 +3,9 @@ package co.electriccoin.zcash.ui.screen.scan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.type.AddressType
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
@@ -23,6 +26,8 @@ internal class ScanZashiAddressVM(
     private val onAddressScanned: OnAddressScannedUseCase,
     private val zip321Scanned: OnZip321ScannedUseCase,
     private val navigateToRedeemGiftCard: NavigateToRedeemGiftCardUseCase,
+    private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val state = MutableStateFlow(ScanValidationState.NONE)
 
@@ -37,7 +42,8 @@ internal class ScanZashiAddressVM(
         state.value = ScanValidationState.NONE
     }
 
-    private val acceptsScan get() = !hasBeenScannedSuccessfully && !awaitingOverlayDismissal
+    private val acceptsScan get() =
+        !hasBeenScannedSuccessfully && !awaitingOverlayDismissal && navigationRouter.isAtEntry(sourceEntryId)
 
     /**
      * Gift card links are handled first and open the redeem flow: a link carries a spending secret, so it must never
@@ -52,8 +58,9 @@ internal class ScanZashiAddressVM(
                         return@withLock
                     }
                     runCatchingRecoverable {
-                        val zip321ValidationResult = zip321ParseUriValidationUseCase(result)
-                        val addressValidationResult = synchronizerProvider.getSynchronizer().validateAddress(result)
+                        val zip321ValidationResult = navigationRouter.whileAtEntry(sourceEntryId) {
+                            zip321ParseUriValidationUseCase(result)
+                        } ?: return@runCatchingRecoverable
 
                         when {
                             zip321ValidationResult is Zip321ParseUriValidation.Valid -> {
@@ -64,12 +71,8 @@ internal class ScanZashiAddressVM(
                                 onZip321SingleAddressScanned(zip321ValidationResult)
                             }
 
-                            addressValidationResult is AddressType.Valid -> {
-                                onAddressScanned(result, addressValidationResult)
-                            }
-
                             else -> {
-                                onInvalidScan()
+                                validateAndDispatchAddress(result)
                             }
                         }
                     }
@@ -77,10 +80,9 @@ internal class ScanZashiAddressVM(
             }
         }
 
-    private fun onGiftCardScanned(link: String) {
-        state.update { ScanValidationState.VALID }
-        hasBeenScannedSuccessfully = true
-        navigateToRedeemGiftCard.replaceWithRedeem(link.trim())
+    private suspend fun onGiftCardScanned(link: String) {
+        hasBeenScannedSuccessfully = navigateToRedeemGiftCard.replaceWithRedeem(link.trim(), sourceEntryId)
+        updateScanState()
     }
 
     private fun onInvalidScan() {
@@ -92,27 +94,34 @@ internal class ScanZashiAddressVM(
         result: String,
         addressValidationResult: AddressType
     ) {
-        state.update { ScanValidationState.VALID }
-        onAddressScanned(result, addressValidationResult, args)
-        hasBeenScannedSuccessfully = true
+        hasBeenScannedSuccessfully = onAddressScanned(result, addressValidationResult, args, sourceEntryId)
+        updateScanState()
     }
 
     private suspend fun onZip321SingleAddressScanned(zip321ValidationResult: Zip321ParseUriValidation.SingleAddress) {
-        val singleAddressValidation =
-            synchronizerProvider
-                .getSynchronizer()
-                .validateAddress(zip321ValidationResult.address)
-        if (singleAddressValidation is AddressType.Invalid) {
-            onInvalidScan()
-        } else {
-            onAddressScanned(zip321ValidationResult.address, singleAddressValidation)
-        }
+        validateAndDispatchAddress(zip321ValidationResult.address)
+    }
+
+    private suspend fun validateAndDispatchAddress(address: String) {
+        val validation = navigationRouter.whileAtEntry(sourceEntryId) {
+            synchronizerProvider.getSynchronizer().validateAddress(address)
+        } ?: return
+        if (validation is AddressType.Valid) onAddressScanned(address, validation) else onInvalidScan()
     }
 
     private suspend fun onZip321Scanned(zip321ValidationResult: Zip321ParseUriValidation.Valid) {
-        state.update { ScanValidationState.VALID }
-        hasBeenScannedSuccessfully = zip321Scanned(zip321ValidationResult, args)
-        awaitingOverlayDismissal = !hasBeenScannedSuccessfully
+        hasBeenScannedSuccessfully = zip321Scanned(zip321ValidationResult, args, sourceEntryId)
+        awaitingOverlayDismissal = !hasBeenScannedSuccessfully &&
+            (sourceEntryId == null || !navigationRouter.isAtEntry(sourceEntryId))
+        updateScanState()
+    }
+
+    private fun updateScanState() {
+        state.value = if (hasBeenScannedSuccessfully || awaitingOverlayDismissal) {
+            ScanValidationState.VALID
+        } else {
+            ScanValidationState.NONE
+        }
     }
 
     fun onScannedError() =

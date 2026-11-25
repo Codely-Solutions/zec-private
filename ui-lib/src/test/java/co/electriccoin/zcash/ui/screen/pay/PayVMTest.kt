@@ -480,7 +480,9 @@ class PayVMTest {
     fun cancelConfirmationNegativeButtonCancelsSwap() =
         runTest {
             val harness = harness()
-            coEvery { harness.cancelSwap.afterDismissal(any(), any()) } coAnswers { secondArg<suspend () -> Unit>()() }
+            coEvery { harness.cancelSwap.afterDismissal(any(), any(), any()) } coAnswers {
+                arg<suspend () -> Unit>(2)()
+            }
             harness.collectState(this)
             harness.makeQuoteHang()
             harness.onAddressChange(BTC_ADDRESS)
@@ -494,7 +496,7 @@ class PayVMTest {
             harness.vm.onCancelSheetHidden()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any(), any()) }
+            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any(), any(), any()) }
         }
 
     @Test

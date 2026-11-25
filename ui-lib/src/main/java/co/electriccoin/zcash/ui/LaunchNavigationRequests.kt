@@ -89,7 +89,13 @@ class LaunchNavigationRequests {
         hasAppAccess: () -> Boolean,
         navigate: suspend (NavigationCommand, isCurrent: () -> Boolean) -> Boolean,
     ) = delivery.withLock {
-        for (request in pending.value) {
+        val requests = pending.value
+        if (walletReady && requests.any { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }) {
+            return@withLock
+        }
+        // A migration replacement retains Home but removes every screen above it. Deliver it
+        // before queued scanners so their destinations stay available on the same stack.
+        for (request in requests.sortedBy { it.command !is NavigationCommand.ReplaceAll }) {
             if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {

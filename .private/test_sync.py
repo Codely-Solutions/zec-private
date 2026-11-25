@@ -178,11 +178,12 @@ class SyncTests(unittest.TestCase):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
         ui_root = base.removesuffix('screen/')
-        for path in ('AppAccessBoundary.kt', 'LaunchNavigationRequests.kt', 'MainActivity.kt',
-                     'NavigationRouter.kt', 'Navigator.kt', 'RootNavGraph.kt', 'WalletNavGraph.kt'):
+        for path in ('AppAccessBoundary.kt', 'BiometricActivity.kt', 'LaunchNavigationRequests.kt', 'MainActivity.kt',
+                     'NavigationExt.kt', 'NavigationRouter.kt', 'Navigator.kt', 'OnboardingNavGraph.kt',
+                     'RootNavGraph.kt', 'WalletNavGraph.kt'):
             with self.subTest(path=path):
                 self.assertTrue(sync.critical(ui_root+path))
-        self.assertFalse(sync.critical(ui_root+'UiPreview.kt'))
+        self.assertFalse(sync.critical(ui_root+'fixture/UiPreview.kt'))
         for path in ('ui-design-lib/src/main/res/ui/common/drawable-night-v35/app_logo.png',
                      'ui-lib/src/main/res/ui/about/values/strings.xml',
                      'ui-design-lib/src/main/java/example/design/theme/Theme.kt'):
@@ -240,12 +241,17 @@ class SyncTests(unittest.TestCase):
             if args[:2]==('git','fetch'): return ''
             if args[:2]==('git','rev-parse'): return self.state['sha']
             return original(*args,**kwargs)
-        with patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \
-                patch.object(sync, 'run', side_effect=commands), \
-                patch.object(sync, 'changed_paths', return_value=[
-                    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt']):
-            with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'): sync.main()
-        self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
+        ui_root = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/'
+        protected = ('common/usecase/RequestSwapQuoteUseCase.kt', 'BiometricActivity.kt',
+                     'NavigationExt.kt', 'OnboardingNavGraph.kt')
+        for relative in protected:
+            with self.subTest(relative=relative), \
+                    patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \
+                    patch.object(sync, 'run', side_effect=commands), \
+                    patch.object(sync, 'changed_paths', return_value=[ui_root+relative]):
+                with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'):
+                    sync.main()
+                self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 
     def test_sdk_gate_commit_must_match_the_fetched_tag(self):
         with patch.object(sync,'source_state',return_value=json.loads(

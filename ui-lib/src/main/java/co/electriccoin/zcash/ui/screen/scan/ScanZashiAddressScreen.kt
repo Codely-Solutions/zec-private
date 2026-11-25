@@ -11,6 +11,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
@@ -22,15 +24,18 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
-internal fun ScanZashiAddressScreen(args: ScanArgs) {
+internal fun ScanZashiAddressScreen(args: ScanArgs, sourceEntryId: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val walletViewModel = koinActivityViewModel<WalletViewModel>()
-    val viewModel = koinViewModel<ScanZashiAddressVM> { parametersOf(args) }
+    val viewModel = koinViewModel<ScanZashiAddressVM> { parametersOf(args, sourceEntryId) }
     val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigationRouter = koinInject<NavigationRouter>()
+    val onBack: () -> Unit = {
+        scope.launch { navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back } }
+    }
 
     LifecycleResumeEffect(viewModel) {
         viewModel.onResumed()
@@ -38,7 +43,7 @@ internal fun ScanZashiAddressScreen(args: ScanArgs) {
     }
 
     BackHandler {
-        navigationRouter.back()
+        onBack()
     }
 
     if (synchronizer == null) {
@@ -49,7 +54,7 @@ internal fun ScanZashiAddressScreen(args: ScanArgs) {
     } else {
         ScanView(
             snackbarHostState = snackbarHostState,
-            onBack = { navigationRouter.back() },
+            onBack = onBack,
             onScan = {
                 viewModel.onScanned(it)
             },

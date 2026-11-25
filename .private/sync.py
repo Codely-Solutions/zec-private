@@ -53,10 +53,7 @@ def critical(path):
     if any(part in path for part in ('/design/theme/', '/res/ui/about/', '/res/ui/theme/')):
         return True
     ui_root = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/'
-    if path.startswith(ui_root) and path[len(ui_root):] in {
-        'AppAccessBoundary.kt', 'LaunchNavigationRequests.kt', 'MainActivity.kt',
-        'NavigationRouter.kt', 'Navigator.kt', 'RootNavGraph.kt', 'WalletNavGraph.kt',
-    }:
+    if path.startswith(ui_root) and path.endswith('.kt') and '/' not in path[len(ui_root):]:
         return True
     sensitive_screen=re.match(
         r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'

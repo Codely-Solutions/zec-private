@@ -1,12 +1,18 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProvider
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import kotlin.time.Duration.Companion.seconds
@@ -28,7 +34,8 @@ class NavigateToSwapRefundWarningUseCase(
      * would leave the first caller suspended forever. A plain field needs no synchronisation: every
      * caller enters through a `viewModelScope` coroutine, so all reads and writes happen on Main.
      */
-    private var isPending = false
+    private var pending: SwapRefundWarningArgs? = null
+    private var hasUnscopedCaller = false
 
     /**
      * Suspends until the user resolves the warning: `true` means carry on to the quote, `false`
@@ -47,10 +54,10 @@ class NavigateToSwapRefundWarningUseCase(
      * result has actually reached the awaiting caller: a sheet restored after process death has
      * nobody left to resolve, and must not silence a warning whose Continue leads nowhere.
      */
-    suspend operator fun invoke(fiatAmount: BigDecimal?, mode: SwapMode): Boolean {
+    suspend operator fun invoke(fiatAmount: BigDecimal?, mode: SwapMode, sourceEntryId: String? = null): Boolean {
         val isAboveThreshold = fiatAmount != null && fiatAmount >= SWAP_REFUND_WARNING_THRESHOLD_USD
         if (isAboveThreshold || isSwapRefundWarningDismissed.get(mode)) return true
-        return showWarning(mode)
+        return showWarning(mode, sourceEntryId)
     }
 
     /**
@@ -61,21 +68,27 @@ class NavigateToSwapRefundWarningUseCase(
      * screen appears can never be dropped (a bare SharedFlow emit with no collector is lost and
      * would hang the caller).
      */
-    private suspend fun showWarning(mode: SwapMode): Boolean {
-        if (isPending) return false
+    private suspend fun showWarning(mode: SwapMode, sourceEntryId: String?): Boolean {
+        if (pending != null) return false
 
-        isPending = true
+        val args = SwapRefundWarningArgs(mode = mode)
+        pending = args
+        hasUnscopedCaller = sourceEntryId == null
         val result =
             try {
-                val args = SwapRefundWarningArgs(mode = mode)
-                pipeline
-                    .onSubscription { navigationRouter.forward(args) }
-                    .first { it.args.requestId == args.requestId }
+                if (sourceEntryId == null) {
+                    pipeline
+                        .onSubscription { navigationRouter.forward(args) }
+                        .first { it.args.requestId == args.requestId }
+                } else {
+                    showOwnedWarning(args, sourceEntryId)
+                }
             } finally {
-                isPending = false
+                pending = null
+                hasUnscopedCaller = false
             }
         return when (result) {
-            is SwapRefundWarningPipelineResult.Cancelled -> {
+            null, is SwapRefundWarningPipelineResult.Cancelled -> {
                 false
             }
 
@@ -88,6 +101,30 @@ class NavigateToSwapRefundWarningUseCase(
         }
     }
 
+    private suspend fun showOwnedWarning(args: SwapRefundWarningArgs, sourceEntryId: String) = coroutineScope {
+        val decision = async(start = CoroutineStart.UNDISPATCHED) {
+            pipeline.first { it.args.requestId == args.requestId }
+        }
+        try {
+            val opened = navigationRouter.commitFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(args))
+            }
+            val openedEntry = navigationRouter.activeEntry.value
+            if (!opened || openedEntry?.refundWarningRequestId != args.requestId) return@coroutineScope null
+            val dismissed = async { navigationRouter.activeEntry.first { it?.id != openedEntry.id } }
+            try {
+                select<SwapRefundWarningPipelineResult?> {
+                    decision.onAwait { it }
+                    dismissed.onAwait { null }
+                }
+            } finally {
+                dismissed.cancel()
+            }
+        } finally {
+            decision.cancel()
+        }
+    }
+
     /**
      * Hands the awaiting caller the user's Continue, together with the state of the
      * "Don't show this message again" checkbox for it to persist. The result is emitted before
@@ -95,13 +132,25 @@ class NavigateToSwapRefundWarningUseCase(
      * has been written.
      */
     suspend fun onContinue(args: SwapRefundWarningArgs, dontShowAgain: Boolean) {
-        pipeline.emit(SwapRefundWarningPipelineResult.Confirmed(args = args, dontShowAgain = dontShowAgain))
-        navigationRouter.back()
+        finish(SwapRefundWarningPipelineResult.Confirmed(args = args, dontShowAgain = dontShowAgain))
     }
 
     suspend fun onCancel(args: SwapRefundWarningArgs) {
-        pipeline.emit(SwapRefundWarningPipelineResult.Cancelled(args))
-        navigationRouter.back()
+        finish(SwapRefundWarningPipelineResult.Cancelled(args))
+    }
+
+    private suspend fun finish(result: SwapRefundWarningPipelineResult) {
+        val requestId = result.args.requestId
+        if (hasUnscopedCaller && pending?.requestId == requestId) {
+            pipeline.emit(result)
+            navigationRouter.back()
+        } else {
+            val entry = navigationRouter.activeEntry.value
+            if (entry?.refundWarningRequestId == requestId) {
+                pipeline.emit(result)
+                navigationRouter.commitFrom(entry.id) { NavigationCommand.Back }
+            }
+        }
     }
 }
 
@@ -127,7 +176,7 @@ internal suspend fun NavigationRouter.awaitQuoteOrigin(sourceEntryId: String?): 
     return when {
         active == null -> false
         active.id == sourceEntryId -> true
-        active.route?.substringBefore('/')?.substringBefore('?') == SwapRefundWarningArgs::class.qualifiedName ->
+        active.refundWarningRequestId != null ->
             withTimeoutOrNull(2.seconds) {
                 activeEntry.first { it?.id != active.id }?.id == sourceEntryId
             } == true

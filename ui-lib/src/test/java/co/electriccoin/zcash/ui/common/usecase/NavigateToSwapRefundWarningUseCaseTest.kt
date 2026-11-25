@@ -33,6 +33,7 @@ class NavigateToSwapRefundWarningUseCaseTest {
     private val forwarded = mutableListOf<Any>()
     private val router =
         mockk<NavigationRouter>(relaxed = true) {
+            every { activeEntry } returns MutableStateFlow(null)
             every { forward(*anyVararg()) } answers {
                 (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
             }
@@ -42,7 +43,7 @@ class NavigateToSwapRefundWarningUseCaseTest {
     fun quoteWaitsForItsOwnFormToReturnAfterWarningContinue() =
         runTest(UnconfinedTestDispatcher()) {
             val form = ActiveNavigationEntry("pay-entry", "Pay")
-            val warning = ActiveNavigationEntry("warning-entry", SwapRefundWarningArgs::class.qualifiedName)
+            val warning = ActiveNavigationEntry("warning-entry", SwapRefundWarningArgs::class.qualifiedName, "request")
             val active = MutableStateFlow<ActiveNavigationEntry?>(warning)
             every { router.activeEntry } returns active
 

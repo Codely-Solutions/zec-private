@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.usecase.GetABSwapContactsUseCase
@@ -30,7 +31,8 @@ class SelectSwapABRecipientVM(
     private val args: SelectABSwapRecipientArgs,
     private val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
     private val navigationRouter: NavigationRouter,
-    private val navigateToScanAddress: NavigateToScanGenericAddressUseCase
+    private val navigateToScanAddress: NavigateToScanGenericAddressUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val state =
         getAddressBookSwapContacts
@@ -120,11 +122,20 @@ class SelectSwapABRecipientVM(
 
     private fun onScanContactClick() =
         viewModelScope.launch {
-            val contact = navigateToScanAddress()
-            if (contact != null) {
-                navigationRouter.replace(
-                    AddSwapABContactArgs(address = contact.rawInput ?: contact.address, network = args.network)
-                )
+            if (sourceEntryId == null) {
+                val contact = navigateToScanAddress()
+                if (contact != null) {
+                    navigationRouter.replace(
+                        AddSwapABContactArgs(address = contact.rawInput ?: contact.address, network = args.network)
+                    )
+                }
+            } else {
+                navigateToScanAddress.scanFrom(sourceEntryId) { contact ->
+                    val added = AddSwapABContactArgs(
+                        address = contact.rawInput ?: contact.address, network = args.network
+                    )
+                    NavigationCommand.Replace(listOf(added))
+                }
             }
         }
 }

@@ -1,18 +1,25 @@
 package co.electriccoin.zcash.ui
 
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.job
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,7 +69,12 @@ interface NavigationRouter {
     fun observePipeline(): Flow<BaseNavigationCommand>
 }
 
-data class ActiveNavigationEntry(val id: String, val route: String?)
+data class ActiveNavigationEntry(
+    val id: String,
+    val route: String?,
+    val refundWarningRequestId: String? = null,
+    val genericScanRequestId: String? = null,
+)
 
 interface ActiveNavigationEntryObserver {
     fun update(entry: ActiveNavigationEntry?)
@@ -86,6 +98,54 @@ internal fun NavigationRouter.forwardFrom(
             } else {
                 null
             }
+        }
+    }
+}
+
+internal suspend fun NavigationRouter.commitFrom(
+    sourceEntryId: String?,
+    buildCommand: () -> NavigationCommand,
+): Boolean = if (sourceEntryId == null) {
+    when (val command = buildCommand()) {
+        is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
+        is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
+        is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
+        is NavigationCommand.ReplaceFrom -> replaceFrom(command.route, *command.routes.toTypedArray())
+        is NavigationCommand.BackTo -> backTo(command.route)
+        NavigationCommand.Back -> back()
+        NavigationCommand.BackToRoot -> backToRoot()
+        is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
+    }
+    true
+} else withTimeoutOrNull(2.seconds) {
+    val waiter = currentCoroutineContext().job
+    val receipt = CompletableDeferred<Boolean>()
+    custom { current ->
+        if (current?.id == sourceEntryId && waiter.isActive) {
+            NavigationCommand.ForEntry(sourceEntryId, { waiter.isActive }, buildCommand) { receipt.complete(it) }
+        } else {
+            receipt.complete(false)
+            null
+        }
+    }
+    receipt.await()
+} == true
+
+internal fun NavigationRouter.isAtEntry(sourceEntryId: String?) =
+    sourceEntryId == null || activeEntry.value?.id == sourceEntryId
+
+internal suspend fun <T> NavigationRouter.whileAtEntry(sourceEntryId: String?, block: suspend () -> T): T? {
+    if (sourceEntryId == null) return block()
+    return if (!isAtEntry(sourceEntryId)) null else coroutineScope {
+        val operation = async { block() }
+        val monitor = launch {
+            activeEntry.first { it?.id != sourceEntryId }
+            operation.cancel()
+        }
+        try {
+            operation.await()
+        } finally {
+            monitor.cancel()
         }
     }
 }
@@ -161,6 +221,13 @@ data class CustomNavigationCommand(
 ) : BaseNavigationCommand
 
 sealed interface NavigationCommand : BaseNavigationCommand {
+    data class ForEntry(
+        val sourceEntryId: String,
+        val isStillAllowed: () -> Boolean,
+        val buildCommand: () -> NavigationCommand,
+        val acknowledge: (Boolean) -> Unit,
+    ) : NavigationCommand
+
     data class Forward(
         val routes: List<Any>,
         val sourceEntryId: String? = null,

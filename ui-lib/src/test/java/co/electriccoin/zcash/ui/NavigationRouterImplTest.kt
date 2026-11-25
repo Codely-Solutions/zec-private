@@ -174,6 +174,26 @@ class NavigationRouterImplTest {
         assertEquals(null, router.activeEntry.value)
     }
 
+    @Test
+    fun queuedMigrationReplacementCommitsBeforeAnEarlierExternalScanner() = runTest(dispatcher) {
+        val requests = LaunchNavigationRequests()
+        val delivered = mutableListOf<NavigationCommand>()
+        requests.requestGiftScan()
+        val migration = requests.beginMigrationProgress("owner")
+        requests.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+            delivered.add(command)
+        }
+        assertTrue(delivered.isEmpty())
+
+        val replacement = NavigationCommand.ReplaceAll(listOf(TestMigrationProgress))
+        val scanner = NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))
+        requests.finishMigrationProgress(migration, replacement)
+        requests.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+            delivered.add(command)
+        }
+        assertEquals(listOf<NavigationCommand>(replacement, scanner), delivered)
+    }
+
     private fun TestScope.collectedCommands(router: NavigationRouter): List<BaseNavigationCommand> {
         val commands = mutableListOf<BaseNavigationCommand>()
         backgroundScope.launch { router.observePipeline().collect { commands += it } }

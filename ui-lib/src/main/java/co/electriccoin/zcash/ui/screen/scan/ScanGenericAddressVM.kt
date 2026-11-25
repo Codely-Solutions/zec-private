@@ -2,6 +2,9 @@ package co.electriccoin.zcash.ui.screen.scan
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToScanGenericAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase
@@ -18,12 +21,15 @@ internal class ScanGenericAddressVM(
     private val parseZip321: Zip321ParseUriValidationUseCase,
     private val navigateToScanAddress: NavigateToScanGenericAddressUseCase,
     private val navigateToRedeemGiftCard: NavigateToRedeemGiftCardUseCase,
+    private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val state = MutableStateFlow(ScanValidationState.NONE)
 
     private val mutex = Mutex()
 
     private var hasBeenScannedSuccessfully = false
+    private val acceptsScan get() = !hasBeenScannedSuccessfully && navigationRouter.isAtEntry(sourceEntryId)
 
     /**
      * A gift card link opens the redeem flow and resolves the pending scan as cancelled: a link carries a spending
@@ -32,13 +38,14 @@ internal class ScanGenericAddressVM(
     fun onScanned(result: String) =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     if (navigateToRedeemGiftCard.isGiftCardLink(result)) {
                         onGiftCardScanned(result)
                         return@withLock
                     }
                     runCatching {
-                        when (val zip321Result = parseZip321(result)) {
+                        when (val zip321Result = navigationRouter.whileAtEntry(sourceEntryId) { parseZip321(result) }) {
+                            null -> Unit
                             is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result, result)
                             is Zip321ParseUriValidation.SingleAddress ->
                                 onZip321SingleAddressScanned(zip321Result, result)
@@ -50,35 +57,30 @@ internal class ScanGenericAddressVM(
         }
 
     private suspend fun onGiftCardScanned(link: String) {
-        state.update { ScanValidationState.VALID }
-        hasBeenScannedSuccessfully = true
-        navigateToScanAddress.onScanRedirected(args)
-        navigateToRedeemGiftCard.replaceWithRedeem(link.trim())
+        if (sourceEntryId == null) navigateToScanAddress.onScanRedirected(args)
+        updateResult(navigateToRedeemGiftCard.replaceWithRedeem(link.trim(), sourceEntryId))
     }
 
     private suspend fun onAddressScanned(result: String) {
-        state.update { ScanValidationState.VALID }
-        navigateToScanAddress.onScanned(
+        updateResult(navigateToScanAddress.onScanned(
             address = result,
             amount = null,
-            args = args
-        )
-        hasBeenScannedSuccessfully = true
+            args = args,
+            sourceEntryId = sourceEntryId,
+        ))
     }
 
     private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress, raw: String) {
-        state.update { ScanValidationState.VALID }
-        navigateToScanAddress.onScanned(
+        updateResult(navigateToScanAddress.onScanned(
             address = result.address,
             amount = null,
             args = args,
-            rawInput = raw
-        )
-        hasBeenScannedSuccessfully = true
+            rawInput = raw,
+            sourceEntryId = sourceEntryId,
+        ))
     }
 
     private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid, raw: String) {
-        state.update { ScanValidationState.VALID }
         val address =
             result.payment.payments[0]
                 .recipientAddress.value
@@ -87,14 +89,18 @@ internal class ScanGenericAddressVM(
                 .nonNegativeAmount
                 ?.toZecValueString()
                 ?.toBigDecimal() ?: BigDecimal.ZERO
-        navigateToScanAddress.onScanned(address, amount, args, rawInput = raw)
-        hasBeenScannedSuccessfully = true
+        updateResult(navigateToScanAddress.onScanned(address, amount, args, raw, sourceEntryId))
+    }
+
+    private fun updateResult(delivered: Boolean) {
+        hasBeenScannedSuccessfully = delivered
+        state.value = if (delivered) ScanValidationState.VALID else ScanValidationState.NONE
     }
 
     fun onScannedError() =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     state.update { ScanValidationState.INVALID }
                 }
             }
@@ -103,7 +109,7 @@ internal class ScanGenericAddressVM(
     fun onImageScanned(result: ImageToQrCodeResult) =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     when (result) {
                         is ImageToQrCodeResult.SingleCode -> {
                             onScanned(result.text)
@@ -123,5 +129,5 @@ internal class ScanGenericAddressVM(
             }
         }
 
-    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args) }
+    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args, sourceEntryId) }
 }

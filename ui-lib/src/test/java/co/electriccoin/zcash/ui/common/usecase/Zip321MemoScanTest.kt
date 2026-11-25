@@ -368,6 +368,7 @@ class Zip321MemoScanTest {
                 onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk()),
                 zip321Scanned = scan,
                 navigateToRedeemGiftCard = navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
+                navigationRouter = router,
             )
             store.put("scanner", scanner)
             scanner.onScanned(uri).join()
@@ -424,6 +425,7 @@ class Zip321MemoScanTest {
                 ScanArgs(ScanFlow.SEND), provider, Zip321ParseUriValidationUseCase(provider),
                 OnAddressScannedUseCase(router, prefill, mockk()), hardwareScan,
                 navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
+                navigationRouter = router,
             )
             store.put("scanner", scanner)
             scanner.onImageScanned(ImageToQrCodeResult.SingleCode(uri)).join()

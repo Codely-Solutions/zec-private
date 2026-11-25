@@ -1,6 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 
 class CancelSwapUseCase(
@@ -12,10 +15,23 @@ class CancelSwapUseCase(
         navigationRouter.backToRoot()
     }
 
-    suspend fun afterDismissal(canReturnToRoot: () -> Boolean, dismiss: suspend () -> Unit) {
-        if (!canReturnToRoot()) return
+    internal suspend fun cancelFrom(sourceEntryId: String) {
+        navigationRouter.commitFrom(sourceEntryId) {
+            swapRepository.clear()
+            NavigationCommand.BackToRoot
+        }
+    }
+
+    suspend fun afterDismissal(
+        canReturnToRoot: () -> Boolean,
+        sourceEntryId: String? = null,
+        dismiss: suspend () -> Unit,
+    ) {
+        if (!canReturnToRoot() || !navigationRouter.isAtEntry(sourceEntryId)) return
         swapRepository.clear()
         dismiss()
-        if (canReturnToRoot() && swapRepository.quote.value == null) navigationRouter.backToRoot()
+        if (canReturnToRoot() && swapRepository.quote.value == null) {
+            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+        }
     }
 }

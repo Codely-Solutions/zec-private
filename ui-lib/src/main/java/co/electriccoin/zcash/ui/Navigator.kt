@@ -31,11 +31,13 @@ class NavigatorImpl(
     private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
 ) : Navigator {
     override suspend fun executeCommand(command: NavigationCommand) {
-        if (command is NavigationCommand.Forward && command.sourceEntryId != null) {
-            if (!canForward(command)) return
-            keyboardManager.controller?.hide()
-        } else {
-            keyboardManager.close()
+        when {
+            command is NavigationCommand.ForEntry -> keyboardManager.controller?.hide()
+            command is NavigationCommand.Forward && command.sourceEntryId != null -> {
+                if (!canForward(command)) return
+                keyboardManager.controller?.hide()
+            }
+            else -> keyboardManager.close()
         }
         executeAfterKeyboard(command)
     }
@@ -50,6 +52,7 @@ class NavigatorImpl(
 
     private suspend fun executeAfterKeyboard(command: NavigationCommand) {
         when (command) {
+            is NavigationCommand.ForEntry -> executeOwned(command)
             is NavigationCommand.Forward -> forward(command)
             is NavigationCommand.Replace -> replace(command)
             is NavigationCommand.ReplaceAll -> replaceAll(command)
@@ -58,6 +61,14 @@ class NavigatorImpl(
             is NavigationCommand.BackTo -> backTo(command)
             NavigationCommand.BackToRoot -> backToRoot()
         }
+    }
+
+    private suspend fun executeOwned(command: NavigationCommand.ForEntry) {
+        val previous = navController.currentBackStackEntry
+        if (previous?.id == command.sourceEntryId && command.isStillAllowed()) {
+            executeAfterKeyboard(command.buildCommand())
+        }
+        command.acknowledge(navController.currentBackStackEntry !== previous)
     }
 
     private fun canForward(command: NavigationCommand.Forward): Boolean =

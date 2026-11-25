@@ -8,9 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
+import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
@@ -26,6 +32,8 @@ import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popExitTransiti
 import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
+import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -134,19 +142,34 @@ fun RootNavGraph(
         if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
     }
 
-    LaunchedEffect(secretState, navController, launchNavigation) {
+    CollectLaunchRequests(secretState, navController, launchNavigation, navigator, currentAccess.value)
+}
+
+@Composable
+private fun CollectLaunchRequests(
+    secretState: SecretState,
+    navController: NavController,
+    requests: LaunchNavigationRequests,
+    navigator: NavigatorImpl,
+    hasAppAccess: () -> Boolean,
+) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val appAccess = rememberUpdatedState(hasAppAccess)
+    LaunchedEffect(secretState, navController, requests, navigator, lifecycle) {
         if (secretState == SecretState.LOADING) return@LaunchedEffect
         val walletReady = secretState == SecretState.READY
         val targetGraph = if (walletReady) MainAppGraph::class else OnboardingGraph::class
-        navController.currentBackStackEntryFlow.first {
-            it.destination.parent?.route == targetGraph.qualifiedName
-        }
-        launchNavigation.changes.collect {
-            launchNavigation.deliver(
-                walletReady,
-                hasAppAccess = { currentAccess.value() },
-                navigate = navigator::executeLaunchCommand
-            )
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            navController.currentBackStackEntryFlow.first {
+                it.destination.parent?.route == targetGraph.qualifiedName
+            }
+            requests.changes.collect {
+                requests.deliver(
+                    walletReady,
+                    hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
+                    navigate = navigator::executeLaunchCommand
+                )
+            }
         }
     }
 }
@@ -155,10 +178,8 @@ fun RootNavGraph(
 private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
     DisposableEffect(navController, navigationRouter) {
         val observer = navigationRouter.registerEntryObserver()
-        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
-            observer.update(
-                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
-            )
+        val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
+            observer.update(controller.currentBackStackEntry?.toActiveNavigationEntry())
         }
         navController.addOnDestinationChangedListener(listener)
         onDispose {
@@ -167,6 +188,17 @@ private fun TrackActiveNavigationEntry(navController: NavController, navigationR
         }
     }
 }
+
+internal fun NavBackStackEntry.toActiveNavigationEntry() = ActiveNavigationEntry(
+    id = id,
+    route = destination.route,
+    refundWarningRequestId = if (destination.hasRoute<SwapRefundWarningArgs>()) {
+        toRoute<SwapRefundWarningArgs>().requestId
+    } else null,
+    genericScanRequestId = if (destination.hasRoute<ScanGenericAddressArgs>()) {
+        toRoute<ScanGenericAddressArgs>().requestId
+    } else null,
+)
 
 @Serializable
 data object OnboardingGraph

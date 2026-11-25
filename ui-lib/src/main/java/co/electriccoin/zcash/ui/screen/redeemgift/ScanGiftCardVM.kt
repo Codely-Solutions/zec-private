@@ -3,6 +3,9 @@ package co.electriccoin.zcash.ui.screen.redeemgift
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -17,12 +20,13 @@ import kotlinx.coroutines.launch
 
 /**
  * The first step of the redeem flow: scan a gift card QR code, pick an image of one, or go on to paste its link.
- * Every callback runs on the main thread without suspending, so they never interleave.
+ * The current scanner can admit one navigation while its delivery is pending.
  */
 class ScanGiftCardVM(
     args: ScanGiftCardArgs,
     private val navigateToRedeemGiftCard: NavigateToRedeemGiftCardUseCase,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val mutableState =
         MutableStateFlow(
@@ -37,6 +41,9 @@ class ScanGiftCardVM(
     val state: StateFlow<ScanGiftCardState> = mutableState.asStateFlow()
 
     private var hasBeenScannedSuccessfully = false
+    private var isDelivering = false
+    private val canAct get() =
+        !hasBeenScannedSuccessfully && !isDelivering && navigationRouter.isAtEntry(sourceEntryId)
 
     fun onScanned(result: String) = viewModelScope.launch { handle(result) }
 
@@ -45,18 +52,28 @@ class ScanGiftCardVM(
      * scanned link is taking the scanner's place.
      */
     fun onPaste() {
-        if (hasBeenScannedSuccessfully) return
-        navigationRouter.forward(PasteGiftCardLinkArgs)
+        viewModelScope.launch {
+            if (canAct) {
+                isDelivering = true
+                try {
+                    navigationRouter.commitFrom(sourceEntryId) {
+                        NavigationCommand.Forward(listOf(PasteGiftCardLinkArgs))
+                    }
+                } finally {
+                    isDelivering = false
+                }
+            }
+        }
     }
 
     fun onScannedError() =
         viewModelScope.launch {
-            if (!hasBeenScannedSuccessfully) setValidation(ScanValidationState.INVALID)
+            if (canAct) setValidation(ScanValidationState.INVALID)
         }
 
     fun onImageScanned(result: ImageToQrCodeResult) =
         viewModelScope.launch {
-            if (hasBeenScannedSuccessfully) return@launch
+            if (!canAct) return@launch
             when (result) {
                 is ImageToQrCodeResult.SingleCode -> handle(result.text)
                 ImageToQrCodeResult.MultipleCodes -> setValidation(ScanValidationState.SEVERAL_CODES_FOUND)
@@ -64,21 +81,22 @@ class ScanGiftCardVM(
             }
         }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        viewModelScope.launch { navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back } }
+    }
 
-    /**
-     * Opens the redeem screen for [text] if it is a gift card link and no link was taken yet.
-     *
-     * This must stay non-suspending. Its callers all run on the main thread, so without a suspension point between
-     * reading and setting [hasBeenScannedSuccessfully] no other scan can interleave, and that is what makes the
-     * scanned-once guard race-free without a mutex. Adding a suspending call here would need a mutex instead.
-     */
-    private fun handle(text: String) {
-        if (hasBeenScannedSuccessfully) return
+    private suspend fun handle(text: String) {
+        if (!canAct) return
         if (navigateToRedeemGiftCard.isGiftCardLink(text)) {
-            hasBeenScannedSuccessfully = true
-            setValidation(ScanValidationState.VALID)
-            navigateToRedeemGiftCard.replaceGiftCardScanWithRedeem(text.trim())
+            isDelivering = true
+            try {
+                hasBeenScannedSuccessfully =
+                    navigateToRedeemGiftCard.replaceGiftCardScanWithRedeem(text.trim(), sourceEntryId)
+                val validation = if (hasBeenScannedSuccessfully) ScanValidationState.VALID else ScanValidationState.NONE
+                setValidation(validation)
+            } finally {
+                isDelivering = false
+            }
         } else {
             setValidation(ScanValidationState.INVALID)
         }

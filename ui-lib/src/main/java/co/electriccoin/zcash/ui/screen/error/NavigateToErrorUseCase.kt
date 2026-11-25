@@ -16,6 +16,10 @@ class NavigateToErrorUseCase(
     private val pending = linkedMapOf<ErrorRoute, ErrorArgs>()
 
     operator fun invoke(args: ErrorArgs, navigate: NavigationRouter.(Any) -> Unit = { forward(it) }) {
+        navigationRouter.navigate(stage(args))
+    }
+
+    internal fun stage(args: ErrorArgs): ErrorRoute {
         val id = UUID.randomUUID().toString()
         val route = when (args) {
             is ErrorArgs.ShieldingError, is ErrorArgs.General, is ErrorArgs.ShieldingGeneralError -> ErrorDialog(id)
@@ -28,7 +32,7 @@ class NavigateToErrorUseCase(
             if (pending.size >= MAX_PENDING_ERRORS) pending.remove(pending.keys.first())
             pending[route] = args
         }
-        navigationRouter.navigate(route)
+        return route
     }
 
     /**

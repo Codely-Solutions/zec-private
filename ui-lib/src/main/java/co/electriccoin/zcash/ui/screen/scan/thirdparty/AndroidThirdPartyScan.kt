@@ -6,10 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AndroidThirdPartyScan() {
-    val vm = koinViewModel<ThirdPartyScanViewModel>()
+fun AndroidThirdPartyScan(sourceEntryId: String) {
+    val vm = koinViewModel<ThirdPartyScanViewModel> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.onBack() }
     ThirdPartyScanView(state)

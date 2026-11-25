@@ -263,7 +263,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<AccountListArgs> { AccountListScreen() }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
         composable<EditAccountArgs> { EditAccountScreen(it.toRoute()) }
-        composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute()) }
+        composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute(), it.id) }
         composable(NavigationTargets.EXPORT_PRIVATE_DATA) { WrapExportPrivateData() }
         composable<ExportVKArgs> { ExportVKScreen() }
         dialogComposable<ExportVKConfirmArgs> { ExportVKConfirmScreen(it.toRoute()) }
@@ -274,7 +274,7 @@ fun NavGraphBuilder.walletNavGraph(
                 goSettings = { navigationRouter.forward(MoreArgs) }
             )
         }
-        composable<AddressBookArgs> { AddressBookScreen() }
+        composable<AddressBookArgs> { AddressBookScreen(it.id) }
         composable<SelectABRecipientArgs> { SelectABRecipientScreen() }
         composable<AddZashiABContactArgs> { AddZashiABContactScreen(it.toRoute()) }
         composable(
@@ -320,9 +320,9 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen() }
         dialogComposable<BalanceBreakdownArgs> { BalanceBreakdownScreen() }
         composable<CrashReportOptIn> { AndroidCrashReportOptIn() }
-        composable<ThirdPartyScan> { AndroidThirdPartyScan() }
-        composable<ScanGiftCardArgs> { ScanGiftCardScreen(it.toRoute()) }
-        composable<PasteGiftCardLinkArgs> { PasteGiftCardLinkScreen() }
+        composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id) }
+        composable<ScanGiftCardArgs> { ScanGiftCardScreen(it.toRoute(), it.id) }
+        composable<PasteGiftCardLinkArgs> { PasteGiftCardLinkScreen(it.id) }
         composable<RedeemGiftArgs> { RedeemGiftScreen(it.toRoute()) }
         dialogComposable<SwapAssetPickerArgs> { SwapAssetPickerScreen(it.toRoute()) }
         dialogComposable<SwapBlockchainPickerArgs> { SwapBlockchainPickerScreen(it.toRoute()) }
@@ -334,8 +334,8 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SwapInfoArgs> { SwapInfoScreen() }
         dialogComposable<DepositSwapInfoArgs> { DepositSwapInfoScreen() }
         dialogComposable<SwapQuoteArgs> { SwapQuoteScreen() }
-        composable<ScanGenericAddressArgs> { ScanGenericAddressScreen(it.toRoute()) }
-        composable<SelectABSwapRecipientArgs> { SelectSwapABRecipientScreen(it.toRoute()) }
+        composable<ScanGenericAddressArgs> { ScanGenericAddressScreen(it.toRoute(), it.id) }
+        composable<SelectABSwapRecipientArgs> { SelectSwapABRecipientScreen(it.toRoute(), it.id) }
         composable<AddSwapABContactArgs> { AddSwapABContactScreen(it.toRoute()) }
         composable<AddGenericABContactArgs> { AddGenericABContactScreen(it.toRoute()) }
         composable<UpdateGenericABContactArgs> { UpdateGenericABContactScreen(it.toRoute()) }

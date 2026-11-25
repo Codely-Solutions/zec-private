@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.Density
 import androidx.navigation.NavHostController
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -38,6 +39,8 @@ import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.NavigateToScanGenericAddressUseCase
+import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarNavigationTag
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -59,6 +62,7 @@ import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeState
+import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.RequestArgs
 import co.electriccoin.zcash.ui.screen.request.RequestScreenContent
@@ -77,6 +81,10 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationVM
 import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVM
 import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteView
+import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
+import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
+import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProvider
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -85,6 +93,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -101,8 +111,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w360dp-h780dp")
@@ -277,6 +290,127 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun externalScannerDismissesWarningAndLetsTheOriginalFormRetry() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val router = collectOwnedNavigation()
+                val preference = mockk<IsSwapRefundWarningDismissedStorageProvider>(relaxed = true)
+                val warning = NavigateToSwapRefundWarningUseCase(router, preference)
+                val form = checkNotNull(controller.currentBackStackEntry).id
+                val first = async { warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form) }
+                runCurrent()
+                val dismissed = checkNotNull(controller.currentBackStackEntry).toRoute<SwapRefundWarningArgs>()
+                controller.navigate(ScanGiftCardArgs(isFromExternalLink = true))
+                runCurrent()
+                assertFalse(first.await())
+                warning.onContinue(dismissed, dontShowAgain = true)
+                assertTrue(controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>()?.isFromExternalLink == true)
+                assertTrue(controller.popBackStack())
+
+                val next = async { warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form) }
+                runCurrent()
+                val retry = checkNotNull(controller.currentBackStackEntry).toRoute<SwapRefundWarningArgs>()
+                warning.onContinue(retry, dontShowAgain = false)
+                assertTrue(next.await())
+                assertEquals(form, controller.currentBackStackEntry?.id)
+                coVerify(exactly = 0) { preference.store(any(), any()) }
+            }
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun genericScanOnlyReturnsDataAfterItsOwnNavigationCommits() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val router = collectOwnedNavigation()
+                val scanner = NavigateToScanGenericAddressUseCase(router)
+                val form = checkNotNull(controller.currentBackStackEntry).id
+                val first = async { scanner.scanFrom(form) }
+                runCurrent()
+                val oldEntry = checkNotNull(controller.currentBackStackEntry)
+                val oldRequest = oldEntry.toRoute<ScanGenericAddressArgs>()
+                controller.navigate(ScanGiftCardArgs(isFromExternalLink = true))
+                assertFalse(scanner.onScanned("synthetic", null, oldRequest, sourceEntryId = oldEntry.id))
+                assertNull(first.await())
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertTrue(controller.popBackStack())
+                assertTrue(controller.popBackStack())
+
+                val next = async {
+                    scanner.scanFrom(form) { NavigationCommand.Replace(listOf(SignKeystoneTransactionArgs)) }
+                }
+                runCurrent()
+                val current = checkNotNull(controller.currentBackStackEntry)
+                val args = current.toRoute<ScanGenericAddressArgs>()
+                assertTrue(scanner.onScanned("fixture", null, args, sourceEntryId = current.id))
+                assertEquals("fixture", next.await()?.address)
+                assertEquals(
+                    SignKeystoneTransactionArgs,
+                    controller.currentBackStackEntry?.toRoute<SignKeystoneTransactionArgs>()
+                )
+            }
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun launchWaitingForKeyboardRemainsPendingAfterTheActivityStops() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val requests = LaunchNavigationRequests()
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                var resumed = true
+                requests.requestGiftScan()
+                val first = launch { requests.deliver(true, { resumed }, navigator::executeLaunchCommand) }
+                runCurrent()
+                resumed = false
+                keyboard.onKeyboardClosed()
+                first.join()
+                assertEquals(home, controller.currentBackStackEntry?.id)
+                assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
+
+                resumed = true
+                requests.deliver(true, { resumed }, navigator::executeLaunchCommand)
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertTrue(requests.saveExternalScans().isEmpty())
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun TestScope.collectOwnedNavigation(): NavigationRouterImpl {
+        val router = NavigationRouterImpl()
+        val observer = router.registerEntryObserver()
+        val listener = NavController.OnDestinationChangedListener { nav, _, _ ->
+            observer.update(nav.currentBackStackEntry?.toActiveNavigationEntry())
+        }
+        controller.addOnDestinationChangedListener(listener)
+        val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            try {
+                router.observePipeline().collect {
+                    when (it) {
+                        is CustomNavigationCommand -> navigator.executeCommand(it)
+                        is NavigationCommand -> navigator.executeCommand(it)
+                    }
+                }
+            } finally {
+                controller.removeOnDestinationChangedListener(listener)
+                observer.close()
+            }
+        }
+        return router
+    }
+
+    @Test
     fun restoredKeystoneSignatureRouteOffersBackEvenWithTheWalletReady() {
         install()
         compose.runOnIdle {
@@ -420,6 +554,9 @@ class RestoredWalletRoutesLayoutTest {
                             }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
                             composable<FixtureMigrationProgress> { Text("Migration progress") }
+                            composable<ScanGiftCardArgs> { Text("External scan") }
+                            composable<ScanGenericAddressArgs> { Text("Generic scan") }
+                            dialogComposable<SwapRefundWarningArgs> { Text("Refund warning") }
                             composable<VKDetailArgs> {
                                 VKDetailScreenContent(
                                     state = null, unavailable = true, isRevealed = { false }, onBack = loadingBack

@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStore
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftArgs
@@ -27,14 +29,23 @@ class NavigateToRedeemGiftCardUseCase(
      * Replaces the current screen (an address scanner that was handed a gift card link) with the redeem screen for
      * [link].
      */
-    fun replaceWithRedeem(link: String) = navigationRouter.replace(redeemArgs(link))
+    suspend fun replaceWithRedeem(link: String, sourceEntryId: String? = null): Boolean =
+        navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(redeemArgs(link))) }
 
     /**
      * Replaces the gift card flow's own screens, the gift card scanner and the paste link screen above it, with the
      * redeem screen for [link], so back from the redeem screen returns to the screen the scanner was opened from.
      */
-    fun replaceGiftCardScanWithRedeem(link: String) =
-        navigationRouter.replaceFrom(ScanGiftCardArgs::class, redeemArgs(link))
+    suspend fun replaceGiftCardScanWithRedeem(
+        link: String,
+        sourceEntryId: String? = null,
+        onCommit: () -> Unit = {},
+    ): Boolean =
+        navigationRouter.commitFrom(sourceEntryId) {
+            val route = redeemArgs(link)
+            onCommit()
+            NavigationCommand.ReplaceFrom(ScanGiftCardArgs::class, listOf(route))
+        }
 
     private fun redeemArgs(link: String) = RedeemGiftArgs(giftCardLinkStore.stash(link))
 }

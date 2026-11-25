@@ -1,6 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
@@ -29,6 +33,8 @@ import co.electriccoin.zcash.ui.screen.scan.ScanFlow.SEND
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class OnZip321ScannedUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
@@ -39,39 +45,31 @@ class OnZip321ScannedUseCase(
     private val prefillSend: PrefillSendUseCase,
     private val navigateToErrorUseCase: NavigateToErrorUseCase
 ) {
-    /** Returns whether navigation removed the scanner from the back stack. */
-    suspend operator fun invoke(zip321: Zip321ParseUriValidation.Valid, scanArgs: ScanArgs): Boolean {
+    /** Returns whether acknowledged navigation moved away from the scanner. */
+    suspend operator fun invoke(
+        zip321: Zip321ParseUriValidation.Valid,
+        scanArgs: ScanArgs,
+        sourceEntryId: String? = null,
+    ): Boolean {
+        if (!navigationRouter.isAtEntry(sourceEntryId)) return false
         if (zip321.payment.payments.size != 1) {
-            navigateToErrorUseCase(ErrorArgs.General(UnsupportedZip321PaymentCountException()))
+            showError(sourceEntryId, ErrorArgs.General(UnsupportedZip321PaymentCountException()))
             return false
         }
         return when (scanArgs.flow) {
-            ADDRESS_BOOK -> {
-                addressBookFlow(zip321)
-                true
+            ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
+                val address = zip321.payment.payments.single().recipientAddress.value
+                NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
             }
 
-            SEND -> {
-                if (scanArgs.isScanZip321Enabled) {
-                    sendFlow(zip321)
-                } else {
-                    sendFlowWithDisabledZip321(zip321)
-                }
+            SEND -> if (scanArgs.isScanZip321Enabled) {
+                prepareFlow(zip321, sourceEntryId, fromHome = false)
+            } else {
+                sendAddressOnly(zip321, sourceEntryId)
             }
 
-            HOMEPAGE -> {
-                homepageFlow(zip321)
-            }
+            HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
         }
-    }
-
-    private fun addressBookFlow(zip321: Zip321ParseUriValidation.Valid) {
-        navigationRouter.replace(
-            AddZashiABContactArgs(
-                zip321.payment.payments[0]
-                    .recipientAddress.value
-            )
-        )
     }
 
     private suspend fun prepareProposal(uri: String) =
@@ -87,129 +85,99 @@ class OnZip321ScannedUseCase(
         }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
+    private suspend fun prepareFlow(
+        zip321: Zip321ParseUriValidation.Valid,
+        sourceEntryId: String?,
+        fromHome: Boolean,
+    ): Boolean =
         try {
-            val proposal = prepareProposal(zip321.zip321Uri)
-
-            if (proposal.binaryMemoByteCount == null) prefillSend.request(
-                PrefillSendData.All(
-                    amount = proposal.amount,
-                    address = proposal.destination.address,
-                    fee = null,
-                    memos =
-                        proposal.memo.value
-                            .takeIf { it.isNotEmpty() }
-                            ?.let { listOf(it) }
-                )
-            )
-            if (proposal.binaryMemoByteCount == null) {
-                navigationRouter.replace(Send(), ReviewTransactionArgs)
-            } else {
-                navigationRouter.replace(ReviewTransactionArgs)
+            val proposal = navigationRouter.whileAtEntry(sourceEntryId) { prepareProposal(zip321.zip321Uri) }
+            proposal != null && navigationRouter.commitFrom(sourceEntryId) {
+                val editable = proposal.binaryMemoByteCount == null
+                if (editable) {
+                    prefillSend.request(
+                        PrefillSendData.All(
+                            amount = proposal.amount,
+                            address = proposal.destination.address,
+                            fee = null,
+                            memos = proposal.memo.value.takeIf { it.isNotEmpty() }?.let { listOf(it) },
+                        )
+                    )
+                }
+                val routes = if (fromHome && editable) {
+                    listOf(Send(), ReviewTransactionArgs)
+                } else {
+                    listOf(ReviewTransactionArgs)
+                }
+                NavigationCommand.Replace(routes)
             }
-            true
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            zashiProposalRepository.clear()
+            clearIfCurrent(sourceEntryId)
+            navigationRouter.commitFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(TEXUnsupportedArgs(isLedger = isLedger)))
+            }
             false
         } catch (_: InsufficientFundsException) {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            navigationRouter.replace(InsufficientFundsArgs)
-            true
+            clearIfCurrent(sourceEntryId)
+            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(InsufficientFundsArgs)) }
         } catch (_: TransactionProposalNotCreatedException) {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            canEdit(zip321).also { editable ->
-                if (editable) {
-                    prefillSend.requestFromZip321(zip321.payment)
-                    navigationRouter.replace(Send())
-                }
-            }
+            clearIfCurrent(sourceEntryId)
+            editUnpreparedPayment(zip321, sourceEntryId, fromHome)
         } catch (error: CancellationException) {
             throw error
         } catch (e: Exception) {
-            navigateToErrorUseCase(ErrorArgs.General(e))
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            false
+            clearIfCurrent(sourceEntryId)
+            showError(sourceEntryId, ErrorArgs.General(e), replaceScanner = !fromHome) && !fromHome
         }
 
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
-        try {
-            val proposal = prepareProposal(zip321.zip321Uri)
-
-            if (proposal.binaryMemoByteCount == null) prefillSend.request(
-                PrefillSendData.All(
-                    amount = proposal.amount,
-                    address = proposal.destination.address,
-                    fee = null,
-                    memos =
-                        proposal.memo.value
-                            .takeIf { it.isNotEmpty() }
-                            ?.let { listOf(it) }
-                )
-            )
-            navigationRouter.replace(ReviewTransactionArgs)
-            true
-        } catch (_: TexUnsupportedOnKSException) {
-            val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            zashiProposalRepository.clear()
-            false
-        } catch (_: InsufficientFundsException) {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            navigationRouter.replace(InsufficientFundsArgs)
-            true
-        } catch (_: TransactionProposalNotCreatedException) {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            canEdit(zip321).also { editable ->
-                if (editable) {
-                    prefillSend.requestFromZip321(zip321.payment)
-                    navigationRouter.back()
-                }
-            }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (e: Exception) {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            navigateToErrorUseCase(ErrorArgs.General(e)) { replace(it) }
-            true
+    private suspend fun editUnpreparedPayment(
+        zip321: Zip321ParseUriValidation.Valid,
+        sourceEntryId: String?,
+        fromHome: Boolean,
+    ): Boolean {
+        if (!canEdit(zip321, sourceEntryId)) return false
+        return navigationRouter.commitFrom(sourceEntryId) {
+            prefillSend.requestFromZip321(zip321.payment)
+            if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
         }
-
-    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid): Boolean {
-        if (!canEdit(zip321)) return false
-        prefillSend.request(
-            PrefillSendData.FromAddressScan(
-                address =
-                    zip321.payment.payments[0]
-                        .recipientAddress.value
-            )
-        )
-        navigationRouter.back()
-        return true
     }
 
-    private fun canEdit(zip321: Zip321ParseUriValidation.Valid): Boolean {
-        if (zip321.payment.payments.single().memo?.data?.zip321MemoTextOrNull() != null ||
-            zip321.payment.payments.single().memo == null
-        ) return true
-        navigateToErrorUseCase(ErrorArgs.General(UneditableZip321MemoException()))
+    private suspend fun sendAddressOnly(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
+        if (!canEdit(zip321, sourceEntryId)) return false
+        return navigationRouter.commitFrom(sourceEntryId) {
+            val address = zip321.payment.payments.single().recipientAddress.value
+            prefillSend.request(PrefillSendData.FromAddressScan(address))
+            NavigationCommand.Back
+        }
+    }
+
+    private suspend fun canEdit(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
+        val memo = zip321.payment.payments.single().memo
+        if (memo == null || memo.data.zip321MemoTextOrNull() != null) return true
+        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()))
         return false
+    }
+
+    private suspend fun clearIfCurrent(sourceEntryId: String?) {
+        currentCoroutineContext().ensureActive()
+        if (!navigationRouter.isAtEntry(sourceEntryId)) return
+        zashiProposalRepository.clear()
+        keystoneProposalRepository.clear()
+        ledgerProposalPipeline.clear()
+    }
+
+    private suspend fun showError(
+        sourceEntryId: String?,
+        args: ErrorArgs,
+        replaceScanner: Boolean = false,
+    ): Boolean = if (sourceEntryId == null) {
+        if (replaceScanner) navigateToErrorUseCase(args) { replace(it) } else navigateToErrorUseCase(args)
+        true
+    } else {
+        navigationRouter.commitFrom(sourceEntryId) {
+            val routes = listOf(navigateToErrorUseCase.stage(args))
+            if (replaceScanner) NavigationCommand.Replace(routes) else NavigationCommand.Forward(routes)
+        }
     }
 }

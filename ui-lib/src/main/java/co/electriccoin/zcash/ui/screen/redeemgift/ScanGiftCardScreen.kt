@@ -19,10 +19,10 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun ScanGiftCardScreen(args: ScanGiftCardArgs) {
+fun ScanGiftCardScreen(args: ScanGiftCardArgs, sourceEntryId: String) {
     // The camera preview shows the card's QR code, which is a spending secret.
     SecureScreen()
-    val vm = koinViewModel<ScanGiftCardVM> { parametersOf(args) }
+    val vm = koinViewModel<ScanGiftCardVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

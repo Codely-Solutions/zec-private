@@ -388,7 +388,7 @@ class RequestSwapQuoteUseCase(
                 }
             }
             else -> forward {
-                val ownerMatches = owner?.matchesCurrentSelection() != false
+                val ownerMatches = result !is SwapQuoteData.Success || owner?.matchesCurrentSelection() != false
                 if (ownerMatches && swapRepository.consumeReview(result) != null) SwapQuoteArgs else null
             }
         }

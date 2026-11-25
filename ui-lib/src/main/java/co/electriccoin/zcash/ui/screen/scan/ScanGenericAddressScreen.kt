@@ -17,8 +17,8 @@ import org.koin.core.parameter.parametersOf
 import java.util.UUID
 
 @Composable
-fun ScanGenericAddressScreen(args: ScanGenericAddressArgs) {
-    val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args) }
+fun ScanGenericAddressScreen(args: ScanGenericAddressArgs, sourceEntryId: String) {
+    val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

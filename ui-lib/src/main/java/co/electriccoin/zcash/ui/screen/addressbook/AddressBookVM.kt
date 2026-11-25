@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.usecase.GetABContactsUseCase
@@ -26,7 +27,8 @@ import kotlinx.coroutines.launch
 class AddressBookVM(
     getAddressBookContacts: GetABContactsUseCase,
     private val navigationRouter: NavigationRouter,
-    private val navigateToScanGenericAddressUseCase: NavigateToScanGenericAddressUseCase
+    private val navigateToScanGenericAddressUseCase: NavigateToScanGenericAddressUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val state =
         getAddressBookContacts
@@ -96,9 +98,13 @@ class AddressBookVM(
 
     private fun onScanContactClick() =
         viewModelScope.launch {
-            val contact = navigateToScanGenericAddressUseCase()
-            if (contact != null) {
-                navigationRouter.replace(AddGenericABContactArgs(address = contact.address))
+            if (sourceEntryId == null) {
+                val contact = navigateToScanGenericAddressUseCase()
+                if (contact != null) navigationRouter.replace(AddGenericABContactArgs(address = contact.address))
+            } else {
+                navigateToScanGenericAddressUseCase.scanFrom(sourceEntryId) { contact ->
+                    NavigationCommand.Replace(listOf(AddGenericABContactArgs(address = contact.address)))
+                }
             }
         }
 }
