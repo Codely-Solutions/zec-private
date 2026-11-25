@@ -24,11 +24,10 @@ internal class GetVKUseCase(
 
     fun startReview(account: WalletAccount, generation: Long, type: VKType): String? {
         val owner = account.sdkAccount.accountUuid
-        if (!isSelected(owner, generation)) return null
-        return account.sdkAccount.viewingKey(type)?.let { key ->
-            UUID.randomUUID().toString().also { id ->
-                review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
-            }
+        val selected = selectedAccount()
+        if (!matchesSelection(selected, owner, generation) || account.sdkAccount.viewingKey(type) == null) return null
+        return UUID.randomUUID().toString().also { id ->
+            review.value = Review(id, owner, generation, type, approved = type == VKType.INCOMING)
         }
     }
 
@@ -42,16 +41,19 @@ internal class GetVKUseCase(
         return review.compareAndSet(pending, pending.approve())
     }
 
-    fun key(id: String, type: VKType): String? = current(id, type)?.takeIf { it.approved }?.key
+    fun key(id: String, type: VKType): String? {
+        val selected = selectedAccount() ?: return null
+        return current(id, type, selected)?.takeIf { it.approved }?.let { selected.sdkAccount.viewingKey(type) }
+    }
 
     fun endReview(id: String) = review.update { it?.takeUnless { pending -> pending.id == id } }
 
-    private fun current(id: String, type: VKType): Review? = review.value?.takeIf {
-        it.id == id && it.type == type && isSelected(it.owner, it.generation)
-    }
+    private fun current(id: String, type: VKType, selected: WalletAccount? = selectedAccount()): Review? =
+        review.value?.takeIf { it.id == id && it.type == type && matchesSelection(selected, it.owner, it.generation) }
 
-    private fun isSelected(owner: AccountUuid, generation: Long): Boolean {
-        val selected = accounts.allAccounts.value?.firstOrNull { it.isSelected }
+    private fun selectedAccount(): WalletAccount? = accounts.allAccounts.value?.firstOrNull { it.isSelected }
+
+    private fun matchesSelection(selected: WalletAccount?, owner: AccountUuid, generation: Long): Boolean {
         return selected?.sdkAccount?.accountUuid == owner && walletAccess.permits(generation)
     }
 
@@ -60,9 +62,8 @@ internal class GetVKUseCase(
         val owner: AccountUuid,
         val generation: Long,
         val type: VKType,
-        val key: String,
         val approved: Boolean,
     ) {
-        fun approve() = Review(id, owner, generation, type, key, approved = true)
+        fun approve() = Review(id, owner, generation, type, approved = true)
     }
 }

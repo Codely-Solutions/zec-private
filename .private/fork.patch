@@ -42112,7 +42112,7 @@ index be3f6dfed..2fc93cdc3 100644
 +    suspend operator fun invoke(txId: String, accountUuid: AccountUuid, token: Long): String? =
 +        metadataRepository.readTxNote(txId, accountUuid, token)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
-index 9fc5047bd..76daead67 100644
+index 9fc5047bd..85304479a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -42140,7 +42140,7 @@ index 9fc5047bd..76daead67 100644
 -        observeSelectedWalletAccount.require().map { account -> account.sdkAccount.viewingKey(type) }
 +    private val review = MutableStateFlow<Review?>(null)
 +    val walletVersion = walletAccess.version
-@@ -14,3 +22,10 @@ class GetVKUseCase(
+@@ -14,3 +22,9 @@ class GetVKUseCase(
 -    fun observeAvailability(): Flow<Map<VKType, Boolean>> =
 -        observeSelectedWalletAccount.require().map { account ->
 -            VKType.entries.associateWith { type -> account.sdkAccount.viewingKey(type) != null }
@@ -42149,12 +42149,11 @@ index 9fc5047bd..76daead67 100644
 +
 +    fun startReview(account: WalletAccount, generation: Long, type: VKType): String? {
 +        val owner = account.sdkAccount.accountUuid
-+        if (!isSelected(owner, generation)) return null
-+        return account.sdkAccount.viewingKey(type)?.let { key ->
-+            UUID.randomUUID().toString().also { id ->
-+                review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
-+            }
-@@ -17,0 +33,35 @@ class GetVKUseCase(
++        val selected = selectedAccount()
++        if (!matchesSelection(selected, owner, generation) || account.sdkAccount.viewingKey(type) == null) return null
++        return UUID.randomUUID().toString().also { id ->
++            review.value = Review(id, owner, generation, type, approved = type == VKType.INCOMING)
+@@ -17,0 +32,37 @@ class GetVKUseCase(
 +    }
 +
 +    fun isCurrent(id: String, type: VKType) = current(id, type) != null
@@ -42167,16 +42166,19 @@ index 9fc5047bd..76daead67 100644
 +        return review.compareAndSet(pending, pending.approve())
 +    }
 +
-+    fun key(id: String, type: VKType): String? = current(id, type)?.takeIf { it.approved }?.key
++    fun key(id: String, type: VKType): String? {
++        val selected = selectedAccount() ?: return null
++        return current(id, type, selected)?.takeIf { it.approved }?.let { selected.sdkAccount.viewingKey(type) }
++    }
 +
 +    fun endReview(id: String) = review.update { it?.takeUnless { pending -> pending.id == id } }
 +
-+    private fun current(id: String, type: VKType): Review? = review.value?.takeIf {
-+        it.id == id && it.type == type && isSelected(it.owner, it.generation)
-+    }
++    private fun current(id: String, type: VKType, selected: WalletAccount? = selectedAccount()): Review? =
++        review.value?.takeIf { it.id == id && it.type == type && matchesSelection(selected, it.owner, it.generation) }
 +
-+    private fun isSelected(owner: AccountUuid, generation: Long): Boolean {
-+        val selected = accounts.allAccounts.value?.firstOrNull { it.isSelected }
++    private fun selectedAccount(): WalletAccount? = accounts.allAccounts.value?.firstOrNull { it.isSelected }
++
++    private fun matchesSelection(selected: WalletAccount?, owner: AccountUuid, generation: Long): Boolean {
 +        return selected?.sdkAccount?.accountUuid == owner && walletAccess.permits(generation)
 +    }
 +
@@ -42185,10 +42187,9 @@ index 9fc5047bd..76daead67 100644
 +        val owner: AccountUuid,
 +        val generation: Long,
 +        val type: VKType,
-+        val key: String,
 +        val approved: Boolean,
 +    ) {
-+        fun approve() = Review(id, owner, generation, type, key, approved = true)
++        fun approve() = Review(id, owner, generation, type, approved = true)
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/HandleExternalLinkUseCase.kt
 index d668814fa..25c62c11c 100644
