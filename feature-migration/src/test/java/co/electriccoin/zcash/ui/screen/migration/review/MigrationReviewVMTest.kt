@@ -95,11 +95,16 @@ class MigrationReviewVMTest {
             val router = FakeNavigationRouter()
             val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
             val reviewed = MigrationSweepTransactionProposal(proposal)
+            val account = spendable<ZodlAccount>()
             every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
             val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val vm =
                 vm(
                     router = router,
+                    getSelectedWalletAccount = mockk {
+                        coEvery { this@mockk() } returns account
+                        every { observe() } returns flowOf(account)
+                    },
                     getOrchardMigrationSdk = mockk {
                         val sdk = mockk<OrchardMigrationSdk> {
                             coEvery { proposeImmediateMigration() } returns proposal
@@ -121,7 +126,7 @@ class MigrationReviewVMTest {
             // broadcast, and the Transaction Progress navigation).
             coVerifyOrder {
                 zashiProposalRepository.setMigrationSweepProposal(proposal)
-                submitProposal(reviewed)
+                submitProposal(reviewed, reviewedOwner = account.sdkAccount.accountUuid)
             }
         }
 
@@ -609,7 +614,7 @@ class MigrationReviewVMTest {
             coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
-            coVerify(exactly = 0) { submitProposal(any()) }
+            coVerify(exactly = 0) { submitProposal(any(), any(), any(), any()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
 

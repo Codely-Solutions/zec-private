@@ -11282,7 +11282,7 @@ index 20a8edf27..1e3c55a22 100644
 -                    coEvery { this@mockk() } returns Zatoshi(500_000L)
 -                },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..62c0f94a3 100644
+index d0838db0c..8df5dd84a 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 @@ -13,0 +14 @@ import cash.z.ecc.android.sdk.model.Zatoshi
@@ -11308,78 +11308,83 @@ index d0838db0c..62c0f94a3 100644
 +import kotlinx.coroutines.test.runCurrent
 @@ -61,0 +72 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertTrue
-@@ -85,0 +97,2 @@ class MigrationReviewVMTest {
+@@ -85,0 +97,3 @@ class MigrationReviewVMTest {
 +            val reviewed = MigrationSweepTransactionProposal(proposal)
++            val account = spendable<ZodlAccount>()
 +            every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
-@@ -89,0 +103,6 @@ class MigrationReviewVMTest {
+@@ -89,0 +104,10 @@ class MigrationReviewVMTest {
++                    getSelectedWalletAccount = mockk {
++                        coEvery { this@mockk() } returns account
++                        every { observe() } returns flowOf(account)
++                    },
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -94 +113 @@ class MigrationReviewVMTest {
+@@ -94 +118 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
-@@ -95,0 +115,3 @@ class MigrationReviewVMTest {
+@@ -95,0 +120,3 @@ class MigrationReviewVMTest {
 +            assertNotNull(vm.state.value.content).onConfirm()
 +            advanceUntilIdle()
 +            collector.cancel()
-@@ -101,2 +123,2 @@ class MigrationReviewVMTest {
+@@ -101,2 +128,2 @@ class MigrationReviewVMTest {
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                submitProposal()
 +                zashiProposalRepository.setMigrationSweepProposal(proposal)
-+                submitProposal(reviewed)
-@@ -114 +136,5 @@ class MigrationReviewVMTest {
++                submitProposal(reviewed, reviewedOwner = account.sdkAccount.accountUuid)
+@@ -114 +141,5 @@ class MigrationReviewVMTest {
 -            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
 +            val adopted = MigrationSweepTransactionProposal(proposal)
 +            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
 +                every { setMigrationSweepProposal(proposal) } returns adopted
 +                every { transactionProposal } returns MutableStateFlow(adopted)
 +            }
-@@ -117,0 +144,6 @@ class MigrationReviewVMTest {
+@@ -117,0 +149,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -127 +159 @@ class MigrationReviewVMTest {
+@@ -127 +164 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
-@@ -128,0 +161,3 @@ class MigrationReviewVMTest {
+@@ -128,0 +166,3 @@ class MigrationReviewVMTest {
 +            assertNotNull(vm.state.value.content).onConfirm()
 +            advanceUntilIdle()
 +            collector.cancel()
-@@ -131,2 +166,2 @@ class MigrationReviewVMTest {
+@@ -131,2 +171,2 @@ class MigrationReviewVMTest {
 -                keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.setMigrationSweepProposal(proposal)
 +                keystoneProposalRepository.createPCZTFromProposal(any())
-@@ -170 +205 @@ class MigrationReviewVMTest {
+@@ -170 +210 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -221 +256 @@ class MigrationReviewVMTest {
+@@ -221 +261 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -248 +283 @@ class MigrationReviewVMTest {
+@@ -248 +288 @@ class MigrationReviewVMTest {
 -            val router = FakeNavigationRouter()
 +            val router = FakeNavigationRouter("scheduled-review")
-@@ -272 +307 @@ class MigrationReviewVMTest {
+@@ -272 +312 @@ class MigrationReviewVMTest {
 -                    coEvery { getMigrationState() } returns MigrationState.NotStarted
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-@@ -283 +318 @@ class MigrationReviewVMTest {
+@@ -283 +323 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -286,0 +322 @@ class MigrationReviewVMTest {
+@@ -286,0 +327 @@ class MigrationReviewVMTest {
 +                    sourceEntryId = "scheduled-review",
-@@ -289 +325,4 @@ class MigrationReviewVMTest {
+@@ -289 +330,4 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(vm, scheduleFromSplit)
 +            val review = vm.currentReview()
 +            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
 +            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
 +            review.onConfirm()
-@@ -297,0 +337,105 @@ class MigrationReviewVMTest {
+@@ -297,0 +342,105 @@ class MigrationReviewVMTest {
 +            val handoff = router.scopedCommands.single()
 +            assertEquals("scheduled-review", handoff.sourceEntryId)
 +            val route = assertIs<NavigationCommand.Forward>(handoff.buildCommand()).routes.single()
@@ -11485,7 +11490,7 @@ index d0838db0c..62c0f94a3 100644
 +            coEvery { this@mockk(reviewed, MigrationMode.AUTOMATIC, any(), false) } coAnswers {
 +                if (++attempts == 1) error("synthetic scheduler unavailable")
 +            }
-@@ -298,0 +443,138 @@ class MigrationReviewVMTest {
+@@ -298,0 +448,138 @@ class MigrationReviewVMTest {
 +        val router = FakeNavigationRouter("automatic-review")
 +        val vm = vm(
 +            router = router,
@@ -11624,17 +11629,17 @@ index d0838db0c..62c0f94a3 100644
 +        coVerify(exactly = 1) { tor.store(any<String>(), true) }
 +        coVerify(exactly = 0) { tor.store(any<String>(), false) }
 +    }
-@@ -311,0 +594,6 @@ class MigrationReviewVMTest {
+@@ -311,0 +599,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -317 +605 @@ class MigrationReviewVMTest {
+@@ -317 +610 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            vm.currentReview().onConfirm()
-@@ -321,4 +609,4 @@ class MigrationReviewVMTest {
+@@ -321,4 +614,4 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
@@ -11642,29 +11647,29 @@ index d0838db0c..62c0f94a3 100644
 +            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
-+            coVerify(exactly = 0) { submitProposal(any()) }
-@@ -336 +624,4 @@ class MigrationReviewVMTest {
++            coVerify(exactly = 0) { submitProposal(any(), any(), any(), any()) }
+@@ -336 +629,4 @@ class MigrationReviewVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
 +            }
-@@ -342 +633 @@ class MigrationReviewVMTest {
+@@ -342 +638 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -347,4 +638 @@ class MigrationReviewVMTest {
+@@ -347,4 +643 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(
 -                vm,
 -                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
 -            )
 +            vm.currentReview().onConfirm()
-@@ -354 +642 @@ class MigrationReviewVMTest {
+@@ -354 +647 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
 +            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-@@ -359 +647 @@ class MigrationReviewVMTest {
+@@ -359 +652 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
 +            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
-@@ -385,6 +673,2 @@ class MigrationReviewVMTest {
+@@ -385,6 +678,2 @@ class MigrationReviewVMTest {
 -    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
@@ -11673,7 +11678,7 @@ index d0838db0c..62c0f94a3 100644
 -    }
 +    private suspend fun MigrationReviewVM.currentReview() =
 +        requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
-@@ -392,21 +676,8 @@ class MigrationReviewVMTest {
+@@ -392,21 +681,8 @@ class MigrationReviewVMTest {
 -    // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
 -    // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
 -    // that (by design, same as every other LCE-driven VM in this codebase, e.g.
@@ -11703,34 +11708,34 @@ index d0838db0c..62c0f94a3 100644
 +        estimatedDurationHours = 1,
 +        proposalHandle = handle,
 +    )
-@@ -429,0 +701 @@ class MigrationReviewVMTest {
+@@ -429,0 +706 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -430,0 +703,3 @@ class MigrationReviewVMTest {
+@@ -430,0 +708,3 @@ class MigrationReviewVMTest {
 +        pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
 +            PendingMigrationScheduleRepositoryImpl(),
 +        draftTor: Boolean? = null,
-@@ -433,0 +709 @@ class MigrationReviewVMTest {
+@@ -433,0 +714 @@ class MigrationReviewVMTest {
 +        sourceEntryId: String? = null,
-@@ -435 +711 @@ class MigrationReviewVMTest {
+@@ -435 +716 @@ class MigrationReviewVMTest {
 -        args = MigrationReviewArgs(mode = mode),
 +        args = MigrationReviewArgs(mode = mode, useTor = draftTor),
-@@ -437 +713,2 @@ class MigrationReviewVMTest {
+@@ -437 +718,2 @@ class MigrationReviewVMTest {
 -        pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
 +        pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
 +        pendingKeystone = mockk { every { peek(any()) } returns null },
-@@ -439,0 +717 @@ class MigrationReviewVMTest {
+@@ -439,0 +722 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled = migrationTorEnabled,
-@@ -446 +723,0 @@ class MigrationReviewVMTest {
+@@ -446 +728,0 @@ class MigrationReviewVMTest {
 -        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
-@@ -453,0 +731 @@ class MigrationReviewVMTest {
+@@ -453,0 +736 @@ class MigrationReviewVMTest {
 +        sourceEntryId = sourceEntryId,
-@@ -456 +734,2 @@ class MigrationReviewVMTest {
+@@ -456 +739,2 @@ class MigrationReviewVMTest {
 -    private class FakeNavigationRouter : NavigationRouter {
 +    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
 +        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
-@@ -457,0 +737 @@ class MigrationReviewVMTest {
+@@ -457,0 +742 @@ class MigrationReviewVMTest {
 +        val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
-@@ -473 +753,3 @@ class MigrationReviewVMTest {
+@@ -473 +758,3 @@ class MigrationReviewVMTest {
 -        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +            (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
