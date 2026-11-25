@@ -86554,7 +86554,7 @@ index 000000000..c3e38fc00
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
-index 57fcc6f0e..e7db2868c 100644
+index 57fcc6f0e..361fb7198 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
 @@ -2,0 +3,6 @@ package co.electriccoin.zcash.ui.screen.send
@@ -86716,7 +86716,7 @@ index 57fcc6f0e..e7db2868c 100644
 +        verify(exactly = 0) { router.forward(ReviewTransactionArgs) }
 +    }
 +
-+    private fun payment(address: String = ORIGINAL_ADDRESS, amount: Long = 10_000L) =
++    private suspend fun payment(address: String = ORIGINAL_ADDRESS, amount: Long = 10_000L) =
 +        ZecSend(WalletAddress.Unified.new(address), Zatoshi(amount), Memo(""), null)
 +
 @@ -58 +204,5 @@ class SendViewModelLedgerTest {

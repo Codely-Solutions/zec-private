@@ -3035,7 +3035,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendAmountReviewTest.kt": "e0451d99c68997b483cfda4e735f6c1f75a70c0421ddb885b564d4a50e736599",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt": "a5c391802994a7d1435a4b485cafc2a235810f86c77aa137db6021dba942cbf8",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt": "bb919fe057f4c6593ced91ae458defdb4ad3e302d0182bf42b6ae476e289a584",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt": "04c225d671495f516ebaa7dac1df0036ae3f890ba4dcd8dccf373b8c36b73140",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt": "b2c42edd6be713de6c9ff9044057ef19d8a749c566e6845b405f9714d2b2102f",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ext/ZecSendExtTest.kt": "3dd59a0b0b01e9cf92eedb404617761ebb0a33485621eb588c7fc3522705aa16",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt": "f0a9495764f9edb3cb33348afa3764967f24ed5b112e69237dde9517c06be8ee",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/support/model/TimeInfoTest.kt": "3ee1e529618af5304dcaa4bafd1bbceea7e7f03aea35e10111c25dcea145dfdd",

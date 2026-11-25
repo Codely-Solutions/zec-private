@@ -196,7 +196,7 @@ class SendViewModelLedgerTest {
         verify(exactly = 0) { router.forward(ReviewTransactionArgs) }
     }
 
-    private fun payment(address: String = ORIGINAL_ADDRESS, amount: Long = 10_000L) =
+    private suspend fun payment(address: String = ORIGINAL_ADDRESS, amount: Long = 10_000L) =
         ZecSend(WalletAddress.Unified.new(address), Zatoshi(amount), Memo(""), null)
 
     private fun amountState() = mockk<AmountState>(relaxed = true)
