@@ -82584,10 +82584,10 @@ index 000000000..cf9eca08f
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 new file mode 100644
-index 000000000..95f66dac8
+index 000000000..6b4025d20
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
-@@ -0,0 +1,265 @@
+@@ -0,0 +1,266 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -82825,7 +82825,8 @@ index 000000000..95f66dac8
 +                entry.value = afterStaging
 +                Uri.parse("content://synthetic/tax.csv")
 +            }
-+            ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk(), mockk(relaxed = true))
++            val accounts = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns account }
++            ExportTaxUseCase(transactions, accounts, versions, context, router, mockk(), mockk(relaxed = true))
 +                .apply { scheduleCleanup = {} }(account, sourceEntryId = "tax") { true }
 +        } finally {
 +            Dispatchers.resetMain()

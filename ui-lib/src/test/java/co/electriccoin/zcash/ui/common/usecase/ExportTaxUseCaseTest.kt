@@ -235,7 +235,8 @@ class ExportTaxUseCaseTest {
                 entry.value = afterStaging
                 Uri.parse("content://synthetic/tax.csv")
             }
-            ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk(), mockk(relaxed = true))
+            val accounts = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns account }
+            ExportTaxUseCase(transactions, accounts, versions, context, router, mockk(), mockk(relaxed = true))
                 .apply { scheduleCleanup = {} }(account, sourceEntryId = "tax") { true }
         } finally {
             Dispatchers.resetMain()
