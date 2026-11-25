@@ -6147,7 +6147,7 @@ index 544d71a69..17c07c947 100644
 -data object MigrationProgressArgs
 +data class MigrationProgressArgs(val accountKeyId: String? = null, val offerRetry: Boolean = false)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressScreen.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressScreen.kt
-index 08734318b..8572cef2a 100644
+index 08734318b..81cb462ec 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressScreen.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressScreen.kt
 @@ -53,0 +54 @@ import co.electriccoin.zcash.ui.screen.migration.component.MigrationPreparationD
@@ -6183,10 +6183,28 @@ index 08734318b..8572cef2a 100644
 -            // pass sends silently while this screen is open — the screen is a pure live status
 -            // view now. The only button is "Got it" on completion; genuine attention states
 -            // (expired / unprovable anchor) surface via the home banner → reschedule flow.
-@@ -184,0 +189,3 @@ fun MigrationProgressView(state: MigrationProgressState) {
-+            state.recoveryRetry?.let { retry ->
-+                ZashiButton(state = retry, modifier = Modifier.fillMaxWidth())
-+            }
+@@ -185,8 +189 @@ fun MigrationProgressView(state: MigrationProgressState) {
+-            if (state.isComplete) {
+-                state.onDone?.let { done ->
+-                    ZashiButton(
+-                        state = ButtonState(text = stringRes(DesignR.string.migration_common_gotIt), onClick = done),
+-                        modifier = Modifier.fillMaxWidth(),
+-                    )
+-                }
+-            }
++            MigrationProgressAction(state)
+@@ -202,0 +200,11 @@ fun MigrationProgressView(state: MigrationProgressState) {
++@Composable
++private fun MigrationProgressAction(state: MigrationProgressState) {
++    val action =
++        if (state.isComplete) {
++            state.onDone?.let { ButtonState(text = stringRes(DesignR.string.migration_common_gotIt), onClick = it) }
++        } else {
++            state.recoveryRetry
++        }
++    action?.let { ZashiButton(state = it, modifier = Modifier.fillMaxWidth()) }
++}
++
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressState.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressState.kt
 index b6f483196..ff4ccc074 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressState.kt
@@ -6196,7 +6214,7 @@ index b6f483196..ff4ccc074 100644
 @@ -27,0 +29 @@ data class MigrationProgressState(
 +    val recoveryRetry: ButtonState? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
-index f1f185d9b..f190b6942 100644
+index f1f185d9b..dcbd86fa2 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 @@ -3,0 +4,2 @@ import androidx.lifecycle.ViewModel
@@ -6235,7 +6253,7 @@ index f1f185d9b..f190b6942 100644
 @@ -97 +112 @@ class MigrationProgressVM(
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +            val accountKeyId = args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-@@ -100,0 +116,37 @@ class MigrationProgressVM(
+@@ -100,0 +116,35 @@ class MigrationProgressVM(
 +    private fun recoveryRetry(readout: MigrationLiveReadout): ButtonState? {
 +        val owner = args.accountKeyId?.takeIf { args.offerRetry }
 +        val nextTransfer = readout.states.transfers.filter { it.isTransfer && !it.isSent }
@@ -6250,21 +6268,19 @@ index f1f185d9b..f190b6942 100644
 +                )
 +            ButtonState(
 +                text = stringRes(DesignR.string.migration_common_retry),
-+                onClick = { retryTransfer(target) },
++                onClick = {
++                    viewModelScope.launch {
++                        val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
++                        if (selected == target.accountKeyId && sourceEntryId != null) {
++                            navigationRouter.stageResultFrom(sourceEntryId) {
++                                NavigationCommand.Forward(listOf(target))
++                            }
++                        }
++                    }
++                },
 +            )
 +        } else {
 +            null
-+        }
-+    }
-+
-+    private fun retryTransfer(target: MigrationSendingArgs) {
-+        viewModelScope.launch {
-+            val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-+            if (selected == target.accountKeyId && sourceEntryId != null) {
-+                navigationRouter.stageResultFrom(sourceEntryId) {
-+                    NavigationCommand.Forward(listOf(target))
-+                }
-+            }
 +        }
 +    }
 +
@@ -6273,21 +6289,21 @@ index f1f185d9b..f190b6942 100644
 +        super.onCleared()
 +    }
 +
-@@ -102,0 +155,4 @@ class MigrationProgressVM(
+@@ -102,0 +153,4 @@ class MigrationProgressVM(
 +    fun retryReadout() {
 +        retry.value++
 +    }
 +
-@@ -191 +247 @@ class MigrationProgressVM(
+@@ -191 +245 @@ class MigrationProgressVM(
 -            isComplete = snapshot.isComplete,
 +            isComplete = snapshot.areAllMined,
-@@ -193 +249 @@ class MigrationProgressVM(
+@@ -193 +247 @@ class MigrationProgressVM(
 -            onDone = if (snapshot.isComplete) ::onDone else null,
 +            onDone = if (snapshot.areAllMined) ::onDone else null,
-@@ -339 +395 @@ internal fun migrationProgressSubtitle(
+@@ -339 +393 @@ internal fun migrationProgressSubtitle(
 -        snapshot.isComplete -> {
 +        snapshot.areAllMined -> {
-@@ -342,0 +399,4 @@ internal fun migrationProgressSubtitle(
+@@ -342,0 +397,4 @@ internal fun migrationProgressSubtitle(
 +        snapshot.isComplete -> {
 +            "All ${snapshot.totalCount} transfers were submitted."
 +        }
@@ -7165,7 +7181,7 @@ index 9899c12bd..fed64ad27 100644
 @@ -7,0 +8 @@ data class MigrationSendingState(
 +    val canGoBack: Boolean = false,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
-index f6acbc6ca..011bfd177 100644
+index f6acbc6ca..78ad0d6c8 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 @@ -4,0 +5,2 @@ import androidx.lifecycle.viewModelScope
@@ -7224,7 +7240,7 @@ index f6acbc6ca..011bfd177 100644
 -                    },
 +                onBack = ::onBack,
 +                canGoBack = f != null,
-@@ -117 +117,11 @@ class MigrationSendingVM(
+@@ -117 +117,7 @@ class MigrationSendingVM(
 -    private fun send() = sendLce.execute { sendOnce(useTor = isMigrationTorEnabledStorageProvider.get()) }
 +    private fun send() = sendLce.execute {
 +        sendOnce(useTor = isMigrationTorEnabledStorageProvider.get(args.accountKeyId))
@@ -7233,12 +7249,12 @@ index f6acbc6ca..011bfd177 100644
 +    fun onBack() {
 +        if (failure.value != null) navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
 +    }
-+
+@@ -119 +125,8 @@ class MigrationSendingVM(
+-    fun onBack() = navigationRouter.back()
 +    private fun openResult(route: Any) = navigationRouter.stageResultFrom(sourceEntryId) {
 +        NavigationCommand.Forward(listOf(route))
 +    }
-@@ -119 +129,4 @@ class MigrationSendingVM(
--    fun onBack() = navigationRouter.back()
++
 +    override fun onCleared() {
 +        navigationRouter.discardResultFrom(sourceEntryId)
 +        super.onCleared()
@@ -7253,15 +7269,14 @@ index f6acbc6ca..011bfd177 100644
 @@ -135 +152 @@ class MigrationSendingVM(
 -                migrationDriveOnce.withExclusiveAccess {
 +                migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
-@@ -146 +163,3 @@ class MigrationSendingVM(
+@@ -146,2 +163 @@ class MigrationSendingVM(
 -            pendingMigrationTorFailureStorageProvider.store(false)
-+            if (!args.isRecoveryRetry) {
-+                pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
-+            }
-@@ -162 +181 @@ class MigrationSendingVM(
+-            failure.value = SendFailure.NotReady
++            reportNotReady()
+@@ -162 +178 @@ class MigrationSendingVM(
 -                        pendingMigrationTorFailureStorageProvider.store(false)
 +                        pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
-@@ -165,5 +184,4 @@ class MigrationSendingVM(
+@@ -165,5 +181,4 @@ class MigrationSendingVM(
 -                        scheduleNextMigrationWindow()
 -                        // Completion straight from the engine — no cache write-through needed, the
 -                        // banner reads the same live states.
@@ -7271,44 +7286,52 @@ index f6acbc6ca..011bfd177 100644
 +                        // Acknowledging broadcast does not establish that every transfer mined.
 +                        val snapshot = getMigrationSnapshot(args.accountKeyId)
 +                        if (snapshot?.areAllMined == true) {
-@@ -173 +191 @@ class MigrationSendingVM(
+@@ -173 +188 @@ class MigrationSendingVM(
 -                            navigationRouter.forward(MigrationCompleteArgs())
 +                            openResult(MigrationCompleteArgs(accountKeyId = args.accountKeyId))
-@@ -175 +193 @@ class MigrationSendingVM(
+@@ -175 +190 @@ class MigrationSendingVM(
 -                            navigationRouter.forward(MigrationSuccessArgs(r.txId.txIdString()))
 +                            openResult(MigrationSuccessArgs(r.txId.txIdString()))
-@@ -184 +202 @@ class MigrationSendingVM(
+@@ -184 +199 @@ class MigrationSendingVM(
 -                            navigationRouter.forward(MigrationTorFailureArgs)
 +                            openResult(MigrationTorFailureArgs(args.accountKeyId))
-@@ -204 +222,3 @@ class MigrationSendingVM(
+@@ -203,4 +218 @@ class MigrationSendingVM(
+-            else -> {
 -                pendingMigrationTorFailureStorageProvider.store(false)
-+                if (!args.isRecoveryRetry) {
-+                    pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
-+                }
-@@ -211,3 +231,2 @@ class MigrationSendingVM(
+-                failure.value = SendFailure.NotReady
+-            }
++            else -> reportNotReady()
+@@ -209,0 +222,7 @@ class MigrationSendingVM(
++    private suspend fun reportNotReady() {
++        if (!args.isRecoveryRetry) {
++            pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
++        }
++        failure.value = SendFailure.NotReady
++    }
++
+@@ -211,3 +230,2 @@ class MigrationSendingVM(
 -     * The original readiness/retry loop, unchanged — runs entirely inside the caller's
 -     * [MigrationDriveOnce.withExclusiveAccess] block (2026-08-06 DRIVE_LOCK bypass fix), so a
 -     * background worker/live-driver step can never interleave with it.
 +     * Runs under [MigrationDriveOnce.withExclusiveAccess] so the background driver cannot
 +     * interleave with a retry or advance its proposed transfer.
-@@ -228,0 +248 @@ class MigrationSendingVM(
+@@ -228,0 +247 @@ class MigrationSendingVM(
 +            if (!canRetryTarget(sdk)) break
-@@ -231 +251,2 @@ class MigrationSendingVM(
+@@ -231 +250,2 @@ class MigrationSendingVM(
 -                migrationLog("SendingVM: attempt=${attempt + 1} outcome=$outcome")
 +                val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
 +                migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
-@@ -237,0 +259,16 @@ class MigrationSendingVM(
+@@ -237,0 +258,15 @@ class MigrationSendingVM(
 +    private suspend fun canRetryTarget(sdk: OrchardMigrationSdk): Boolean {
 +        if (!args.isRecoveryRetry) return true
-+        val transfer =
-+            sdk.getMigrationTransferStates()?.transfers?.firstOrNull {
++        val ready =
++            sdk.getMigrationTransferStates()?.transfers?.any {
 +                it.id == args.retryTransferId && it.isTransfer && !it.isSent &&
-+                    it.action == MigrationNextAction.BROADCAST
-+            } ?: return false
-+        val schedule = transfer.scheduledHeight ?: MigrationSendingArgs.UNSET
-+        val anchor = transfer.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET
-+        if (schedule != args.retryScheduledHeight || anchor != args.retryAnchorBoundaryHeight) return false
-+        val next = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
++                    it.action == MigrationNextAction.BROADCAST &&
++                    (it.scheduledHeight ?: MigrationSendingArgs.UNSET) == args.retryScheduledHeight &&
++                    (it.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET) == args.retryAnchorBoundaryHeight
++            } == true
++        val next = if (ready) sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast else null
 +        val selectedOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
 +            ?.sdkAccount?.accountUuid?.toStorageKeyId()
 +        return next?.transferId == args.retryTransferId && selectedOwner == args.accountKeyId

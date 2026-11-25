@@ -127,21 +127,19 @@ class MigrationProgressVM(
                 )
             ButtonState(
                 text = stringRes(DesignR.string.migration_common_retry),
-                onClick = { retryTransfer(target) },
+                onClick = {
+                    viewModelScope.launch {
+                        val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+                        if (selected == target.accountKeyId && sourceEntryId != null) {
+                            navigationRouter.stageResultFrom(sourceEntryId) {
+                                NavigationCommand.Forward(listOf(target))
+                            }
+                        }
+                    }
+                },
             )
         } else {
             null
-        }
-    }
-
-    private fun retryTransfer(target: MigrationSendingArgs) {
-        viewModelScope.launch {
-            val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-            if (selected == target.accountKeyId && sourceEntryId != null) {
-                navigationRouter.stageResultFrom(sourceEntryId) {
-                    NavigationCommand.Forward(listOf(target))
-                }
-            }
         }
     }
 

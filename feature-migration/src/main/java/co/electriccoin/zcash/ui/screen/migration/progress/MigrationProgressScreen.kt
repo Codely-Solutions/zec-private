@@ -186,17 +186,7 @@ fun MigrationProgressView(state: MigrationProgressState) {
 
             Spacer(Modifier.height(28.dp))
 
-            state.recoveryRetry?.let { retry ->
-                ZashiButton(state = retry, modifier = Modifier.fillMaxWidth())
-            }
-            if (state.isComplete) {
-                state.onDone?.let { done ->
-                    ZashiButton(
-                        state = ButtonState(text = stringRes(DesignR.string.migration_common_gotIt), onClick = done),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
+            MigrationProgressAction(state)
         }
     }
     MigrationPreparationDetailsBottomSheet(
@@ -205,6 +195,17 @@ fun MigrationProgressView(state: MigrationProgressState) {
                 ?.takeIf { isShowingPreparationDetails }
                 ?.copy(onDismiss = { isShowingPreparationDetails = false }),
     )
+}
+
+@Composable
+private fun MigrationProgressAction(state: MigrationProgressState) {
+    val action =
+        if (state.isComplete) {
+            state.onDone?.let { ButtonState(text = stringRes(DesignR.string.migration_common_gotIt), onClick = it) }
+        } else {
+            state.recoveryRetry
+        }
+    action?.let { ZashiButton(state = it, modifier = Modifier.fillMaxWidth()) }
 }
 
 /**
