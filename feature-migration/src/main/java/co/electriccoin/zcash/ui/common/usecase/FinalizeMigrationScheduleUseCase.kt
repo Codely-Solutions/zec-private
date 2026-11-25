@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
+import cash.z.ecc.android.sdk.TransferResult
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.migration.estimatedSecondsBetweenHeights
@@ -9,6 +10,9 @@ import co.electriccoin.zcash.ui.common.model.migration.rateReferenceHeight
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -128,5 +132,16 @@ class FinalizeMigrationScheduleUseCase(
         val remaining =
             estimatedSecondsBetweenHeights(tipHeight, earliest, secondsPerBlock, nu7ActivationHeight, rateHeight)
         return if (remaining <= 0) 0.seconds else remaining.seconds
+    }
+}
+
+internal fun SynchronizerProvider.enhanceFinalizedSplit(scope: CoroutineScope, split: TransferResult.Success?) {
+    if (split == null) return
+    scope.launch {
+        runCatching { getSynchronizerOrNull()?.enhanceTransaction(split.txId) }
+            .onFailure { error ->
+                if (error is CancellationException) throw error
+                migrationLog("Migration activity refresh after finalization failed.")
+            }
     }
 }

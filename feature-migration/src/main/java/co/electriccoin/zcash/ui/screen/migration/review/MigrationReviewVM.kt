@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.migration.review
 
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
@@ -57,6 +58,7 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -452,19 +454,22 @@ class MigrationReviewVM(
         try {
             val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
             requireReviewAccount()
-            if (split != null) {
+            val splitResult = if (split != null) {
                 val result = sdk.submitNoteSplit(split, spendingKey)
                 if (result !is TransferResult.Success) {
                     onSplitFailure(result, sdk, reviewed, accountKeyId)
                     return
                 }
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
                 requireReviewAccount()
+                result
+            } else {
+                null
             }
             sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
             val saved = CommittedMigration(reviewed, showSchedule = true)
             committedMigration = saved
             finishCommittedMigration(saved, accountKeyId)
+            synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
         } catch (e: RuntimeException) {
             if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {

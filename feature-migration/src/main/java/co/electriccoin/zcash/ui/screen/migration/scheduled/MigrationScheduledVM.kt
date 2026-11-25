@@ -35,6 +35,7 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.work.MigrationDriveOnce
@@ -138,6 +139,7 @@ class MigrationScheduledVM(
                 pendingSchedule.clear(accountKeyId, schedule)
                 pendingKeystonePczts.clear(accountKeyId, pending)
                 isFinalizing.value = false
+                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult as? TransferResult.Success)
             }
             TransferResult.InvalidNote, TransferResult.Expired ->
                 returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
@@ -157,11 +159,7 @@ class MigrationScheduledVM(
         }
         return if (split.needsSignature()) {
             val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-            if (result is TransferResult.Success) {
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-            }
-            result
+            sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
         } else {
             null
         }

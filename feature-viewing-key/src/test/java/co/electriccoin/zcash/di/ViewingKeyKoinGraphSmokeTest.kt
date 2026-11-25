@@ -127,7 +127,7 @@ class ViewingKeyKoinGraphSmokeTest {
         koin.koin.get<ImportedVKVM>()
         koin.koin.get<AlreadyImportedVKVM>()
         koin.koin.get<RemoveVKAccountVM> { parametersOf(RemoveVKAccountArgs(ACCOUNT_KEY_ID)) }
-        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID)) }
+        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID), "fixture-entry") }
     }
 
     @Test

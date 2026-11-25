@@ -4816,36 +4816,41 @@ index b0b3f2cd0..0f66606f9 100644
 @@ -143 +146,0 @@ class DebugStartMigrationE2EUseCase(
 -        private const val ERROR_MESSAGE_PREVIEW_LENGTH = 120
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt
-index a0d1b229d..50dae1bbb 100644
+index a0d1b229d..014117e9a 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt
-@@ -3,0 +4 @@ import cash.z.ecc.android.sdk.MigrationSchedule
+@@ -3,0 +4,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
 +import cash.z.ecc.android.sdk.OrchardMigrationSdk
-@@ -8 +8,0 @@ import co.electriccoin.zcash.ui.common.model.migration.rateReferenceHeight
++import cash.z.ecc.android.sdk.TransferResult
+@@ -8 +9,0 @@ import co.electriccoin.zcash.ui.common.model.migration.rateReferenceHeight
 -import co.electriccoin.zcash.ui.common.model.toStorageKeyId
-@@ -44 +44 @@ import kotlin.time.Duration.Companion.seconds
+@@ -11,0 +13,3 @@ import co.electriccoin.zcash.work.MigrationScheduler
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.launch
+@@ -44 +48 @@ import kotlin.time.Duration.Companion.seconds
 - * (hot-wallet confirm) pass `false` to match: the `migrationScheduler.schedule(...)` call above
 + * (hot-wallet confirm) pass `false` to match: the `migrationScheduler.scheduleAndAwait(...)` call above
-@@ -54 +53,0 @@ class FinalizeMigrationScheduleUseCase(
+@@ -54 +57,0 @@ class FinalizeMigrationScheduleUseCase(
 -    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
-@@ -60,0 +60 @@ class FinalizeMigrationScheduleUseCase(
+@@ -60,0 +64 @@ class FinalizeMigrationScheduleUseCase(
 +        accountKeyId: String,
-@@ -62,0 +63,4 @@ class FinalizeMigrationScheduleUseCase(
+@@ -62,0 +67,4 @@ class FinalizeMigrationScheduleUseCase(
 +        // Protect the first proving anchor before waiting on a separate scheduler operation.
 +        // A failed enqueue leaves the already committed SDK plan and its sync session intact.
 +        val restarted = synchronizerProvider.getSynchronizerOrNull()?.restartSyncSession() ?: false
 +        migrationLog("FinalizeMigrationSchedule: sync-session restart for anchor retention — restarted=$restarted")
-@@ -65 +69 @@ class FinalizeMigrationScheduleUseCase(
+@@ -65 +73 @@ class FinalizeMigrationScheduleUseCase(
 -        val sdk = getOrchardMigrationSdk()
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-@@ -67,2 +71 @@ class FinalizeMigrationScheduleUseCase(
+@@ -67,2 +75 @@ class FinalizeMigrationScheduleUseCase(
 -        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -        logCommittedBoundaries()
 +        migrationLog("FinalizeMigrationSchedule: scheduling ${sched.transfers.size} committed transfer(s).")
-@@ -72 +75 @@ class FinalizeMigrationScheduleUseCase(
+@@ -72 +79 @@ class FinalizeMigrationScheduleUseCase(
 -        migrationScheduler.schedule(
 +        migrationScheduler.scheduleAndAwait(
-@@ -82,7 +84,0 @@ class FinalizeMigrationScheduleUseCase(
+@@ -82,7 +88,0 @@ class FinalizeMigrationScheduleUseCase(
 -        // The engine's anchor-retention floor is session-scoped and was computed BEFORE this plan
 -        // existed — restart the sync session now, before the chain crosses the plan's first
 -        // boundary, or that boundary's checkpoint is never created and its transfer can never be
@@ -4853,7 +4858,7 @@ index a0d1b229d..50dae1bbb 100644
 -        // AnchorNotFound on the plan's first bucket).
 -        val restarted = synchronizerProvider.getSynchronizerOrNull()?.restartSyncSession() ?: false
 -        migrationLog("FinalizeMigrationSchedule: sync-session restart for anchor retention — restarted=$restarted")
-@@ -103,39 +98,0 @@ class FinalizeMigrationScheduleUseCase(
+@@ -103,39 +102,0 @@ class FinalizeMigrationScheduleUseCase(
 -    /**
 -     * Post-commit discoverability log (Issue 1): re-surface the engine's REAL per-transfer anchor
 -     * boundaries from the Kotlin side, right after the commit, so `grep MIGRATION_DIAG` shows the
@@ -4893,6 +4898,18 @@ index a0d1b229d..50dae1bbb 100644
 -        )
 -    }
 -
+@@ -175,0 +137,11 @@ class FinalizeMigrationScheduleUseCase(
++
++internal fun SynchronizerProvider.enhanceFinalizedSplit(scope: CoroutineScope, split: TransferResult.Success?) {
++    if (split == null) return
++    scope.launch {
++        runCatching { getSynchronizerOrNull()?.enhanceTransaction(split.txId) }
++            .onFailure { error ->
++                if (error is CancellationException) throw error
++                migrationLog("Migration activity refresh after finalization failed.")
++            }
++    }
++}
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetMigrationPrivacyOrReviewDestinationUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetMigrationPrivacyOrReviewDestinationUseCase.kt
 index d4aee1768..86f32e269 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetMigrationPrivacyOrReviewDestinationUseCase.kt
@@ -6847,35 +6864,39 @@ index 2c9a83423..20fd87cae 100644
 @@ -271,0 +274 @@ internal fun ImmediateDetailsRow(label: String, value: String) {
 +            textAlign = TextAlign.End,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..5ad2d1bbd 100644
+index ccdc9db31..30cf746e0 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-@@ -5,0 +6,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
+@@ -4,0 +5 @@ import androidx.lifecycle.ViewModel
++import androidx.lifecycle.viewModelScope
+@@ -5,0 +7,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
 +import cash.z.ecc.android.sdk.MigrationState
 +import cash.z.ecc.android.sdk.OrchardMigrationSdk
-@@ -11,0 +14 @@ import co.electriccoin.zcash.migration.migrationLog
+@@ -11,0 +15 @@ import co.electriccoin.zcash.migration.migrationLog
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -12,0 +16 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -12,0 +17 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -37,0 +42 @@ import co.electriccoin.zcash.ui.common.model.withLce
+@@ -37,0 +43 @@ import co.electriccoin.zcash.ui.common.model.withLce
 +import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-@@ -44,0 +50 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+@@ -44,0 +51 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
-@@ -46,0 +53 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
+@@ -46,0 +54 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
 +import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
-@@ -50 +56,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+@@ -50 +57,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
-@@ -60,0 +67 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -53,0 +61 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
++import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
+@@ -60,0 +69 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -76,0 +84 @@ class MigrationReviewVM(
+@@ -76,0 +86 @@ class MigrationReviewVM(
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
-@@ -82 +89,0 @@ class MigrationReviewVM(
+@@ -82 +91,0 @@ class MigrationReviewVM(
 -    private val getOrchardBalance: GetOrchardBalanceUseCase,
-@@ -88,0 +96 @@ class MigrationReviewVM(
+@@ -88,0 +98 @@ class MigrationReviewVM(
 +    private val sourceEntryId: String? = null,
-@@ -89,0 +98 @@ class MigrationReviewVM(
+@@ -89,0 +100 @@ class MigrationReviewVM(
 +    private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
-@@ -91,4 +100,6 @@ class MigrationReviewVM(
+@@ -91,4 +102,6 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
 -    // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
 -    // destination of its own (only totalFeeRequired()/transactionCount()); the amount shown is
@@ -6886,26 +6907,26 @@ index ccdc9db31..5ad2d1bbd 100644
 +    }
 +
 +    // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
-@@ -97 +108 @@ class MigrationReviewVM(
+@@ -97 +110 @@ class MigrationReviewVM(
 -            val schedule: MigrationSchedule,
 +            val reviewed: ReviewedMigrationSchedule,
-@@ -101,4 +112 @@ class MigrationReviewVM(
+@@ -101,4 +114 @@ class MigrationReviewVM(
 -        data class Immediate(
 -            val proposal: Proposal,
 -            val amountZatoshi: Zatoshi
 -        ) : ReviewProposal()
 +        data class Immediate(val proposal: Proposal) : ReviewProposal()
-@@ -134,0 +143,4 @@ class MigrationReviewVM(
+@@ -134,0 +145,4 @@ class MigrationReviewVM(
 +    private var reviewedOwnerKey: String? = null
 +    private var committedMigration: CommittedMigration? = null
 +
 +    private data class CommittedMigration(val reviewed: ReviewedMigrationSchedule, val showSchedule: Boolean)
-@@ -138,0 +151,4 @@ class MigrationReviewVM(
+@@ -138,0 +153,4 @@ class MigrationReviewVM(
 +        loadProposal()
 +    }
 +
 +    private fun loadProposal() {
-@@ -147 +163,7 @@ class MigrationReviewVM(
+@@ -147 +165,7 @@ class MigrationReviewVM(
 -            val sdk = getOrchardMigrationSdk()
 +            val account = getSelectedWalletAccount()
 +            val key = account.sdkAccount.accountUuid.toStorageKeyId()
@@ -6914,12 +6935,12 @@ index ccdc9db31..5ad2d1bbd 100644
 +            }
 +            reviewedOwnerKey = key
 +            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-@@ -151 +172,0 @@ class MigrationReviewVM(
+@@ -151 +174,0 @@ class MigrationReviewVM(
 -                        val amount = getOrchardBalance()
-@@ -159 +180 @@ class MigrationReviewVM(
+@@ -159 +182 @@ class MigrationReviewVM(
 -                        ReviewProposal.Immediate(proposal, amount)
 +                        ReviewProposal.Immediate(proposal)
-@@ -171,13 +192,2 @@ class MigrationReviewVM(
+@@ -171,13 +194,2 @@ class MigrationReviewVM(
 -                        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -                        val reused = restartMigrationScheduleRepository.consume(accountKeyId)
 -                        val schedule =
@@ -6935,15 +6956,15 @@ index ccdc9db31..5ad2d1bbd 100644
 -                            }
 +                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
 +                        val schedule = reviewed.schedule
-@@ -189 +199 @@ class MigrationReviewVM(
+@@ -189 +201 @@ class MigrationReviewVM(
 -                            if (getSelectedWalletAccount() is KeystoneAccount) {
 +                            if (account is KeystoneAccount) {
-@@ -213,2 +223,2 @@ class MigrationReviewVM(
+@@ -213,2 +225,2 @@ class MigrationReviewVM(
 -                        logProposedPlan(schedule)
 -                        ReviewProposal.Automatic(schedule, keystoneRunCount)
 +                        migrationLog("MigrationReviewVM: proposed ${schedule.transfers.size} transfer(s).")
 +                        ReviewProposal.Automatic(reviewed, keystoneRunCount)
-@@ -233 +243,8 @@ class MigrationReviewVM(
+@@ -233 +245,8 @@ class MigrationReviewVM(
 -        }.withLce(groupLce(proposeLce, confirmLce), errorStateMapper::mapToState)
 +        }.withLce(groupLce(proposeLce, confirmLce)) { error ->
 +            val message = when (error.cause) {
@@ -6953,50 +6974,50 @@ index ccdc9db31..5ad2d1bbd 100644
 +            }
 +            errorStateMapper.mapToState(error, message = message)
 +        }
-@@ -249 +266 @@ class MigrationReviewVM(
+@@ -249 +268 @@ class MigrationReviewVM(
 -                createImmediateState(proposal, isConfirming, exchangeRateState)
 +                createImmediateState(proposal, isConfirming)
-@@ -260 +277 @@ class MigrationReviewVM(
+@@ -260 +279 @@ class MigrationReviewVM(
 -        val sched = proposal.schedule
 +        val sched = proposal.reviewed.schedule
-@@ -305 +322 @@ class MigrationReviewVM(
+@@ -305 +324 @@ class MigrationReviewVM(
 -            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(sched) } },
 +            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(proposal) } },
-@@ -313 +330 @@ class MigrationReviewVM(
+@@ -313 +332 @@ class MigrationReviewVM(
 -                            proposeLce.guardLoading { onConfirmAutomatic(sched) }
 +                            proposeLce.guardLoading { onConfirmAutomatic(proposal) }
-@@ -321,4 +338 @@ class MigrationReviewVM(
+@@ -321,4 +340 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration()'s raw send-max Proposal carries no destination-facing
 -    // "list of transfers" the way a MigrationSchedule does — this renders it as a single
 -    // synthetic row so the (shared) review layout still has something to show, using the real
 -    // fee from Proposal.totalFeeRequired() instead of AUTOMATIC's placeholder.
 +    // The public SDK exposes the sweep fee. The exact eligible amount is available in history after creation.
-@@ -328 +341,0 @@ class MigrationReviewVM(
+@@ -328 +343,0 @@ class MigrationReviewVM(
 -        exchangeRateState: ExchangeRateState,
-@@ -333,2 +346,2 @@ class MigrationReviewVM(
+@@ -333,2 +348,2 @@ class MigrationReviewVM(
 -            totalAmount = stringRes(proposal.amountZatoshi),
 -            totalFiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +            totalAmount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +            totalFiatAmount = null,
-@@ -341,2 +354,2 @@ class MigrationReviewVM(
+@@ -341,2 +356,2 @@ class MigrationReviewVM(
 -                        amount = stringRes(proposal.amountZatoshi),
 -                        fiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +                        amount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +                        fiatAmount = null,
-@@ -348 +361 @@ class MigrationReviewVM(
+@@ -348 +363 @@ class MigrationReviewVM(
 -            onConfirm = { onConfirmImmediate(proposal.proposal, proposal.amountZatoshi) },
 +            onConfirm = { onConfirmImmediate(proposal.proposal) },
-@@ -368 +381 @@ class MigrationReviewVM(
+@@ -368 +383 @@ class MigrationReviewVM(
 -    private fun onConfirmAutomatic(sched: MigrationSchedule) =
 +    private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
-@@ -369,0 +383 @@ class MigrationReviewVM(
+@@ -369,0 +385 @@ class MigrationReviewVM(
 +            if (proposeLce.state.value.success !== proposal) return@execute
-@@ -386 +400,3 @@ class MigrationReviewVM(
+@@ -386 +402,3 @@ class MigrationReviewVM(
 -            confirmAutomatic(sched)
 +            if (proposeLce.state.value.success === proposal) {
 +                confirmAutomatic(proposal.reviewed)
 +            }
-@@ -389,3 +405,9 @@ class MigrationReviewVM(
+@@ -389,3 +407,9 @@ class MigrationReviewVM(
 -    private suspend fun confirmAutomatic(sched: MigrationSchedule) {
 -        if (getSelectedWalletAccount() is LedgerAccount) {
 -            throw AccountOperationUnsupportedException.ledger()
@@ -7009,7 +7030,7 @@ index ccdc9db31..5ad2d1bbd 100644
 +            return checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
 +                "Return to Home to recover the existing migration."
 +            }
-@@ -393,9 +415,5 @@ class MigrationReviewVM(
+@@ -393,9 +417,5 @@ class MigrationReviewVM(
 -        getSelectedWalletAccount().requireSpendable()
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
 -            // Keystone can't sign in-process — hand the unsigned schedule off to the QR
@@ -7024,7 +7045,7 @@ index ccdc9db31..5ad2d1bbd 100644
 +            ReviewedMigrationSchedule(restarted)
 +        } else {
 +            sdk.prepareReviewedAutomaticMigration()
-@@ -403,35 +421,38 @@ class MigrationReviewVM(
+@@ -403,35 +423,38 @@ class MigrationReviewVM(
 -        val sdk = getOrchardMigrationSdk()
 -        // Note-split is the first step of this confirm action (design spec §7) — a schedule with
 -        // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
@@ -7094,33 +7115,60 @@ index ccdc9db31..5ad2d1bbd 100644
 +        try {
 +            val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
 +            requireReviewAccount()
-+            if (split != null) {
++            val splitResult = if (split != null) {
 +                val result = sdk.submitNoteSplit(split, spendingKey)
 +                if (result !is TransferResult.Success) {
 +                    onSplitFailure(result, sdk, reviewed, accountKeyId)
-@@ -440,6 +461,12 @@ class MigrationReviewVM(
+@@ -440,6 +463,2 @@ class MigrationReviewVM(
 -                // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
 -                // already stored locally, so without this the normal enhancement queue would skip
 -                // it forever and the Activity row would stay "Sent" instead of "Note split"/
 -                // "Migrated". See MigrationDriveOnce.handleExecuted's identical call for transfers.
 -                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(splitResult.txId)
 -                scheduleFromSplit
-+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
 +                requireReviewAccount()
-+            }
++                result
+@@ -447 +466 @@ class MigrationReviewVM(
+-                sched
++                null
+@@ -449,7 +468,5 @@ class MigrationReviewVM(
+-        try {
+-            sdk.signAndStoreMigrationSchedule(scheduleToSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
+-            // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
+-            // also never eagerly starts a drive loop right after signAndStoreMigrationSchedule —
+-            // see FinalizeMigrationScheduleUseCase's doc.
+-            finalizeMigrationSchedule(scheduleToSign, args.mode, startLiveDriverImmediately = false)
+-            navigationRouter.forward(MigrationScheduledArgs)
 +            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
 +            val saved = CommittedMigration(reviewed, showSchedule = true)
 +            committedMigration = saved
 +            finishCommittedMigration(saved, accountKeyId)
-+        } catch (e: RuntimeException) {
++            synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
+@@ -457,17 +474,82 @@ class MigrationReviewVM(
+-            val retryable =
+-                e.message?.contains("StalePlan") == true ||
+-                    e.message?.contains("BoundaryCheckpointMissing") == true
+-            if (!retryable) throw e
+-            // StalePlan: the plan is a planning-time snapshot of wallet note indices; any note
+-            // received or changed between this screen's propose and the commit (the bursty
+-            // testnet syncs continuously) shifts them and the engine correctly refuses with
+-            // "must be re-planned". Same balance, fresh draw — re-propose once and commit that.
+-            // Retrying the SAME cached schedule can never succeed (observed live: six identical
+-            // StalePlan failures from the retry button). BoundaryCheckpointMissing: the commit
+-            // drew an anchor boundary onto a grid height with no retained checkpoint (pre-
+-            // always-on-retention scan history) — a fresh draw lands on retained boundaries.
+-            migrationLog("MigrationReview: StalePlan on commit — re-proposing once and retrying")
+-            val fresh = sdk.proposeMigrationTransfers()
+-            sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
+-            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
+-            navigationRouter.forward(MigrationScheduledArgs)
 +            if (!e.requiresNewMigrationReview()) throw e
 +            if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
 +                // The SDK owns the already-committed plan. Do not draw or sign a replacement.
 +                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-@@ -447 +474 @@ class MigrationReviewVM(
--                sched
++            } else {
 +                loadProposal()
-@@ -448,0 +476,35 @@ class MigrationReviewVM(
++            }
 +        }
 +    }
 +
@@ -7156,31 +7204,7 @@ index ccdc9db31..5ad2d1bbd 100644
 +
 +    @Suppress("TooGenericExceptionCaught") // After native commit, retry only the app's scheduling work.
 +    private suspend fun finishCommittedMigration(committed: CommittedMigration, accountKeyId: String) {
-@@ -450,24 +512,39 @@ class MigrationReviewVM(
--            sdk.signAndStoreMigrationSchedule(scheduleToSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
--            // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
--            // also never eagerly starts a drive loop right after signAndStoreMigrationSchedule —
--            // see FinalizeMigrationScheduleUseCase's doc.
--            finalizeMigrationSchedule(scheduleToSign, args.mode, startLiveDriverImmediately = false)
--            navigationRouter.forward(MigrationScheduledArgs)
--        } catch (e: RuntimeException) {
--            val retryable =
--                e.message?.contains("StalePlan") == true ||
--                    e.message?.contains("BoundaryCheckpointMissing") == true
--            if (!retryable) throw e
--            // StalePlan: the plan is a planning-time snapshot of wallet note indices; any note
--            // received or changed between this screen's propose and the commit (the bursty
--            // testnet syncs continuously) shifts them and the engine correctly refuses with
--            // "must be re-planned". Same balance, fresh draw — re-propose once and commit that.
--            // Retrying the SAME cached schedule can never succeed (observed live: six identical
--            // StalePlan failures from the retry button). BoundaryCheckpointMissing: the commit
--            // drew an anchor boundary onto a grid height with no retained checkpoint (pre-
--            // always-on-retention scan history) — a fresh draw lands on retained boundaries.
--            migrationLog("MigrationReview: StalePlan on commit — re-proposing once and retrying")
--            val fresh = sdk.proposeMigrationTransfers()
--            sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
--            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
--            navigationRouter.forward(MigrationScheduledArgs)
++        try {
 +            finalizeMigrationSchedule(committed.reviewed.schedule, args.mode, accountKeyId, false)
 +        } catch (e: kotlinx.coroutines.CancellationException) {
 +            throw e
@@ -7220,10 +7244,10 @@ index ccdc9db31..5ad2d1bbd 100644
 +            navigationRouter.stageResultFrom(sourceEntryId) {
 +                NavigationCommand.Forward(listOf(MigrationKeystoneSignArgs(args.mode, accountKeyId)))
 +            }
-@@ -482 +559 @@ class MigrationReviewVM(
+@@ -482 +564 @@ class MigrationReviewVM(
 -    private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
 +    private fun onConfirmImmediate(proposal: Proposal) =
-@@ -484,5 +561,2 @@ class MigrationReviewVM(
+@@ -484,5 +566,2 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
@@ -7231,11 +7255,11 @@ index ccdc9db31..5ad2d1bbd 100644
 -            if (getSelectedWalletAccount() is KeystoneAccount) {
 +            val account = requireReviewAccount()
 +            if (account is KeystoneAccount) {
-@@ -510 +584,2 @@ class MigrationReviewVM(
+@@ -510 +589,2 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 +                requireReviewAccount()
 +                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
-@@ -514,2 +589,8 @@ class MigrationReviewVM(
+@@ -514,2 +594,8 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.createPCZTFromProposal()
 -                navigationRouter.forward(SignKeystoneTransactionArgs)
 +                keystoneProposalRepository.createPCZTFromProposal(account)
@@ -7246,12 +7270,12 @@ index ccdc9db31..5ad2d1bbd 100644
 +                }) {
 +                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
 +                }
-@@ -517,2 +598,2 @@ class MigrationReviewVM(
+@@ -517,2 +603,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
 +                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal)
 +                submitProposal(reviewed, sourceEntryId = sourceEntryId)
-@@ -521,0 +603,10 @@ class MigrationReviewVM(
+@@ -521,0 +608,10 @@ class MigrationReviewVM(
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
 +            "The migration review belongs to a different account"
@@ -7262,7 +7286,7 @@ index ccdc9db31..5ad2d1bbd 100644
 +
 +    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
 +
-@@ -532,36 +622,0 @@ class MigrationReviewVM(
+@@ -532,36 +627,0 @@ class MigrationReviewVM(
 -    // Only ever called for AUTOMATIC (createImmediateState hardcodes its own single-row label
 -    // instead — a raw send-max Proposal carries no per-transfer schedule to derive one from).
 -
@@ -7299,7 +7323,7 @@ index ccdc9db31..5ad2d1bbd 100644
 -        )
 -    }
 -
-@@ -636,0 +692,39 @@ class MigrationReviewVM(
+@@ -636,0 +697,39 @@ class MigrationReviewVM(
 +
 +internal fun Throwable.requiresNewMigrationReview(): Boolean =
 +    message?.contains("StalePlan") == true ||
@@ -7401,7 +7425,7 @@ index d80cbcdb3..af2e04303 100644
 +
 +        else -> LceRenderer(
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
-index c53b8b4a0..c9e806923 100644
+index c53b8b4a0..b5784cdb9 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 @@ -4,0 +5,4 @@ import androidx.lifecycle.viewModelScope
@@ -7415,34 +7439,35 @@ index c53b8b4a0..c9e806923 100644
 +import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
 @@ -23,0 +30 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
-@@ -30,0 +38 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+@@ -30,0 +38,2 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
++import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
 +import co.electriccoin.zcash.ui.design.util.StringResource
-@@ -31,0 +40 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -31,0 +41 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -37 +45,0 @@ import kotlinx.coroutines.flow.map
+@@ -37 +46,0 @@ import kotlinx.coroutines.flow.map
 -import kotlinx.coroutines.flow.update
-@@ -42,0 +51 @@ class MigrationScheduledVM(
+@@ -42,0 +52 @@ class MigrationScheduledVM(
 +    private val args: MigrationScheduledArgs,
-@@ -47 +55,0 @@ class MigrationScheduledVM(
+@@ -47 +56,0 @@ class MigrationScheduledVM(
 -    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
-@@ -53,0 +62,2 @@ class MigrationScheduledVM(
+@@ -53,0 +63,2 @@ class MigrationScheduledVM(
 +    private val selectedAccount: GetSelectedWalletAccountUseCase,
 +    private val drive: MigrationDriveOnce,
-@@ -62,0 +73,3 @@ class MigrationScheduledVM(
+@@ -62,0 +74,3 @@ class MigrationScheduledVM(
 +    val finalizationError = MutableStateFlow<StringResource?>(null)
 +    val needsKeystoneSignatures = MutableStateFlow(false)
 +    val homeRecoveryMessage = MutableStateFlow<StringResource?>(null)
-@@ -69 +82 @@ class MigrationScheduledVM(
+@@ -69 +83 @@ class MigrationScheduledVM(
 -            loadLce.execute { getMigrationSnapshot() }
 +            if (homeRecoveryMessage.value == null) retrySnapshot()
-@@ -75,3 +88,3 @@ class MigrationScheduledVM(
+@@ -75,3 +89,3 @@ class MigrationScheduledVM(
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -            val sched = pendingSchedule.get(accountKeyId)
 -            val pending = pendingKeystonePczts.get(accountKeyId)
 +            val accountKeyId = args.accountKeyId
 +            val sched = pendingSchedule.peek(accountKeyId)
 +            val pending = pendingKeystonePczts.peek(accountKeyId)
-@@ -84,28 +97,5 @@ class MigrationScheduledVM(
+@@ -84,28 +98,5 @@ class MigrationScheduledVM(
 -            val sdk = getOrchardMigrationSdk()
 -            val splitSignedPczt = pending.accumulatedSplitSigned
 -            if (splitSignedPczt != null) {
@@ -7476,7 +7501,7 @@ index c53b8b4a0..c9e806923 100644
 +            }
 +            checkNotNull(finalized) {
 +                "Another migration step is in progress"
-@@ -113,22 +102,0 @@ class MigrationScheduledVM(
+@@ -113,22 +103,0 @@ class MigrationScheduledVM(
 -            // Kind-agnostic per-id signature application — extra PREPARATIONS of the note-split
 -            // tree go through the same call as the transfers.
 -            sdk.storeSignedSchedulePczts(
@@ -7499,7 +7524,7 @@ index c53b8b4a0..c9e806923 100644
 -            pendingSchedule.clear()
 -            pendingKeystonePczts.clear()
 -            isFinalizing.value = false
-@@ -138,16 +106,57 @@ class MigrationScheduledVM(
+@@ -138,16 +107,36 @@ class MigrationScheduledVM(
 -            // An unguarded failure here (e.g. a transient "database is locked" from the migration
 -            // engine mutex) would otherwise crash the app right after the user completes a
 -            // physical Keystone signing ceremony, with the signed batch already applied. Surface
@@ -7551,7 +7576,8 @@ index c53b8b4a0..c9e806923 100644
 +                pendingSchedule.clear(accountKeyId, schedule)
 +                pendingKeystonePczts.clear(accountKeyId, pending)
 +                isFinalizing.value = false
-+            }
++                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult as? TransferResult.Success)
+@@ -154,0 +144,15 @@ class MigrationScheduledVM(
 +            TransferResult.InvalidNote, TransferResult.Expired ->
 +                returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
 +            is TransferResult.NetworkError -> showFinalizationError(migrationFailureMessage(splitResult))
@@ -7567,14 +7593,10 @@ index c53b8b4a0..c9e806923 100644
 +        val signedSplit = pending.accumulatedSplitSigned ?: return null
 +        val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
 +            "The reviewed note split is unavailable"
-+        }
+@@ -155,0 +160,18 @@ class MigrationScheduledVM(
 +        return if (split.needsSignature()) {
 +            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-+            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-+            if (result is TransferResult.Success) {
-+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-@@ -154,0 +164,39 @@ class MigrationScheduledVM(
-+            result
++            sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
 +        } else {
 +            null
 +        }
@@ -7590,8 +7612,7 @@ index c53b8b4a0..c9e806923 100644
 +        pendingKeystonePczts.clear(accountKeyId, pending)
 +        homeRecoveryMessage.value = message
 +        isFinalizing.value = false
-+    }
-+
+@@ -157,0 +180,33 @@ class MigrationScheduledVM(
 +    private fun showFinalizationError(message: StringResource) {
 +        finalizationError.value = message
 +        failureSheet.value = MigrationTransferFailureState(
@@ -7613,7 +7634,7 @@ index c53b8b4a0..c9e806923 100644
 +        if (nativeState != null && nativeState !is MigrationState.InProgress) {
 +            homeRecoveryMessage.value = stringRes(DesignR.string.migrationProgress_unavailable)
 +            return@execute null
-@@ -155,0 +204,7 @@ class MigrationScheduledVM(
++        }
 +        val snapshot = getMigrationSnapshot(args.accountKeyId)
 +        val needsSignatures = snapshot?.let {
 +            it.transfers.any { step -> step.blocker == MigrationTransferBlocker.SIGNATURE } ||
@@ -7621,13 +7642,14 @@ index c53b8b4a0..c9e806923 100644
 +        } ?: false
 +        needsKeystoneSignatures.value = needsSignatures
 +        snapshot.takeUnless { needsSignatures }
-@@ -157,0 +213,2 @@ class MigrationScheduledVM(
++    }
++
 +    fun navigateBack() = navigationRouter.backToRoot()
 +
-@@ -162,2 +218,0 @@ class MigrationScheduledVM(
+@@ -162,2 +216,0 @@ class MigrationScheduledVM(
 -                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
 -                // instead of rendering zeroed stats (review L3).
-@@ -191,0 +247,30 @@ class MigrationScheduledVM(
+@@ -191,0 +245,30 @@ class MigrationScheduledVM(
 +
 +private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
 +    states: List<MigrationTransferState>,
@@ -12397,7 +12419,7 @@ index 0aa3a0379..596f81efe 100644
 +            "pnqej5wzj6ereyfe4nej4nm6um766vtlyqyygnu8cp02h7dwv0l4d6zz9m0e0x0ue29edhdkctp04h6wzx93jmyl7dgpqfpf" +
 +            "a85"
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
-index bab9de9e3..3ae1c817c 100644
+index bab9de9e3..a422e1787 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
@@ -12411,6 +12433,9 @@ index bab9de9e3..3ae1c817c 100644
 +        koin.koin.get<ImportVKVM> { parametersOf("fixture-entry") }
 +        koin.koin.get<ScanVKVM> { parametersOf("fixture-entry") }
 +        koin.koin.get<NameVKVM> { parametersOf("fixture-entry") }
+@@ -128 +130 @@ class ViewingKeyKoinGraphSmokeTest {
+-        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID)) }
++        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID), "fixture-entry") }
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
 index e528212fd..99c9209b7 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
