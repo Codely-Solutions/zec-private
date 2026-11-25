@@ -2906,7 +2906,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelSwapQuoteUseCaseTest.kt": "18a6ba391ab807c2df3110bbb6a77f37946caacc17e187276bccfda691f1a127",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelSwapUseCaseTest.kt": "e18417e2082c7985ef811960c84f01a67c695a87427f536b988fd65f3e63df5c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ClearClipboardUseCaseTest.kt": "618dbb9bb04c169eea7145e7bb06c31a6299ae047897c02e932ce11eae5e2f42",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt": "6b3e6b2551260b4adfc4d0496ee7fea1e12a3e6f7d3498acec80255b742eb39f",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt": "0ecfc0e949a2a62882927dfc4be44854fd5e214bf6e0d12f6ddfd377f67d683a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt": "a77e49a882078febed2cc0ffc0d85200f2343091f308d76061c543c0b3ce4008",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt": "f4068fc6932e43657c535da9a166df87087b3c8986d64efcbf10b9c64d44ca44",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt": "3d9cf0ef7c003927ece9ba2c3068e1c3d31a28da44d2b35aeaadfbc005de27ae",

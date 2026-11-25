@@ -146,7 +146,7 @@ class CreateHWWalletAccountUseCaseTest {
             useCase(HWWalletEnrollment.Ledger, birthday)
 
             coVerify(exactly = 1) { ledgerAccountImporter.importAccount(birthday) }
-            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
+            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any(), any()) }
         }
 
     @Test
@@ -193,7 +193,7 @@ class CreateHWWalletAccountUseCaseTest {
 
             verify(exactly = 1) { viewOnlyAccountImporter.continueWithBirthday(birthday) }
             coVerify(exactly = 0) { ledgerAccountImporter.importAccount(any()) }
-            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
+            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any(), any()) }
             verify(exactly = 0) { navigationRouter.backToRoot() }
         }
 
@@ -223,7 +223,7 @@ class CreateHWWalletAccountUseCaseTest {
 
             useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
 
-            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
+            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any(), any()) }
             verify(exactly = 1) {
                 navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
             }
