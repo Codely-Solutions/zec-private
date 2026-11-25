@@ -21,12 +21,9 @@ import kotlin.math.roundToInt
 /**
  * Picks a colour for [ColorPickerArgs] and reports through [NavigateToColorPickerUseCase]: every
  * change of the picked opaque colour as it happens, then one close, which keeps the last pick. The
- * toolbar's trailing button, back, a drag down or a tap outside close the sheet, and a sheet cleared
- * without a close, popped or replaced by another navigation, closes it too, so the caller's flow
- * always ends. Only the first close is reported, because the sheet also reports its own hiding once it
- * has gone, but every close pops the sheet while it is still on top, so a pop that never arrived does
- * not leave it stuck. A sheet restored without a caller collecting its picks, after process death,
- * closes itself.
+ * caller keeps receiving picks until the sheet's navigation entry is cleared. Every close request
+ * may pop the sheet while it is on top. If a request is declined or missed, picks and another close
+ * remain available. A sheet restored after process death without a caller asks to dismiss itself.
  */
 internal class ColorPickerVM(
     private val args: ColorPickerArgs,
@@ -55,7 +52,8 @@ internal class ColorPickerVM(
     }
 
     override fun onCleared() {
-        reportClosed()
+        isClosed = true
+        navigateToColorPicker.onClosed(args)
         super.onCleared()
     }
 
@@ -87,10 +85,7 @@ internal class ColorPickerVM(
         )
     }
 
-    private fun onClose() {
-        reportClosed()
-        navigateToColorPicker.dismiss(args)
-    }
+    private fun onClose() = navigateToColorPicker.dismiss(args)
 
     /** Picks the opaque part of [color], which clears every half-typed field. */
     private fun pick(
@@ -109,13 +104,6 @@ internal class ColorPickerVM(
         val before = selection.value.color
         val after = selection.updateAndGet(transform).color
         if (after != before && !isClosed) navigateToColorPicker.onPicked(after, args)
-    }
-
-    /** Ends the caller's flow on the last pick, once. */
-    private fun reportClosed() {
-        if (isClosed) return
-        isClosed = true
-        navigateToColorPicker.onClosed(args)
     }
 
     private companion object {

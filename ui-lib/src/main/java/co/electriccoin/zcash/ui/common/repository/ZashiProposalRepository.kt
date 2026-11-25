@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.atomic.AtomicInteger
 
 interface ZashiProposalRepository {
     suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
@@ -48,6 +49,7 @@ interface ZashiProposalRepository {
     val transactionProposal: StateFlow<TransactionProposal?>
 
     val submitState: StateFlow<SubmitProposalState?>
+    val isShieldSubmissionActive: Boolean
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createProposal(zecSend: ZecSend): RegularTransactionProposal
@@ -103,6 +105,8 @@ class ZashiProposalRepositoryImpl(
     override val transactionProposal = MutableStateFlow<TransactionProposal?>(null)
 
     override val submitState = MutableStateFlow<SubmitProposalState?>(null)
+    private val activeShieldSubmissions = AtomicInteger()
+    override val isShieldSubmissionActive: Boolean get() = activeShieldSubmissions.get() > 0
 
     override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
         val previous = transactionProposal.value
@@ -239,15 +243,20 @@ class ZashiProposalRepositoryImpl(
 
     private suspend fun submitShield(shield: ShieldTransactionProposal): SubmitResult =
         scope.async {
-            shield.requireCurrentShieldingApproval()
-            val key = zashiSpendingKeyDataSource.getZashiSpendingKey()
-            shield.requireCurrentShieldingApproval()
-            proposalDataSource.submitTransaction(
-                proposal = shield.proposal,
-                usk = key,
-                beforeCreation = shield::requireCurrentShieldingApproval,
-                beforeFirstSubmission = shield::requireCurrentShieldingApproval,
-            )
+            activeShieldSubmissions.incrementAndGet()
+            try {
+                shield.requireCurrentShieldingApproval()
+                val key = zashiSpendingKeyDataSource.getZashiSpendingKey()
+                shield.requireCurrentShieldingApproval()
+                proposalDataSource.submitTransaction(
+                    proposal = shield.proposal,
+                    usk = key,
+                    beforeCreation = shield::requireCurrentShieldingApproval,
+                    beforeFirstSubmission = shield::requireCurrentShieldingApproval,
+                )
+            } finally {
+                activeShieldSubmissions.decrementAndGet()
+            }
         }.await()
 
     private fun publishOutcome(expected: TransactionProposal, result: SubmitResult) {

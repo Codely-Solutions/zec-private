@@ -43082,7 +43082,7 @@ index 926e60d9c..0240ac487 100644
 +        }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
-index 322328a32..c79a1795e 100644
+index 322328a32..b790c7374 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 @@ -11 +10,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
@@ -43100,15 +43100,19 @@ index 322328a32..c79a1795e 100644
 @@ -62 +59 @@ class AutomaticServerRepositoryImpl(
 -    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
 +    private val walletServerSelectionProvider: WalletServerSelectionProvider,
-@@ -82 +78,0 @@ class AutomaticServerRepositoryImpl(
+@@ -69 +66,2 @@ class AutomaticServerRepositoryImpl(
+-            zashiProposalRepository.transactionProposal.value != null ||
++            zashiProposalRepository.isShieldSubmissionActive ||
++                zashiProposalRepository.transactionProposal.value != null ||
+@@ -82 +79,0 @@ class AutomaticServerRepositoryImpl(
 -    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -84,2 +80,3 @@ class AutomaticServerRepositoryImpl(
+@@ -84,2 +81,3 @@ class AutomaticServerRepositoryImpl(
 -        isServerSelectionAutomaticProvider
 -            .observe()
 +        walletServerSelectionProvider.serverSelection
 +            .filterNotNull()
 +            .map { it.isAutomatic() }
-@@ -87,25 +84,8 @@ class AutomaticServerRepositoryImpl(
+@@ -87,25 +85,8 @@ class AutomaticServerRepositoryImpl(
 -            .flatMapLatest { isAutomatic ->
 -                if (isAutomatic != null) {
 -                    flowOf(isAutomatic)
@@ -43142,30 +43146,30 @@ index 322328a32..c79a1795e 100644
 +        resolveIsServerSelectionAutomatic(
 +            isAutomaticPreference = this?.isAutomatic,
 +            currentEndpoint = this?.endpoint,
-@@ -114 +93,0 @@ class AutomaticServerRepositoryImpl(
+@@ -114 +94,0 @@ class AutomaticServerRepositoryImpl(
 -    }
-@@ -119,3 +98,3 @@ class AutomaticServerRepositoryImpl(
+@@ -119,3 +99,3 @@ class AutomaticServerRepositoryImpl(
 -        if (isServerAutomatic()) return false
 -        val endpoint = persistableWalletProvider.getPersistableWallet()?.endpoint
 -        return endpoint != null && resolveIsEndpointCustom(endpoint, lightWalletEndpointProvider.getEndpoints())
 +        val selection = walletServerSelectionProvider.getServerSelection() ?: return false
 +        return !selection.isAutomatic() &&
 +            resolveIsEndpointCustom(selection.endpoint, lightWalletEndpointProvider.getEndpoints())
-@@ -147,2 +126,3 @@ class AutomaticServerRepositoryImpl(
+@@ -147,2 +127,3 @@ class AutomaticServerRepositoryImpl(
 -                guarded("switch to ${candidate.host}:${candidate.port}") { applyServerSwitch(candidate) }
 -            }
 +                val endpoint = candidate.endpoint
 +                guarded("switch to ${endpoint.host}:${endpoint.port}") { applyServerSwitch(candidate) }
 +            }.map { it.endpoint }
-@@ -167 +147 @@ class AutomaticServerRepositoryImpl(
+@@ -167 +148 @@ class AutomaticServerRepositoryImpl(
 -    internal suspend fun resolveSwitchCandidate(): LightWalletEndpoint? {
 +    internal suspend fun resolveSwitchCandidate(): ServerSwitchCandidate? {
-@@ -168,0 +149 @@ class AutomaticServerRepositoryImpl(
+@@ -168,0 +150 @@ class AutomaticServerRepositoryImpl(
 +        val endpoint = candidate.endpoint
-@@ -173 +154 @@ class AutomaticServerRepositoryImpl(
+@@ -173 +155 @@ class AutomaticServerRepositoryImpl(
 -                    "switch to ${candidate.host}:${candidate.port} anyway"
 +                    "switch to ${endpoint.host}:${endpoint.port} anyway"
-@@ -182,3 +163,4 @@ class AutomaticServerRepositoryImpl(
+@@ -182,3 +164,4 @@ class AutomaticServerRepositoryImpl(
 -    internal suspend fun evaluateServerSwitch(): LightWalletEndpoint? {
 -        if (!isServerAutomatic() || isAppInTransactionState) return null
 -        val current = persistableWalletProvider.getPersistableWallet()?.endpoint ?: return null
@@ -43173,24 +43177,26 @@ index 322328a32..c79a1795e 100644
 +        val version = walletServerSelectionProvider.writeVersion
 +        val current = walletServerSelectionProvider.getServerSelection() ?: return null
 +        if (!current.isAutomatic() || isAppInTransactionState) return null
-@@ -190 +172 @@ class AutomaticServerRepositoryImpl(
+@@ -187,0 +171 @@ class AutomaticServerRepositoryImpl(
++        if (isAppInTransactionState) return null
+@@ -190 +174 @@ class AutomaticServerRepositoryImpl(
 -                current = current,
 +                current = current.endpoint,
-@@ -194 +176 @@ class AutomaticServerRepositoryImpl(
+@@ -194 +178 @@ class AutomaticServerRepositoryImpl(
 -            )
 +            )?.let { ServerSwitchCandidate(it, current, version) }
-@@ -209,3 +191,4 @@ class AutomaticServerRepositoryImpl(
+@@ -209,3 +193,3 @@ class AutomaticServerRepositoryImpl(
 -    private suspend fun applyServerSwitch(candidate: LightWalletEndpoint) {
 -        if (!isServerAutomatic() || isAppInTransactionState) return
 -        if (candidate !in lightWalletEndpointProvider.getEndpoints()) return
 +    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
-+        if (isAppInTransactionState) return
 +        val endpoint = candidate.endpoint
-+        if (endpoint !in lightWalletEndpointProvider.getEndpoints()) return
-@@ -213,3 +196,7 @@ class AutomaticServerRepositoryImpl(
++        if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
+@@ -213,3 +197,8 @@ class AutomaticServerRepositoryImpl(
 -        Twig.info { "Automatic server: switching to ${candidate.host}:${candidate.port}" }
 -        walletRepository.updateWalletEndpoint(candidate)
 -        synchronizer?.confirmServerSwitch(candidate)
++        if (isAppInTransactionState) return
 +        Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
 +        val applied = walletServerSelectionProvider.storeServerSelection(
 +            WalletServerSelection(endpoint, isAutomatic = true),
@@ -43198,7 +43204,7 @@ index 322328a32..c79a1795e 100644
 +            expected = candidate.current
 +        )
 +        if (applied) synchronizer?.confirmServerSwitch(endpoint)
-@@ -218,0 +206,6 @@ class AutomaticServerRepositoryImpl(
+@@ -218,0 +208,6 @@ class AutomaticServerRepositoryImpl(
 +internal data class ServerSwitchCandidate(
 +    val endpoint: LightWalletEndpoint,
 +    val current: WalletServerSelection,
@@ -46182,7 +46188,7 @@ index fa652b038..d1c9e9d01 100644
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..b81ffb918 100644
+index 0a5bfe73c..a9fc8bfb8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -46206,65 +46212,71 @@ index 0a5bfe73c..b81ffb918 100644
 @@ -21,0 +35,2 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -30,0 +46,2 @@ interface ZashiProposalRepository {
+@@ -28,0 +44 @@ import kotlinx.coroutines.flow.update
++import java.util.concurrent.atomic.AtomicInteger
+@@ -30,0 +47,2 @@ interface ZashiProposalRepository {
 +    suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
 +
-@@ -42 +59,5 @@ interface ZashiProposalRepository {
+@@ -33,0 +52 @@ interface ZashiProposalRepository {
++    val isShieldSubmissionActive: Boolean
+@@ -42 +61,5 @@ interface ZashiProposalRepository {
 -    suspend fun createExactInputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactInputSwapTransactionProposal
 +    suspend fun createExactInputSwapProposal(
 +        zecSend: ZecSend,
 +        quote: SwapQuote,
 +        account: WalletAccount,
 +    ): ExactInputSwapTransactionProposal
-@@ -45 +66,5 @@ interface ZashiProposalRepository {
+@@ -45 +68,5 @@ interface ZashiProposalRepository {
 -    suspend fun createExactOutputSwapProposal(zecSend: ZecSend, quote: SwapQuote): ExactOutputSwapTransactionProposal
 +    suspend fun createExactOutputSwapProposal(
 +        zecSend: ZecSend,
 +        quote: SwapQuote,
 +        account: WalletAccount,
 +    ): ExactOutputSwapTransactionProposal
-@@ -48 +73 @@ interface ZashiProposalRepository {
+@@ -48 +75 @@ interface ZashiProposalRepository {
 -    suspend fun createShieldProposal()
 +    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
-@@ -53,0 +79 @@ interface ZashiProposalRepository {
+@@ -53,0 +81 @@ interface ZashiProposalRepository {
 +     * Returns the exact adopted review identity for the authentication handoff.
-@@ -55 +81 @@ interface ZashiProposalRepository {
+@@ -55 +83 @@ interface ZashiProposalRepository {
 -    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
 +    fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal
-@@ -57 +83,5 @@ interface ZashiProposalRepository {
+@@ -57 +85,5 @@ interface ZashiProposalRepository {
 -    suspend fun submit(): SubmitResult
 +    suspend fun submit(
 +        expectedProposal: TransactionProposal? = null,
 +        reviewedQuote: SwapQuoteData.Success? = null,
 +        checkWalletContext: () -> Unit = {},
 +    ): SubmitResult
-@@ -61 +91 @@ interface ZashiProposalRepository {
+@@ -61 +93 @@ interface ZashiProposalRepository {
 -    fun clear()
 +    fun clear(expectedProposal: TransactionProposal? = null)
-@@ -68,0 +99 @@ class ZashiProposalRepositoryImpl(
+@@ -68,0 +101 @@ class ZashiProposalRepositoryImpl(
 +    private val processSwapTransaction: ProcessSwapTransactionUseCase,
-@@ -75,0 +107,7 @@ class ZashiProposalRepositoryImpl(
+@@ -74,0 +108,9 @@ class ZashiProposalRepositoryImpl(
++    private val activeShieldSubmissions = AtomicInteger()
++    override val isShieldSubmissionActive: Boolean get() = activeShieldSubmissions.get() > 0
++
 +    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
 +        val previous = transactionProposal.value
 +        val proposal = proposalDataSource.preparePayment(owner, draft)
 +        transactionProposal.publishOwnedPayment(owner, previous, proposal)
 +        return proposal
 +    }
-+
-@@ -85 +123 @@ class ZashiProposalRepositoryImpl(
+@@ -85 +127 @@ class ZashiProposalRepositoryImpl(
 -        createProposalInternal {
 +        createProposalInternal(includeFailureCause = false) {
-@@ -94,0 +133 @@ class ZashiProposalRepositoryImpl(
+@@ -94,0 +137 @@ class ZashiProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -98 +137 @@ class ZashiProposalRepositoryImpl(
+@@ -98 +141 @@ class ZashiProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -106,0 +146 @@ class ZashiProposalRepositoryImpl(
+@@ -106,0 +150 @@ class ZashiProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -110 +150 @@ class ZashiProposalRepositoryImpl(
+@@ -110 +154 @@ class ZashiProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -116,6 +156,3 @@ class ZashiProposalRepositoryImpl(
+@@ -116,6 +160,3 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun createShieldProposal() {
 -        createProposalInternal {
 -            proposalDataSource.createShieldProposal(
@@ -46274,13 +46286,13 @@ index 0a5bfe73c..b81ffb918 100644
 +    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
 +        approval.requireCurrent()
 +        return proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
-@@ -124,3 +161,2 @@ class ZashiProposalRepositoryImpl(
+@@ -124,3 +165,2 @@ class ZashiProposalRepositoryImpl(
 -    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
 -        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
 -    }
 +    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
 +        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
-@@ -129 +165,7 @@ class ZashiProposalRepositoryImpl(
+@@ -129 +169,7 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun submit(): SubmitResult =
 +    override suspend fun submit(
 +        expectedProposal: TransactionProposal?,
@@ -46289,11 +46301,11 @@ index 0a5bfe73c..b81ffb918 100644
 +    ): SubmitResult = if (expectedProposal is ShieldTransactionProposal && expectedProposal.approval != null) {
 +        submitShield(expectedProposal)
 +    } else {
-@@ -132,0 +175,3 @@ class ZashiProposalRepositoryImpl(
+@@ -132,0 +179,3 @@ class ZashiProposalRepositoryImpl(
 +                check(expectedProposal == null || transactionProposal === expectedProposal) {
 +                    "The reviewed transaction changed before submission."
 +                }
-@@ -140,4 +185,19 @@ class ZashiProposalRepositoryImpl(
+@@ -140,4 +189,19 @@ class ZashiProposalRepositoryImpl(
 -                        val result =
 -                            proposalDataSource.submitTransaction(
 -                                proposal = transactionProposal.proposal,
@@ -46317,7 +46329,7 @@ index 0a5bfe73c..b81ffb918 100644
 +                                    transactionProposal.memo,
 +                                    null
 +                                )
-@@ -145 +205,26 @@ class ZashiProposalRepositoryImpl(
+@@ -145 +209,26 @@ class ZashiProposalRepositoryImpl(
 -                        submitState.update { SubmitProposalState.Result(result) }
 +                        }
 +                        val validateFunding: () -> Unit = {
@@ -46345,23 +46357,28 @@ index 0a5bfe73c..b81ffb918 100644
 +                            submit(validateFunding, validateFunding)
 +                        }
 +                        publishOutcome(transactionProposal, result)
-@@ -148 +233 @@ class ZashiProposalRepositoryImpl(
+@@ -148 +237 @@ class ZashiProposalRepositoryImpl(
 -                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
 +                        publishOutcome(transactionProposal, SubmitResult.Error(e))
-@@ -152,0 +238,22 @@ class ZashiProposalRepositoryImpl(
+@@ -152,0 +242,27 @@ class ZashiProposalRepositoryImpl(
 +    }
 +
 +    private suspend fun submitShield(shield: ShieldTransactionProposal): SubmitResult =
 +        scope.async {
-+            shield.requireCurrentShieldingApproval()
-+            val key = zashiSpendingKeyDataSource.getZashiSpendingKey()
-+            shield.requireCurrentShieldingApproval()
-+            proposalDataSource.submitTransaction(
-+                proposal = shield.proposal,
-+                usk = key,
-+                beforeCreation = shield::requireCurrentShieldingApproval,
-+                beforeFirstSubmission = shield::requireCurrentShieldingApproval,
-+            )
++            activeShieldSubmissions.incrementAndGet()
++            try {
++                shield.requireCurrentShieldingApproval()
++                val key = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                shield.requireCurrentShieldingApproval()
++                proposalDataSource.submitTransaction(
++                    proposal = shield.proposal,
++                    usk = key,
++                    beforeCreation = shield::requireCurrentShieldingApproval,
++                    beforeFirstSubmission = shield::requireCurrentShieldingApproval,
++                )
++            } finally {
++                activeShieldSubmissions.decrementAndGet()
++            }
 +        }.await()
 +
 +    private fun publishOutcome(expected: TransactionProposal, result: SubmitResult) {
@@ -46371,7 +46388,7 @@ index 0a5bfe73c..b81ffb918 100644
 +    private fun requireCurrentProposal(expected: TransactionProposal) {
 +        check(transactionProposal.value === expected) { "The transaction changed before submission." }
 +    }
-@@ -156,3 +263,9 @@ class ZashiProposalRepositoryImpl(
+@@ -156,3 +272,9 @@ class ZashiProposalRepositoryImpl(
 -    override fun clear() {
 -        transactionProposal.update { null }
 -        submitState.update { null }
@@ -46384,13 +46401,13 @@ index 0a5bfe73c..b81ffb918 100644
 +        ) {
 +            submitState.update { previous -> if (transactionProposal.value == null) null else previous }
 +        }
-@@ -161 +274,4 @@ class ZashiProposalRepositoryImpl(
+@@ -161 +283,4 @@ class ZashiProposalRepositoryImpl(
 -    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
 +    private suspend inline fun <T : TransactionProposal> createProposalInternal(
 +        includeFailureCause: Boolean = true,
 +        block: () -> T,
 +    ): T {
-@@ -166 +282,6 @@ class ZashiProposalRepositoryImpl(
+@@ -166 +291,6 @@ class ZashiProposalRepositoryImpl(
 -                Twig.error(e) { "Unable to create proposal" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -46398,7 +46415,7 @@ index 0a5bfe73c..b81ffb918 100644
 +                } else {
 +                    Twig.error { "Unable to create ZIP321 proposal" }
 +                }
-@@ -170 +291,6 @@ class ZashiProposalRepositoryImpl(
+@@ -170 +300,6 @@ class ZashiProposalRepositoryImpl(
 -                Twig.error(e) { "Insufficient funds" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -46406,7 +46423,7 @@ index 0a5bfe73c..b81ffb918 100644
 +                } else {
 +                    Twig.error { "Insufficient funds for ZIP321 proposal" }
 +                }
-@@ -173,0 +300 @@ class ZashiProposalRepositoryImpl(
+@@ -173,0 +309 @@ class ZashiProposalRepositoryImpl(
 +        currentCoroutineContext().ensureActive()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/serialization/NearSwapStatusSerializer.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/serialization/NearSwapStatusSerializer.kt
 index 23b452f77..32b89edb0 100644
@@ -53951,6 +53968,38 @@ index cc829b5e8..ef8018b93 100644
 -                    )
 -                }
 -            },
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
+index db4e24fd1..eece27647 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
+@@ -24,6 +24,3 @@ import kotlin.math.roundToInt
+- * toolbar's trailing button, back, a drag down or a tap outside close the sheet, and a sheet cleared
+- * without a close, popped or replaced by another navigation, closes it too, so the caller's flow
+- * always ends. Only the first close is reported, because the sheet also reports its own hiding once it
+- * has gone, but every close pops the sheet while it is still on top, so a pop that never arrived does
+- * not leave it stuck. A sheet restored without a caller collecting its picks, after process death,
+- * closes itself.
++ * caller keeps receiving picks until the sheet's navigation entry is cleared. Every close request
++ * may pop the sheet while it is on top. If a request is declined or missed, picks and another close
++ * remain available. A sheet restored after process death without a caller asks to dismiss itself.
+@@ -58 +55,2 @@ internal class ColorPickerVM(
+-        reportClosed()
++        isClosed = true
++        navigateToColorPicker.onClosed(args)
+@@ -90,4 +88 @@ internal class ColorPickerVM(
+-    private fun onClose() {
+-        reportClosed()
+-        navigateToColorPicker.dismiss(args)
+-    }
++    private fun onClose() = navigateToColorPicker.dismiss(args)
+@@ -114,7 +108,0 @@ internal class ColorPickerVM(
+-    /** Ends the caller's flow on the last pick, once. */
+-    private fun reportClosed() {
+-        if (isClosed) return
+-        isClosed = true
+-        navigateToColorPicker.onClosed(args)
+-    }
+-
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt
 new file mode 100644
 index 000000000..c12c22a84
@@ -83615,7 +83664,7 @@ index 000000000..75d60f528
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
-index bd304eb7c..be514649d 100644
+index bd304eb7c..77a52c339 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 @@ -10 +9,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -83623,115 +83672,148 @@ index bd304eb7c..be514649d 100644
 @@ -13,0 +13,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
-@@ -51 +52,5 @@ class AutomaticServerRepositoryTest {
+@@ -23,0 +25 @@ import kotlinx.coroutines.flow.launchIn
++import kotlinx.coroutines.flow.onEach
+@@ -51 +53,5 @@ class AutomaticServerRepositoryTest {
 -    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
 +    private val serverSelectionProvider = mockk<WalletServerSelectionProvider> {
 +        every { serverSelection } returns MutableStateFlow(null)
 +        every { writeVersion } returns 7L
 +        coEvery { storeServerSelection(any(), any(), any()) } returns true
 +    }
-@@ -86,2 +90,0 @@ class AutomaticServerRepositoryTest {
+@@ -86,2 +91,0 @@ class AutomaticServerRepositoryTest {
 -    private val walletRepository = mockk<WalletRepository>(relaxed = true)
 -
-@@ -92 +94,0 @@ class AutomaticServerRepositoryTest {
+@@ -92 +95,0 @@ class AutomaticServerRepositoryTest {
 -            walletRepository = walletRepository,
-@@ -100 +102 @@ class AutomaticServerRepositoryTest {
+@@ -100 +103 @@ class AutomaticServerRepositoryTest {
 -            isServerSelectionAutomaticProvider = isAutomaticProvider,
 +            walletServerSelectionProvider = serverSelectionProvider,
-@@ -107 +109 @@ class AutomaticServerRepositoryTest {
+@@ -107 +110 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -114 +116 @@ class AutomaticServerRepositoryTest {
+@@ -114 +117 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 +            selectServer(false)
-@@ -121,3 +123 @@ class AutomaticServerRepositoryTest {
+@@ -121,3 +124 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns
 -                wallet(endpoint("custom.example.com"))
 +            selectServer(null, endpoint("custom.example.com"))
-@@ -131,2 +131 @@ class AutomaticServerRepositoryTest {
+@@ -131,2 +132 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
 +            selectServer(null, known.last())
-@@ -140,2 +139 @@ class AutomaticServerRepositoryTest {
+@@ -140,2 +140 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +            coEvery { serverSelectionProvider.getServerSelection() } returns null
-@@ -149 +147 @@ class AutomaticServerRepositoryTest {
+@@ -149 +148 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -156,2 +154 @@ class AutomaticServerRepositoryTest {
+@@ -156,2 +155 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
 +            selectServer(false, known.last())
-@@ -165,3 +162 @@ class AutomaticServerRepositoryTest {
+@@ -165,3 +163 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns
 -                wallet(endpoint("custom.example.com"))
 +            selectServer(false, endpoint("custom.example.com"))
-@@ -175,2 +170 @@ class AutomaticServerRepositoryTest {
+@@ -175,2 +171 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +            coEvery { serverSelectionProvider.getServerSelection() } returns null
-@@ -184 +178 @@ class AutomaticServerRepositoryTest {
+@@ -184 +179 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 +            selectServer(false)
-@@ -186 +180 @@ class AutomaticServerRepositoryTest {
+@@ -186 +181 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -193 +187 @@ class AutomaticServerRepositoryTest {
+@@ -193 +188 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -196 +190 @@ class AutomaticServerRepositoryTest {
+@@ -196 +191 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -203 +197 @@ class AutomaticServerRepositoryTest {
+@@ -199,0 +195,9 @@ class AutomaticServerRepositoryTest {
++    @Test
++    fun aDetachedShieldSkipsTheSdkBenchmarkWithoutARegularProposal() = runTest {
++        selectServer(true)
++        every { zashiProposalRepository.isShieldSubmissionActive } returns true
++
++        assertNull(repository.evaluateServerSwitch())
++        coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
++    }
++
+@@ -203 +207 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -207 +201 @@ class AutomaticServerRepositoryTest {
+@@ -207 +211 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -214 +208 @@ class AutomaticServerRepositoryTest {
+@@ -214 +218 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -217 +211 @@ class AutomaticServerRepositoryTest {
+@@ -217 +221 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -224,2 +218 @@ class AutomaticServerRepositoryTest {
+@@ -224,2 +228 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -228 +221 @@ class AutomaticServerRepositoryTest {
+@@ -228 +231 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -234,2 +227 @@ class AutomaticServerRepositoryTest {
+@@ -234,2 +237 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -238 +230 @@ class AutomaticServerRepositoryTest {
+@@ -238 +240 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.evaluateServerSwitch())
 +            assertEquals(known.last(), repository.evaluateServerSwitch()?.endpoint)
-@@ -244,2 +236 @@ class AutomaticServerRepositoryTest {
+@@ -244,2 +246 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -269 +260 @@ class AutomaticServerRepositoryTest {
+@@ -269 +270 @@ class AutomaticServerRepositoryTest {
 -            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate() })
 +            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate()?.endpoint })
-@@ -277 +268 @@ class AutomaticServerRepositoryTest {
+@@ -277 +278 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.resolveSwitchCandidate())
 +            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
-@@ -285 +276 @@ class AutomaticServerRepositoryTest {
+@@ -285 +286 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.resolveSwitchCandidate())
 +            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
-@@ -300 +291,5 @@ class AutomaticServerRepositoryTest {
+@@ -300 +301,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -303,0 +299,20 @@ class AutomaticServerRepositoryTest {
+@@ -303,0 +309,41 @@ class AutomaticServerRepositoryTest {
++    @Test
++    fun aShieldStartingAfterEvaluationPreventsApplyingThePreparedSwitch() = runTest {
++        stubSwitchDecision(balances = null)
++        val foregroundEdges = MutableSharedFlow<Unit>()
++        val processed = mutableListOf<LightWalletEndpoint>()
++        repository.observeSwitchCandidates(foregroundEdges).onEach { processed.add(it) }
++            .launchIn(backgroundScope)
++        runCurrent()
++        foregroundEdges.emit(Unit)
++        runCurrent()
++        coVerify(exactly = 1) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
++
++        every { zashiProposalRepository.isShieldSubmissionActive } returns true
++        localBalances.value = emptyMap()
++        runCurrent()
++
++        assertEquals(listOf(known.last()), processed)
++        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
++        coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
++    }
++
 +    @Test
 +    fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =
 +        runTest {
@@ -83752,39 +83834,39 @@ index bd304eb7c..be514649d 100644
 +            coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
 +        }
 +
-@@ -318 +333 @@ class AutomaticServerRepositoryTest {
+@@ -318 +364 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -338 +353 @@ class AutomaticServerRepositoryTest {
+@@ -338 +384 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -375 +390 @@ class AutomaticServerRepositoryTest {
+@@ -375 +421 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -382 +397,5 @@ class AutomaticServerRepositoryTest {
+@@ -382 +428,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -389 +408,3 @@ class AutomaticServerRepositoryTest {
+@@ -389 +439,3 @@ class AutomaticServerRepositoryTest {
 -            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
 +            coEvery {
 +                serverSelectionProvider.storeServerSelection(any(), any(), any())
 +            } throws IllegalStateException("prefs failed")
-@@ -398 +419,5 @@ class AutomaticServerRepositoryTest {
+@@ -398 +450,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -421,2 +446 @@ class AutomaticServerRepositoryTest {
+@@ -421,2 +477 @@ class AutomaticServerRepositoryTest {
 -        coEvery { isAutomaticProvider.get() } returns true
 -        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
 +        selectServer(true)
-@@ -427,0 +452,4 @@ class AutomaticServerRepositoryTest {
+@@ -427,0 +483,4 @@ class AutomaticServerRepositoryTest {
 +    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
 +        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
 +    }
@@ -86794,10 +86876,10 @@ index 0bc7a1124..46d32e84f 100644
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..559040a7f
+index 000000000..d634be2f4
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,308 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -86826,6 +86908,8 @@ index 000000000..559040a7f
 +import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.async
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.delay
 +import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.withTimeout
 +import java.math.BigDecimal
@@ -86835,6 +86919,7 @@ index 000000000..559040a7f
 +import kotlin.test.assertFalse
 +import kotlin.test.assertIs
 +import kotlin.test.assertSame
++import kotlin.test.assertTrue
 +import kotlin.time.Duration.Companion.seconds
 +import kotlin.time.Instant
 +
@@ -86927,6 +87012,38 @@ index 000000000..559040a7f
 +        assertSame(approval, shield.approval)
 +        assertFailsWith<IllegalStateException> { repository.submit(shield) }
 +        assertFalse(broadcast)
++        assertFalse(repository.isShieldSubmissionActive)
++    }
++
++    @Test
++    fun cancellingTheShieldWaiterKeepsTheServerGuardUntilTheDetachedSubmissionEnds() = runBlocking {
++        val approval = ShieldingApproval(EditAccountFixtures.zodl()) { true }
++        val proposal = ShieldTransactionProposal(mockk<Proposal>(), approval = approval)
++        val entered = CompletableDeferred<Unit>()
++        val finish = CompletableDeferred<Unit>()
++        coEvery { keys.getZashiSpendingKey() } returns mockk()
++        coEvery { proposals.submitTransaction(proposal.proposal, any<UnifiedSpendingKey>(), any(), any()) } coAnswers {
++            entered.complete(Unit)
++            finish.await()
++            SubmitResult.Success(listOf("synthetic-shield"))
++        }
++
++        val waiting = async { repository.submit(proposal) }
++        try {
++            withTimeout(5.seconds) { entered.await() }
++            assertTrue(repository.isShieldSubmissionActive)
++            waiting.cancelAndJoin()
++            assertTrue(repository.isShieldSubmissionActive)
++        } finally {
++            finish.complete(Unit)
++        }
++        withTimeout(5.seconds) {
++            while (repository.isShieldSubmissionActive) {
++                delay(10)
++            }
++        }
++        assertEquals(null, repository.transactionProposal.value)
++        assertEquals(null, repository.submitState.value)
 +    }
 +
 +    @Test
@@ -95138,6 +95255,35 @@ index 000000000..906b3ca2a
 +    private val ChooseServerState.custom: ServerState.Custom
 +        get() = other.servers.filterIsInstance<ServerState.Custom>().single()
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVMTest.kt
+index db9588bac..9cda48993 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVMTest.kt
+@@ -246,0 +247,3 @@ class ColorPickerVMTest {
++            assertFalse(emitted.job.isCompleted)
++
++            clear(vm)
+@@ -263,0 +267 @@ class ColorPickerVMTest {
++            clear(vm)
+@@ -301 +305 @@ class ColorPickerVMTest {
+-    fun aCloseWhileAnotherScreenIsOnTopPopsNothing() =
++    fun aRefusedCloseKeepsDeliveringPicksUntilTheSheetActuallyLeaves() =
+@@ -303,0 +308 @@ class ColorPickerVMTest {
++            val sheet = top
+@@ -309 +314 @@ class ColorPickerVMTest {
+-            assertTrue(emitted.job.isCompleted)
++            assertFalse(emitted.job.isCompleted)
+@@ -310,0 +316,10 @@ class ColorPickerVMTest {
++
++            top = sheet
++            val green = ColorPickerPalette.grid.last()
++            assertIs<ColorPickerContentState.Grid>(vm.state.value.content).onSelect(green)
++            assertEquals(listOf(green), emitted.values)
++            vm.state.value.onBack()
++            assertEquals(1, pops)
++
++            clear(vm)
++            assertTrue(emitted.job.isCompleted)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt
 index b110e1944..ec8456617 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt

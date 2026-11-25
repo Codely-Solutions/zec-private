@@ -26,6 +26,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.math.BigDecimal
@@ -35,6 +37,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -127,6 +130,38 @@ class ZashiProposalRepositoryTest {
         assertSame(approval, shield.approval)
         assertFailsWith<IllegalStateException> { repository.submit(shield) }
         assertFalse(broadcast)
+        assertFalse(repository.isShieldSubmissionActive)
+    }
+
+    @Test
+    fun cancellingTheShieldWaiterKeepsTheServerGuardUntilTheDetachedSubmissionEnds() = runBlocking {
+        val approval = ShieldingApproval(EditAccountFixtures.zodl()) { true }
+        val proposal = ShieldTransactionProposal(mockk<Proposal>(), approval = approval)
+        val entered = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        coEvery { keys.getZashiSpendingKey() } returns mockk()
+        coEvery { proposals.submitTransaction(proposal.proposal, any<UnifiedSpendingKey>(), any(), any()) } coAnswers {
+            entered.complete(Unit)
+            finish.await()
+            SubmitResult.Success(listOf("synthetic-shield"))
+        }
+
+        val waiting = async { repository.submit(proposal) }
+        try {
+            withTimeout(5.seconds) { entered.await() }
+            assertTrue(repository.isShieldSubmissionActive)
+            waiting.cancelAndJoin()
+            assertTrue(repository.isShieldSubmissionActive)
+        } finally {
+            finish.complete(Unit)
+        }
+        withTimeout(5.seconds) {
+            while (repository.isShieldSubmissionActive) {
+                delay(10)
+            }
+        }
+        assertEquals(null, repository.transactionProposal.value)
+        assertEquals(null, repository.submitState.value)
     }
 
     @Test

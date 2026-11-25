@@ -244,6 +244,9 @@ class ColorPickerVMTest {
             vm.state.value.doneButton
                 .onClick()
             vm.state.value.onBack()
+            assertFalse(emitted.job.isCompleted)
+
+            clear(vm)
 
             assertEquals(listOf(green), emitted.values)
             assertTrue(emitted.job.isCompleted)
@@ -261,6 +264,7 @@ class ColorPickerVMTest {
             vm.state.value.onBack()
             vm.state.value.doneButton
                 .onClick()
+            clear(vm)
 
             assertEquals(listOf(green), emitted.values)
             assertTrue(emitted.job.isCompleted)
@@ -298,16 +302,27 @@ class ColorPickerVMTest {
         }
 
     @Test
-    fun aCloseWhileAnotherScreenIsOnTopPopsNothing() =
+    fun aRefusedCloseKeepsDeliveringPicksUntilTheSheetActuallyLeaves() =
         runTest(UnconfinedTestDispatcher()) {
             val (vm, emitted) = openFromCaller(Color(PURPLE_OPAQUE))
+            val sheet = top
             top = otherScreen()
 
             vm.state.value.doneButton
                 .onClick()
 
-            assertTrue(emitted.job.isCompleted)
+            assertFalse(emitted.job.isCompleted)
             assertEquals(0, pops)
+
+            top = sheet
+            val green = ColorPickerPalette.grid.last()
+            assertIs<ColorPickerContentState.Grid>(vm.state.value.content).onSelect(green)
+            assertEquals(listOf(green), emitted.values)
+            vm.state.value.onBack()
+            assertEquals(1, pops)
+
+            clear(vm)
+            assertTrue(emitted.job.isCompleted)
         }
 
     @Test

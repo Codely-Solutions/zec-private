@@ -22,6 +22,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
@@ -192,6 +193,15 @@ class AutomaticServerRepositoryTest {
         }
 
     @Test
+    fun aDetachedShieldSkipsTheSdkBenchmarkWithoutARegularProposal() = runTest {
+        selectServer(true)
+        every { zashiProposalRepository.isShieldSubmissionActive } returns true
+
+        assertNull(repository.evaluateServerSwitch())
+        coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun aPendingLedgerProposalSkipsTheSdkBenchmark() =
         runTest {
             selectServer(true)
@@ -295,6 +305,27 @@ class AutomaticServerRepositoryTest {
             }
             coVerify(exactly = 1) { synchronizer.confirmServerSwitch(known.last()) }
         }
+
+    @Test
+    fun aShieldStartingAfterEvaluationPreventsApplyingThePreparedSwitch() = runTest {
+        stubSwitchDecision(balances = null)
+        val foregroundEdges = MutableSharedFlow<Unit>()
+        val processed = mutableListOf<LightWalletEndpoint>()
+        repository.observeSwitchCandidates(foregroundEdges).onEach { processed.add(it) }
+            .launchIn(backgroundScope)
+        runCurrent()
+        foregroundEdges.emit(Unit)
+        runCurrent()
+        coVerify(exactly = 1) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
+
+        every { zashiProposalRepository.isShieldSubmissionActive } returns true
+        localBalances.value = emptyMap()
+        runCurrent()
+
+        assertEquals(listOf(known.last()), processed)
+        coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+        coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
+    }
 
     @Test
     fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =

@@ -63,7 +63,8 @@ class AutomaticServerRepositoryImpl(
 
     private val isAppInTransactionState: Boolean
         get() =
-            zashiProposalRepository.transactionProposal.value != null ||
+            zashiProposalRepository.isShieldSubmissionActive ||
+                zashiProposalRepository.transactionProposal.value != null ||
                 zashiProposalRepository.submitState.value != null ||
                 keystoneProposalRepository.transactionProposal.value != null ||
                 keystoneProposalRepository.submitState.value != null ||
@@ -167,6 +168,7 @@ class AutomaticServerRepositoryImpl(
         val candidates = lightWalletEndpointProvider.getEndpoints()
         if (candidates.isEmpty()) return null
         val synchronizer = synchronizerProvider.getSynchronizerOrNull() ?: return null
+        if (isAppInTransactionState) return null
         return try {
             synchronizer.evaluateServerSwitch(
                 current = current.endpoint,
@@ -189,10 +191,10 @@ class AutomaticServerRepositoryImpl(
      * hysteresis state it updates is process-wide and outlives any single Synchronizer.
      */
     private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
-        if (isAppInTransactionState) return
         val endpoint = candidate.endpoint
-        if (endpoint !in lightWalletEndpointProvider.getEndpoints()) return
+        if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
         val synchronizer: Synchronizer? = synchronizerProvider.getSynchronizerOrNull()
+        if (isAppInTransactionState) return
         Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
         val applied = walletServerSelectionProvider.storeServerSelection(
             WalletServerSelection(endpoint, isAutomatic = true),
