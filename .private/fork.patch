@@ -33917,7 +33917,7 @@ index 000000000..47c12409a
 +    return !migrationHasPriority && any { it === request }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..0b23b2da9 100644
+index 048340e48..08ef1b371 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
@@ -34006,7 +34006,7 @@ index 048340e48..0b23b2da9 100644
 +        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
 +        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
-+        private const val NAVIGATION_STATE_VERSION = 13
++        private const val NAVIGATION_STATE_VERSION = 14
 +
 +        internal fun stampNavigationState(state: Bundle) {
 +            state.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)

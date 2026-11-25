@@ -1360,7 +1360,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/BiometricActivity.kt": "a913af51b7d1827d30f931e22d67a0c543e81ec1ba8f77d32c118fef3e0df84f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/HWEnrollmentNavGraph.kt": "a038cda47d595db9b2f9531fbff2de8eacecc9b82c006b229f8ba803049bc6f6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt": "67c18dd80f7ddbde8b174cd66e159187e118307b30c31071cf29f5833a1e9821",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt": "86bb813015b5e11bf41611e38831e97ae0656031a9104240334e0b4de05c937e",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt": "4ea66c825d2c80874b8daedc81c6ed6fe8424e414dd33d346b06608db7c7d527",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationExt.kt": "10b3361c5060224d651fa2a06a5a77a07c21794c17b8ec03001fd9aa25baefc5",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt": "6ee0025a9f28729a99c99e95cdffbe0e268398bd2b9daaf444dddd04718fbbab",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt": "24e29d3967872136894f9bc200022308a7dc3ef63c15e70756f6b14b26936ea9",
