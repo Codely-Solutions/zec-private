@@ -2997,7 +2997,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableVMTest.kt": "1b09d4faa993d5efe2a0160169a5b6a9d4c351618551d5547e046cc2214fb8fc",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/ExportVKVMTest.kt": "cb77cca2e1e3834d562c800dd8d661cc702472ab2833f4fc5da733411478c971",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/confirm/ExportVKConfirmVMTest.kt": "bb0fb24dda38446ea65a4244d3f6e25ab25c88f28892cd9af8d9936adefd2782",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt": "47b4c58c69d3d0b2680f9abc881d93a99833f2bbf7f94f42d43d829350af0e0f",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt": "01b6b0bea5bcf4a2f5c0c8ac839b2ee1ec4c0e3be2dc629fd8b4aa071418b312",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/home/HomeVMButtonsTest.kt": "d1dcd96cada4bb7c993fa8099f7f826e6d517fe5996e8c72991c1d8487ad5e74",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt": "eece23741b35511600a8e1027eb7cb4fe9ce5139148862870e2e8a4c94ced41a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodActivationTest.kt": "1cdebd7123ebd9fae0044c569d88dccc4510f5ef8da7b2a7e309e86691ceaf92",

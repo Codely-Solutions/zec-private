@@ -22,6 +22,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -351,17 +352,15 @@ class VKDetailVMTest {
     @Test
     fun accountChangeBeforeChooserLaunchRevokesTheStagedKeyHandoff() = runTest(dispatcher) {
         val ownerStillCurrent = MutableStateFlow(true)
-        val handoff = CompletableDeferred<() -> Boolean>()
+        val handoff = slot<() -> Boolean>()
         val share = mockk<ShareQRUseCase> {
-            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), any()) } answers {
-                handoff.complete(lastArg())
-                true
-            }
+            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), capture(handoff)) } returns true
         }
         val vm = startedVm(shareQR = share, ownerStillCurrent = ownerStillCurrent)
         reveal(vm)
         requireNotNull(vm.state.value).secondaryButton.onClick()
-        val isAllowed = handoff.await()
+        runCurrent()
+        val isAllowed = handoff.captured
         assertTrue(isAllowed())
         ownerStillCurrent.value = false
         assertFalse(isAllowed())

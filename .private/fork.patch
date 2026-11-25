@@ -81468,35 +81468,37 @@ index 363420b40..51c55d60d 100644
 +            },
 +        )
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt
-index 32b7d3625..4a91f133e 100644
+index 32b7d3625..da0fa53ec 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exportvk/detail/VKDetailVMTest.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
-@@ -24,0 +26 @@ import io.mockk.verify
+@@ -23,0 +25 @@ import io.mockk.mockk
++import io.mockk.slot
+@@ -24,0 +27 @@ import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
-@@ -27,0 +30 @@ import kotlinx.coroutines.flow.Flow
+@@ -27,0 +31 @@ import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -29 +31,0 @@ import kotlinx.coroutines.flow.emptyFlow
+@@ -29 +32,0 @@ import kotlinx.coroutines.flow.emptyFlow
 -import kotlinx.coroutines.flow.flowOf
-@@ -35,0 +38 @@ import kotlinx.coroutines.test.resetMain
+@@ -35,0 +39 @@ import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runCurrent
-@@ -223 +226 @@ class VKDetailVMTest {
+@@ -223 +227 @@ class VKDetailVMTest {
 -            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any(), any()) }
-@@ -241,2 +244,3 @@ class VKDetailVMTest {
+@@ -241,2 +245,3 @@ class VKDetailVMTest {
 -                    filenamePrefix = "zodl_viewing_key_qr_",
 -                    centerIcon = null
 +                    filenamePrefix = match { it.startsWith("zodl_viewing_key_qr_") },
 +                    centerIcon = null,
 +                    isAllowed = any()
-@@ -263,2 +267,3 @@ class VKDetailVMTest {
+@@ -263,2 +268,3 @@ class VKDetailVMTest {
 -                    filenamePrefix = "zodl_viewing_key_qr_",
 -                    centerIcon = null
 +                    filenamePrefix = match { it.startsWith("zodl_viewing_key_qr_") },
 +                    centerIcon = null,
 +                    isAllowed = any()
-@@ -281,0 +287,85 @@ class VKDetailVMTest {
+@@ -281,0 +288,83 @@ class VKDetailVMTest {
 +    @Test
 +    fun relockHidesKeyAndRejectsStaleShareEvenAfterUnlock() =
 +        runTest(dispatcher) {
@@ -81564,17 +81566,15 @@ index 32b7d3625..4a91f133e 100644
 +    @Test
 +    fun accountChangeBeforeChooserLaunchRevokesTheStagedKeyHandoff() = runTest(dispatcher) {
 +        val ownerStillCurrent = MutableStateFlow(true)
-+        val handoff = CompletableDeferred<() -> Boolean>()
++        val handoff = slot<() -> Boolean>()
 +        val share = mockk<ShareQRUseCase> {
-+            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), any()) } answers {
-+                handoff.complete(lastArg())
-+                true
-+            }
++            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), capture(handoff)) } returns true
 +        }
 +        val vm = startedVm(shareQR = share, ownerStillCurrent = ownerStillCurrent)
 +        reveal(vm)
 +        requireNotNull(vm.state.value).secondaryButton.onClick()
-+        val isAllowed = handoff.await()
++        runCurrent()
++        val isAllowed = handoff.captured
 +        assertTrue(isAllowed())
 +        ownerStillCurrent.value = false
 +        assertFalse(isAllowed())
@@ -81582,41 +81582,41 @@ index 32b7d3625..4a91f133e 100644
 +        assertNull(vm.state.value)
 +    }
 +
-@@ -286 +376,2 @@ class VKDetailVMTest {
+@@ -286 +375,2 @@ class VKDetailVMTest {
 -            val vm = startedVm(deleteSharedQRImages = deleteSharedQRImages)
 +            val share = mockk<ShareQRUseCase>(relaxed = true)
 +            val vm = startedVm(shareQR = share, deleteSharedQRImages = deleteSharedQRImages)
-@@ -288,0 +380,5 @@ class VKDetailVMTest {
+@@ -288,0 +379,5 @@ class VKDetailVMTest {
 +            reveal(vm)
 +            requireNotNull(vm.state.value).secondaryButton.onClick()
 +            advanceUntilIdle()
 +            val prefix = io.mockk.slot<String>()
 +            coVerify(exactly = 1) { share(any(), any(), any(), capture(prefix), any(), any()) }
-@@ -292 +388 @@ class VKDetailVMTest {
+@@ -292 +387 @@ class VKDetailVMTest {
 -            verify(exactly = 1) { deleteSharedQRImages("zodl_viewing_key_qr_") }
 +            verify(exactly = 1) { deleteSharedQRImages(prefix.captured) }
-@@ -316 +412 @@ class VKDetailVMTest {
+@@ -316 +411 @@ class VKDetailVMTest {
 -            assertEquals(1, router.backCount)
 +            assertEquals(1, router.guardedBackCount)
-@@ -344,0 +441,2 @@ class VKDetailVMTest {
+@@ -344,0 +440,2 @@ class VKDetailVMTest {
 +        appAccessSession: AppAccessSession = AppAccessSession().apply { unlock() },
 +        ownerStillCurrent: MutableStateFlow<Boolean> = MutableStateFlow(true),
-@@ -347,2 +445,4 @@ class VKDetailVMTest {
+@@ -347,2 +444,4 @@ class VKDetailVMTest {
 -            mockk<GetVKUseCase> {
 -                every { observe(type) } returns flowOf(key)
 +            mockk<GetVKUseCase>(relaxed = true) {
 +                every { watchReview("review-id", type) } returns ownerStillCurrent
 +                every { isCurrent("review-id", type) } answers { ownerStillCurrent.value }
 +                every { this@mockk.key("review-id", type) } returns key
-@@ -352 +452 @@ class VKDetailVMTest {
+@@ -352 +451 @@ class VKDetailVMTest {
 -                args = VKDetailArgs(type),
 +                args = VKDetailArgs(type, "review-id"),
-@@ -357,0 +458 @@ class VKDetailVMTest {
+@@ -357,0 +457 @@ class VKDetailVMTest {
 +                appAccessSession = appAccessSession,
-@@ -371,0 +473,2 @@ private class FakeNavigationRouter : NavigationRouter {
+@@ -371,0 +472,2 @@ private class FakeNavigationRouter : NavigationRouter {
 +    var guardedBackCount = 0
 +        private set
-@@ -390 +493,4 @@ private class FakeNavigationRouter : NavigationRouter {
+@@ -390 +492,4 @@ private class FakeNavigationRouter : NavigationRouter {
 -    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +        guardedBackCount++
