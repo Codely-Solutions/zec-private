@@ -433,8 +433,17 @@ class MigrationReviewVM(
         val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
         if (account is KeystoneAccount) {
             confirmKeystone(reviewed, accountKeyId, newTorPreference)
-            return
+        } else {
+            confirmSoftwareAutomatic(sdk, reviewed, accountKeyId, newTorPreference)
         }
+    }
+
+    private suspend fun confirmSoftwareAutomatic(
+        sdk: OrchardMigrationSdk,
+        reviewed: ReviewedMigrationSchedule,
+        accountKeyId: String,
+        newTorPreference: Boolean?,
+    ) {
         val split = reviewed.noteSplit
         if (split != null && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
             throw PrivateNoteSplitUnavailable()

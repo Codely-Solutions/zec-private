@@ -416,7 +416,7 @@ class MigrationReviewVMTest {
         var attempts = 0
         val finalize = mockk<FinalizeMigrationScheduleUseCase> {
             coEvery { this@mockk(reviewed, MigrationMode.AUTOMATIC, any(), false) } coAnswers {
-                if (++attempts == 1) throw IllegalStateException("synthetic scheduler unavailable")
+                if (++attempts == 1) error("synthetic scheduler unavailable")
             }
         }
         val router = FakeNavigationRouter()
