@@ -546,5 +546,5 @@ private fun previewProgressStateComplete() =
 
 private fun previewCompleteStateDustLocked() =
     previewCompleteStateWithDust().copy(
-        lockNotice = stringRes(DesignR.string.migrationComplete_lockRequestCompleted),
+        lockNotice = stringRes(co.electriccoin.zcash.ui.design.R.string.migrationComplete_lockRequestCompleted),
     )

@@ -447,7 +447,7 @@ class TransactionDetailVM(
             data.swap != null -> support
 
             data.contact == null -> {
-                if (data.transaction is SendTransaction) {
+                if (data.transaction is SendTransaction && data.recipient != null) {
                     ButtonState(
                         text = stringRes(R.string.transactionHistory_saveAddress),
                         onClick = { onSaveAddressClick(data) }

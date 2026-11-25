@@ -169,7 +169,11 @@ class TransactionDetailVMTest {
         assertEquals(stringRes(failed.amount, HIDDEN), state.header.amount)
         assertIs<SendShieldedState>(state.info)
         assertNull(state.errorFooter)
-        assertEquals(stringRes(R.string.transactionHistory_saveAddress), state.primaryButton?.text)
+        assertNull(state.primaryButton)
+
+        val address = mockk<WalletAddress.Unified> { every { this@mockk.address } returns failed.recipient.orEmpty() }
+        val withAddress = state(data(failed).copy(recipient = address))
+        assertEquals(stringRes(R.string.transactionHistory_saveAddress), withAddress.primaryButton?.text)
     }
 
     @Test

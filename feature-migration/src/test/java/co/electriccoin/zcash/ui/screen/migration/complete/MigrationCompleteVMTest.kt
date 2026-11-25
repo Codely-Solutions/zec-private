@@ -264,7 +264,7 @@ class MigrationCompleteVMTest {
         )
         for (account in accounts) {
             val owner = account.sdkAccount.accountUuid.toStorageKeyId()
-            val router = FakeNavigationRouter("completion")
+            val router = FakeNavigationRouter()
             val sdk = mockk<OrchardMigrationSdk>()
             val vm = vm(
                 account = account,
@@ -272,7 +272,6 @@ class MigrationCompleteVMTest {
                 router = router,
                 getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                 args = MigrationCompleteArgs(isResidueOnly = true),
-                sourceEntryId = "completion",
             )
             advanceUntilIdle()
             invokeOnMigrateAnyway(vm)

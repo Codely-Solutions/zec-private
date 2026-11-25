@@ -100,12 +100,21 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
+                    getOrchardMigrationSdk = mockk {
+                        val sdk = mockk<OrchardMigrationSdk> {
+                            coEvery { proposeImmediateMigration() } returns proposal
+                        }
+                        coEvery { this@mockk(any<String>()) } returns sdk
+                    },
                     zashiProposalRepository = zashiProposalRepository,
                     submitProposal = submitProposal,
                 )
 
-            invokeOnConfirmImmediate(vm, proposal)
+            val collector = launch { vm.state.collect {} }
             advanceUntilIdle()
+            assertNotNull(vm.state.value.content).onConfirm()
+            advanceUntilIdle()
+            collector.cancel()
 
             // IMMEDIATE confirm on a Zashi account no longer signs/broadcasts in this VM — it adopts the
             // send-max sweep proposal into the shared send pipeline (SubmitProposalUseCase owns biometrics,
@@ -132,6 +141,12 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
+                    getOrchardMigrationSdk = mockk {
+                        val sdk = mockk<OrchardMigrationSdk> {
+                            coEvery { proposeImmediateMigration() } returns proposal
+                        }
+                        coEvery { this@mockk(any<String>()) } returns sdk
+                    },
                     keystoneProposalRepository = keystoneProposalRepository,
                     getSelectedWalletAccount =
                         mockk {
@@ -141,8 +156,11 @@ class MigrationReviewVMTest {
                         },
                 )
 
-            invokeOnConfirmImmediate(vm, proposal)
+            val collector = launch { vm.state.collect {} }
             advanceUntilIdle()
+            assertNotNull(vm.state.value.content).onConfirm()
+            advanceUntilIdle()
+            collector.cancel()
 
             coVerifyOrder {
                 keystoneProposalRepository.setMigrationSweepProposal(proposal)
@@ -657,26 +675,6 @@ class MigrationReviewVMTest {
         estimatedDurationHours = 1,
         proposalHandle = handle,
     )
-
-    // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
-    // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
-    // that (by design, same as every other LCE-driven VM in this codebase, e.g.
-    // MigrationCompleteVM) only starts computing once actively collected — exercising it through a
-    // real subscriber is exactly the kind of Flow-timing plumbing this test isn't meant to be
-    // about. `MigrationCompleteVMTest.invokeOnDone` establishes the same
-    // call-the-private-handler-via-reflection pattern for the identical reason.
-    private fun invokeOnConfirmImmediate(
-        vm: MigrationReviewVM,
-        proposal: Proposal,
-    ) {
-        val method =
-            MigrationReviewVM::class.java.getDeclaredMethod(
-                "onConfirmImmediate",
-                Proposal::class.java,
-            )
-        method.isAccessible = true
-        method.invoke(vm, proposal)
-    }
 
     private fun vm(
         router: NavigationRouter,
