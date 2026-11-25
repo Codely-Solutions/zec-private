@@ -9715,10 +9715,12 @@ index 000000000..bae21724a
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-index 0f4dd1930..cc36a7d17 100644
+index 0f4dd1930..0183ec971 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-@@ -224 +224,2 @@ private class FakeAccountDataSource(
+@@ -213,0 +214 @@ private class FakeAccountDataSource(
++        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
+@@ -224 +225,2 @@ private class FakeAccountDataSource(
 -    override suspend fun requestNextShieldedAddress(): String = error("unsupported")
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String =
 +        error("unsupported")
@@ -13080,32 +13082,33 @@ index 4f0cf7924..5e2925ccb 100644
 +        }
 +
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
-index 725b23d17..e515ad850 100644
+index 725b23d17..b335c8a3b 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
 @@ -3,0 +4 @@ import androidx.compose.ui.graphics.Color
 +import cash.z.ecc.android.sdk.model.Account
-@@ -4,0 +6 @@ import cash.z.ecc.android.sdk.model.BlockHeight
+@@ -4,0 +6,2 @@ import cash.z.ecc.android.sdk.model.BlockHeight
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 +import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
-@@ -6 +8,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -6 +9,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
 -import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
-@@ -13,0 +17,2 @@ internal interface ViewOnlyPendingImportRepository {
+@@ -13,0 +18,2 @@ internal interface ViewOnlyPendingImportRepository {
 +    val pendingImport: StateFlow<PendingViewOnlyImport?>
 +
-@@ -18,0 +24,2 @@ internal interface ViewOnlyPendingImportRepository {
+@@ -18,0 +25,2 @@ internal interface ViewOnlyPendingImportRepository {
 +
 +    fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean
-@@ -22,0 +30 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+@@ -22,0 +31 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 +    override val pendingImport = pending.asStateFlow()
-@@ -26 +34,4 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+@@ -26 +35,4 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 -    override fun set(pendingImport: PendingViewOnlyImport) = pending.update { pendingImport }
 +    @Synchronized
 +    override fun set(pendingImport: PendingViewOnlyImport) {
 +        pending.value = pendingImport
 +    }
-@@ -28 +39,11 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+@@ -28 +40,11 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 -    override fun clear() = pending.update { null }
 +    @Synchronized
 +    override fun clear() {
@@ -13118,93 +13121,141 @@ index 725b23d17..e515ad850 100644
 +        pending.value = replacement
 +        return true
 +    }
-@@ -40,0 +62 @@ internal data class PendingViewOnlyImport(
+@@ -40,0 +63,2 @@ internal data class PendingViewOnlyImport(
 +    val importedAccount: Account? = null,
-@@ -41,0 +64,3 @@ internal data class PendingViewOnlyImport(
++    val enrollment: WalletEnrollmentToken? = null,
+@@ -41,0 +66,3 @@ internal data class PendingViewOnlyImport(
 +    val committedBirthday: CommittedEnrollmentBirthday?
 +        get() = importedAccount?.let { CommittedEnrollmentBirthday(birthday, it) }
 +
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt
-index 373ecf3ca..f575b0c53 100644
+index 373ecf3ca..647b226cb 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt
-@@ -5 +4,0 @@ import cash.z.ecc.android.sdk.model.Account
+@@ -3,0 +4 @@ import androidx.compose.ui.graphics.Color
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -5 +5,0 @@ import cash.z.ecc.android.sdk.model.Account
 -import cash.z.ecc.android.sdk.model.BlockHeight
-@@ -6,0 +6 @@ import co.electriccoin.zcash.spackle.Twig
+@@ -6,0 +7 @@ import co.electriccoin.zcash.spackle.Twig
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -7,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -42,3 +43,3 @@ import kotlin.time.Duration.Companion.seconds
+@@ -12,0 +15,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
+@@ -20 +23,0 @@ import co.electriccoin.zcash.ui.screen.viewingkey.imported.ImportedVKArgs
+-import kotlinx.coroutines.NonCancellable
+@@ -27 +29,0 @@ import kotlinx.coroutines.sync.withLock
+-import kotlinx.coroutines.withContext
+@@ -42,3 +44,3 @@ import kotlin.time.Duration.Companion.seconds
 - * Once the import starts it runs to the restarted synchronizer even if the caller is cancelled, so
 - * an account is never left imported but unselected; only the navigation is skipped then. A colour
 - * picked for the account is stored in its metadata on the way, best-effort.
 + * Once admitted, the import and its finalization run across caller cancellation. If selection
 + * fails, the pending import retains the created account so retry can finish selecting it. A
 + * cancelled caller skips navigation.
-@@ -60 +61 @@ internal class ImportViewOnlyAccountUseCase(
+@@ -51,0 +54 @@ internal class ImportViewOnlyAccountUseCase(
++    private val walletEnrollment: WalletEnrollmentAccess,
+@@ -60 +63 @@ internal class ImportViewOnlyAccountUseCase(
 -    suspend operator fun invoke() {
 +    suspend operator fun invoke(sourceEntryId: String? = null) {
-@@ -63 +64 @@ internal class ImportViewOnlyAccountUseCase(
+@@ -63 +66 @@ internal class ImportViewOnlyAccountUseCase(
 -            if (pendingImportRepository.get() === requested) import(requested)
 +            if (pendingImportRepository.get() === requested) import(requested, sourceEntryId)
-@@ -67,2 +68,2 @@ internal class ImportViewOnlyAccountUseCase(
+@@ -67,2 +70,13 @@ internal class ImportViewOnlyAccountUseCase(
 -    private suspend fun import(pending: PendingViewOnlyImport) {
 -        val route = withContext(NonCancellable) { importAndSelect(pending, pending.birthday) }
 +    private suspend fun import(pending: PendingViewOnlyImport, sourceEntryId: String?) {
-+        val route = withContext(NonCancellable) { importAndSelect(pending) }
-@@ -70 +71,3 @@ internal class ImportViewOnlyAccountUseCase(
--        navigationRouter.forward(route)
-+        route?.let { destination ->
-+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
++        val enrollment = pending.enrollment
++        if (enrollment == null || !walletEnrollment.permits(enrollment)) {
++            pendingImportRepository.replace(pending, null)
++            throw ViewOnlyPendingImportMissingException()
 +        }
-@@ -77,5 +80,2 @@ internal class ImportViewOnlyAccountUseCase(
--    private suspend fun importAndSelect(
--        pending: PendingViewOnlyImport,
++        val route = walletEnrollment.complete(enrollment) { synchronizer ->
++            if (pendingImportRepository.get() === pending) {
++                importAndSelect(pending, enrollment, synchronizer)
++            } else {
++                null
++            }
++        }
+@@ -70 +84,11 @@ internal class ImportViewOnlyAccountUseCase(
+-        navigationRouter.forward(route)
++        if (!walletEnrollment.permits(enrollment)) {
++            pendingImportRepository.get()?.takeIf { it.enrollment == enrollment }?.let {
++                pendingImportRepository.replace(it, null)
++            }
++            throw ViewOnlyPendingImportMissingException()
++        }
++        route?.let { destination ->
++            navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(enrollment) }) {
++                NavigationCommand.Forward(listOf(destination))
++            }
++        }
+@@ -79,3 +103,4 @@ internal class ImportViewOnlyAccountUseCase(
 -        birthday: BlockHeight?,
 -    ): Any {
 -        val created =
-+    private suspend fun importAndSelect(pending: PendingViewOnlyImport): Any? {
++        enrollment: WalletEnrollmentToken,
++        synchronizer: Synchronizer,
++    ): Any? {
 +        val approved =
-@@ -83,5 +83 @@ internal class ImportViewOnlyAccountUseCase(
+@@ -83,5 +108 @@ internal class ImportViewOnlyAccountUseCase(
 -                accountDataSource.importViewOnlyAccount(
 -                    ufvk = pending.ufvk,
 -                    name = pending.name,
 -                    birthday = birthday,
 -                )
-+                pending.takeIf { it.importedAccount != null } ?: importAccount(pending)
-@@ -89,2 +85 @@ internal class ImportViewOnlyAccountUseCase(
++                pending.takeIf { it.importedAccount != null } ?: importAccount(pending, enrollment, synchronizer)
+@@ -89,2 +110 @@ internal class ImportViewOnlyAccountUseCase(
 -                pendingImportRepository.clear()
 -                return AlreadyImportedVKArgs
 +                return AlreadyImportedVKArgs.takeIf { pendingImportRepository.replace(pending, null) }
-@@ -91,0 +87,17 @@ internal class ImportViewOnlyAccountUseCase(
-+        return approved?.let { finishImport(it) }
+@@ -92,5 +112,35 @@ internal class ImportViewOnlyAccountUseCase(
+-        accountDataSource.selectAccount(created)
+-        pending.color?.let { storeColor(created, it) }
+-        pendingImportRepository.clear()
+-        synchronizerProvider.resetSynchronizer()
+-        return if (birthday != null) KeepOpenArgs(KeepOpenFlow.VIEW_ONLY) else ImportedVKArgs
++        return approved?.let { finishImport(it, enrollment) }
 +    }
 +
-+    private suspend fun importAccount(pending: PendingViewOnlyImport): PendingViewOnlyImport? {
++    private suspend fun importAccount(
++        pending: PendingViewOnlyImport,
++        enrollment: WalletEnrollmentToken,
++        synchronizer: Synchronizer,
++    ): PendingViewOnlyImport? {
 +        val created = accountDataSource.importViewOnlyAccount(
++            synchronizer = synchronizer,
 +            ufvk = pending.ufvk,
 +            name = pending.name,
 +            birthday = pending.birthday,
 +        )
 +        val approved = pending.copy(importedAccount = created)
 +        if (pendingImportRepository.replace(pending, approved)) return approved
-+        synchronizerProvider.resetSynchronizer()
++        if (walletEnrollment.permits(enrollment)) synchronizerProvider.resetSynchronizer()
 +        return null
 +    }
 +
-+    private suspend fun finishImport(approved: PendingViewOnlyImport): Any? {
++    private suspend fun finishImport(approved: PendingViewOnlyImport, enrollment: WalletEnrollmentToken): Any? {
 +        val created = checkNotNull(approved.importedAccount)
-@@ -93,2 +105 @@ internal class ImportViewOnlyAccountUseCase(
--        pending.color?.let { storeColor(created, it) }
--        pendingImportRepository.clear()
-+        approved.color?.let { storeColor(created, it) }
-@@ -96 +107,5 @@ internal class ImportViewOnlyAccountUseCase(
--        return if (birthday != null) KeepOpenArgs(KeepOpenFlow.VIEW_ONLY) else ImportedVKArgs
++        val selected = walletEnrollment.write(enrollment) {
++            if (pendingImportRepository.get() !== approved) return@write false
++            accountDataSource.selectAccount(created)
++            true
++        } == true
++        if (!selected) return null
++        approved.color?.let { storeColor(created, it, enrollment) }
++        if (walletEnrollment.permits(enrollment)) synchronizerProvider.resetSynchronizer()
 +        return when {
 +            !pendingImportRepository.replace(approved, null) -> null
 +            approved.birthday != null -> KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)
 +            else -> ImportedVKArgs
 +        }
+@@ -106,0 +157 @@ internal class ImportViewOnlyAccountUseCase(
++        enrollment: WalletEnrollmentToken,
+@@ -114 +165 @@ internal class ImportViewOnlyAccountUseCase(
+-            metadataRepository.setAccountColor(account, color)
++            metadataRepository.setAccountColor(account, color, enrollment)
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCase.kt
 index e73b23b21..0b57e9e7a 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCase.kt
@@ -13235,6 +13286,40 @@ index e73b23b21..0b57e9e7a 100644
 -            if (wasSelected) {
 -                accountDataSource.selectAccount(accountDataSource.getZashiAccount())
 -            }
+diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCase.kt
+index 4aa55bb58..54c69d72d 100644
+--- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCase.kt
++++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCase.kt
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
+@@ -28,0 +30 @@ internal class SubmitViewOnlyKeyUseCase(
++    private val walletEnrollment: WalletEnrollmentAccess,
+@@ -36,2 +38,3 @@ internal class SubmitViewOnlyKeyUseCase(
+-    ): SubmitViewOnlyKeyResult =
+-        when (val validation = validateUfvk(input, network)) {
++    ): SubmitViewOnlyKeyResult {
++        val enrollment = walletEnrollment.capture() ?: throw ViewOnlyKeyCheckException()
++        return when (val validation = validateUfvk(input, network)) {
+@@ -43,6 +46,11 @@ internal class SubmitViewOnlyKeyUseCase(
+-                if (isAlreadyImported(validation.ufvk)) {
+-                    SubmitViewOnlyKeyResult.AlreadyImported
+-                } else {
+-                    pendingImportRepository.set(PendingViewOnlyImport(ufvk = validation.ufvk, name = ""))
+-                    SubmitViewOnlyKeyResult.Accepted
+-                }
++                val exists = isAlreadyImported(validation.ufvk)
++                walletEnrollment.stage(enrollment) {
++                    if (exists) {
++                        SubmitViewOnlyKeyResult.AlreadyImported
++                    } else {
++                        pendingImportRepository.set(
++                            PendingViewOnlyImport(ufvk = validation.ufvk, name = "", enrollment = enrollment)
++                        )
++                        SubmitViewOnlyKeyResult.Accepted
++                    }
++                } ?: throw ViewOnlyKeyCheckException()
+@@ -50,0 +59 @@ internal class SubmitViewOnlyKeyUseCase(
++    }
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt
 index 044df4acb..650040217 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt
@@ -13693,17 +13778,123 @@ index bab9de9e3..a422e1787 100644
 -        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID)) }
 +        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID), "fixture-entry") }
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
-index e528212fd..99c9209b7 100644
+index e528212fd..c9581f369 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
-@@ -35,0 +36 @@ import kotlinx.coroutines.test.runTest
+@@ -3,0 +4 @@ import androidx.compose.ui.graphics.Color
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -11,0 +13 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -35,0 +38 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -142,0 +144,20 @@ class ImportViewOnlyAccountUseCaseTest {
+@@ -55,0 +59,4 @@ class ImportViewOnlyAccountUseCaseTest {
++    private val wallet = WalletWriteAccess()
++    private val sdk = mockk<Synchronizer>()
++    private val activeSdk = MutableStateFlow<Synchronizer?>(sdk)
++    private val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(wallet, activeSdk)
+@@ -61 +68 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coEvery { importViewOnlyAccount(any(), any(), any()) } returns created
++            coEvery { importViewOnlyAccount(sdk, any(), any(), any()) } returns created
+@@ -76 +83,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-            metadataRepository
++            metadataRepository,
++            walletEnrollment,
+@@ -78,0 +87,58 @@ class ImportViewOnlyAccountUseCaseTest {
++    @Test
++    fun walletResetCanFinishWhenTheSdkIsUnavailableAndOldEnrollmentCannotUseItsReplacement() = runTest {
++        repository.set(pending(name = "Savings"))
++        activeSdk.value = null
++        assertFailsWith<IllegalStateException> { useCase() }
++        assertEquals("Savings", repository.get()?.name)
++
++        wallet.beginReset()
++        wallet.finishReset()
++        wallet.replaceWallet {}
++        activeSdk.value = mockk()
++        assertFailsWith<ViewOnlyPendingImportMissingException> { useCase() }
++
++        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
++        coVerify(exactly = 0) { accountDataSource.selectAccount(any<Account>()) }
++        verify(exactly = 0) { navigationRouter.forward(any()) }
++        assertNull(repository.get())
++    }
++
++    @Test
++    fun resetDrainsAnAdmittedSdkImportAndRejectsLateSelection() = runTest {
++        repository.set(pending(name = "Savings"))
++        val entered = CompletableDeferred<Unit>()
++        val finish = CompletableDeferred<Account>()
++        coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers {
++            entered.complete(Unit)
++            finish.await()
++        }
++
++        val importing = async { runCatching { useCase() } }
++        entered.await()
++        val resetting = async { wallet.beginReset() }
++        runCurrent()
++        assertFalse(resetting.isCompleted)
++        finish.complete(created)
++        assertTrue(importing.await().exceptionOrNull() is ViewOnlyPendingImportMissingException)
++        resetting.await()
++        wallet.finishReset()
++
++        coVerify(exactly = 0) { accountDataSource.selectAccount(any<Account>()) }
++        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
++        verify(exactly = 0) { navigationRouter.forward(any()) }
++        assertNull(repository.get())
++    }
++
++    @Test
++    fun anOrdinarySynchronizerRestartKeepsTheExistingImportReceipt() = runTest {
++        repository.set(pending(name = "Savings").copy(importedAccount = created))
++        activeSdk.value = mockk()
++
++        useCase()
++
++        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
++        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
++        verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
++        assertNull(repository.get())
++    }
++
+@@ -82 +148 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
++            repository.set(pending(name = "Savings"))
+@@ -86 +152 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", null) }
++            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", null) }
+@@ -91 +157 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any()) }
++            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any(), any()) }
+@@ -99 +165 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
++            repository.set(pending(name = "Savings", color = Color(PICKED)))
+@@ -105 +171 @@ class ImportViewOnlyAccountUseCaseTest {
+-                metadataRepository.setAccountColor(account, Color(PICKED))
++                metadataRepository.setAccountColor(account, Color(PICKED), walletEnrollment.capture())
+@@ -115 +181 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
++            repository.set(pending(name = "Savings", color = Color(PICKED)))
+@@ -119 +185 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any()) }
++            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any(), any()) }
+@@ -130,2 +196,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coEvery { metadataRepository.setAccountColor(any(), any()) } coAnswers { awaitCancellation() }
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
++            coEvery { metadataRepository.setAccountColor(any(), any(), any()) } coAnswers { awaitCancellation() }
++            repository.set(pending(name = "Savings", color = Color(PICKED)))
+@@ -135 +201,3 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 1) { metadataRepository.setAccountColor(account, Color(PICKED)) }
++            coVerify(exactly = 1) {
++                metadataRepository.setAccountColor(account, Color(PICKED), walletEnrollment.capture())
++            }
+@@ -142,0 +211,20 @@ class ImportViewOnlyAccountUseCaseTest {
 +    @Test
 +    fun aFailedViewOnlyFinalizationRejectsAnEarlierBirthdayAndRetriesTheCommittedHeight() = runTest {
 +        val importedHeight = BlockHeight.new(2_500_000L)
 +        val correctedHeight = BlockHeight.new(2_000_000L)
-+        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = importedHeight))
++        repository.set(pending(name = "Savings", birthday = importedHeight))
 +        coEvery { accountDataSource.selectAccount(created) } throws IOException() andThen Unit
 +        assertFailsWith<IOException> { useCase() }
 +
@@ -13714,16 +13905,55 @@ index e528212fd..99c9209b7 100644
 +        assertEquals(importedHeight, importer.committedBirthday()?.height)
 +        assertEquals(importedHeight, repository.get()?.birthday)
 +        importer.finishImport()
-+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", importedHeight) }
-+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", correctedHeight) }
++        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", importedHeight) }
++        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", correctedHeight) }
 +        verify(exactly = 1) { navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)) }
 +    }
 +
-@@ -241,0 +263,36 @@ class ImportViewOnlyAccountUseCaseTest {
+@@ -147 +235 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = birthday))
++            repository.set(pending(name = "Savings", birthday = birthday))
+@@ -151 +239 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", birthday) }
++            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", birthday) }
+@@ -159,2 +247,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
++            repository.set(pending(name = "Savings"))
++            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
+@@ -174,2 +262,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
++            repository.set(pending(name = "Savings"))
++            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
+@@ -189 +277 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
++            repository.set(pending(name = "Savings"))
+@@ -191 +279 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } coAnswers { imported.await() }
++            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers { imported.await() }
+@@ -200 +288 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
++            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
+@@ -211 +299 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
++            repository.set(pending(name = "Savings"))
+@@ -213 +301 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } coAnswers { imported.await() }
++            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers { imported.await() }
+@@ -230,2 +318,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
++            repository.set(pending(name = "Savings"))
++            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
+@@ -237 +325 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 2) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", null) }
++            coVerify(exactly = 2) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", null) }
+@@ -241,0 +330,36 @@ class ImportViewOnlyAccountUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun cancellationDuringAFailedSelectionKeepsTheCreatedAccountAvailableForRetry() = runTest {
-+        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
++        repository.set(pending(name = "Savings"))
 +        val finishWrite = CompletableDeferred<Unit>()
 +        coEvery { accountDataSource.selectAccount(created) } coAnswers {
 +            finishWrite.await()
@@ -13749,22 +13979,52 @@ index e528212fd..99c9209b7 100644
 +        coEvery { accountDataSource.selectAccount(created) } returns Unit
 +        useCase()
 +
-+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
++        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
 +        coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
 +        verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
 +        verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
 +        assertNull(repository.get())
 +    }
 +
-@@ -253 +310 @@ class ImportViewOnlyAccountUseCaseTest {
+@@ -247 +371 @@ class ImportViewOnlyAccountUseCaseTest {
+-            coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
++            coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
+@@ -253 +377 @@ class ImportViewOnlyAccountUseCaseTest {
 -        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
 +        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
-@@ -263 +320 @@ class ImportViewOnlyAccountUseCaseTest {
+@@ -256 +380 @@ class ImportViewOnlyAccountUseCaseTest {
+-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = ""))
++        repository.set(pending(name = ""))
+@@ -263,2 +387,2 @@ class ImportViewOnlyAccountUseCaseTest {
+-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
+-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
++        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
++        repository.set(pending(name = "Savings", color = Color(PICKED)))
+@@ -270 +394 @@ class ImportViewOnlyAccountUseCaseTest {
+-            PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED), birthday = birthday),
++            pending(name = "Savings", color = Color(PICKED), birthday = birthday),
+@@ -274 +398 @@ class ImportViewOnlyAccountUseCaseTest {
+-        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
++        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
+@@ -279 +403 @@ class ImportViewOnlyAccountUseCaseTest {
 -        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
 +        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
-@@ -279 +336 @@ class ImportViewOnlyAccountUseCaseTest {
--        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
-+        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
+@@ -286,0 +411,12 @@ class ImportViewOnlyAccountUseCaseTest {
++    private fun pending(
++        name: String,
++        color: Color? = null,
++        birthday: BlockHeight? = null,
++    ) = PendingViewOnlyImport(
++        ufvk = UFVK,
++        name = name,
++        color = color,
++        birthday = birthday,
++        enrollment = walletEnrollment.capture(),
++    )
++
+@@ -291 +427 @@ class ImportViewOnlyAccountUseCaseTest {
+-        val printed = PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = birthday).toString()
++        val printed = pending(name = "Savings", birthday = birthday).toString()
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCaseTest.kt
 index d2223e148..1b02c82a8 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/RemoveViewOnlyAccountUseCaseTest.kt
@@ -13836,6 +14096,62 @@ index d2223e148..1b02c82a8 100644
 +        RemoveViewOnlyAccountUseCase(
 @@ -159 +114,0 @@ class RemoveViewOnlyAccountUseCaseTest {
 -    }
+diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCaseTest.kt
+index 9ab95b999..a4f2b5c78 100644
+--- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCaseTest.kt
++++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitViewOnlyKeyUseCaseTest.kt
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -15,0 +17,2 @@ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.async
+@@ -20,0 +24 @@ import kotlin.test.assertFailsWith
++import kotlin.test.assertIs
+@@ -31,0 +36,2 @@ class SubmitViewOnlyKeyUseCaseTest {
++    private val wallet = WalletWriteAccess()
++    private val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(wallet)
+@@ -34,0 +41,19 @@ class SubmitViewOnlyKeyUseCaseTest {
++    @Test
++    fun validationStartedBeforeWalletReplacementCannotStageTheOldKey() = runTest {
++        val entered = CompletableDeferred<Unit>()
++        val result = CompletableDeferred<AccountKeyOverlap?>()
++        val sdk = mockk<Synchronizer> {
++            coEvery { findAccountSharingKeyComponents(any()) } coAnswers {
++                entered.complete(Unit)
++                result.await()
++            }
++        }
++        val submitted = async { runCatching { useCase(sdk).submit("input") } }
++        entered.await()
++        wallet.replaceWallet {}
++        result.complete(null)
++
++        assertIs<ViewOnlyKeyCheckException>(submitted.await().exceptionOrNull())
++        assertNull(repository.get())
++    }
++
+@@ -43 +68 @@ class SubmitViewOnlyKeyUseCaseTest {
+-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
++            assertEquals(expectedPending(), repository.get())
+@@ -98 +123 @@ class SubmitViewOnlyKeyUseCaseTest {
+-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
++            assertEquals(expectedPending(), repository.get())
+@@ -122,0 +148 @@ class SubmitViewOnlyKeyUseCaseTest {
++                    walletEnrollment = walletEnrollment,
+@@ -126 +152 @@ class SubmitViewOnlyKeyUseCaseTest {
+-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
++            assertEquals(expectedPending(), repository.get())
+@@ -140 +166 @@ class SubmitViewOnlyKeyUseCaseTest {
+-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
++            assertEquals(expectedPending(), repository.get())
+@@ -180,0 +207 @@ class SubmitViewOnlyKeyUseCaseTest {
++                    walletEnrollment = walletEnrollment,
+@@ -187,0 +215,3 @@ class SubmitViewOnlyKeyUseCaseTest {
++    private fun expectedPending() =
++        PendingViewOnlyImport(ufvk = key, name = "", enrollment = walletEnrollment.capture())
++
+@@ -197,0 +228 @@ class SubmitViewOnlyKeyUseCaseTest {
++        walletEnrollment = walletEnrollment,
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
 index a9300de58..9b8c05014 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
@@ -13852,37 +14168,58 @@ index a9300de58..9b8c05014 100644
 @@ -140 +140 @@ class ValidateUfvkUseCaseTest {
 -            assertInvalid(useCase(UfvkFixtures.MAINNET_FULL, ZcashNetwork.Mainnet))
 +            assertIs<UfvkValidation.Valid>(useCase(UfvkFixtures.MAINNET_FULL, ZcashNetwork.Mainnet))
+diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlyAccountFixtures.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlyAccountFixtures.kt
+index 9f98095a0..84fcc4f35 100644
+--- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlyAccountFixtures.kt
++++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlyAccountFixtures.kt
+@@ -4,0 +5,2 @@ import android.content.res.Configuration
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletCoordinator
+@@ -11,0 +14,2 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -26,0 +31,8 @@ internal object ViewOnlyAccountFixtures {
++    fun enrollmentAccess(
++        wallet: WalletWriteAccess = WalletWriteAccess(),
++        sdk: StateFlow<Synchronizer?> = MutableStateFlow(mockk<Synchronizer>()),
++    ) = WalletEnrollmentAccess(
++        wallet,
++        mockk<WalletCoordinator> { every { synchronizer } returns sdk },
++    )
++
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKVMTest.kt
-index 88e642863..47dff1429 100644
+index 88e642863..2955e301e 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKVMTest.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
-@@ -23,0 +25 @@ import io.mockk.coVerify
+@@ -11,0 +13 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyUseCase
++import co.electriccoin.zcash.ui.common.usecase.ViewOnlyAccountFixtures
+@@ -23,0 +26 @@ import io.mockk.coVerify
 +import io.mockk.every
-@@ -51,2 +53,2 @@ import kotlin.test.assertTrue
+@@ -51,2 +54,2 @@ import kotlin.test.assertTrue
 - * Continue can be tried again. A pasted key is wiped from the clipboard on Continue and on back, and
 - * the key never shows up in the state's text.
 + * Continue can be tried again. An explicitly pasted item is cleared if it still matches the
 + * clipboard on Back or accepted Continue. The key is redacted from the state's string form.
-@@ -59,0 +62,5 @@ class ImportVKVMTest {
+@@ -59,0 +63,5 @@ class ImportVKVMTest {
 +    private var clipboardText: String? = null
 +    private val readClipboardText = mockk<ReadClipboardTextUseCase> {
 +        every { this@mockk.invoke() } answers { clipboardText }
 +    }
 +
-@@ -254 +261 @@ class ImportVKVMTest {
+@@ -254 +262 @@ class ImportVKVMTest {
 -            type(vm, TYPED)
 +            paste(vm)
-@@ -268 +275 @@ class ImportVKVMTest {
+@@ -268 +276 @@ class ImportVKVMTest {
 -            type(vm, TYPED)
 +            paste(vm)
-@@ -276 +283 @@ class ImportVKVMTest {
+@@ -276 +284 @@ class ImportVKVMTest {
 -    fun aTypedKeyLeavesTheClipboardAlone() =
 +    fun aPastedKeyIsWipedWhenItWasAlreadyImported() =
-@@ -277,0 +285 @@ class ImportVKVMTest {
+@@ -277,0 +286 @@ class ImportVKVMTest {
 +            result = SubmitViewOnlyKeyResult.AlreadyImported
-@@ -280 +288,54 @@ class ImportVKVMTest {
+@@ -280 +289,54 @@ class ImportVKVMTest {
 -            TYPED.forEachIndexed { index, _ -> type(vm, TYPED.substring(0, index + 1)) }
 +            paste(vm)
 +
@@ -13938,17 +14275,19 @@ index 88e642863..47dff1429 100644
 +            collect(vm)
 +            clipboardText = TYPED
 +            type(vm, TYPED)
-@@ -287,0 +349 @@ class ImportVKVMTest {
+@@ -287,0 +350 @@ class ImportVKVMTest {
 +            verify(exactly = 0) { readClipboardText.invoke() }
-@@ -335,0 +398,6 @@ class ImportVKVMTest {
+@@ -335,0 +399,6 @@ class ImportVKVMTest {
 +    private fun TestScope.paste(vm: ImportVKVM) {
 +        clipboardText = TYPED
 +        vm.state.value.pasteButton.onClick()
 +        runCurrent()
 +    }
 +
-@@ -338,0 +407 @@ class ImportVKVMTest {
+@@ -338,0 +408 @@ class ImportVKVMTest {
 +            readClipboardText = readClipboardText,
+@@ -361,0 +432 @@ class ImportVKVMTest {
++            walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(),
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKViewTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKViewTest.kt
 index 3b9ca0b94..668e2d83e 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/ImportVKViewTest.kt
@@ -14242,7 +14581,7 @@ index 000000000..99de90350
 +    }
 +}
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
-index 5faf35c95..f563a6533 100644
+index 5faf35c95..3f79421eb 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.viewingkey
@@ -14451,7 +14790,7 @@ index 5faf35c95..f563a6533 100644
 +        val created = visible.sdkAccount
 +        val accountDataSource = mockk<AccountDataSource> {
 +            every { allAccounts } returns accounts
-+            coEvery { importViewOnlyAccount(UFVK, "Vault", BIRTHDAY) } coAnswers {
++            coEvery { importViewOnlyAccount(any(), UFVK, "Vault", BIRTHDAY) } coAnswers {
 +                accounts.value = listOf(ViewOnlyAccountFixtures.zodl(), visible)
 +                created
 +            }
@@ -14459,7 +14798,7 @@ index 5faf35c95..f563a6533 100644
 +        }
 +        val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
 +        val importer = ImportViewOnlyAccountUseCase(
-+            repository, accountDataSource, synchronizer, navigationRouter, mockk(relaxed = true)
++            repository, accountDataSource, synchronizer, navigationRouter, mockk(relaxed = true), walletEnrollment,
 +        )
 +        val vm = vm(importer)
 +        collect(vm)
@@ -14500,7 +14839,7 @@ index 5faf35c95..f563a6533 100644
 +        assertEquals(created.accountUuid, selected.getUUID())
 +        assertEquals(Base64.getEncoder().encodeToString(created.accountUuid.value), storage.durable)
 +        assertNull(repository.get())
-+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
++        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
 +        coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
 +        verify(exactly = 1) { synchronizer.resetSynchronizer() }
 +        verify(exactly = 0) { navigationRouter.forward(AlreadyImportedVKArgs) }
@@ -14511,7 +14850,7 @@ index 5faf35c95..f563a6533 100644
 +        }
 +    }
 +
-@@ -542,0 +677,49 @@ class NameVKVMTest {
+@@ -542,0 +677,50 @@ class NameVKVMTest {
 +    @Test
 +    fun refusedBackKeepsNameEditableAndAllowsTheOwnedBackToRetry() = runTest {
 +        val nameEntry = mockk<NavBackStackEntry> { every { id } returns "name" }
@@ -14521,7 +14860,8 @@ index 5faf35c95..f563a6533 100644
 +            val owned = assertIs<NavigationCommand.ForEntry>(
 +                firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
 +            )
-+            pickerRequests.addAll(assertIs<NavigationCommand.Forward>(owned.buildCommand()).routes.filterIsInstance())
++            val forward = assertIs<NavigationCommand.Forward>(owned.buildCommand())
++            pickerRequests.addAll(forward.routes.filterIsInstance<ColorPickerArgs>())
 +            owned.acknowledge(true)
 +        }
 +        every { navigationRouter.custom(any()) } answers {
@@ -14561,9 +14901,9 @@ index 5faf35c95..f563a6533 100644
 +        verify(exactly = 0) { navigationRouter.back() }
 +    }
 +
-@@ -556,0 +740 @@ class NameVKVMTest {
+@@ -556,0 +741 @@ class NameVKVMTest {
 +}
-@@ -558,36 +742,3 @@ class NameVKVMTest {
+@@ -558,36 +743,3 @@ class NameVKVMTest {
 -    @Test
 -    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
 -        runTest {
@@ -14603,7 +14943,7 @@ index 5faf35c95..f563a6533 100644
 +@OptIn(ExperimentalCoroutinesApi::class)
 +internal abstract class NameVKVMFixture {
 +    protected val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-@@ -595,6 +746 @@ class NameVKVMTest {
+@@ -595,6 +747 @@ class NameVKVMTest {
 -    @Test
 -    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
 -        runTest {
@@ -14611,14 +14951,14 @@ index 5faf35c95..f563a6533 100644
 -            val vm = vm()
 -            collect(vm)
 +    protected val pickerRequests = mutableListOf<ColorPickerArgs>()
-@@ -602 +748,3 @@ class NameVKVMTest {
+@@ -602 +749,3 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 +    protected val pickerRouter = mockk<NavigationRouter>(relaxed = true) {
 +        every { forward(*anyVararg()) } answers {
 +            (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
-@@ -603,0 +752 @@ class NameVKVMTest {
+@@ -603,0 +753 @@ class NameVKVMTest {
 +    }
-@@ -605,15 +754 @@ class NameVKVMTest {
+@@ -605,9 +755 @@ class NameVKVMTest {
 -    @Test
 -    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
 -        runTest {
@@ -14628,21 +14968,22 @@ index 5faf35c95..f563a6533 100644
 -            navigateToColorPicker.onPicked(Color(PICKED), pickerRequests.last())
 -            navigateToColorPicker.onClosed(pickerRequests.last())
 -            runCurrent()
--
++    protected val navigateToColorPicker = NavigateToColorPickerUseCase(pickerRouter)
+@@ -615,5 +757,4 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            val second = pickerRequests.last()
 -            assertEquals(Color(PICKED), Color(assertNotNull(second.initialArgb)))
 -            navigateToColorPicker.onClosed(second)
 -            runCurrent()
-+    protected val navigateToColorPicker = NavigateToColorPickerUseCase(pickerRouter)
-@@ -621,2 +756,4 @@ class NameVKVMTest {
--            assertEquals(Color(PICKED), vm.content().avatarColor())
--        }
 +    protected val accounts =
 +        MutableStateFlow<List<WalletAccount>?>(
 +            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
 +        )
-@@ -624,7 +761 @@ class NameVKVMTest {
+@@ -621,2 +762 @@ class NameVKVMTest {
+-            assertEquals(Color(PICKED), vm.content().avatarColor())
+-        }
++    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
+@@ -624,7 +764 @@ class NameVKVMTest {
 -    @Test
 -    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
 -        runTest {
@@ -14650,25 +14991,25 @@ index 5faf35c95..f563a6533 100644
 -            collect(vm)
 -            openPicker(vm)
 -            val request = pickerRequests.single()
-+    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
-@@ -632,3 +763 @@ class NameVKVMTest {
++    protected val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess()
+@@ -632,3 +766 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(OTHER), request)
 -            runCurrent()
 -            assertEquals(Color(OTHER), vm.content().avatarColor())
 +    protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
-@@ -636,4 +765 @@ class NameVKVMTest {
+@@ -636,4 +768 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(PICKED), request)
 -            navigateToColorPicker.onClosed(request)
 -            runCurrent()
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 +    protected var importAnswer: suspend () -> Unit = {}
-@@ -641,2 +767,3 @@ class NameVKVMTest {
+@@ -641,2 +770,3 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            assertEquals(2, pickerRequests.size)
 +    protected val importViewOnlyAccount =
 +        mockk<ImportViewOnlyAccountUseCase> {
 +            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
-@@ -645,5 +772,6 @@ class NameVKVMTest {
+@@ -645,5 +775,6 @@ class NameVKVMTest {
 -    @Test
 -    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
 -        runTest {
@@ -14680,60 +15021,70 @@ index 5faf35c95..f563a6533 100644
 +            sendEmail = mockk(relaxed = true),
 +            viewOnlyContent = mockk(relaxed = true),
 +        )
-@@ -651,2 +779,4 @@ class NameVKVMTest {
+@@ -651,2 +782,4 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            openPicker(vm)
 +    @BeforeTest
 +    fun setUp() {
 +        Dispatchers.setMain(StandardTestDispatcher())
 +    }
-@@ -654,2 +784,4 @@ class NameVKVMTest {
+@@ -654,2 +787,4 @@ class NameVKVMTest {
 -            assertEquals(1, pickerRequests.size)
 -        }
 +    @AfterTest
 +    fun tearDown() {
 +        Dispatchers.resetMain()
 +    }
-@@ -657 +789 @@ class NameVKVMTest {
+@@ -657 +792 @@ class NameVKVMTest {
 -    private fun NameVKState.avatarColor() =
 +    protected fun NameVKState.avatarColor() =
-@@ -660 +792 @@ class NameVKVMTest {
+@@ -660 +795 @@ class NameVKVMTest {
 -    private fun TestScope.openPicker(vm: NameVKVM) {
 +    protected fun TestScope.openPicker(vm: NameVKVM) {
-@@ -669 +801 @@ class NameVKVMTest {
+@@ -669 +804 @@ class NameVKVMTest {
 -    private fun TestScope.pickColor(
 +    protected fun TestScope.pickColor(
-@@ -680 +812 @@ class NameVKVMTest {
+@@ -680 +815 @@ class NameVKVMTest {
 -    private fun NameVKVM.content() = assertNotNull(state.value.content)
 +    protected fun NameVKVM.content() = assertNotNull(state.value.content)
-@@ -682 +814 @@ class NameVKVMTest {
+@@ -682 +817 @@ class NameVKVMTest {
 -    private fun pending(
 +    protected fun pending(
-@@ -687 +819 @@ class NameVKVMTest {
+@@ -685,3 +820,9 @@ class NameVKVMTest {
+-    ) = PendingViewOnlyImport(ufvk = UFVK, name = name, color = color, birthday = BIRTHDAY)
+-
 -    private fun TestScope.type(
++    ) = PendingViewOnlyImport(
++        ufvk = UFVK,
++        name = name,
++        color = color,
++        birthday = BIRTHDAY,
++        enrollment = walletEnrollment.capture(),
++    )
++
 +    protected fun TestScope.type(
-@@ -698 +830,4 @@ class NameVKVMTest {
+@@ -698 +839,4 @@ class NameVKVMTest {
 -    private fun vm() =
 +    protected fun vm(
 +        importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount,
 +        sourceEntryId: String? = null,
 +    ) =
-@@ -704 +839 @@ class NameVKVMTest {
+@@ -704 +848 @@ class NameVKVMTest {
 -            importViewOnlyAccount = importViewOnlyAccount,
 +            importViewOnlyAccount = importer,
-@@ -705,0 +841 @@ class NameVKVMTest {
+@@ -705,0 +850 @@ class NameVKVMTest {
 +            sourceEntryId = sourceEntryId,
-@@ -708 +844 @@ class NameVKVMTest {
+@@ -708 +853 @@ class NameVKVMTest {
 -    private fun TestScope.collect(vm: NameVKVM) {
 +    protected fun TestScope.collect(vm: NameVKVM) {
-@@ -713 +849 @@ class NameVKVMTest {
+@@ -713 +858 @@ class NameVKVMTest {
 -    private fun StringResource.text() = (this as StringResource.ByString).value
 +    protected fun StringResource.text() = (this as StringResource.ByString).value
-@@ -715 +851,2 @@ class NameVKVMTest {
+@@ -715 +860,2 @@ class NameVKVMTest {
 -    private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +    protected fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +}
-@@ -717,5 +854,34 @@ class NameVKVMTest {
+@@ -717,5 +863,34 @@ class NameVKVMTest {
 -    private companion object {
 -        const val UFVK = "uview1namefixture"
 -        const val PICKED = 0x80BE38F3
@@ -35438,7 +35789,7 @@ index 1a21cd376..0f9011394 100644
 +                simpleSwapAssetProvider = get(),
 +                walletWriteAccess = get(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-index 9c294ca9d..e2ab320ed 100644
+index 9c294ca9d..af98ba488 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 @@ -22,0 +23,2 @@ import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
@@ -35449,23 +35800,25 @@ index 9c294ca9d..e2ab320ed 100644
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProviderImpl
 @@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
-@@ -81,0 +83,2 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+@@ -81,0 +83,3 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -84,0 +88 @@ import org.koin.dsl.bind
+@@ -84,0 +89 @@ import org.koin.dsl.bind
 +import org.koin.dsl.binds
-@@ -94 +98,3 @@ val providerModule =
+@@ -94 +99,4 @@ val providerModule =
 -        singleOf(::PersistableWalletProviderImpl) bind PersistableWalletProvider::class
 +        singleOf(::PersistableWalletProviderImpl) binds
 +            arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
 +        single { WalletWriteAccess(get()) }
-@@ -96 +101,0 @@ val providerModule =
++        singleOf(::WalletEnrollmentAccess)
+@@ -96 +103,0 @@ val providerModule =
 -        singleOf(::IsServerSelectionAutomaticProviderImpl) bind IsServerSelectionAutomaticProvider::class
-@@ -102,0 +108 @@ val providerModule =
+@@ -102,0 +110 @@ val providerModule =
 +                migrationSyncGate = get(),
-@@ -129,0 +136 @@ val providerModule =
+@@ -129,0 +138 @@ val providerModule =
 +        single { QuoteRequestDiagnostics() }
-@@ -136,0 +144,3 @@ val providerModule =
+@@ -136,0 +146,3 @@ val providerModule =
 +        single {
 +            KrakenPriceProvider(get(), elapsedTimeMillis = get<GetMonotonicTimeProvider>()::invoke)
 +        } bind IndependentPriceProvider::class
@@ -37201,7 +37554,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..ac807496e 100644
+index 4d388e80f..2b9ced242 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -37221,26 +37574,28 @@ index 4d388e80f..ac807496e 100644
 +    val accountSelectionReadState: Flow<AccountSelectionAvailability>
 +        get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 +
-@@ -119 +127,5 @@ interface AccountDataSource {
+@@ -113,0 +122 @@ interface AccountDataSource {
++        synchronizer: Synchronizer,
+@@ -119 +128,5 @@ interface AccountDataSource {
 -    suspend fun requestNextShieldedAddress(): String
 +    /**
 +     * A best-effort request uses the selected account if it is ready, or returns null while it
 +     * loads. A strict request throws when it cannot obtain a fresh address from the requested account.
 +     */
 +    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String?
-@@ -135,0 +148,4 @@ interface AccountDataSource {
+@@ -135,0 +149,4 @@ interface AccountDataSource {
 +data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
 +
 +enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
 +
-@@ -143,0 +160,4 @@ class AccountDataSourceImpl(
+@@ -143,0 +161,4 @@ class AccountDataSourceImpl(
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
 +        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
-@@ -146 +165,0 @@ class AccountDataSourceImpl(
+@@ -146 +166,0 @@ class AccountDataSourceImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-@@ -149,0 +169,24 @@ class AccountDataSourceImpl(
+@@ -149,0 +170,24 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    private val selectedAccountRead = combine(accountWalletAvailability, accountPreferenceReads, ::Pair)
 +        .flatMapLatest { (wallet, generation) ->
@@ -37265,26 +37620,30 @@ index 4d388e80f..ac807496e 100644
 +        AccountSelectionAvailability(read?.generation ?: accountPreferenceReads.value, state)
 +    }.distinctUntilChanged()
 +
-@@ -160,0 +204 @@ class AccountDataSourceImpl(
+@@ -160,0 +205 @@ class AccountDataSourceImpl(
 +                val generation = accountPreferenceReads.value
-@@ -173 +216,0 @@ class AccountDataSourceImpl(
+@@ -173 +217,0 @@ class AccountDataSourceImpl(
 -                                        observeIsSelected(sdkAccount, allSdkAccounts),
-@@ -179 +221,0 @@ class AccountDataSourceImpl(
+@@ -179 +222,0 @@ class AccountDataSourceImpl(
 -                                        isSelected,
-@@ -186 +227,0 @@ class AccountDataSourceImpl(
+@@ -186 +228,0 @@ class AccountDataSourceImpl(
 -                                            isSelected = isSelected,
-@@ -193 +234 @@ class AccountDataSourceImpl(
+@@ -193 +235 @@ class AccountDataSourceImpl(
 -                            }.combineToFlow()
 +                            }.combineToFlow().map { AccountRows(generation, it) }
-@@ -196,2 +237,2 @@ class AccountDataSourceImpl(
+@@ -196,2 +238,2 @@ class AccountDataSourceImpl(
 -            }.map { it?.sortedDescending() }
 -            .retainWhileWalletExists(persistableWalletProvider)
 +            }.retainWhileWalletExists(persistableWalletProvider)
 +            .combine(currentSelection) { snapshot, read -> applyAccountSelection(snapshot, read) }
-@@ -284 +325 @@ class AccountDataSourceImpl(
+@@ -284 +326 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
-@@ -354,0 +396,10 @@ class AccountDataSourceImpl(
+@@ -303,0 +346 @@ class AccountDataSourceImpl(
++        synchronizer: Synchronizer,
+@@ -309 +351,0 @@ class AccountDataSourceImpl(
+-            val synchronizer = synchronizerProvider.getSynchronizer()
+@@ -354,0 +397,10 @@ class AccountDataSourceImpl(
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String? {
 +        val requestedAccount = account ?: allAccounts.value?.firstOrNull { it.isSelected }
 +        val address = requestedAccount?.let { rotateShieldedAddress(it) }
@@ -37295,7 +37654,7 @@ index 4d388e80f..ac807496e 100644
 +        }
 +    }
 +
-@@ -356,22 +407,17 @@ class AccountDataSourceImpl(
+@@ -356,22 +408,17 @@ class AccountDataSourceImpl(
 -    override suspend fun requestNextShieldedAddress(): String {
 -        var result: String? = null
 -        scope
@@ -37335,7 +37694,7 @@ index 4d388e80f..ac807496e 100644
 +            null
 +        } finally {
 +            responseChannel.close()
-@@ -391,7 +437,3 @@ class AccountDataSourceImpl(
+@@ -391,7 +438,3 @@ class AccountDataSourceImpl(
 -     * Between the cleared selection and the caller's next one there is a short window in which no
 -     * account UUID is stored and the selection falls back to the default account. DisconnectUseCase
 -     * and RemoveViewOnlyAccountUseCase close it by selecting the Zodl account right after this
@@ -37346,43 +37705,43 @@ index 4d388e80f..ac807496e 100644
 +     * With no surviving selected UUID, the account flow falls back to the default account.
 +     * Clearing the deleted UUID and explicit account selections serialize so a newer selection
 +     * survives account removal.
-@@ -415,3 +457 @@ class AccountDataSourceImpl(
+@@ -415,3 +458 @@ class AccountDataSourceImpl(
 -                if (selectedAccountUUIDProvider.getUUID() == accountUuid) {
 -                    selectedAccountUUIDProvider.clearUUID()
 -                }
 +                selectedAccountUUIDProvider.clearIfSelected(accountUuid)
-@@ -446 +486 @@ class AccountDataSourceImpl(
+@@ -446 +487 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +523 @@ class AccountDataSourceImpl(
+@@ -483 +524 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -487 +527 @@ class AccountDataSourceImpl(
+@@ -487 +528 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -497 +537 @@ class AccountDataSourceImpl(
+@@ -497 +538 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -501 +541 @@ class AccountDataSourceImpl(
+@@ -501 +542 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -515 +555 @@ class AccountDataSourceImpl(
+@@ -515 +556 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -526 +566 @@ class AccountDataSourceImpl(
+@@ -526 +567 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -532 +572 @@ class AccountDataSourceImpl(
+@@ -532 +573 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -536,0 +577 @@ class AccountDataSourceImpl(
+@@ -536,0 +578 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -539 +580,3 @@ class AccountDataSourceImpl(
+@@ -539 +581,3 @@ class AccountDataSourceImpl(
 -            ledgerAccountBindingProvider.observe(sdkAccount.accountUuid)
 +            accountPreferenceReads.flatMapLatest {
 +                ledgerAccountBindingProvider.observe(sdkAccount.accountUuid).recoverableReads().map { it.getOrNull() }
 +            }
-@@ -549,12 +592,17 @@ class AccountDataSourceImpl(
+@@ -549,12 +593,17 @@ class AccountDataSourceImpl(
 -    private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
 -        selectedAccountUUIDProvider
 -            .uuid
@@ -37412,13 +37771,13 @@ index 4d388e80f..ac807496e 100644
 +            account.withSelection(verified?.isSuccess == true && (matches || useFallback))
 +        }.sortedDescending()
 +    }
-@@ -565 +613 @@ class AccountDataSourceImpl(
+@@ -565 +614 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +624 @@ class AccountDataSourceImpl(
+@@ -576 +625 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -598,6 +646,2 @@ class AccountDataSourceImpl(
+@@ -598,6 +647,2 @@ class AccountDataSourceImpl(
 -                        try {
 -                            it.responseChannel.send(address)
 -                            it.responseChannel.close()
@@ -37427,14 +37786,14 @@ index 4d388e80f..ac807496e 100644
 -                        }
 +                        it.responseChannel.trySend(address)
 +                        it.responseChannel.close()
-@@ -610,2 +654 @@ class AccountDataSourceImpl(
+@@ -610,2 +655 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +669 @@ class AccountDataSourceImpl(
+@@ -626 +670 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +671,12 @@ class AccountDataSourceImpl(
+@@ -628 +672,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -37448,7 +37807,7 @@ index 4d388e80f..ac807496e 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -655,0 +710,12 @@ private data class AddressRequest(
+@@ -655,0 +711,12 @@ private data class AddressRequest(
 +private data class SelectedAccountRead(val generation: Long, val result: Result<AccountUuid?>)
 +
 +private data class AccountRows(val generation: Long, val accounts: List<WalletAccount>)
@@ -37461,12 +37820,12 @@ index 4d388e80f..ac807496e 100644
 +        is ViewOnlyAccount -> copy(isSelected = selected)
 +    }
 +
-@@ -659 +725 @@ private data class AccountSnapshot(
+@@ -659 +726 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -661 +726,0 @@ private data class AccountSnapshot(
+@@ -661 +727,0 @@ private data class AccountSnapshot(
 -    val isSelected: Boolean,
-@@ -665,0 +731,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +732,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -37482,7 +37841,7 @@ index 4d388e80f..ac807496e 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -667,5 +747,2 @@ private const val RETRY_DELAY = 3L
+@@ -667,5 +748,2 @@ private const val RETRY_DELAY = 3L
 - * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
 - * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
 - * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
@@ -37490,7 +37849,7 @@ index 4d388e80f..ac807496e 100644
 - * address.
 + * Bounds both submission to the rotation collector and delivery of the address. Receive can
 + * use the current address on timeout. A swap that requires a new address must get one first.
-@@ -720,0 +798,3 @@ class AccountDeletionException(
+@@ -720,0 +799,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -42996,12 +43355,61 @@ index 5ca17bee4..0444601bc 100644
 @@ -157 +163 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Setup: $error" }
 +            Twig.error { "Wallet synchronizer setup failed" }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt
+new file mode 100644
+index 000000000..b591bdde5
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt
+@@ -0,0 +1,43 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletCoordinator
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.withContext
++
++data class WalletEnrollmentToken internal constructor(internal val wallet: Long, internal val sdkErasure: Long)
++
++class WalletEnrollmentAccess(
++    private val walletWriteAccess: WalletWriteAccess,
++    private val walletCoordinator: WalletCoordinator,
++) {
++    fun capture(): WalletEnrollmentToken? = walletWriteAccess.enrollmentToken()
++
++    fun permits(token: WalletEnrollmentToken): Boolean = walletWriteAccess.permitsEnrollment(token)
++
++    /**
++     * The user can retry while a synchronizer is restarting. Once admitted, the native mutation and
++     * its receipt finish on the same SDK instance, and reset or recovery waits for them.
++     */
++    suspend fun <T> complete(token: WalletEnrollmentToken, block: suspend (Synchronizer) -> T): T? {
++        if (!permits(token)) return null
++        return walletWriteAccess.withSdkRecovery(token.wallet) {
++            if (!permits(token)) return@withSdkRecovery null
++            val sdk = checkNotNull(walletCoordinator.synchronizer.value) {
++                "The wallet is connecting. Try again when it is ready."
++            }
++            currentCoroutineContext().ensureActive()
++            withContext(NonCancellable) { block(sdk) }
++        }
++    }
++
++    /** Call during [complete] for writes that also use the general wallet write fence. */
++    suspend fun <T> write(token: WalletEnrollmentToken, block: suspend () -> T): T? =
++        walletWriteAccess.write(token.wallet) { if (permits(token)) block() else null }
++
++    /** Publish a pending enrollment only while its original wallet and database still own it. */
++    suspend fun <T> stage(token: WalletEnrollmentToken, block: () -> T): T? =
++        walletWriteAccess.withSdkRecovery(token.wallet) { if (permits(token)) block() else null }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
 new file mode 100644
-index 000000000..f5083ca4c
+index 000000000..7e3b7ceab
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,69 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
@@ -43009,12 +43417,14 @@ index 000000000..f5083ca4c
 +import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
++import java.util.concurrent.atomic.AtomicLong
 +
 +/** Serializes wallet-owned writes with reset and invalidates work from an earlier wallet session. */
 +class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
 +    private val mutex = Mutex()
 +    private val sdkRecovery = Mutex()
 +    private val generation = MutableStateFlow(0L)
++    private val sdkErasure = AtomicLong()
 +    val version = generation.asStateFlow()
 +    @Volatile private var blocked = false
 +    @Volatile private var resetting = false
@@ -43030,6 +43440,19 @@ index 000000000..f5083ca4c
 +
 +    internal suspend fun <T> withSdkRecovery(token: Long, block: suspend () -> T): T? = sdkRecovery.withLock {
 +        if (permits(token)) block() else null
++    }
++
++    internal fun enrollmentToken(): WalletEnrollmentToken? {
++        val wallet = token()
++        return WalletEnrollmentToken(wallet, sdkErasure.get()).takeIf(::permitsEnrollment)
++    }
++
++    internal fun permitsEnrollment(token: WalletEnrollmentToken): Boolean =
++        permits(token.wallet) && sdkErasure.get() == token.sdkErasure
++
++    /** Call under the SDK recovery fence before an erase can change the enrolled account IDs. */
++    internal fun onSdkErasureStarting() {
++        sdkErasure.incrementAndGet()
 +    }
 +
 +    /** Stops admission before draining SDK recovery and writes. Remains closed until explicit setup. */
@@ -44555,7 +44978,7 @@ index f9a562c53..77f2a571a 100644
 -    val error: Exception? = null
 -)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-index a4216cc0a..58b4ae2db 100644
+index a4216cc0a..f429c38e3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 @@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -44565,40 +44988,41 @@ index a4216cc0a..58b4ae2db 100644
 @@ -20,0 +23,2 @@ import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 +import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
-@@ -23,0 +28 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+@@ -23,0 +28,2 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -50,0 +56 @@ import java.time.Instant
+@@ -50,0 +57 @@ import java.time.Instant
 +import kotlin.time.toJavaInstant
-@@ -65 +71,3 @@ interface MetadataRepository {
+@@ -65 +72,3 @@ interface MetadataRepository {
 -    suspend fun flipTxBookmark(txId: String): Boolean
 +    suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, accountUuid: AccountUuid, token: Long): Boolean
 +
 +    suspend fun readTxNote(txId: String, accountUuid: AccountUuid, token: Long): String?
-@@ -68 +76 @@ interface MetadataRepository {
+@@ -68 +77 @@ interface MetadataRepository {
 -     * Returns whether the note was saved; see [flipTxBookmark].
 +     * Returns whether the note was saved; see [setTxBookmark].
-@@ -70 +78 @@ interface MetadataRepository {
+@@ -70 +79 @@ interface MetadataRepository {
 -    suspend fun createOrUpdateTxNote(txId: String, note: String): Boolean
 +    suspend fun createOrUpdateTxNote(txId: String, note: String, accountUuid: AccountUuid, token: Long): Boolean
-@@ -73 +81 @@ interface MetadataRepository {
+@@ -73 +82 @@ interface MetadataRepository {
 -     * Returns whether the note was deleted; see [flipTxBookmark].
 +     * Returns whether the note was deleted; see [setTxBookmark].
-@@ -75 +83 @@ interface MetadataRepository {
+@@ -75 +84 @@ interface MetadataRepository {
 -    suspend fun deleteTxNote(txId: String): Boolean
 +    suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean
-@@ -80 +88 @@ interface MetadataRepository {
+@@ -80 +89 @@ interface MetadataRepository {
 -    fun markTxMemoAsRead(txId: String)
 +    fun markTxMemoAsRead(txId: String, accountUuid: AccountUuid, token: Long)
-@@ -83 +91 @@ interface MetadataRepository {
+@@ -83 +92 @@ interface MetadataRepository {
 -     * Returns whether the swap was saved; see [flipTxBookmark].
 +     * Returns whether the swap was saved; see [setTxBookmark].
-@@ -94,0 +103,5 @@ interface MetadataRepository {
+@@ -94,0 +104,5 @@ interface MetadataRepository {
 +        reviewedIdentity: String? = null,
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        account: WalletAccount? = null,
 +        walletWriteToken: Long? = null,
 +        reservationCreatedAt: Instant? = null,
-@@ -97,4 +110,4 @@ interface MetadataRepository {
+@@ -97,4 +111,4 @@ interface MetadataRepository {
 -    /**
 -     * A background write from swap status polling: a failure is only logged.
 -     */
@@ -44607,7 +45031,7 @@ index a4216cc0a..58b4ae2db 100644
 +    suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata?
 +
 +    suspend fun markSwapFundingNotSubmitted(
-@@ -102,6 +115,5 @@ interface MetadataRepository {
+@@ -102,6 +116,5 @@ interface MetadataRepository {
 -        amountOutFormatted: BigDecimal,
 -        status: SwapStatus,
 -        mode: SwapMode,
@@ -44619,35 +45043,41 @@ index a4216cc0a..58b4ae2db 100644
 +        account: WalletAccount,
 +        walletWriteToken: Long,
 +    ): Boolean
-@@ -114 +126 @@ interface MetadataRepository {
+@@ -114 +127 @@ interface MetadataRepository {
 -    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String)
 +    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount? = null)
-@@ -120 +132,4 @@ interface MetadataRepository {
+@@ -120 +133,4 @@ interface MetadataRepository {
 -    suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata?
 +    suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount? = null): TransactionSwapMetadata?
 +
 +    /** Reloads only the original wallet generation, account and saved route that owned a refresh. */
 +    suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata?
-@@ -127 +142 @@ interface MetadataRepository {
+@@ -127,2 +143,6 @@ interface MetadataRepository {
 -    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [flipTxBookmark]. */
+-    suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean
 +    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [setTxBookmark]. */
-@@ -130 +145 @@ interface MetadataRepository {
++    suspend fun setAccountColor(
++        account: WalletAccount,
++        color: Color,
++        enrollment: WalletEnrollmentToken? = null,
++    ): Boolean
+@@ -130 +150 @@ interface MetadataRepository {
 -    fun delete()
 +    suspend fun delete()
-@@ -139 +154,2 @@ class MetadataRepositoryImpl(
+@@ -139 +159,2 @@ class MetadataRepositoryImpl(
 -    private val simpleSwapAssetProvider: SimpleSwapAssetProvider
 +    private val simpleSwapAssetProvider: SimpleSwapAssetProvider,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -145,0 +162 @@ class MetadataRepositoryImpl(
+@@ -145,0 +167 @@ class MetadataRepositoryImpl(
 +    private var observedGeneration: Long? = null
-@@ -152,2 +169,4 @@ class MetadataRepositoryImpl(
+@@ -152,2 +174,4 @@ class MetadataRepositoryImpl(
 -            .flatMapLatest { accounts ->
 -                val previous = metadata.value
 +            .combine(walletWriteAccess.version) { accounts, generation -> accounts to generation }
 +            .flatMapLatest { (accounts, generation) ->
 +                val previous = metadata.value.takeIf { observedGeneration == generation }.orEmpty()
 +                observedGeneration = generation
-@@ -173,3 +192,19 @@ class MetadataRepositoryImpl(
+@@ -173,3 +197,19 @@ class MetadataRepositoryImpl(
 -    override suspend fun flipTxBookmark(txId: String) =
 -        updateMetadataAndAwait {
 -            metadataDataSource.flipTxAsBookmarked(txId = txId, key = it)
@@ -44670,9 +45100,9 @@ index a4216cc0a..58b4ae2db 100644
 +        return mutex.withLock {
 +            val result = walletWriteAccess.write(token) { NoteRead(metadataDataSource.readTxNote(txId, key)) }
 +            checkNotNull(result) { "Wallet changed before the note could be read" }.note
-@@ -176,0 +212 @@ class MetadataRepositoryImpl(
+@@ -176,0 +217 @@ class MetadataRepositoryImpl(
 +    }
-@@ -178,2 +214,8 @@ class MetadataRepositoryImpl(
+@@ -178,2 +219,8 @@ class MetadataRepositoryImpl(
 -    override suspend fun createOrUpdateTxNote(txId: String, note: String) =
 -        updateMetadataAndAwait {
 +    override suspend fun createOrUpdateTxNote(
@@ -44683,17 +45113,17 @@ index a4216cc0a..58b4ae2db 100644
 +    ): Boolean {
 +        val account = findWritableAccount(accountUuid, token) ?: return false
 +        return updateMetadataAndAwait(account, token) {
-@@ -181,0 +224 @@ class MetadataRepositoryImpl(
+@@ -181,0 +229 @@ class MetadataRepositoryImpl(
 +    }
-@@ -183,2 +226,3 @@ class MetadataRepositoryImpl(
+@@ -183,2 +231,3 @@ class MetadataRepositoryImpl(
 -    override suspend fun deleteTxNote(txId: String) =
 -        updateMetadataAndAwait {
 +    override suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean {
 +        val account = findWritableAccount(accountUuid, token) ?: return false
 +        return updateMetadataAndAwait(account, token) {
-@@ -186,0 +231 @@ class MetadataRepositoryImpl(
+@@ -186,0 +236 @@ class MetadataRepositoryImpl(
 +    }
-@@ -188,3 +233,4 @@ class MetadataRepositoryImpl(
+@@ -188,3 +238,4 @@ class MetadataRepositoryImpl(
 -    override fun markTxMemoAsRead(txId: String) =
 -        updateMetadata {
 -            metadataDataSource.markTxMemoAsRead(txId = txId, key = it)
@@ -44701,7 +45131,7 @@ index a4216cc0a..58b4ae2db 100644
 +        val account = findWritableAccount(accountUuid, token) ?: return
 +        scope.launch {
 +            updateMetadataLocked(account, token = token) { metadataDataSource.markTxMemoAsRead(txId, it) }
-@@ -191,0 +238,9 @@ class MetadataRepositoryImpl(
+@@ -191,0 +243,9 @@ class MetadataRepositoryImpl(
 +    }
 +
 +    private fun findWritableAccount(accountUuid: AccountUuid, token: Long): WalletAccount? =
@@ -44711,7 +45141,7 @@ index a4216cc0a..58b4ae2db 100644
 +        accountDataSource.allAccounts.value?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
 +
 +    private data class NoteRead(val note: String?)
-@@ -203 +258,6 @@ class MetadataRepositoryImpl(
+@@ -203 +263,6 @@ class MetadataRepositoryImpl(
 -    ) = updateMetadataAndAwait {
 +        reviewedIdentity: String?,
 +        signedQuoteEvidence: NearSignedQuoteEvidence?,
@@ -44719,11 +45149,11 @@ index a4216cc0a..58b4ae2db 100644
 +        walletWriteToken: Long?,
 +        reservationCreatedAt: Instant?,
 +    ) = updateMetadataAndAwait(account, walletWriteToken ?: walletWriteAccess.token()) {
-@@ -218,0 +279,3 @@ class MetadataRepositoryImpl(
+@@ -218,0 +284,3 @@ class MetadataRepositoryImpl(
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
 +            reservationCreatedAt = reservationCreatedAt,
-@@ -222 +285,30 @@ class MetadataRepositoryImpl(
+@@ -222 +290,30 @@ class MetadataRepositoryImpl(
 -    override fun updateSwap(
 +    override suspend fun updateSwap(
 +        expected: TransactionSwapMetadata,
@@ -44755,7 +45185,7 @@ index a4216cc0a..58b4ae2db 100644
 +    }
 +
 +    override suspend fun markSwapFundingNotSubmitted(
-@@ -224,19 +316,6 @@ class MetadataRepositoryImpl(
+@@ -224,19 +321,6 @@ class MetadataRepositoryImpl(
 -        amountOutFormatted: BigDecimal,
 -        status: SwapStatus,
 -        mode: SwapMode,
@@ -44781,23 +45211,23 @@ index a4216cc0a..58b4ae2db 100644
 +        walletWriteToken: Long,
 +    ): Boolean = updateMetadataAndAwait(account, walletWriteToken) { key ->
 +        metadataDataSource.markSwapFundingNotSubmitted(depositAddress, createdAt, reviewedIdentity, key)
-@@ -250,2 +329,2 @@ class MetadataRepositoryImpl(
+@@ -250,2 +334,2 @@ class MetadataRepositoryImpl(
 -    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String) =
 -        updateMetadata {
 +    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount?) =
 +        updateMetadata(account) {
-@@ -259 +338,5 @@ class MetadataRepositoryImpl(
+@@ -259 +343,5 @@ class MetadataRepositoryImpl(
 -        return selectedMetadata
 +        val accountUuid = transaction.accountUuid
 +        val generation = walletWriteAccess.token()
 +        val accountMetadataFlow =
 +            if (accountUuid == null) selectedMetadata else metadata.map { it[accountUuid] }
 +        return accountMetadataFlow
-@@ -273 +356,2 @@ class MetadataRepositoryImpl(
+@@ -273 +361,2 @@ class MetadataRepositoryImpl(
 -                    swapMetadata = swapMetadata?.toBusinessObject()
 +                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider),
 +                    bookmarkWriteToken = generation
-@@ -278,28 +361,0 @@ class MetadataRepositoryImpl(
+@@ -278,28 +366,0 @@ class MetadataRepositoryImpl(
 -    private fun SwapMetadataV3.toBusinessObject(): TransactionSwapMetadata {
 -        val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
 -        return TransactionSwapMetadata(
@@ -44826,7 +45256,7 @@ index a4216cc0a..58b4ae2db 100644
 -        )
 -    }
 -
-@@ -307,8 +363,24 @@ class MetadataRepositoryImpl(
+@@ -307,8 +368,24 @@ class MetadataRepositoryImpl(
 -        selectedMetadata
 -            .map { metadata ->
 -                metadata
@@ -44859,7 +45289,7 @@ index a4216cc0a..58b4ae2db 100644
 +            ?.toBusinessObject(simpleSwapAssetProvider)
 +            ?.copy(ownerAccount = owner, walletWriteToken = token)
 +    }
-@@ -316,9 +388,15 @@ class MetadataRepositoryImpl(
+@@ -316,9 +393,15 @@ class MetadataRepositoryImpl(
 -    override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? =
 -        selectedMetadata
 -            .filterNotNull()
@@ -44884,13 +45314,24 @@ index a4216cc0a..58b4ae2db 100644
 +            }
 +        }
 +    }
-@@ -348 +426,4 @@ class MetadataRepositoryImpl(
+@@ -348 +431,4 @@ class MetadataRepositoryImpl(
 -            emitAll(metadataDataSource.observe(getMetadataKey(account)).dropWhile { it == null })
 +            val token = walletWriteAccess.token()
 +            val key = getMetadataKey(account, token)
 +            val observations = walletWriteAccess.write(token) { metadataDataSource.observe(key) } ?: return@flow
 +            emitAll(observations.dropWhile { it == null })
-@@ -354,13 +435,3 @@ class MetadataRepositoryImpl(
+@@ -351,2 +437,8 @@ class MetadataRepositoryImpl(
+-    override suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean =
+-        updateMetadataAndAwait(account) { metadataDataSource.setAccountColor(color = color, key = it) }
++    override suspend fun setAccountColor(
++        account: WalletAccount,
++        color: Color,
++        enrollment: WalletEnrollmentToken?,
++    ): Boolean =
++        when {
++            enrollment == null ->
++                updateMetadataAndAwait(account) { metadataDataSource.setAccountColor(color = color, key = it) }
+@@ -354,13 +446,9 @@ class MetadataRepositoryImpl(
 -    @Suppress("TooGenericExceptionCaught")
 -    override fun delete() {
 -        scope.launch {
@@ -44904,27 +45345,33 @@ index a4216cc0a..58b4ae2db 100644
 -                    }
 -                }
 -            }
++            walletWriteAccess.permitsEnrollment(enrollment) ->
++                updateMetadataLocked(account, enrollment.wallet) { metadataDataSource.setAccountColor(color, it) }
++
++            else -> false
++        }
++
 +    override suspend fun delete() {
 +        mutex.withLock {
 +            metadataDataSource.delete()
-@@ -370,2 +441,3 @@ class MetadataRepositoryImpl(
+@@ -370,2 +458,3 @@ class MetadataRepositoryImpl(
 -    private fun updateMetadata(block: suspend (MetadataKey) -> Boolean) {
 -        scope.launch { updateMetadataLocked(block = block) }
 +    private fun updateMetadata(account: WalletAccount? = null, block: suspend (MetadataKey) -> Boolean) {
 +        val token = walletWriteAccess.token()
 +        scope.launch { updateMetadataLocked(account = account, block = block, token = token) }
-@@ -375,0 +448 @@ class MetadataRepositoryImpl(
+@@ -375,0 +465 @@ class MetadataRepositoryImpl(
 +        token: Long = walletWriteAccess.token(),
-@@ -377 +450,3 @@ class MetadataRepositoryImpl(
+@@ -377 +467,3 @@ class MetadataRepositoryImpl(
 -    ): Boolean = scope.async { updateMetadataLocked(account, block) }.await()
 +    ): Boolean {
 +        return scope.async { updateMetadataLocked(account, token, block) }.await()
 +    }
-@@ -386 +461,2 @@ class MetadataRepositoryImpl(
+@@ -386 +478,2 @@ class MetadataRepositoryImpl(
 -        block: suspend (MetadataKey) -> Boolean
 +        token: Long,
 +        block: suspend (MetadataKey) -> Boolean,
-@@ -388,4 +464,4 @@ class MetadataRepositoryImpl(
+@@ -388,4 +481,4 @@ class MetadataRepositoryImpl(
 -        mutex.withLock {
 -            try {
 -                val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount())
@@ -44933,30 +45380,30 @@ index a4216cc0a..58b4ae2db 100644
 +            val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount(), token)
 +            mutex.withLock {
 +                (walletWriteAccess.write(token) { block(key) } ?: false).also { isSaved ->
-@@ -394,3 +469,0 @@ class MetadataRepositoryImpl(
+@@ -394,3 +486,0 @@ class MetadataRepositoryImpl(
 -            } catch (e: Exception) {
 -                Twig.error(e) { "Unable to update Metadata" }
 -                false
-@@ -397,0 +471,3 @@ class MetadataRepositoryImpl(
+@@ -397,0 +488,3 @@ class MetadataRepositoryImpl(
 +        } catch (e: Exception) {
 +            Twig.error(e) { "Unable to update Metadata" }
 +            false
-@@ -405 +481 @@ class MetadataRepositoryImpl(
+@@ -405 +498 @@ class MetadataRepositoryImpl(
 -    private suspend fun getMetadataKey(account: WalletAccount): MetadataKey =
 +    private suspend fun getMetadataKey(account: WalletAccount, token: Long = walletWriteAccess.token()): MetadataKey =
-@@ -427 +503,3 @@ class MetadataRepositoryImpl(
+@@ -427 +520,3 @@ class MetadataRepositoryImpl(
 -                metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
 +                checkNotNull(walletWriteAccess.write(token) {
 +                    metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
 +                }) { "Wallet changed before its metadata key could be saved" }
-@@ -444 +522,2 @@ data class TransactionMetadata(
+@@ -444 +539,2 @@ data class TransactionMetadata(
 -    val swapMetadata: TransactionSwapMetadata?
 +    val swapMetadata: TransactionSwapMetadata?,
 +    internal val bookmarkWriteToken: Long? = null,
-@@ -456 +535 @@ data class TransactionSwapMetadata(
+@@ -456 +552 @@ data class TransactionSwapMetadata(
 -    val status: SwapStatus,
 +    val recordedStatus: SwapStatus?,
-@@ -458 +537,73 @@ data class TransactionSwapMetadata(
+@@ -458 +554,73 @@ data class TransactionSwapMetadata(
 -)
 +    val reviewedIdentity: String? = null,
 +    internal val ownerAccount: WalletAccount? = null,
@@ -50675,7 +51122,7 @@ index eb7d61b0d..9a718a545 100644
 +            null
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
-index 4ed2d4b85..0ad7843fe 100644
+index 4ed2d4b85..5c1cde852 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.WalletInitMode
@@ -50760,7 +51207,7 @@ index 4ed2d4b85..0ad7843fe 100644
 @@ -69,0 +74,2 @@ class RecoverFromSeedMismatchUseCase(
 +        return false
 +    }
-@@ -71 +77,12 @@ class RecoverFromSeedMismatchUseCase(
+@@ -71 +77,15 @@ class RecoverFromSeedMismatchUseCase(
 -        persistableWalletProvider.store(recoveryWallet)
 +    private suspend fun waitForErase(onEraseDelayed: () -> Unit): Boolean = coroutineScope {
 +        val notice = launch {
@@ -50770,15 +51217,18 @@ index 4ed2d4b85..0ad7843fe 100644
 +        }
 +        try {
 +            // SDK 6.0.0 starts the erase on its own wallet scope. Keep the app fence until it reports completion.
-+            withContext(NonCancellable) { walletCoordinator.deleteSdkDataFlow().first() }
++            withContext(NonCancellable) {
++                walletWriteAccess.onSdkErasureStarting()
++                walletCoordinator.deleteSdkDataFlow().first()
++            }
 +        } finally {
 +            notice.cancel()
 +        }
-@@ -76 +93,2 @@ class RecoverFromSeedMismatchUseCase(
+@@ -76 +96,2 @@ class RecoverFromSeedMismatchUseCase(
 -        private val ERASE_TIMEOUT = 30.seconds
 +        private const val PREFERENCE_READ_ATTEMPTS = 3
 +        private val ERASE_NOTICE_DELAY = 30.seconds
-@@ -81,8 +99 @@ class RecoverFromSeedMismatchUseCase(
+@@ -81,8 +102 @@ class RecoverFromSeedMismatchUseCase(
 - * Wallet identity is network plus seed phrase. `walletInitMode` is excluded because it is not serialized
 - * and reflects process state rather than identity.
 - */
@@ -76229,6 +76679,51 @@ index c57c43f26..3b34c01c2 100644
 @@ -165 +165 @@ class AccountDataSourceImplViewOnlyDeletionTest {
 -            coVerify(exactly = 0) { selection.clearUUID() }
 +            coVerify(exactly = 1) { selection.clearIfSelected(accountUuid) }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
+index a425a5c4d..7fa887455 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyImportRetryTest.kt
+@@ -46 +46,2 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
+-                dataSource(synchronizer).importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                dataSource(synchronizer)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
+index 04895fbcd..9c95aa829 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyTest.kt
+@@ -340 +340 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -369 +369 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -393 +393 @@ class AccountDataSourceImplViewOnlyTest {
+-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -420 +420 @@ class AccountDataSourceImplViewOnlyTest {
+-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -450 +450 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -473 +473 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -491 +491 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -510 +510 @@ class AccountDataSourceImplViewOnlyTest {
+-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -533 +533 @@ class AccountDataSourceImplViewOnlyTest {
+-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -563 +563 @@ class AccountDataSourceImplViewOnlyTest {
+-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
+@@ -584 +584 @@ class AccountDataSourceImplViewOnlyTest {
+-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
++                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AddressBookDurabilityTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AddressBookDurabilityTest.kt
 new file mode 100644
 index 000000000..01f8991ed
@@ -91062,7 +91557,7 @@ index 16244cdf4..65cb5eb54 100644
 +            } returns true
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
-index 606f64402..21012d4a4 100644
+index 606f64402..07f88a73b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
 @@ -3,0 +4,2 @@ import cash.z.ecc.android.sdk.WalletCoordinator
@@ -91085,7 +91580,7 @@ index 606f64402..21012d4a4 100644
 +import kotlinx.coroutines.test.runCurrent
 @@ -16,0 +28 @@ import kotlin.test.Test
 +import kotlin.test.assertEquals
-@@ -18,8 +30,3 @@ import kotlin.test.assertFailsWith
+@@ -18,8 +30,5 @@ import kotlin.test.assertFailsWith
 -import kotlin.time.Duration.Companion.days
 -
 -/**
@@ -91094,10 +91589,12 @@ index 606f64402..21012d4a4 100644
 - * [cash.z.ecc.android.sdk.WalletInitMode] to `RestoreWallet`) once that erase actually succeeds.
 - * A failed erase must neither silently proceed to `store()` nor be retried without bound.
 - */
++import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
 +import kotlin.time.Duration.Companion.seconds
 +
-@@ -27,5 +34,9 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -27,5 +36,9 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    private val wallet = mockk<PersistableWallet>(relaxed = true)
 -    private val persistableWalletProvider =
 -        mockk<PersistableWalletProvider>(relaxed = true) {
@@ -91112,27 +91609,49 @@ index 606f64402..21012d4a4 100644
 +    )
 +    private val access = WalletWriteAccess()
 +    private val walletProvider = RecordingWalletProvider(wallet, access)
-@@ -32,0 +44,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -32,0 +46,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 +    private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxed = true)
 +    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access, preferenceRecovery)
-@@ -34 +47 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -34 +49 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    private val useCase = RecoverFromSeedMismatchUseCase(persistableWalletProvider, walletCoordinator)
 +    private suspend fun useCase() = recovery(access.token())
-@@ -37,3 +50,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -37,3 +52,7 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun successfulEraseWipesThenRePersists() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
++    fun destructiveRecoveryExpiresAnImportedReceiptEvenWhenTheWalletGenerationStaysTheSame() = runTest {
++        val originalGeneration = access.token()
++        val pendingImport = assertNotNull(access.enrollmentToken())
++        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
++            assertFalse(access.permitsEnrollment(pendingImport))
++            emit(true)
++        }
+@@ -41 +60 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            useCase()
++        useCase()
+@@ -43,3 +62,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
+-        }
++        assertEquals(originalGeneration, access.token())
++        assertFalse(access.permitsEnrollment(pendingImport))
++        assertTrue(access.permitsEnrollment(assertNotNull(access.enrollmentToken())))
++    }
+@@ -48,3 +68,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    fun noWalletStoredIsANoOp() =
+-        runTest {
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +    fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
 +            assertTrue(walletProvider.replacements.isEmpty())
 +            emit(true)
 +        }
-@@ -41 +56 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -52 +74 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        useCase()
-@@ -43,3 +58,6 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
--            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
+@@ -54,3 +76,6 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
 +        assertEquals(
@@ -91140,98 +91659,91 @@ index 606f64402..21012d4a4 100644
 +            walletProvider.replacements,
 +        )
 +    }
-@@ -48,3 +66,2 @@ class RecoverFromSeedMismatchUseCaseTest {
--    fun noWalletStoredIsANoOp() =
+@@ -59,3 +84,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    fun failedEraseDoesNotPersistAndThrowsExplicitError() =
 -        runTest {
--            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +    fun noWalletStoredIsANoOp() = runTest {
 +        walletProvider.persistableWallet.value = null
-@@ -52 +69 @@ class RecoverFromSeedMismatchUseCaseTest {
--            useCase()
+@@ -63 +87 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        useCase()
-@@ -54,3 +71,3 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+@@ -65,2 +89,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -59,3 +76,2 @@ class RecoverFromSeedMismatchUseCaseTest {
--    fun failedEraseDoesNotPersistAndThrowsExplicitError() =
--        runTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-+    fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-@@ -63 +79 @@ class RecoverFromSeedMismatchUseCaseTest {
--            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-+        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -65,2 +81,2 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
--        }
-+        assertTrue(walletProvider.replacements.isEmpty())
-+    }
-@@ -68,6 +83,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -68,6 +92,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * Simulates the collector re-invoking this use case on every `isSeedMismatch` flip — far more
 -     * than the retry cap. Only [RecoverFromSeedMismatchUseCase]'s `MAX_RECOVERY_ATTEMPTS` (3) real
 -     * erase attempts are made; once exhausted, further invocations fail fast without hammering the
 -     * SDK again — this is the unthrottled wipe-retry loop fix.
 -     */
-@@ -75,7 +85,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -75,3 +94,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun repeatedFailuresAreCappedAndStopHittingTheSdk() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
--
++    fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
++        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+@@ -79,3 +97 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            repeat(5) {
 -                assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 -            }
-+    fun unreadablePreferencesRefuseDetachedEraseWithoutRepairingOrReplacingWallet() = runTest {
-+        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
-@@ -83,3 +88,6 @@ class RecoverFromSeedMismatchUseCaseTest {
++        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+@@ -83,3 +99,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
++        assertTrue(walletProvider.replacements.isEmpty())
++    }
+@@ -87,4 +101,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    /**
+-     * A success resets the failure counter, and a subsequent failure starts a fresh cap rather
+-     * than inheriting the earlier count.
+-     */
+@@ -92,5 +103,9 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    fun successAfterPriorFailuresResetsTheCounter() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
++    fun unreadablePreferencesRefuseDetachedEraseWithoutRepairingOrReplacingWallet() = runTest {
++        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
++
 +        assertEquals(1, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
 +        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
 +        coVerify(exactly = 0) { preferenceRecovery.ensureReadable() }
 +        assertEquals(wallet, walletProvider.persistableWallet.value)
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -87,4 +94,0 @@ class RecoverFromSeedMismatchUseCaseTest {
--    /**
--     * A success resets the failure counter, and a subsequent failure starts a fresh cap rather
--     * than inheriting the earlier count.
--     */
-@@ -92,5 +96,3 @@ class RecoverFromSeedMismatchUseCaseTest {
--    fun successAfterPriorFailuresResetsTheCounter() =
--        runTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
--            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
--            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+@@ -98,2 +113,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-            useCase()
++    @Test
 +    fun recoveryRetriesAReadFailureBeforeEnteringTheSdkOnce() = runTest {
 +        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unavailable") andThen Unit
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
-@@ -98,2 +100 @@ class RecoverFromSeedMismatchUseCaseTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
--            useCase()
-+        useCase()
-@@ -101 +102,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -101 +118 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
++        useCase()
+@@ -103,2 +120,10 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        coVerify(exactly = 2) { preferenceRecovery.checkReadableForErase() }
 +        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
 +        assertEquals(WalletInitMode.RestoreWallet, walletProvider.persistableWallet.value?.walletInitMode)
 +    }
-@@ -103,2 +107,5 @@ class RecoverFromSeedMismatchUseCaseTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
--            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
++
 +    @Test
 +    fun repeatedFailuresAreCappedAndStopHittingTheSdk() = runTest {
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +
 +        repeat(5) {
-@@ -106 +112,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -106 +130,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
-@@ -109,6 +115,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -109,6 +133,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * A wallet concurrently nulled out (Reset Zashi racing this recovery) leaves
 -     * [WalletCoordinator.deleteSdkDataFlow]'s inner wallet read null, so the flow never emits or
@@ -91242,7 +91754,7 @@ index 606f64402..21012d4a4 100644
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
 +
-@@ -116,3 +120,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -116,3 +138,5 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun eraseTimeoutCountsAsFailedAttemptAndThrows() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flow<Boolean> { delay(1.days) }
@@ -91251,22 +91763,22 @@ index 606f64402..21012d4a4 100644
 +        repeat(3) { assertFailsWith<SeedMismatchRecoveryException> { useCase() } }
 +        val old = access.token()
 +        access.replaceWallet { walletProvider.persistableWallet.value = wallet.copy() }
-@@ -120 +126,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -120 +144,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        recovery(old)
 +        val firstFailure = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -122,2 +129,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -122,2 +147,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertEquals(1, firstFailure.failedAttempts)
 +        verify(exactly = 4) { walletCoordinator.deleteSdkDataFlow() }
 +    }
-@@ -125,4 +132,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -125,4 +150,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * If Reset Zashi clears the persisted wallet while the erase is in flight, `store()` must not
 -     * resurrect the deleted wallet's seed.
 -     */
-@@ -130,6 +134,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -130,6 +152,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenWalletWasClearedDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -91277,28 +91789,28 @@ index 606f64402..21012d4a4 100644
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -137 +139,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -137 +157,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
 +        useCase()
-@@ -139,2 +142,8 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -139,2 +160 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertEquals(1, walletProvider.replacements.size)
-+
+@@ -142,4 +162,8 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    /**
+-     * If the user restores a different wallet while the erase is in flight, `store()` must not
+-     * overwrite it with the stale, now-wiped wallet's recovery copy.
+-     */
 +        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        verify(exactly = 5) { walletCoordinator.deleteSdkDataFlow() }
 +        assertEquals(1, walletProvider.replacements.size)
 +    }
-@@ -142,4 +151 @@ class RecoverFromSeedMismatchUseCaseTest {
--    /**
--     * If the user restores a different wallet while the erase is in flight, `store()` must not
--     * overwrite it with the stale, now-wiped wallet's recovery copy.
--     */
++
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -147,15 +153,14 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -147,15 +171,42 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenADifferentWalletWasStoredDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -91328,7 +91840,7 @@ index 606f64402..21012d4a4 100644
 +            assertTrue(!replacing.isCompleted)
 +        } finally {
 +            sdkResult.complete(true)
-@@ -162,0 +168,30 @@ class RecoverFromSeedMismatchUseCaseTest {
++        }
 +        recovering.join()
 +        replacing.join()
 +        assertEquals(wallet, walletProvider.persistableWallet.value)
@@ -91356,11 +91868,10 @@ index 606f64402..21012d4a4 100644
 +            replacements += replacement
 +            persistableWallet.value = replacement
 +            return true
-+        }
-+
-+        override suspend fun getPersistableWallet() = persistableWallet.value
-@@ -164 +199,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -164 +215,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    private fun seedPhrase(word: String) = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { word })
++        override suspend fun getPersistableWallet() = persistableWallet.value
++
 +        override suspend fun requirePersistableWallet() = checkNotNull(persistableWallet.value)
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt

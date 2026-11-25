@@ -7,17 +7,21 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.common.model.ufvk.UfvkFixtures
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositoryImpl
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 /**
@@ -29,8 +33,29 @@ import kotlin.test.assertNull
  */
 class SubmitViewOnlyKeyUseCaseTest {
     private val repository = ViewOnlyPendingImportRepositoryImpl()
+    private val wallet = WalletWriteAccess()
+    private val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(wallet)
 
     private val key = UfvkFixtures.MAINNET_FULL
+
+    @Test
+    fun validationStartedBeforeWalletReplacementCannotStageTheOldKey() = runTest {
+        val entered = CompletableDeferred<Unit>()
+        val result = CompletableDeferred<AccountKeyOverlap?>()
+        val sdk = mockk<Synchronizer> {
+            coEvery { findAccountSharingKeyComponents(any()) } coAnswers {
+                entered.complete(Unit)
+                result.await()
+            }
+        }
+        val submitted = async { runCatching { useCase(sdk).submit("input") } }
+        entered.await()
+        wallet.replaceWallet {}
+        result.complete(null)
+
+        assertIs<ViewOnlyKeyCheckException>(submitted.await().exceptionOrNull())
+        assertNull(repository.get())
+    }
 
     @Test
     fun aKeyNoAccountSharesAComponentWithBecomesThePendingImport() =
@@ -40,7 +65,7 @@ class SubmitViewOnlyKeyUseCaseTest {
             val result = useCase(synchronizer).submit("  input ")
 
             assertEquals(SubmitViewOnlyKeyResult.Accepted, result)
-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
+            assertEquals(expectedPending(), repository.get())
             coVerify { synchronizer.findAccountSharingKeyComponents(UnifiedFullViewingKey(key)) }
         }
 
@@ -95,7 +120,7 @@ class SubmitViewOnlyKeyUseCaseTest {
             val result = useCase(synchronizer).submit("input")
 
             assertEquals(SubmitViewOnlyKeyResult.Accepted, result)
-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
+            assertEquals(expectedPending(), repository.get())
         }
 
     @Test
@@ -120,10 +145,11 @@ class SubmitViewOnlyKeyUseCaseTest {
                     synchronizerProvider =
                         mockk<SynchronizerProvider> { coEvery { getSynchronizer() } coAnswers { awaitCancellation() } },
                     pendingImportRepository = repository,
+                    walletEnrollment = walletEnrollment,
                 ).submit("input")
 
             assertEquals(SubmitViewOnlyKeyResult.Accepted, result)
-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
+            assertEquals(expectedPending(), repository.get())
         }
 
     @Test
@@ -137,7 +163,7 @@ class SubmitViewOnlyKeyUseCaseTest {
             val result = useCase(synchronizer).submit("input")
 
             assertEquals(SubmitViewOnlyKeyResult.Accepted, result)
-            assertEquals(PendingViewOnlyImport(ufvk = key, name = ""), repository.get())
+            assertEquals(expectedPending(), repository.get())
         }
 
     @Test
@@ -178,12 +204,16 @@ class SubmitViewOnlyKeyUseCaseTest {
                     synchronizerProvider =
                         mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer },
                     pendingImportRepository = repository,
+                    walletEnrollment = walletEnrollment,
                 )
 
             assertFailsWith<ViewOnlyKeyCheckException> { useCase.submit("input") }
             assertNull(repository.get())
             coVerify(exactly = 0) { synchronizer.findAccountSharingKeyComponents(any()) }
         }
+
+    private fun expectedPending() =
+        PendingViewOnlyImport(ufvk = key, name = "", enrollment = walletEnrollment.capture())
 
     private fun synchronizerFinding(overlap: AccountKeyOverlap?) =
         mockk<Synchronizer> { coEvery { findAccountSharingKeyComponents(any()) } returns overlap }
@@ -195,6 +225,7 @@ class SubmitViewOnlyKeyUseCaseTest {
         validateUfvk = mockk { coEvery { this@mockk.invoke(any(), any()) } returns validation },
         synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer },
         pendingImportRepository = repository,
+        walletEnrollment = walletEnrollment,
     )
 
     private fun validating(ufvk: String): ValidateUfvkUseCase =

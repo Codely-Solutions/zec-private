@@ -539,7 +539,7 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         val created = visible.sdkAccount
         val accountDataSource = mockk<AccountDataSource> {
             every { allAccounts } returns accounts
-            coEvery { importViewOnlyAccount(UFVK, "Vault", BIRTHDAY) } coAnswers {
+            coEvery { importViewOnlyAccount(any(), UFVK, "Vault", BIRTHDAY) } coAnswers {
                 accounts.value = listOf(ViewOnlyAccountFixtures.zodl(), visible)
                 created
             }
@@ -547,7 +547,7 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         }
         val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
         val importer = ImportViewOnlyAccountUseCase(
-            repository, accountDataSource, synchronizer, navigationRouter, mockk(relaxed = true)
+            repository, accountDataSource, synchronizer, navigationRouter, mockk(relaxed = true), walletEnrollment,
         )
         val vm = vm(importer)
         collect(vm)
@@ -588,7 +588,7 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         assertEquals(created.accountUuid, selected.getUUID())
         assertEquals(Base64.getEncoder().encodeToString(created.accountUuid.value), storage.durable)
         assertNull(repository.get())
-        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
         coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
         verify(exactly = 1) { synchronizer.resetSynchronizer() }
         verify(exactly = 0) { navigationRouter.forward(AlreadyImportedVKArgs) }
@@ -683,7 +683,8 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
             val owned = assertIs<NavigationCommand.ForEntry>(
                 firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(top)
             )
-            pickerRequests.addAll(assertIs<NavigationCommand.Forward>(owned.buildCommand()).routes.filterIsInstance())
+            val forward = assertIs<NavigationCommand.Forward>(owned.buildCommand())
+            pickerRequests.addAll(forward.routes.filterIsInstance<ColorPickerArgs>())
             owned.acknowledge(true)
         }
         every { navigationRouter.custom(any()) } answers {
@@ -760,6 +761,8 @@ internal abstract class NameVKVMFixture {
 
     private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
 
+    protected val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess()
+
     protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
 
     protected var importAnswer: suspend () -> Unit = {}
@@ -814,7 +817,13 @@ internal abstract class NameVKVMFixture {
     protected fun pending(
         name: String = "",
         color: Color? = null,
-    ) = PendingViewOnlyImport(ufvk = UFVK, name = name, color = color, birthday = BIRTHDAY)
+    ) = PendingViewOnlyImport(
+        ufvk = UFVK,
+        name = name,
+        color = color,
+        birthday = BIRTHDAY,
+        enrollment = walletEnrollment.capture(),
+    )
 
     protected fun TestScope.type(
         vm: NameVKVM,

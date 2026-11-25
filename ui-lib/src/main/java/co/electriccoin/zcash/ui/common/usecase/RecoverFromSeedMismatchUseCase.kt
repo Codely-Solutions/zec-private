@@ -82,7 +82,10 @@ class RecoverFromSeedMismatchUseCase(
         }
         try {
             // SDK 6.0.0 starts the erase on its own wallet scope. Keep the app fence until it reports completion.
-            withContext(NonCancellable) { walletCoordinator.deleteSdkDataFlow().first() }
+            withContext(NonCancellable) {
+                walletWriteAccess.onSdkErasureStarting()
+                walletCoordinator.deleteSdkDataFlow().first()
+            }
         } finally {
             notice.cancel()
         }

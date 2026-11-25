@@ -27,6 +27,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -45,6 +47,22 @@ class RecoverFromSeedMismatchUseCaseTest {
     private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access, preferenceRecovery)
 
     private suspend fun useCase() = recovery(access.token())
+
+    @Test
+    fun destructiveRecoveryExpiresAnImportedReceiptEvenWhenTheWalletGenerationStaysTheSame() = runTest {
+        val originalGeneration = access.token()
+        val pendingImport = assertNotNull(access.enrollmentToken())
+        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
+            assertFalse(access.permitsEnrollment(pendingImport))
+            emit(true)
+        }
+
+        useCase()
+
+        assertEquals(originalGeneration, access.token())
+        assertFalse(access.permitsEnrollment(pendingImport))
+        assertTrue(access.permitsEnrollment(assertNotNull(access.enrollmentToken())))
+    }
 
     @Test
     fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {

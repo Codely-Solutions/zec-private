@@ -43,7 +43,8 @@ class AccountDataSourceImplViewOnlyImportRetryTest {
                 }
 
             val created =
-                dataSource(synchronizer).importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                dataSource(synchronizer)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
 
             assertEquals(imported, created)
             coVerify(exactly = 2) { synchronizer.importAccountByUfvk(any()) }

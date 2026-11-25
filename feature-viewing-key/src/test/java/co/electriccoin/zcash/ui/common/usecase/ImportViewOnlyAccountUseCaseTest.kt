@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import androidx.compose.ui.graphics.Color
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -9,6 +10,7 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountAlreadyExistsExcepti
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountImportException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositoryImpl
@@ -54,12 +56,16 @@ import kotlin.test.assertTrue
  */
 class ImportViewOnlyAccountUseCaseTest {
     private val repository = ViewOnlyPendingImportRepositoryImpl()
+    private val wallet = WalletWriteAccess()
+    private val sdk = mockk<Synchronizer>()
+    private val activeSdk = MutableStateFlow<Synchronizer?>(sdk)
+    private val walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(wallet, activeSdk)
 
     private val created = mockk<Account> { every { accountUuid } returns ViewOnlyAccountFixtures.viewOnlyUuid }
 
     private val accountDataSource =
         mockk<AccountDataSource>(relaxed = true) {
-            coEvery { importViewOnlyAccount(any(), any(), any()) } returns created
+            coEvery { importViewOnlyAccount(sdk, any(), any(), any()) } returns created
         }
 
     private val synchronizerProvider = mockk<SynchronizerProvider>(relaxed = true)
@@ -74,22 +80,81 @@ class ImportViewOnlyAccountUseCaseTest {
             accountDataSource,
             synchronizerProvider,
             navigationRouter,
-            metadataRepository
+            metadataRepository,
+            walletEnrollment,
         )
+
+    @Test
+    fun walletResetCanFinishWhenTheSdkIsUnavailableAndOldEnrollmentCannotUseItsReplacement() = runTest {
+        repository.set(pending(name = "Savings"))
+        activeSdk.value = null
+        assertFailsWith<IllegalStateException> { useCase() }
+        assertEquals("Savings", repository.get()?.name)
+
+        wallet.beginReset()
+        wallet.finishReset()
+        wallet.replaceWallet {}
+        activeSdk.value = mockk()
+        assertFailsWith<ViewOnlyPendingImportMissingException> { useCase() }
+
+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { accountDataSource.selectAccount(any<Account>()) }
+        verify(exactly = 0) { navigationRouter.forward(any()) }
+        assertNull(repository.get())
+    }
+
+    @Test
+    fun resetDrainsAnAdmittedSdkImportAndRejectsLateSelection() = runTest {
+        repository.set(pending(name = "Savings"))
+        val entered = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Account>()
+        coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers {
+            entered.complete(Unit)
+            finish.await()
+        }
+
+        val importing = async { runCatching { useCase() } }
+        entered.await()
+        val resetting = async { wallet.beginReset() }
+        runCurrent()
+        assertFalse(resetting.isCompleted)
+        finish.complete(created)
+        assertTrue(importing.await().exceptionOrNull() is ViewOnlyPendingImportMissingException)
+        resetting.await()
+        wallet.finishReset()
+
+        coVerify(exactly = 0) { accountDataSource.selectAccount(any<Account>()) }
+        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
+        verify(exactly = 0) { navigationRouter.forward(any()) }
+        assertNull(repository.get())
+    }
+
+    @Test
+    fun anOrdinarySynchronizerRestartKeepsTheExistingImportReceipt() = runTest {
+        repository.set(pending(name = "Savings").copy(importedAccount = created))
+        activeSdk.value = mockk()
+
+        useCase()
+
+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
+        verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
+        assertNull(repository.get())
+    }
 
     @Test
     fun anAccountWithoutHistoryGoesStraightToTheSuccessScreen() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+            repository.set(pending(name = "Savings"))
 
             useCase()
 
-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", null) }
+            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", null) }
             coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
             verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
             assertNull(repository.get())
-            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any()) }
+            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any(), any()) }
         }
 
     @Test
@@ -97,13 +162,13 @@ class ImportViewOnlyAccountUseCaseTest {
         runTest {
             val account = ViewOnlyAccountFixtures.viewOnly()
             every { accountDataSource.allAccounts } returns MutableStateFlow(listOf(account))
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
+            repository.set(pending(name = "Savings", color = Color(PICKED)))
 
             useCase()
 
             coVerifyOrder {
                 accountDataSource.selectAccount(created)
-                metadataRepository.setAccountColor(account, Color(PICKED))
+                metadataRepository.setAccountColor(account, Color(PICKED), walletEnrollment.capture())
                 synchronizerProvider.resetSynchronizer()
             }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
@@ -113,11 +178,11 @@ class ImportViewOnlyAccountUseCaseTest {
     fun aColorForAnAccountTheWalletNeverListsIsDroppedAndTheImportGoesOn() =
         runTest {
             every { accountDataSource.allAccounts } returns MutableStateFlow(emptyList())
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
+            repository.set(pending(name = "Savings", color = Color(PICKED)))
 
             useCase()
 
-            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any()) }
+            coVerify(exactly = 0) { metadataRepository.setAccountColor(any(), any(), any()) }
             verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
         }
@@ -128,12 +193,14 @@ class ImportViewOnlyAccountUseCaseTest {
         runTest {
             val account = ViewOnlyAccountFixtures.viewOnly()
             every { accountDataSource.allAccounts } returns MutableStateFlow(listOf(account))
-            coEvery { metadataRepository.setAccountColor(any(), any()) } coAnswers { awaitCancellation() }
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
+            coEvery { metadataRepository.setAccountColor(any(), any(), any()) } coAnswers { awaitCancellation() }
+            repository.set(pending(name = "Savings", color = Color(PICKED)))
 
             useCase()
 
-            coVerify(exactly = 1) { metadataRepository.setAccountColor(account, Color(PICKED)) }
+            coVerify(exactly = 1) {
+                metadataRepository.setAccountColor(account, Color(PICKED), walletEnrollment.capture())
+            }
             coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
             verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
@@ -145,7 +212,7 @@ class ImportViewOnlyAccountUseCaseTest {
     fun aFailedViewOnlyFinalizationRejectsAnEarlierBirthdayAndRetriesTheCommittedHeight() = runTest {
         val importedHeight = BlockHeight.new(2_500_000L)
         val correctedHeight = BlockHeight.new(2_000_000L)
-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = importedHeight))
+        repository.set(pending(name = "Savings", birthday = importedHeight))
         coEvery { accountDataSource.selectAccount(created) } throws IOException() andThen Unit
         assertFailsWith<IOException> { useCase() }
 
@@ -156,8 +223,8 @@ class ImportViewOnlyAccountUseCaseTest {
         assertEquals(importedHeight, importer.committedBirthday()?.height)
         assertEquals(importedHeight, repository.get()?.birthday)
         importer.finishImport()
-        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", importedHeight) }
-        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", correctedHeight) }
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", importedHeight) }
+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", correctedHeight) }
         verify(exactly = 1) { navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)) }
     }
 
@@ -165,11 +232,11 @@ class ImportViewOnlyAccountUseCaseTest {
     fun anAccountWithHistoryGoesThroughTheKeepOpenScreen() =
         runTest {
             val birthday = BlockHeight.new(2_000_000L)
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = birthday))
+            repository.set(pending(name = "Savings", birthday = birthday))
 
             useCase()
 
-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", birthday) }
+            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", birthday) }
             verify(exactly = 1) { navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)) }
             assertNull(repository.get())
         }
@@ -177,8 +244,8 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun aKeyTheWalletAlreadyHoldsEndsOnTheAlreadyImportedSheet() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
+            repository.set(pending(name = "Savings"))
+            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
                 ViewOnlyAccountAlreadyExistsException()
 
             useCase()
@@ -192,8 +259,8 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun anSdkFailureKeepsTheKeySoTheImportCanBeRetried() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
+            repository.set(pending(name = "Savings"))
+            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
                 ViewOnlyAccountImportException()
 
             val error = assertFailsWith<ViewOnlyAccountImportException> { useCase() }
@@ -207,9 +274,9 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun aSecondCallWhileTheFirstImportsReturnsWithoutImportingAgain() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+            repository.set(pending(name = "Savings"))
             val imported = CompletableDeferred<Account>()
-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } coAnswers { imported.await() }
+            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers { imported.await() }
 
             val first = async { useCase() }
             val second = async { useCase() }
@@ -218,7 +285,7 @@ class ImportViewOnlyAccountUseCaseTest {
             first.await()
             second.await()
 
-            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+            coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
             coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
             verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
@@ -229,9 +296,9 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun aCancelledCallerStillSelectsTheImportedAccountButDoesNotNavigate() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+            repository.set(pending(name = "Savings"))
             val imported = CompletableDeferred<Account>()
-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } coAnswers { imported.await() }
+            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } coAnswers { imported.await() }
 
             val caller = launch { useCase() }
             runCurrent()
@@ -248,14 +315,14 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun aSecondCallAfterAFailedImportRetriesIt() =
         runTest {
-            repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
-            coEvery { accountDataSource.importViewOnlyAccount(any(), any(), any()) } throws
+            repository.set(pending(name = "Savings"))
+            coEvery { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) } throws
                 ViewOnlyAccountImportException() andThen created
 
             assertFailsWith<ViewOnlyAccountImportException> { useCase() }
             useCase()
 
-            coVerify(exactly = 2) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", null) }
+            coVerify(exactly = 2) { accountDataSource.importViewOnlyAccount(sdk, UFVK, "Savings", null) }
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
             assertNull(repository.get())
         }
@@ -263,7 +330,7 @@ class ImportViewOnlyAccountUseCaseTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun cancellationDuringAFailedSelectionKeepsTheCreatedAccountAvailableForRetry() = runTest {
-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+        repository.set(pending(name = "Savings"))
         val finishWrite = CompletableDeferred<Unit>()
         coEvery { accountDataSource.selectAccount(created) } coAnswers {
             finishWrite.await()
@@ -289,7 +356,7 @@ class ImportViewOnlyAccountUseCaseTest {
         coEvery { accountDataSource.selectAccount(created) } returns Unit
         useCase()
 
-        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
         coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
         verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
         verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
@@ -301,7 +368,7 @@ class ImportViewOnlyAccountUseCaseTest {
         runTest {
             assertFailsWith<ViewOnlyPendingImportMissingException> { useCase() }
 
-            coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+            coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
             verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
         }
 
@@ -310,7 +377,7 @@ class ImportViewOnlyAccountUseCaseTest {
         val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
         assertFalse(importer.hasPendingImport())
 
-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = ""))
+        repository.set(pending(name = ""))
 
         assertTrue(importer.hasPendingImport())
     }
@@ -318,17 +385,17 @@ class ImportViewOnlyAccountUseCaseTest {
     @Test
     fun theImporterStoresTheBirthdayAndOpensTheNamingStepWithoutImporting() {
         val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
-        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
+        repository.set(pending(name = "Savings", color = Color(PICKED)))
         val birthday = BlockHeight.new(2_000_000L)
 
         importer.continueWithBirthday(birthday)
 
         assertEquals(
-            PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED), birthday = birthday),
+            pending(name = "Savings", color = Color(PICKED), birthday = birthday),
             repository.get()
         )
         verify(exactly = 1) { navigationRouter.forward(NameVKArgs) }
-        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(sdk, any(), any(), any()) }
     }
 
     @Test
@@ -341,11 +408,23 @@ class ImportViewOnlyAccountUseCaseTest {
         verify(exactly = 0) { navigationRouter.forward(any()) }
     }
 
+    private fun pending(
+        name: String,
+        color: Color? = null,
+        birthday: BlockHeight? = null,
+    ) = PendingViewOnlyImport(
+        ufvk = UFVK,
+        name = name,
+        color = color,
+        birthday = birthday,
+        enrollment = walletEnrollment.capture(),
+    )
+
     @Test
     fun thePendingImportNeverPrintsItsKey() {
         val birthday = BlockHeight.new(2_000_000L)
 
-        val printed = PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = birthday).toString()
+        val printed = pending(name = "Savings", birthday = birthday).toString()
 
         assertFalse(printed.contains("uview"))
         assertTrue(printed.contains("birthday=$birthday"))

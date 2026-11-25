@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
 import kotlinx.coroutines.CancellationException
@@ -26,6 +27,7 @@ internal class SubmitViewOnlyKeyUseCase(
     private val validateUfvk: ValidateUfvkUseCase,
     private val synchronizerProvider: SynchronizerProvider,
     private val pendingImportRepository: ViewOnlyPendingImportRepository,
+    private val walletEnrollment: WalletEnrollmentAccess,
 ) {
     /**
      * @throws ViewOnlyKeyCheckException if the SDK failed to read the key; nothing is kept then.
@@ -33,21 +35,28 @@ internal class SubmitViewOnlyKeyUseCase(
     suspend operator fun invoke(
         input: String,
         network: ZcashNetwork = VersionInfo.NETWORK,
-    ): SubmitViewOnlyKeyResult =
-        when (val validation = validateUfvk(input, network)) {
+    ): SubmitViewOnlyKeyResult {
+        val enrollment = walletEnrollment.capture() ?: throw ViewOnlyKeyCheckException()
+        return when (val validation = validateUfvk(input, network)) {
             UfvkValidation.Invalid -> {
                 SubmitViewOnlyKeyResult.Invalid
             }
 
             is UfvkValidation.Valid -> {
-                if (isAlreadyImported(validation.ufvk)) {
-                    SubmitViewOnlyKeyResult.AlreadyImported
-                } else {
-                    pendingImportRepository.set(PendingViewOnlyImport(ufvk = validation.ufvk, name = ""))
-                    SubmitViewOnlyKeyResult.Accepted
-                }
+                val exists = isAlreadyImported(validation.ufvk)
+                walletEnrollment.stage(enrollment) {
+                    if (exists) {
+                        SubmitViewOnlyKeyResult.AlreadyImported
+                    } else {
+                        pendingImportRepository.set(
+                            PendingViewOnlyImport(ufvk = validation.ufvk, name = "", enrollment = enrollment)
+                        )
+                        SubmitViewOnlyKeyResult.Accepted
+                    }
+                } ?: throw ViewOnlyKeyCheckException()
             }
         }
+    }
 
     /**
      * An early answer for the user, not the guard: the import repeats the lookup right before it

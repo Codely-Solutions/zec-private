@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import android.content.res.Configuration
+import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -9,6 +11,8 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.every
@@ -24,6 +28,14 @@ import co.electriccoin.zcash.ui.R as UiR
  * behave as in the app) and a Zodl account that must never be renamed or removed.
  */
 internal object ViewOnlyAccountFixtures {
+    fun enrollmentAccess(
+        wallet: WalletWriteAccess = WalletWriteAccess(),
+        sdk: StateFlow<Synchronizer?> = MutableStateFlow(mockk<Synchronizer>()),
+    ) = WalletEnrollmentAccess(
+        wallet,
+        mockk<WalletCoordinator> { every { synchronizer } returns sdk },
+    )
+
     val viewOnlyUuid: AccountUuid = AccountUuid.new(ByteArray(16) { (it + 1).toByte() })
 
     val zodlUuid: AccountUuid = AccountUuid.new(ByteArray(16) { it.toByte() })

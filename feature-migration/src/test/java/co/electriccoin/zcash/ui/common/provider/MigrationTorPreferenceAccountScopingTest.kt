@@ -211,6 +211,7 @@ private class FakeAccountDataSource(
     ): cash.z.ecc.android.sdk.model.Account = error("unsupported")
 
     override suspend fun importViewOnlyAccount(
+        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
         ufvk: String,
         name: String,
         birthday: BlockHeight?

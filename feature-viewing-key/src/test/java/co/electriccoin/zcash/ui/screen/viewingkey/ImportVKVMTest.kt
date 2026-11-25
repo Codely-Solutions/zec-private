@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyResult
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyUseCase
+import co.electriccoin.zcash.ui.common.usecase.ViewOnlyAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.UfvkDescriber
 import co.electriccoin.zcash.ui.common.usecase.ValidateUfvkUseCase
 import co.electriccoin.zcash.ui.common.usecase.ViewOnlyKeyCheckException
@@ -428,6 +429,7 @@ class ImportVKVMTest {
                 ),
             synchronizerProvider = mockk(),
             pendingImportRepository = repository,
+            walletEnrollment = ViewOnlyAccountFixtures.enrollmentAccess(),
         )
 
     /**

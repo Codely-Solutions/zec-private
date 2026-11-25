@@ -119,6 +119,7 @@ interface AccountDataSource {
      *         import.
      */
     suspend fun importViewOnlyAccount(
+        synchronizer: Synchronizer,
         ufvk: String,
         name: String,
         birthday: BlockHeight? = null
@@ -342,12 +343,12 @@ class AccountDataSourceImpl(
      * before it is reported.
      */
     override suspend fun importViewOnlyAccount(
+        synchronizer: Synchronizer,
         ufvk: String,
         name: String,
         birthday: BlockHeight?
     ): Account =
         withContext(Dispatchers.IO) {
-            val synchronizer = synchronizerProvider.getSynchronizer()
             val overlap =
                 mapViewOnlyImportFailure {
                     synchronizer.findAccountSharingKeyComponents(UnifiedFullViewingKey(ufvk))

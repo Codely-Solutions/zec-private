@@ -5,12 +5,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 
 /** Serializes wallet-owned writes with reset and invalidates work from an earlier wallet session. */
 class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     private val mutex = Mutex()
     private val sdkRecovery = Mutex()
     private val generation = MutableStateFlow(0L)
+    private val sdkErasure = AtomicLong()
     val version = generation.asStateFlow()
     @Volatile private var blocked = false
     @Volatile private var resetting = false
@@ -26,6 +28,19 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
 
     internal suspend fun <T> withSdkRecovery(token: Long, block: suspend () -> T): T? = sdkRecovery.withLock {
         if (permits(token)) block() else null
+    }
+
+    internal fun enrollmentToken(): WalletEnrollmentToken? {
+        val wallet = token()
+        return WalletEnrollmentToken(wallet, sdkErasure.get()).takeIf(::permitsEnrollment)
+    }
+
+    internal fun permitsEnrollment(token: WalletEnrollmentToken): Boolean =
+        permits(token.wallet) && sdkErasure.get() == token.sdkErasure
+
+    /** Call under the SDK recovery fence before an erase can change the enrolled account IDs. */
+    internal fun onSdkErasureStarting() {
+        sdkErasure.incrementAndGet()
     }
 
     /** Stops admission before draining SDK recovery and writes. Remains closed until explicit setup. */

@@ -337,7 +337,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             val created =
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
 
             assertEquals(imported, created)
             assertEquals(AccountPurpose.ViewOnly, setup.captured.purpose)
@@ -366,7 +366,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             assertFailsWith<ViewOnlyAccountAlreadyExistsException> {
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
             }
         }
 
@@ -390,7 +390,7 @@ class AccountDataSourceImplViewOnlyTest {
             val thrown =
                 assertFailsWith<ViewOnlyAccountImportException> {
                     dataSource(synchronizer, relaxedBindingProvider())
-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
                 }
 
             assertTrue(generateSequence<Throwable>(thrown) { it.cause }.all { it is ViewOnlyAccountImportException })
@@ -417,7 +417,7 @@ class AccountDataSourceImplViewOnlyTest {
             val thrown =
                 assertFailsWith<ViewOnlyAccountAlreadyExistsException> {
                     dataSource(synchronizer, relaxedBindingProvider())
-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
                 }
 
             val causes = generateSequence<Throwable>(thrown) { it.cause }
@@ -447,7 +447,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             assertFailsWith<ViewOnlyAccountAlreadyExistsException> {
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
             }
         }
 
@@ -470,7 +470,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             assertFailsWith<ViewOnlyAccountImportException> {
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
             }
         }
 
@@ -488,7 +488,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             assertFailsWith<CancellationException> {
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
             }
             coVerify(exactly = 1) { synchronizer.importAccountByUfvk(any()) }
         }
@@ -507,7 +507,7 @@ class AccountDataSourceImplViewOnlyTest {
 
                 assertFailsWith<ViewOnlyAccountAlreadyExistsException>(kind.name) {
                     dataSource(synchronizer, relaxedBindingProvider())
-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
                 }
                 coVerify(exactly = 0) { synchronizer.importAccountByUfvk(any()) }
             }
@@ -530,7 +530,7 @@ class AccountDataSourceImplViewOnlyTest {
             val thrown =
                 assertFailsWith<ViewOnlyAccountAlreadyExistsException> {
                     dataSource(synchronizer, relaxedBindingProvider())
-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
                 }
 
             val causes = generateSequence<Throwable>(thrown) { it.cause }
@@ -560,7 +560,7 @@ class AccountDataSourceImplViewOnlyTest {
             val thrown =
                 assertFailsWith<ViewOnlyAccountImportException> {
                     dataSource(synchronizer, relaxedBindingProvider())
-                        .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                        .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
                 }
 
             assertTrue(generateSequence<Throwable>(thrown) { it.cause }.all { it is ViewOnlyAccountImportException })
@@ -581,7 +581,7 @@ class AccountDataSourceImplViewOnlyTest {
 
             assertFailsWith<CancellationException> {
                 dataSource(synchronizer, relaxedBindingProvider())
-                    .importViewOnlyAccount(ufvk = UFVK, name = "Savings", birthday = null)
+                    .importViewOnlyAccount(synchronizer, ufvk = UFVK, name = "Savings", birthday = null)
             }
             coVerify(exactly = 0) { synchronizer.importAccountByUfvk(any()) }
         }

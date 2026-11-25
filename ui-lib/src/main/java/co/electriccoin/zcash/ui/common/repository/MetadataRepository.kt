@@ -25,6 +25,7 @@ import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.design.util.combineToFlow
@@ -140,7 +141,11 @@ interface MetadataRepository {
     fun observeColor(accountUuid: AccountUuid): Flow<Color?>
 
     /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [setTxBookmark]. */
-    suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean
+    suspend fun setAccountColor(
+        account: WalletAccount,
+        color: Color,
+        enrollment: WalletEnrollmentToken? = null,
+    ): Boolean
 
     suspend fun delete()
 }
@@ -429,8 +434,20 @@ class MetadataRepositoryImpl(
             emitAll(observations.dropWhile { it == null })
         }.catch { e -> Twig.error(e) { "Unable to read Metadata" } }
 
-    override suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean =
-        updateMetadataAndAwait(account) { metadataDataSource.setAccountColor(color = color, key = it) }
+    override suspend fun setAccountColor(
+        account: WalletAccount,
+        color: Color,
+        enrollment: WalletEnrollmentToken?,
+    ): Boolean =
+        when {
+            enrollment == null ->
+                updateMetadataAndAwait(account) { metadataDataSource.setAccountColor(color = color, key = it) }
+
+            walletWriteAccess.permitsEnrollment(enrollment) ->
+                updateMetadataLocked(account, enrollment.wallet) { metadataDataSource.setAccountColor(color, it) }
+
+            else -> false
+        }
 
     override suspend fun delete() {
         mutex.withLock {
