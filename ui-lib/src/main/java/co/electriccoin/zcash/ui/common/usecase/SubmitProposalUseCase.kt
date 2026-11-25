@@ -90,8 +90,8 @@ class SubmitProposalUseCase(
             val account = navigationRouter.whileAtEntry(sourceEntryId) {
                 if (sameSession()) authenticate() else null
             } ?: return
-            val selection = accountDataSource.confirmSelection(account) ?: return
-            val canSubmit = { sameSession() && selection() }
+            val selection = accountDataSource.confirmSelection(account)
+            val canSubmit = { sameSession() && selection?.invoke() == true }
             if (canSubmit() && navigationRouter.isAtEntry(sourceEntryId)) {
                 approveSubmission(account, reviewedProposal, reviewedQuote, sourceEntryId, reviewedOwner, canSubmit)
             }

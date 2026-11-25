@@ -2584,7 +2584,7 @@ index e8193931b..2df8185a6 100644
 -        navigationRouter.back()
 +        if (navigateBack) navigationRouter.back()
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
-index 291d24903..9171a8e17 100644
+index 291d24903..111e5e5de 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -2612,7 +2612,7 @@ index 291d24903..9171a8e17 100644
 @@ -31 +45 @@ class CreateLedgerAccountUseCase(
 -    suspend operator fun invoke(birthday: BlockHeight? = null) {
 +    suspend operator fun invoke(birthday: BlockHeight? = null, sourceEntryId: String? = null) {
-@@ -33,8 +47,31 @@ class CreateLedgerAccountUseCase(
+@@ -33,8 +47,33 @@ class CreateLedgerAccountUseCase(
 -        val createdAccount = accountDataSource.importLedgerAccount(pairing, birthday)
 -        accountDataSource.selectAccount(createdAccount)
 -        ledgerPairingRepository.clear()
@@ -2635,7 +2635,9 @@ index 291d24903..9171a8e17 100644
 +            }
 +            currentCoroutineContext().ensureActive()
 +            route?.let { destination ->
-+                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) { NavigationCommand.Forward(listOf(destination)) }
++                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) {
++                    NavigationCommand.Forward(listOf(destination))
++                }
 +            }
 +        }
 +    }
@@ -2652,7 +2654,7 @@ index 291d24903..9171a8e17 100644
 +            !ledgerPairingRepository.clear(pairing) -> null
 +            imported.birthday == null -> LedgerConnectedArgs
 +            else -> KeepOpenArgs(KeepOpenFlow.LEDGER)
-@@ -42,0 +80,26 @@ class CreateLedgerAccountUseCase(
+@@ -42,0 +82,26 @@ class CreateLedgerAccountUseCase(
 +
 +    private suspend fun selectImported(
 +        pairing: LedgerAccountPairing,
@@ -52862,7 +52864,7 @@ index 73da2bea1..8b71a6a1f 100644
 +                }
 +            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
-index c6e75900c..8117d086f 100644
+index c6e75900c..7303a024b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -52918,27 +52920,70 @@ index c6e75900c..8117d086f 100644
 +                val selection = accountDataSource.confirmSelection(account) ?: return@launch
 +                val approval = newApproval(account) { sameSession() && selection() }
 +                if (!canStartShield(approval, sourceEntryId)) return@launch
-@@ -46 +86,2 @@ class ShieldFundsUseCase(
+@@ -46,23 +86,35 @@ class ShieldFundsUseCase(
 -                when (accountDataSource.getSelectedAccount()) {
-+                if (!canStartShield(approval, sourceEntryId)) return@launch
-+                when (approval.account) {
-@@ -48 +89,3 @@ class ShieldFundsUseCase(
+-                    is KeystoneAccount -> {
 -                        createKeystoneShieldProposal()
-+                        navigationRouter.whileAtEntry(sourceEntryId) {
-+                            createKeystoneShieldProposal(approval, sourceEntryId)
-+                        }
-@@ -52 +95,3 @@ class ShieldFundsUseCase(
+-                    }
+-
+-                    is LedgerAccount -> {
 -                        createLedgerShieldProposal()
-+                        navigationRouter.whileAtEntry(sourceEntryId) {
-+                            createLedgerShieldProposal(approval, sourceEntryId)
-+                        }
-@@ -65 +110 @@ class ShieldFundsUseCase(
+-                    }
+-
+-                    is ViewOnlyAccount -> {
+-                        navigateToError(
+-                            ErrorArgs.General(
+-                                AccountOperationUnsupportedException.viewOnly()
+-                            )
+-                        )
+-                    }
+-
+-                    is ZodlAccount -> {
+-                        if (closeCurrentScreen) {
 -                            navigationRouter.back()
-+                            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -67 +112 @@ class ShieldFundsUseCase(
+-                        }
 -                        shieldZashiFunds()
-+                        shieldZashiFunds(approval, outcomeEntryId)
-@@ -72,0 +118,11 @@ class ShieldFundsUseCase(
+-                    }
++                if (!canStartShield(approval, sourceEntryId)) return@launch
++                performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
++            }
++    }
++
++    private suspend fun performShield(
++        approval: ShieldingApproval,
++        closeCurrentScreen: Boolean,
++        sourceEntryId: String?,
++        outcomeEntryId: String?,
++    ) {
++        when (approval.account) {
++            is KeystoneAccount -> {
++                navigationRouter.whileAtEntry(sourceEntryId) {
++                    createKeystoneShieldProposal(approval, sourceEntryId)
++                }
++            }
++
++            is LedgerAccount -> {
++                navigationRouter.whileAtEntry(sourceEntryId) {
++                    createLedgerShieldProposal(approval, sourceEntryId)
++                }
++            }
++
++            is ViewOnlyAccount -> {
++                navigateToError(
++                    ErrorArgs.General(
++                        AccountOperationUnsupportedException.viewOnly()
++                    )
++                )
++            }
++
++            is ZodlAccount -> {
++                if (closeCurrentScreen) {
++                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+@@ -69,0 +122 @@ class ShieldFundsUseCase(
++                shieldZashiFunds(approval, outcomeEntryId)
+@@ -70,0 +124 @@ class ShieldFundsUseCase(
++        }
+@@ -72,0 +127,11 @@ class ShieldFundsUseCase(
 +    private fun newApproval(account: WalletAccount, isCurrent: () -> Boolean): ShieldingApproval =
 +        ShieldingApproval(
 +            account = account,
@@ -52950,30 +52995,30 @@ index c6e75900c..8117d086f 100644
 +            remainsCurrent = isCurrent,
 +        )
 +
-@@ -74 +130 @@ class ShieldFundsUseCase(
+@@ -74 +139 @@ class ShieldFundsUseCase(
 -    private suspend fun shieldZashiFunds() {
 +    private suspend fun shieldZashiFunds(approval: ShieldingApproval, outcomeEntryId: String?) {
-@@ -76,2 +132,2 @@ class ShieldFundsUseCase(
+@@ -76,2 +141,2 @@ class ShieldFundsUseCase(
 -            zashiProposalRepository.createShieldProposal()
 -            when (val result = zashiProposalRepository.submit()) {
 +            val proposal = zashiProposalRepository.createShieldProposal(approval)
 +            when (val result = zashiProposalRepository.submit(proposal)) {
-@@ -82 +138 @@ class ShieldFundsUseCase(
+@@ -82 +147 @@ class ShieldFundsUseCase(
 -                    navigateToError(ErrorArgs.ShieldingError(result))
 +                    showShieldError(ErrorArgs.ShieldingError(result), approval, outcomeEntryId)
-@@ -88,0 +145,2 @@ class ShieldFundsUseCase(
+@@ -88,0 +154,2 @@ class ShieldFundsUseCase(
 +        } catch (e: CancellationException) {
 +            throw e
-@@ -90,3 +148 @@ class ShieldFundsUseCase(
+@@ -90,3 +157 @@ class ShieldFundsUseCase(
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 -        } finally {
 -            zashiProposalRepository.clear()
 +            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, outcomeEntryId)
-@@ -97 +153,2 @@ class ShieldFundsUseCase(
+@@ -97 +162,2 @@ class ShieldFundsUseCase(
 -    private suspend fun createKeystoneShieldProposal() {
 +    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
 +        var created: ShieldTransactionProposal? = null
-@@ -99,3 +156,14 @@ class ShieldFundsUseCase(
+@@ -99,3 +165,14 @@ class ShieldFundsUseCase(
 -            keystoneProposalRepository.createShieldProposal()
 -            keystoneProposalRepository.createPCZTFromProposal()
 -            navigationRouter.forward(SignKeystoneTransactionArgs)
@@ -52991,40 +53036,41 @@ index c6e75900c..8117d086f 100644
 +                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 +            throw e
-@@ -103,2 +171,4 @@ class ShieldFundsUseCase(
+@@ -103,2 +180,4 @@ class ShieldFundsUseCase(
 -            keystoneProposalRepository.clear()
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 +            clearOwnedShield(
 +                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 +            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, sourceEntryId)
-@@ -113 +183,2 @@ class ShieldFundsUseCase(
+@@ -113 +192,2 @@ class ShieldFundsUseCase(
 -    private suspend fun createLedgerShieldProposal() {
 +    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
 +        var created: ShieldTransactionProposal? = null
-@@ -115 +186 @@ class ShieldFundsUseCase(
+@@ -115 +195 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.createShieldProposal()
 +            val proposal = ledgerProposalPipeline.createShieldProposal(approval).also { created = it }
-@@ -117 +188,5 @@ class ShieldFundsUseCase(
+@@ -117 +197,5 @@ class ShieldFundsUseCase(
 -            ledgerNavigator.forwardToSign()
 +            approval.requireCurrent()
 +            ledgerProposalPipeline.approveForSigning(proposal)
 +            ledgerNavigator.forwardToSign(sourceEntryId) {
 +                approval.isCurrent() && ledgerProposalPipeline.transactionProposal.value === proposal
 +            }
-@@ -119 +194,3 @@ class ShieldFundsUseCase(
+@@ -119 +203,3 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 +            clearOwnedShield(
 +                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
 +            )
-@@ -122,2 +199,4 @@ class ShieldFundsUseCase(
+@@ -122,2 +208,15 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 +            clearOwnedShield(
 +                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
 +            )
 +            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, sourceEntryId)
-@@ -125,0 +205,19 @@ class ShieldFundsUseCase(
++        }
++    }
 +    private fun showShieldError(args: ErrorArgs, approval: ShieldingApproval, outcomeEntryId: String?) {
 +        if (approval.isCurrent()) {
 +            if (outcomeEntryId == null) {
@@ -53034,9 +53080,7 @@ index c6e75900c..8117d086f 100644
 +                    NavigationCommand.Forward(listOf(navigateToError.stage(args)))
 +                }
 +            }
-+        }
-+    }
-+}
+@@ -126,0 +226,8 @@ class ShieldFundsUseCase(
 +
 +private fun clearOwnedShield(
 +    created: ShieldTransactionProposal?,
@@ -53044,6 +53088,7 @@ index c6e75900c..8117d086f 100644
 +    clear: () -> Unit,
 +) {
 +    if (created != null && current() === created) clear()
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmissionProgressStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmissionProgressStore.kt
 new file mode 100644
 index 000000000..729032d8e
@@ -53187,7 +53232,7 @@ index d950f7042..4a2a1be19 100644
 -                prefillSend.clear()
 +                prefillSend.clearThrough(originalPrefill)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCase.kt
-index 43f1b5a78..730c86745 100644
+index 43f1b5a78..01c7c8755 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCase.kt
 @@ -4,0 +5,2 @@ import androidx.annotation.VisibleForTesting
@@ -53266,8 +53311,8 @@ index 43f1b5a78..730c86745 100644
 +            val account = navigationRouter.whileAtEntry(sourceEntryId) {
 +                if (sameSession()) authenticate() else null
 +            } ?: return
-+            val selection = accountDataSource.confirmSelection(account) ?: return
-+            val canSubmit = { sameSession() && selection() }
++            val selection = accountDataSource.confirmSelection(account)
++            val canSubmit = { sameSession() && selection?.invoke() == true }
 +            if (canSubmit() && navigationRouter.isAtEntry(sourceEntryId)) {
 +                approveSubmission(account, reviewedProposal, reviewedQuote, sourceEntryId, reviewedOwner, canSubmit)
 @@ -79,12 +98,17 @@ class SubmitProposalUseCase(

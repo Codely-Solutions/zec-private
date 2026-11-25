@@ -58,7 +58,9 @@ class CreateLedgerAccountUseCase(
             }
             currentCoroutineContext().ensureActive()
             route?.let { destination ->
-                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) { NavigationCommand.Forward(listOf(destination)) }
+                navigationRouter.stageResultFrom(sourceEntryId, { walletEnrollment.permits(owner) }) {
+                    NavigationCommand.Forward(listOf(destination))
+                }
             }
         }
     }

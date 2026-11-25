@@ -84,35 +84,44 @@ class ShieldFundsUseCase(
                 messageAvailabilityDataSource.onShieldingInitiated()
 
                 if (!canStartShield(approval, sourceEntryId)) return@launch
-                when (approval.account) {
-                    is KeystoneAccount -> {
-                        navigationRouter.whileAtEntry(sourceEntryId) {
-                            createKeystoneShieldProposal(approval, sourceEntryId)
-                        }
-                    }
+                performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
+            }
+    }
 
-                    is LedgerAccount -> {
-                        navigationRouter.whileAtEntry(sourceEntryId) {
-                            createLedgerShieldProposal(approval, sourceEntryId)
-                        }
-                    }
-
-                    is ViewOnlyAccount -> {
-                        navigateToError(
-                            ErrorArgs.General(
-                                AccountOperationUnsupportedException.viewOnly()
-                            )
-                        )
-                    }
-
-                    is ZodlAccount -> {
-                        if (closeCurrentScreen) {
-                            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-                        }
-                        shieldZashiFunds(approval, outcomeEntryId)
-                    }
+    private suspend fun performShield(
+        approval: ShieldingApproval,
+        closeCurrentScreen: Boolean,
+        sourceEntryId: String?,
+        outcomeEntryId: String?,
+    ) {
+        when (approval.account) {
+            is KeystoneAccount -> {
+                navigationRouter.whileAtEntry(sourceEntryId) {
+                    createKeystoneShieldProposal(approval, sourceEntryId)
                 }
             }
+
+            is LedgerAccount -> {
+                navigationRouter.whileAtEntry(sourceEntryId) {
+                    createLedgerShieldProposal(approval, sourceEntryId)
+                }
+            }
+
+            is ViewOnlyAccount -> {
+                navigateToError(
+                    ErrorArgs.General(
+                        AccountOperationUnsupportedException.viewOnly()
+                    )
+                )
+            }
+
+            is ZodlAccount -> {
+                if (closeCurrentScreen) {
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+                }
+                shieldZashiFunds(approval, outcomeEntryId)
+            }
+        }
     }
 
     private fun newApproval(account: WalletAccount, isCurrent: () -> Boolean): ShieldingApproval =
