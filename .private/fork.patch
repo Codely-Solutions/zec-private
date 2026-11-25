@@ -35406,7 +35406,7 @@ index 1c2a8787c..53d13e159 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..71669214e 100644
+index c9262f680..1f26f3d77 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -35419,77 +35419,80 @@ index c9262f680..71669214e 100644
 +import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 @@ -31 +32,0 @@ import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
 -import co.electriccoin.zcash.ui.common.usecase.FlipTransactionBookmarkUseCase
-@@ -42 +42,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
+@@ -40 +40,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
+@@ -42 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
-@@ -72 +71,0 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
+@@ -72 +70,0 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
 -import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
-@@ -75 +73,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
+@@ -75 +72,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
-@@ -77 +75 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
+@@ -77 +74 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToExportPrivateDataUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ExportPrivateDataUseCase
-@@ -96 +93,0 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapUseCase
+@@ -96 +92,0 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToTaxExportUseCase
-@@ -117 +113,0 @@ import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
+@@ -117 +112,0 @@ import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneUrToZashiAccountsUseCase
-@@ -137 +132,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -137 +131,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -139,0 +135 @@ import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
+@@ -139,0 +134 @@ import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
-@@ -147,0 +144,3 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitKSProposalUseCase
+@@ -147,0 +143,3 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitKSProposalUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
 +import co.electriccoin.zcash.ui.common.usecase.ReviewedPaymentStore
 +import co.electriccoin.zcash.ui.common.usecase.PreparePaymentReviewUseCase
-@@ -164,0 +164,2 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
+@@ -164,0 +163,2 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetWalletSdkDataUseCase
-@@ -188,0 +190 @@ val useCaseModule =
+@@ -188,0 +189 @@ val useCaseModule =
 +        singleOf(::CopyRecoveryToClipboardUseCase)
-@@ -190,0 +193 @@ val useCaseModule =
+@@ -190,0 +192 @@ val useCaseModule =
 +        singleOf(::DeleteLegacySharedExportsUseCase)
-@@ -201 +203,0 @@ val useCaseModule =
+@@ -201 +202,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -214 +215,0 @@ val useCaseModule =
+@@ -214,2 +214,0 @@ val useCaseModule =
 -        factoryOf(::ParseKeystoneUrToZashiAccountsUseCase)
-@@ -234,0 +236,3 @@ val useCaseModule =
+-        factoryOf(::GetExchangeRateUseCase)
+@@ -234,0 +234,3 @@ val useCaseModule =
 +        singleOf(::SubmissionProgressStore)
 +        singleOf(::ReviewedPaymentStore)
 +        factoryOf(::PreparePaymentReviewUseCase)
-@@ -246 +249,0 @@ val useCaseModule =
+@@ -246 +247,0 @@ val useCaseModule =
 -        factoryOf(::NavigateToAddressBookUseCase)
-@@ -249 +252 @@ val useCaseModule =
+@@ -249 +250 @@ val useCaseModule =
 -        factoryOf(::FlipTransactionBookmarkUseCase)
 +        factoryOf(::SetTransactionBookmarkUseCase)
-@@ -255,2 +258 @@ val useCaseModule =
+@@ -255,2 +256 @@ val useCaseModule =
 -        factoryOf(::NavigateToTaxExportUseCase)
 -        factoryOf(::CreateFlexaTransactionUseCase)
 +        factoryOf(::WalletReportAccess)
-@@ -261 +262,0 @@ val useCaseModule =
+@@ -261 +260,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -289 +290 @@ val useCaseModule =
+@@ -289 +288 @@ val useCaseModule =
 -        factoryOf(::RequestSwapQuoteUseCase)
 +        singleOf(::RequestSwapQuoteUseCase)
-@@ -304 +305 @@ val useCaseModule =
+@@ -304 +303 @@ val useCaseModule =
 -        factoryOf(::GetReloadableSwapQuoteUseCase)
 +        factory { GetReloadableSwapQuoteUseCase(get(), get(), get()) }
-@@ -306 +307 @@ val useCaseModule =
+@@ -306 +305 @@ val useCaseModule =
 -        factoryOf(::GetVKUseCase)
 +        singleOf(::GetVKUseCase)
-@@ -309 +310 @@ val useCaseModule =
+@@ -309 +308 @@ val useCaseModule =
 -        factoryOf(::NavigateToExportPrivateDataUseCase)
 +        singleOf(::ExportPrivateDataUseCase)
-@@ -312 +313 @@ val useCaseModule =
+@@ -312 +311 @@ val useCaseModule =
 -        singleOf(::UpdateSwapActivityMetadataUseCase)
 +        single { UpdateSwapActivityMetadataUseCase(get(), get(), get()) }
-@@ -320 +321,3 @@ val useCaseModule =
+@@ -320 +319,3 @@ val useCaseModule =
 -        factoryOf(::ResetZashiUseCase)
 +        singleOf(::ResetProgressStore)
 +        singleOf(::ResetWalletSdkDataUseCase)
 +        singleOf(::ResetZashiUseCase)
-@@ -325 +328 @@ val useCaseModule =
+@@ -325 +326 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        single { GetSwapStatusUseCase(get(), get(), get()) }
-@@ -330 +332,0 @@ val useCaseModule =
+@@ -330 +330,0 @@ val useCaseModule =
 -        factoryOf(::IsServerAutomaticUseCase)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
 index 50bcc0da8..72da86ccc 100644
@@ -47906,6 +47909,22 @@ index 4c31aad9e..cdcc9b878 100644
 +import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 @@ -27,0 +29 @@ class GetCuratedSwapAssetsUseCase(
 +                    ?.let(SwapPriceMarkets::selectableAssets)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetExchangeRateUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetExchangeRateUseCase.kt
+deleted file mode 100644
+index adf8626c5..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetExchangeRateUseCase.kt
++++ /dev/null
+@@ -1,10 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+-import kotlinx.coroutines.flow.first
+-
+-class GetExchangeRateUseCase(
+-    private val exchangeRateRepository: ExchangeRateRepository
+-) {
+-    suspend operator fun invoke() = exchangeRateRepository.state.first()
+-}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
 index 48c238fb1..f132e8ac9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
@@ -56398,7 +56417,7 @@ index 1ff687453..363beb343 100644
 +                contentDescription = null,
 +                colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
-index dca6d245c..768d07818 100644
+index dca6d245c..8386ee361 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeBalance.kt
 @@ -5 +4,0 @@ package co.electriccoin.zcash.ui.screen.exchangerate.widget
@@ -56424,14 +56443,21 @@ index dca6d245c..768d07818 100644
 @@ -22 +23 @@ import androidx.compose.runtime.rememberCoroutineScope
 -import androidx.compose.ui.Alignment.Companion.CenterVertically
 +import androidx.compose.ui.Alignment
-@@ -48 +48,0 @@ import co.electriccoin.zcash.ui.design.util.getValue
+@@ -31,0 +33 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
++import cash.z.ecc.android.sdk.model.FiatCurrency
+@@ -36,0 +39 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+@@ -48 +50,0 @@ import co.electriccoin.zcash.ui.design.util.getValue
 -import co.electriccoin.zcash.ui.design.util.orDark
-@@ -71,5 +71,8 @@ fun StyledExchangeBalance(
+@@ -70,6 +72,10 @@ fun StyledExchangeBalance(
+-            if ((state.isStale && !state.isLoading) || (!state.isLoading && state.currencyConversion == null)) {
 -                ExchangeRateUnavailableButton(
 -                    textColor = textColor,
 -                    style = style,
 -                    modifier = modifier
 -                )
++            val conversion = state.eligibleConversion()
++            if (!state.isLoading && conversion == null) {
 +                FlowRow(
 +                    modifier = modifier,
 +                    horizontalArrangement = Arrangement.Center,
@@ -56440,30 +56466,39 @@ index dca6d245c..768d07818 100644
 +                    ExchangeRateUnavailableButton(textColor = textColor, style = style)
 +                    if (state.isRefreshEnabled) ExchangeRateRefreshButton(state, textColor)
 +                }
-@@ -83 +86,2 @@ fun StyledExchangeBalance(
+@@ -81,0 +88 @@ fun StyledExchangeBalance(
++                    conversion = conversion,
+@@ -83 +90,2 @@ fun StyledExchangeBalance(
 -                    isHideBalance = LocalBalancesAvailable.current.not()
 +                    isHideBalance = LocalBalancesAvailable.current.not(),
 +                    modifier = modifier
-@@ -109,3 +113 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -104,0 +113 @@ private fun ExchangeAvailableRateLabelInternal(
++    conversion: FiatCurrencyConversion?,
+@@ -109,3 +118 @@ private fun ExchangeAvailableRateLabelInternal(
 -    val isEnabled = !state.isLoading && state.isRefreshEnabled && zatoshi != null
 -
 -    ExchangeRateButton(
 +    Row(
-@@ -113,3 +115 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -113,3 +120 @@ private fun ExchangeAvailableRateLabelInternal(
 -        onClick = state.onRefresh,
 -        isEnabled = isEnabled,
 -        textColor = textColor,
 +        verticalAlignment = Alignment.CenterVertically,
-@@ -128,2 +128 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -120 +125,3 @@ private fun ExchangeAvailableRateLabelInternal(
+-                    createExchangeRateText(state, hiddenBalancePlaceholder, it, isHideBalance)
++                    createExchangeRateText(
++                        state.expectedCurrency, conversion, hiddenBalancePlaceholder, it, isHideBalance,
++                    )
+@@ -128,2 +135 @@ private fun ExchangeAvailableRateLabelInternal(
 -        Spacer(modifier = Modifier.width(12.dp))
 -
 +        val refreshTargetSize = 48.dp
-@@ -131 +130,3 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -131 +137,3 @@ private fun ExchangeAvailableRateLabelInternal(
 -            LottieProgress(modifier = Modifier.align(CenterVertically))
 +            Box(modifier = Modifier.size(refreshTargetSize), contentAlignment = Alignment.Center) {
 +                LottieProgress()
 +            }
-@@ -133,16 +134 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -133,16 +141 @@ private fun ExchangeAvailableRateLabelInternal(
 -            Image(
 -                modifier =
 -                    Modifier
@@ -56481,7 +56516,7 @@ index dca6d245c..768d07818 100644
 -                    )
 -            )
 +            ExchangeRateRefreshButton(state, textColor)
-@@ -152,0 +139,18 @@ private fun ExchangeAvailableRateLabelInternal(
+@@ -152,0 +146,18 @@ private fun ExchangeAvailableRateLabelInternal(
 +@Composable
 +private fun ExchangeRateRefreshButton(state: ExchangeRateState.Data, textColor: Color) {
 +    IconButton(
@@ -56500,27 +56535,63 @@ index dca6d245c..768d07818 100644
 +    }
 +}
 +
-@@ -187 +190,0 @@ private fun ExchangeRateUnavailableButton(
+@@ -155 +166,2 @@ internal fun createExchangeRateText(
+-    state: ExchangeRateState.Data,
++    currency: FiatCurrency,
++    conversion: FiatCurrencyConversion?,
+@@ -159,6 +171,5 @@ internal fun createExchangeRateText(
+-): String {
+-    val currencySymbol = state.expectedCurrency.symbol
+-    val text =
+-        if (isHideBalances) {
+-            "${currencySymbol}${hiddenBalancePlaceholder.getValue()}"
+-        } else if (state.currencyConversion != null) {
++): String? =
++    if (isHideBalances) {
++        "${currency.symbol}${hiddenBalancePlaceholder.getValue()}"
++    } else {
++        conversion?.let {
+@@ -166,9 +177,3 @@ internal fun createExchangeRateText(
+-                amount =
+-                    zatoshi
+-                        .convertZatoshiToZec()
+-                        .multiply(
+-                            BigDecimal(state.currencyConversion.priceOfZec),
+-                            MathContext.DECIMAL128
+-                        ),
+-                ticker = currencySymbol,
+-                tickerLocation = TickerLocation.BEFORE
++                amount = zatoshi.convertZatoshiToZec().multiply(BigDecimal(it.priceOfZec), MathContext.DECIMAL128),
++                ticker = currency.symbol,
++                tickerLocation = TickerLocation.BEFORE,
+@@ -176,2 +180,0 @@ internal fun createExchangeRateText(
+-        } else {
+-            currencySymbol
+@@ -179,2 +182 @@ internal fun createExchangeRateText(
+-    return text
+-}
++    }
+@@ -187 +188,0 @@ private fun ExchangeRateUnavailableButton(
 -    modifier: Modifier = Modifier,
-@@ -203,2 +206 @@ private fun ExchangeRateUnavailableButton(
+@@ -203,2 +204 @@ private fun ExchangeRateUnavailableButton(
 -        ExchangeRateButton(
 -            modifier = modifier,
 +        TextButton(
-@@ -210,3 +212,2 @@ private fun ExchangeRateUnavailableButton(
+@@ -210,3 +210,2 @@ private fun ExchangeRateUnavailableButton(
 -            isEnabled = true,
 -            enableBorder = false,
 -            textColor = textColor,
 +            colors = ButtonDefaults.textButtonColors(contentColor = textColor),
 +            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-@@ -217 +218 @@ private fun ExchangeRateUnavailableButton(
+@@ -217 +216 @@ private fun ExchangeRateUnavailableButton(
 -                maxLines = 1,
 +                modifier = Modifier.weight(1f, fill = false),
-@@ -224,3 +225 @@ private fun ExchangeRateUnavailableButton(
+@@ -224,3 +223 @@ private fun ExchangeRateUnavailableButton(
 -                modifier =
 -                    Modifier
 -                        .align(CenterVertically),
 +                modifier = Modifier.align(Alignment.CenterVertically),
-@@ -235,46 +233,0 @@ private fun ExchangeRateUnavailableButton(
+@@ -235,46 +231,0 @@ private fun ExchangeRateUnavailableButton(
 -@Suppress("LongParameterList")
 -@Composable
 -private fun ExchangeRateButton(
@@ -56567,6 +56638,33 @@ index dca6d245c..768d07818 100644
 -    )
 -}
 -
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeLabel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeLabel.kt
+index e8ead1e9b..cf3856570 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeLabel.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/StyledExchangeLabel.kt
+@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+@@ -32,9 +33,11 @@ fun StyledExchangeLabel(
+-            if (!state.isStale && state.currencyConversion != null) {
+-                Text(
+-                    modifier = modifier,
+-                    text = createExchangeRateText(state, hiddenBalancePlaceholder, zatoshi, isHideBalances),
+-                    maxLines = 1,
+-                    color = textColor,
+-                    style = style,
+-                )
+-            }
++            val conversion = state.eligibleConversion() ?: return
++            val text = createExchangeRateText(
++                state.expectedCurrency, conversion, hiddenBalancePlaceholder, zatoshi, isHideBalances,
++            ) ?: return
++            Text(
++                modifier = modifier,
++                text = text,
++                maxLines = 1,
++                color = textColor,
++                style = style,
++            )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableScreen.kt
 index f8570505d..849951990 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableScreen.kt
@@ -60579,18 +60677,24 @@ index 479babd2e..b898e84bc 100644
 -data object ReviewTransactionArgs
 +data class ReviewTransactionArgs(val reviewId: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
-index 7f73faf20..19351d286 100644
+index 7f73faf20..5a5f6b2fb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -18,0 +20 @@ import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
+@@ -17,0 +19 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
++import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+@@ -19 +21 @@ import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ReviewedPaymentStore
 @@ -43,0 +46 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.filterNotNull
-@@ -45,0 +49 @@ import kotlinx.coroutines.flow.flow
+@@ -45 +48 @@ import kotlinx.coroutines.flow.flatMapLatest
+-import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.flow.flowOf
-@@ -51,0 +56,12 @@ import kotlinx.coroutines.launch
+@@ -47 +49,0 @@ import kotlinx.coroutines.flow.map
+-import kotlinx.coroutines.flow.shareIn
+@@ -51,0 +54,12 @@ import kotlinx.coroutines.launch
 +internal fun unavailableReview(onBack: () -> Unit) = ReviewTransactionState(
 +    title = stringRes(R.string.send_review),
 +    items = listOf(
@@ -60603,11 +60707,22 @@ index 7f73faf20..19351d286 100644
 +    onBack = onBack,
 +)
 +
-@@ -61,0 +78,3 @@ class ReviewTransactionVM(
+@@ -59 +73 @@ class ReviewTransactionVM(
+-    private val getExchangeRate: GetExchangeRateUseCase,
++    exchangeRateRepository: ExchangeRateRepository,
+@@ -61,0 +76,3 @@ class ReviewTransactionVM(
 +    private val sourceEntryId: String? = null,
 +    private val reviewedPaymentStore: ReviewedPaymentStore? = null,
 +    private val args: ReviewTransactionArgs? = null,
-@@ -75,0 +95,8 @@ class ReviewTransactionVM(
+@@ -67,8 +84,7 @@ class ReviewTransactionVM(
+-    private val exchangeRate =
+-        flow {
+-            emit(getExchangeRate())
+-        }.shareIn(
+-            scope = viewModelScope,
+-            started = SharingStarted.Eagerly,
+-            replay = 1
+-        )
 +    private val reviewProposal = observeProposal.observeSendReview().let { published ->
 +        reviewedPaymentStore?.let { store ->
 +            combine(published, store.observe(args?.reviewId)) { proposal, approved ->
@@ -60615,50 +60730,52 @@ index 7f73faf20..19351d286 100644
 +            }
 +        } ?: published
 +    }
-+
-@@ -83 +110 @@ class ReviewTransactionVM(
+@@ -83 +99 @@ class ReviewTransactionVM(
 -            observeProposal.filterSend(),
 +            reviewProposal,
-@@ -90,0 +118 @@ class ReviewTransactionVM(
+@@ -85 +101 @@ class ReviewTransactionVM(
+-            exchangeRate,
++            exchangeRateRepository.state,
+@@ -90,0 +107 @@ class ReviewTransactionVM(
 +            if (proposal == null) return@flatMapLatest flowOf(null)
-@@ -126 +154 @@ class ReviewTransactionVM(
+@@ -126 +143 @@ class ReviewTransactionVM(
 -            base.copy(orchardWarningSheet = sheet)
 +            base?.copy(orchardWarningSheet = sheet) ?: unavailableReview(navigationRouter::back)
-@@ -132,0 +161 @@ class ReviewTransactionVM(
+@@ -132,0 +150 @@ class ReviewTransactionVM(
 +
-@@ -134,0 +164,6 @@ class ReviewTransactionVM(
+@@ -134,0 +153,6 @@ class ReviewTransactionVM(
 +    override fun onCleared() {
 +        navigationRouter.discardResultFrom(sourceEntryId)
 +        reviewedPaymentStore?.discard(args?.reviewId)
 +        super.onCleared()
 +    }
 +
-@@ -140 +175,2 @@ class ReviewTransactionVM(
+@@ -140 +164,2 @@ class ReviewTransactionVM(
 -            observeProposal.filterSend().first { it.proposal.usesOrchardInputs() }
 +            val proposal = reviewProposal.filterNotNull().first { it.proposal.usesOrchardInputs() }
 +            val account = observeSelectedWalletAccount.require().first()
-@@ -145 +181,4 @@ class ReviewTransactionVM(
+@@ -145 +170,4 @@ class ReviewTransactionVM(
 -                    onCancel = ::onOrchardWarningCancel,
 +                    onCancel = {
 +                        orchardWarningSheet.value = null
 +                        onBack(proposal, account)
 +                    },
-@@ -168 +207 @@ class ReviewTransactionVM(
+@@ -168 +196 @@ class ReviewTransactionVM(
 -                    title = stringRes(R.string.send_amountSummary),
 +                    title = stringRes(R.string.private_total_zec_to_spend),
-@@ -187 +226 @@ class ReviewTransactionVM(
+@@ -187 +215 @@ class ReviewTransactionVM(
 -                    title = stringRes(R.string.send_feeSummary),
 +                    title = stringRes(R.string.private_wallet_transaction_fee),
-@@ -215 +254 @@ class ReviewTransactionVM(
+@@ -215 +243 @@ class ReviewTransactionVM(
 -                onClick = ::onConfirmClick
 +                onClick = { onConfirmClick(transactionProposal, selectedWallet) }
-@@ -217 +256 @@ class ReviewTransactionVM(
+@@ -217 +245 @@ class ReviewTransactionVM(
 -        onBack = ::onBack,
 +        onBack = { onBack(transactionProposal, selectedWallet) },
-@@ -221 +260 @@ class ReviewTransactionVM(
+@@ -221 +249 @@ class ReviewTransactionVM(
 -        transactionProposal: SendTransactionProposal,
 +        transactionProposal: Zip321TransactionProposal,
-@@ -267,5 +306,4 @@ class ReviewTransactionVM(
+@@ -267,5 +295,4 @@ class ReviewTransactionVM(
 -                transactionProposal.memo.takeIf { it.value.isNotEmpty() }?.let {
 -                    MessageState(
 -                        title = stringRes(R.string.send_requestPayment_for),
@@ -60668,20 +60785,20 @@ index 7f73faf20..19351d286 100644
 +                    val message = binaryMemoByteCount?.let { stringRes(R.string.zip321_binary_memo, it) }
 +                        ?: memo.value.takeIf { it.isNotEmpty() }?.let { stringRes(it) }
 +                    message?.let { MessageState(title = stringRes(R.string.send_requestPayment_for), message = it) }
-@@ -274 +312 @@ class ReviewTransactionVM(
+@@ -274 +301 @@ class ReviewTransactionVM(
 -                    title = stringRes(R.string.send_feeSummary),
 +                    title = stringRes(R.string.private_wallet_transaction_fee),
-@@ -289 +327 @@ class ReviewTransactionVM(
+@@ -289 +316 @@ class ReviewTransactionVM(
 -                onClick = ::onConfirmClick
 +                onClick = { onConfirmClick(transactionProposal, selectedWallet) }
-@@ -291 +329 @@ class ReviewTransactionVM(
+@@ -291 +318 @@ class ReviewTransactionVM(
 -        onBack = ::onBack,
 +        onBack = { onBack(transactionProposal, selectedWallet) },
-@@ -296 +334,2 @@ class ReviewTransactionVM(
+@@ -296 +323,2 @@ class ReviewTransactionVM(
 -    private fun onBack() = viewModelScope.launch { cancelProposalFlow(clearSendForm = false) }
 +    private fun onBack(proposal: SendTransactionProposal, account: WalletAccount) =
 +        cancelProposalFlow.rejectReviewed(proposal, account.sdkAccount.accountUuid, sourceEntryId)
-@@ -304,8 +343 @@ class ReviewTransactionVM(
+@@ -304,8 +332 @@ class ReviewTransactionVM(
 -    // "Cancel" (and back gesture / scrim tap): dismiss the sheet and leave the review screen back to
 -    // Send, reusing the screen's existing cancel-proposal-flow action.
 -    private fun onOrchardWarningCancel() {
@@ -60691,7 +60808,7 @@ index 7f73faf20..19351d286 100644
 -
 -    private fun onConfirmClick() {
 +    private fun onConfirmClick(proposal: SendTransactionProposal, selectedWallet: WalletAccount) {
-@@ -313 +345,5 @@ class ReviewTransactionVM(
+@@ -313 +334,5 @@ class ReviewTransactionVM(
 -        onConfirmClickJob = viewModelScope.launch { submitProposal() }
 +        onConfirmClickJob = viewModelScope.launch {
 +            submitProposal(
@@ -93213,7 +93330,7 @@ index 1d445dd11..111cbb3b4 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..76a19c6d7
+index 000000000..136dd0467
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 @@ -0,0 +1,581 @@
@@ -93772,9 +93889,9 @@ index 000000000..76a19c6d7
 +            cancelProposalFlow = CancelProposalFlowUseCase(
 +                repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(),
 +            ),
-+            getExchangeRate = GetExchangeRateUseCase(mockk {
++            exchangeRateRepository = mockk {
 +                every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
-+            }),
++            },
 +            navigationRouter = reviewRouter,
 +            submitProposal = SubmitProposalUseCase(
 +                router, accounts, repository, keystone, ledger, mockk(), mockk(), mockk(), mockk(), prefill, error,
@@ -97748,6 +97865,93 @@ index 000000000..2ef6c3eed
 +
 +    private fun unavailableCurrency() = mockk<PreferredFiatProvider> {
 +        coEvery { get() } throws IOException("Synthetic stored currency read failure") andThen FiatCurrency.USD
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/ExchangeRatePresentationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/ExchangeRatePresentationTest.kt
+new file mode 100644
+index 000000000..29d934ef0
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/ExchangeRatePresentationTest.kt
+@@ -0,0 +1,81 @@
++package co.electriccoin.zcash.ui.screen.exchangerate.widget
++
++import android.graphics.Bitmap
++import androidx.compose.foundation.layout.Column
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.graphics.asAndroidBitmap
++import androidx.compose.ui.test.assertCountEquals
++import androidx.compose.ui.test.captureToImage
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onAllNodesWithText
++import androidx.compose.ui.test.onRoot
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import java.io.File
++import kotlin.time.Clock
++import kotlin.time.Duration.Companion.minutes
++import kotlin.time.Instant
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [28], qualifiers = "en-rUS")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class ExchangeRatePresentationTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    fun refreshingExpiredRateHidesFiatUntilBothDisplaysHaveAValidConversion() {
++        val now = Instant.parse("2026-11-25T00:00:00Z")
++        val clock = object : Clock { override fun now() = now }
++        val fresh = ExchangeRateState.Data(
++            isLoading = false,
++            currencyConversion = FiatCurrencyConversion(now, 150.0),
++            clock = clock,
++            onRefresh = {},
++        )
++        val state = mutableStateOf(fresh)
++        val amount = Zatoshi(100_000_000)
++        compose.setContent {
++            ZcashTheme {
++                Column {
++                    StyledExchangeBalance(amount, state.value)
++                    StyledExchangeLabel(amount, state.value)
++                }
++            }
++        }
++        compose.onAllNodesWithText("150", substring = true).assertCountEquals(2)
++        capture("fresh-exchange-rate")
++
++        compose.runOnIdle {
++            state.value = fresh.copy(
++                isLoading = true,
++                currencyConversion = FiatCurrencyConversion(now - 16.minutes, 150.0),
++            )
++        }
++        compose.onAllNodesWithText("150", substring = true).assertCountEquals(0)
++        capture("expired-exchange-rate-refresh")
++
++        compose.runOnIdle {
++            state.value = fresh.copy(currencyConversion = FiatCurrencyConversion(now, 160.0))
++        }
++        compose.onAllNodesWithText("160", substring = true).assertCountEquals(2)
++        capture("recovered-exchange-rate")
++    }
++
++    private fun capture(name: String) {
++        val directory = System.getProperty("private.review.captureDir")?.let(::File) ?: return
++        directory.mkdirs()
++        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
++        File(directory, "$name.png").outputStream().use { stream ->
++            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
++        }
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/exchangerateunavailable/ExchangeRateUnavailableVMTest.kt
@@ -102293,34 +102497,64 @@ index 000000000..04482ad46
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVMTest.kt
-index 8ad312da8..970658bad 100644
+index 8ad312da8..25b1fc86b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVMTest.kt
-@@ -8,0 +9,2 @@ import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -4,0 +5 @@ import cash.z.ecc.android.sdk.model.AccountUuid
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+@@ -8,0 +10,2 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -10,0 +13,3 @@ import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
+@@ -10,0 +14,3 @@ import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 +import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-@@ -12,0 +18,3 @@ import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
+@@ -12,0 +19,3 @@ import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 +import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-@@ -17,0 +26 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCa
+@@ -17,0 +27,2 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCa
 +import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
-@@ -20,0 +30,5 @@ import co.electriccoin.zcash.ui.design.util.imageRes
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+@@ -20,0 +32,5 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 +import io.mockk.coEvery
 +import io.mockk.coVerify
-@@ -22,0 +37,2 @@ import io.mockk.mockk
+@@ -22,0 +39,2 @@ import io.mockk.mockk
 +import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
-@@ -39,0 +56 @@ import kotlin.test.assertNotNull
+@@ -25,0 +44 @@ import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
+@@ -39,0 +59,2 @@ import kotlin.test.assertNotNull
++import kotlin.time.Instant
 +import co.electriccoin.zcash.ui.R as UiR
-@@ -84,0 +102,113 @@ class ReviewTransactionVMTest {
+@@ -84,0 +106,137 @@ class ReviewTransactionVMTest {
++    @Test
++    fun sendReviewObservesRatesThatArriveAfterOpening() = runTest {
++        val loading = ExchangeRateState.Data(onRefresh = {})
++        val rates = MutableStateFlow<ExchangeRateState>(loading)
++        val vm = vm(metadata = emptyMap(), rates = rates)
++        collect(vm)
++        fun amount() = assertNotNull(vm.state.value).items.filterIsInstance<AmountState>().single()
++        val displayedAmount = amount().amount
++        assertEquals(loading, amount().exchangeRate)
++
++        val fresh = loading.copy(
++            isLoading = false,
++            currencyConversion = FiatCurrencyConversion(Instant.parse("2026-11-25T00:00:00Z"), 150.0),
++        )
++        rates.value = fresh
++        runCurrent()
++        assertEquals(fresh, amount().exchangeRate)
++        assertEquals(displayedAmount, amount().amount)
++
++        rates.value = ExchangeRateState.OptedOut
++        runCurrent()
++        assertEquals(ExchangeRateState.OptedOut, amount().exchangeRate)
++    }
++
 +    @Test
 +    fun sendConfirmsTheDisplayedProposalAcrossAuthentication() = runTest {
 +        confirmAfterReplacingProposal(proposal(), proposal(amount = 4321L))
@@ -102434,7 +102668,7 @@ index 8ad312da8..970658bad 100644
 +        verify(exactly = 1) { router.replace(TransactionProgressArgs) }
 +    }
 +
-@@ -88,3 +218,6 @@ class ReviewTransactionVMTest {
+@@ -88,3 +246,7 @@ class ReviewTransactionVMTest {
 -    private suspend fun vm(metadata: Map<AccountUuid, MetadataV3>): ReviewTransactionVM {
 -        val proposal = proposal()
 -        return ReviewTransactionVM(
@@ -102442,18 +102676,25 @@ index 8ad312da8..970658bad 100644
 +        metadata: Map<AccountUuid, MetadataV3>,
 +        observeProposal: ObserveProposalUseCase,
 +        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
++        rates: StateFlow<ExchangeRateState> = MutableStateFlow(ExchangeRateState.OptedOut),
 +    ) =
 +        ReviewTransactionVM(
-@@ -96,2 +229 @@ class ReviewTransactionVMTest {
+@@ -96,2 +258 @@ class ReviewTransactionVMTest {
 -            observeProposal =
 -                mockk<ObserveProposalUseCase> { every { filterSend() } returns MutableStateFlow(proposal) },
 +            observeProposal = observeProposal,
-@@ -102 +234,11 @@ class ReviewTransactionVMTest {
+@@ -100 +261 @@ class ReviewTransactionVMTest {
+-            getExchangeRate = mockk(relaxed = true),
++            exchangeRateRepository = mockk { every { state } returns rates },
+@@ -102 +263,15 @@ class ReviewTransactionVMTest {
 -            submitProposal = mockk(relaxed = true),
 +            submitProposal = submitProposal,
 +        )
 +
-+    private suspend fun vm(metadata: Map<AccountUuid, MetadataV3>): ReviewTransactionVM {
++    private suspend fun vm(
++        metadata: Map<AccountUuid, MetadataV3>,
++        rates: StateFlow<ExchangeRateState> = MutableStateFlow(ExchangeRateState.OptedOut),
++    ): ReviewTransactionVM {
 +        val proposal = proposal()
 +        return vm(
 +            metadata,
@@ -102461,13 +102702,14 @@ index 8ad312da8..970658bad 100644
 +                every { filterSend() } returns MutableStateFlow(proposal)
 +                every { observeSendReview() } returns MutableStateFlow(proposal)
 +            },
-@@ -106 +248 @@ class ReviewTransactionVMTest {
++            rates = rates,
+@@ -106 +281 @@ class ReviewTransactionVMTest {
 -    private suspend fun proposal(): SendTransactionProposal =
 +    private suspend fun proposal(amount: Long = 1234L): SendTransactionProposal =
-@@ -109 +251 @@ class ReviewTransactionVMTest {
+@@ -109 +284 @@ class ReviewTransactionVMTest {
 -            amount = Zatoshi(1234L),
 +            amount = Zatoshi(amount),
-@@ -117,0 +260,11 @@ class ReviewTransactionVMTest {
+@@ -117,0 +293,11 @@ class ReviewTransactionVMTest {
 +    private suspend fun zip321Proposal(
 +        amount: Long = 1234L,
 +        memo: String = "",

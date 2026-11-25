@@ -38,7 +38,6 @@ import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetBalancePoolsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetConfigurationUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetGiftCardDestinationAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetHomeMessageUseCase
@@ -213,7 +212,6 @@ val useCaseModule =
         factoryOf(::CreateHWWalletAccountUseCase)
         factoryOf(::CreateKeystoneAccountUseCase)
         factoryOf(::DeriveKeystoneAccountUnifiedAddressUseCase)
-        factoryOf(::GetExchangeRateUseCase)
         factoryOf(::GetSelectedWalletAccountUseCase)
         singleOf(::ObserveClearSendUseCase)
         singleOf(::PrefillSendUseCase)

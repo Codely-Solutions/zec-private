@@ -8,6 +8,7 @@ import androidx.compose.ui.text.TextStyle
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
 import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
@@ -29,15 +30,17 @@ fun StyledExchangeLabel(
 ) {
     when (state) {
         is ExchangeRateState.Data -> {
-            if (!state.isStale && state.currencyConversion != null) {
-                Text(
-                    modifier = modifier,
-                    text = createExchangeRateText(state, hiddenBalancePlaceholder, zatoshi, isHideBalances),
-                    maxLines = 1,
-                    color = textColor,
-                    style = style,
-                )
-            }
+            val conversion = state.eligibleConversion() ?: return
+            val text = createExchangeRateText(
+                state.expectedCurrency, conversion, hiddenBalancePlaceholder, zatoshi, isHideBalances,
+            ) ?: return
+            Text(
+                modifier = modifier,
+                text = text,
+                maxLines = 1,
+                color = textColor,
+                style = style,
+            )
         }
 
         is ExchangeRateState.OptIn -> {

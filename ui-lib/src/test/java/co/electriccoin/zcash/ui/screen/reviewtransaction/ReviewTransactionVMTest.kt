@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.reviewtransaction
 
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
@@ -24,6 +25,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.imageRes
@@ -39,6 +41,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -53,6 +56,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.time.Instant
 import co.electriccoin.zcash.ui.R as UiR
 
 /**
@@ -98,6 +102,30 @@ class ReviewTransactionVMTest {
 
             assertEquals(imageRes(zodl.icon), sender(vm).icon)
         }
+
+    @Test
+    fun sendReviewObservesRatesThatArriveAfterOpening() = runTest {
+        val loading = ExchangeRateState.Data(onRefresh = {})
+        val rates = MutableStateFlow<ExchangeRateState>(loading)
+        val vm = vm(metadata = emptyMap(), rates = rates)
+        collect(vm)
+        fun amount() = assertNotNull(vm.state.value).items.filterIsInstance<AmountState>().single()
+        val displayedAmount = amount().amount
+        assertEquals(loading, amount().exchangeRate)
+
+        val fresh = loading.copy(
+            isLoading = false,
+            currencyConversion = FiatCurrencyConversion(Instant.parse("2026-11-25T00:00:00Z"), 150.0),
+        )
+        rates.value = fresh
+        runCurrent()
+        assertEquals(fresh, amount().exchangeRate)
+        assertEquals(displayedAmount, amount().amount)
+
+        rates.value = ExchangeRateState.OptedOut
+        runCurrent()
+        assertEquals(ExchangeRateState.OptedOut, amount().exchangeRate)
+    }
 
     @Test
     fun sendConfirmsTheDisplayedProposalAcrossAuthentication() = runTest {
@@ -219,6 +247,7 @@ class ReviewTransactionVMTest {
         metadata: Map<AccountUuid, MetadataV3>,
         observeProposal: ObserveProposalUseCase,
         submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
+        rates: StateFlow<ExchangeRateState> = MutableStateFlow(ExchangeRateState.OptedOut),
     ) =
         ReviewTransactionVM(
             getWalletAccounts = EditAccountFixtures.getWalletAccounts(accounts),
@@ -229,12 +258,15 @@ class ReviewTransactionVMTest {
             observeProposal = observeProposal,
             observeAccountIcon = AccountIconFixtures.useCase(MutableStateFlow(metadata)),
             cancelProposalFlow = mockk(relaxed = true),
-            getExchangeRate = mockk(relaxed = true),
+            exchangeRateRepository = mockk { every { state } returns rates },
             navigationRouter = mockk(relaxed = true),
             submitProposal = submitProposal,
         )
 
-    private suspend fun vm(metadata: Map<AccountUuid, MetadataV3>): ReviewTransactionVM {
+    private suspend fun vm(
+        metadata: Map<AccountUuid, MetadataV3>,
+        rates: StateFlow<ExchangeRateState> = MutableStateFlow(ExchangeRateState.OptedOut),
+    ): ReviewTransactionVM {
         val proposal = proposal()
         return vm(
             metadata,
@@ -242,6 +274,7 @@ class ReviewTransactionVMTest {
                 every { filterSend() } returns MutableStateFlow(proposal)
                 every { observeSendReview() } returns MutableStateFlow(proposal)
             },
+            rates = rates,
         )
     }
 

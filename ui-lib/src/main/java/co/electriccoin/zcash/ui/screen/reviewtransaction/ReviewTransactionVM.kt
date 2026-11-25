@@ -16,9 +16,9 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReviewedPaymentStore
-import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
@@ -45,10 +45,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -72,7 +70,7 @@ class ReviewTransactionVM(
     observeProposal: ObserveProposalUseCase,
     observeAccountIcon: ObserveAccountIconUseCase,
     private val cancelProposalFlow: CancelProposalFlowUseCase,
-    private val getExchangeRate: GetExchangeRateUseCase,
+    exchangeRateRepository: ExchangeRateRepository,
     private val navigationRouter: NavigationRouter,
     private val submitProposal: SubmitProposalUseCase,
     private val sourceEntryId: String? = null,
@@ -82,15 +80,6 @@ class ReviewTransactionVM(
     private val isReceiverExpanded = MutableStateFlow(false)
 
     private val orchardWarningSheet = MutableStateFlow<ZashiConfirmationState?>(null)
-
-    private val exchangeRate =
-        flow {
-            emit(getExchangeRate())
-        }.shareIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            replay = 1
-        )
 
     private val reviewProposal = observeProposal.observeSendReview().let { published ->
         reviewedPaymentStore?.let { store ->
@@ -109,7 +98,7 @@ class ReviewTransactionVM(
             },
             reviewProposal,
             isReceiverExpanded,
-            exchangeRate,
+            exchangeRateRepository.state,
             getWalletAccounts.observe()
         ) { wallet, zecSend, isReceiverExpanded, exchangeRate, accounts ->
             Quintuple(wallet, zecSend, isReceiverExpanded, exchangeRate, accounts)

@@ -553,9 +553,9 @@ class Zip321MemoScanTest {
             cancelProposalFlow = CancelProposalFlowUseCase(
                 repository, keystone, ledger, router, ObserveClearSendUseCase(), accounts, mockk(),
             ),
-            getExchangeRate = GetExchangeRateUseCase(mockk {
+            exchangeRateRepository = mockk {
                 every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
-            }),
+            },
             navigationRouter = reviewRouter,
             submitProposal = SubmitProposalUseCase(
                 router, accounts, repository, keystone, ledger, mockk(), mockk(), mockk(), mockk(), prefill, error,

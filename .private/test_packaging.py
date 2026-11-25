@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from textwrap import dedent
 from contextlib import chdir
 from unittest.mock import Mock, patch
 from apk_architecture import check_apk
@@ -17,6 +18,37 @@ from test_support import patch_environment
 
 
 class PackagingTests(unittest.TestCase):
+    def test_pinned_tor_ci_bundle_uses_the_official_version_archive(self):
+        script = (Path(__file__).resolve().parent / 'run_tor_ci.sh').read_text()
+        self.assertIn('url="https://archive.torproject.org/tor-package-archive/torbrowser/$version/$base"', script)
+        self.assertIn('"$scratch/bundle.asc" "$url.asc"', script)
+
+    def test_baseline_bootstrap_selects_the_checked_out_release_runtime(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/core-validation.yml').read_text()
+        baseline = workflow.split('  baseline:\n', 1)[1]
+        code = baseline.split('        id: baseline-java\n', 1)[1].split('        run: |\n', 1)[1]
+        code = dedent(code.split('      - uses:', 1)[0])
+        self.assertLess(baseline.index('ref: ${{ steps.selected-baseline.outputs.source_sha }}'), baseline.index('id: baseline-java'))
+        self.assertIn('java-version: ${{ steps.baseline-java.outputs.java_version }}', baseline)
+        with tempfile.TemporaryDirectory() as temporary, chdir(temporary):
+            properties = Path('gradle.properties')
+            output = Path('java-output')
+            with patch_environment(dict(GITHUB_OUTPUT=str(output))):
+                for pin in ('25.0.5+8', '21.0.13+9'):
+                    with self.subTest(pin=pin):
+                        properties.write_text(f'JAVA_RUNTIME_VERSION={pin}\n', encoding='utf-8')
+                        output.unlink(missing_ok=True)
+                        exec(code, {})
+                        self.assertEqual(f'java_version={pin}', output.read_text().strip())
+                for invalid in ('', 'JAVA_RUNTIME_VERSION=25\n',
+                                'JAVA_RUNTIME_VERSION=25.0.5+8\nJAVA_RUNTIME_VERSION=21.0.13+9\n'):
+                    with self.subTest(invalid=invalid):
+                        properties.write_text(invalid, encoding='utf-8')
+                        output.unlink(missing_ok=True)
+                        with self.assertRaisesRegex(SystemExit, 'Expected one full JAVA_RUNTIME_VERSION'):
+                            exec(code, {})
+                        self.assertFalse(output.exists())
+
     def test_reviewed_runtime_upgrades_do_not_allow_rollback_or_unreviewed_drift(self):
         baseline = json.loads((Path(__file__).resolve().parent / 'phase1-runtime-baseline.json').read_text())
         components = list(baseline['components'])

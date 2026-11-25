@@ -30,11 +30,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
 import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.component.LottieProgress
 import co.electriccoin.zcash.ui.design.component.ShimmerableText
@@ -67,7 +69,8 @@ fun StyledExchangeBalance(
 ) {
     when (state) {
         is ExchangeRateState.Data -> {
-            if ((state.isStale && !state.isLoading) || (!state.isLoading && state.currencyConversion == null)) {
+            val conversion = state.eligibleConversion()
+            if (!state.isLoading && conversion == null) {
                 FlowRow(
                     modifier = modifier,
                     horizontalArrangement = Arrangement.Center,
@@ -82,6 +85,7 @@ fun StyledExchangeBalance(
                     textColor = textColor,
                     zatoshi = zatoshi,
                     state = state,
+                    conversion = conversion,
                     hiddenBalancePlaceholder = hiddenBalancePlaceholder,
                     isHideBalance = LocalBalancesAvailable.current.not(),
                     modifier = modifier
@@ -106,6 +110,7 @@ private fun ExchangeAvailableRateLabelInternal(
     textColor: Color,
     zatoshi: Zatoshi?,
     state: ExchangeRateState.Data,
+    conversion: FiatCurrencyConversion?,
     hiddenBalancePlaceholder: StringResource,
     isHideBalance: Boolean,
     modifier: Modifier = Modifier,
@@ -117,7 +122,9 @@ private fun ExchangeAvailableRateLabelInternal(
         ShimmerableText(
             text =
                 zatoshi?.let {
-                    createExchangeRateText(state, hiddenBalancePlaceholder, it, isHideBalance)
+                    createExchangeRateText(
+                        state.expectedCurrency, conversion, hiddenBalancePlaceholder, it, isHideBalance,
+                    )
                 },
             shimmerText = "0.00",
             style = style,
@@ -156,32 +163,23 @@ private fun ExchangeRateRefreshButton(state: ExchangeRateState.Data, textColor: 
 
 @Composable
 internal fun createExchangeRateText(
-    state: ExchangeRateState.Data,
+    currency: FiatCurrency,
+    conversion: FiatCurrencyConversion?,
     hiddenBalancePlaceholder: StringResource,
     zatoshi: Zatoshi,
     isHideBalances: Boolean
-): String {
-    val currencySymbol = state.expectedCurrency.symbol
-    val text =
-        if (isHideBalances) {
-            "${currencySymbol}${hiddenBalancePlaceholder.getValue()}"
-        } else if (state.currencyConversion != null) {
+): String? =
+    if (isHideBalances) {
+        "${currency.symbol}${hiddenBalancePlaceholder.getValue()}"
+    } else {
+        conversion?.let {
             stringResByDynamicCurrencyNumber(
-                amount =
-                    zatoshi
-                        .convertZatoshiToZec()
-                        .multiply(
-                            BigDecimal(state.currencyConversion.priceOfZec),
-                            MathContext.DECIMAL128
-                        ),
-                ticker = currencySymbol,
-                tickerLocation = TickerLocation.BEFORE
+                amount = zatoshi.convertZatoshiToZec().multiply(BigDecimal(it.priceOfZec), MathContext.DECIMAL128),
+                ticker = currency.symbol,
+                tickerLocation = TickerLocation.BEFORE,
             ).getValue()
-        } else {
-            currencySymbol
         }
-    return text
-}
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
