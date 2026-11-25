@@ -85789,11 +85789,11 @@ index 1dec990ab..4804e8d55 100644
 +            getSelectedWalletAccount = getSelectedWalletAccount,
 +        )
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
-index 4ff11b7a6..168374a83 100644
+index 4ff11b7a6..68c8ad360 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
 @@ -116,0 +117 @@ class ScanGiftCardVMTest {
-+            runCurrent()
++            advanceUntilIdle()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
 index fcda335bd..39c357d3f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt

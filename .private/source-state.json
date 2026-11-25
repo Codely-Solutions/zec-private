@@ -3018,7 +3018,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RecordingNavigationRouter.kt": "1a344b9bf4201f545cdb751f7bbb6d9bd6c434139a28894e9643fae2aeb4c698",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftStateWaitingTest.kt": "60b8d2afa75984d77d089a81fad787219d79447252e6dd891e333a7cc8d55a56",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt": "d6855acb6517760a4d581ccc5cdd279fafdba53b0d3767d982148d5c8bfa3964",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt": "efef1249171c0bc9766c39e743310f38529e3d349f37e1715a499b527b235275",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt": "d9b3940eea94210c7b76f300aed10e3387aa203cdb9f2f1f468c2898eb03bd72",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt": "04ff2de9dfe7b1ef343a942e83ed313d0d3d0255a9d1795021018712978d0225",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt": "5e624b4715cc323b6f3924c65e1a7501d3d8f1dc9ba2e068b16163e3f55e9d37",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestVMTest.kt": "c86d67cc4cb90b29dbdb2b54dc42a84cade27a7920a48f969ec37dbcdac3dd80",
