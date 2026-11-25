@@ -5,6 +5,8 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -16,9 +18,11 @@ import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.paymentReviewFixture
 import co.electriccoin.zcash.ui.common.usecase.paymentTestRouter
 import co.electriccoin.zcash.ui.common.usecase.selectedPaymentAccount
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,9 +36,15 @@ class SendFiatProposalTest {
             EditAccountFixtures.ledger(isSelected = true),
         )
         accounts.forEach { account ->
-            val proposals = mockk<ZashiProposalRepository>(relaxed = true)
-            val keystone = mockk<KeystoneProposalRepository>(relaxed = true)
-            val ledger = mockk<LedgerProposalPipeline>(relaxed = true)
+            val proposals = softwareRepository()
+            val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow<TransactionProposal?>(null)
+                coEvery { preparePayment(any(), any()) } returns mockk<SendTransactionProposal>()
+            }
+            val ledger = mockk<LedgerProposalPipeline>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow<TransactionProposal?>(null)
+                coEvery { preparePayment(any(), any()) } returns mockk<SendTransactionProposal>()
+            }
             val router = paymentTestRouter("fixture-send")
             val createProposal = CreateProposalUseCase(
                 paymentReviewFixture(selectedPaymentAccount(account), router, proposals, keystone, ledger), router,
@@ -66,7 +76,7 @@ class SendFiatProposalTest {
 
     @Test
     fun explicitZeroRequiresZecInputShieldedRecipientAndMemo() = runTest {
-        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
+        val proposals = softwareRepository()
         val createProposal = softwareProposal(proposals)
 
         val send = ZecSend(
@@ -89,7 +99,7 @@ class SendFiatProposalTest {
 
     @Test
     fun proposalPayloadIncludesMemoOnlyForShieldedRecipients() = runTest {
-        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
+        val proposals = softwareRepository()
         val createProposal = softwareProposal(proposals)
         val memo = Memo("Draft memo")
         val send = ZecSend(
@@ -113,7 +123,7 @@ class SendFiatProposalTest {
 
     @Test
     fun proposalBoundaryChecksSupplyBeforeApplyingFiatFloor() = runTest {
-        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
+        val proposals = softwareRepository()
         val createProposal = softwareProposal(proposals)
         val maxSend = ZecSend(
             destination = WalletAddress.Unified.new("synthetic-recipient"),
@@ -135,6 +145,11 @@ class SendFiatProposalTest {
 
     private suspend fun CreateProposalUseCase.prepare(send: ZecSend, floor: Boolean) =
         invoke(send, floor, "fixture-send") { true }
+
+    private fun softwareRepository() = mockk<ZashiProposalRepository>(relaxed = true) {
+        every { transactionProposal } returns MutableStateFlow<TransactionProposal?>(null)
+        coEvery { preparePayment(any(), any()) } returns mockk<SendTransactionProposal>()
+    }
 
     private fun softwareProposal(proposals: ZashiProposalRepository): CreateProposalUseCase {
         val router = paymentTestRouter("fixture-send")

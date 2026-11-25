@@ -296,11 +296,18 @@ class SwapDetailVMTest {
             assertFalse(harness.state().transactionHeader.showAmount)
             assertNull(harness.state().transactionHeader.amount)
             assertNotNull(harness.state().quotedOutput.message)
-            assertEquals(
-                stringRes(R.string.errorPage_action_contactSupport),
-                assertNotNull(harness.state().primaryButton).text,
-            )
-            harness.state().primaryButton!!.onClick()
+            val support = if (settlement == SwapStatus.FAILED) {
+                val refresh = assertNotNull(harness.state().primaryButton)
+                assertEquals(stringRes(R.string.private_swap_check_status), refresh.text)
+                refresh.onClick()
+                verify(exactly = 1) { harness.reload.requestReload() }
+                harness.state().supportButton
+            } else {
+                assertNull(harness.state().supportButton)
+                harness.state().primaryButton
+            }
+            assertEquals(stringRes(R.string.errorPage_action_contactSupport), assertNotNull(support).text)
+            support.onClick()
             verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT)) }
         }
     }

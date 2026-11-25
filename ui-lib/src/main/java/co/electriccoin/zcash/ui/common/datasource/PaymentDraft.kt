@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.datasource
 
 import cash.z.ecc.android.sdk.model.ZecSend
+import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
@@ -37,8 +38,23 @@ suspend fun ProposalDataSource.preparePayment(owner: PaymentDraftOwner, draft: P
             createProposal(account, draft.value).copy(isDonation = true)
         }
 
-        is PaymentDraft.Zip321 -> createZip321Proposal(account, draft.uri)
+        is PaymentDraft.Zip321 -> createOwnedZip321Proposal(owner, draft.uri)
     }
+}
+
+private suspend fun ProposalDataSource.createOwnedZip321Proposal(
+    owner: PaymentDraftOwner,
+    uri: String,
+): Zip321TransactionProposal = try {
+    createZip321Proposal(owner.account, uri)
+} catch (error: TransactionProposalNotCreatedException) {
+    currentCoroutineContext().ensureActive()
+    Twig.error { "Unable to create ZIP321 proposal" }
+    throw error
+} catch (error: InsufficientFundsException) {
+    currentCoroutineContext().ensureActive()
+    Twig.error { "Insufficient funds for ZIP321 proposal" }
+    throw error
 }
 
 suspend fun MutableStateFlow<TransactionProposal?>.publishOwnedPayment(

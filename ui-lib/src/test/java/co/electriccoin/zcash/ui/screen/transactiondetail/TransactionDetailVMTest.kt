@@ -458,11 +458,15 @@ class TransactionDetailVMTest {
         assertEquals(stringRes(R.string.swapAndPay_failedTitle), info.message?.title)
         assertNull(info.donationBasisZec)
         assertNull(state.errorFooter)
-        assertEquals(stringRes(R.string.errorPage_action_contactSupport), state.primaryButton?.text)
+        val refresh = assertNotNull(state.primaryButton)
+        assertEquals(stringRes(R.string.private_swap_check_status), refresh.text)
+        refresh.onClick()
+        verify(exactly = 1) { reload.requestReload() }
 
-        assertNotNull(state.primaryButton).onClick()
+        val support = assertNotNull(state.secondaryButton)
+        assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
+        support.onClick()
         verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
-        verify(exactly = 0) { reload.requestReload() }
     }
 
     @Test
