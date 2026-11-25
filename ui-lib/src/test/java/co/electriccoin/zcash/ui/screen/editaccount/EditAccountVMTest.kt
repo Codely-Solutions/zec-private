@@ -702,23 +702,34 @@ class EditAccountVMTest {
         }
 
     @Test
-    fun removeIsIgnoredWhileSaving() =
+    fun editingAndRemoveAreDisabledWhileSaving() =
         runTest {
             val saved = CompletableDeferred<Unit>()
             coEvery { accountDataSource.renameAccount(any(), any()) } coAnswers { saved.await() }
             val vm = vm()
             collect(vm)
             type(vm, "Savings")
-            val remove = assertNotNull(assertNotNull(vm.state.value).remove).button
+            val before = assertNotNull(vm.state.value)
+            val remove = assertNotNull(before.remove).button
+            val avatar = assertNotNull(before.avatar.editButton)
 
-            assertNotNull(vm.state.value).saveButton.onClick()
+            before.saveButton.onClick()
             runCurrent()
-            assertFalse(assertNotNull(assertNotNull(vm.state.value).remove).button.isEnabled)
+            val saving = assertNotNull(vm.state.value)
+            assertFalse(assertNotNull(saving.remove).button.isEnabled)
+            assertFalse(assertNotNull(saving.avatar.editButton).isEnabled)
+            assertFalse(saving.field.isEnabled)
+            before.field.onValueChange("Unsaved edit")
+            avatar.onClick()
             remove.onClick()
+            runCurrent()
+            assertEquals("Savings", assertNotNull(vm.state.value).field.value.text())
+            assertTrue(pickerRequests.isEmpty())
             saved.complete(Unit)
             runCurrent()
 
             verify(exactly = 0) { viewOnlyNavigator.forwardToRemoveAccount(any()) }
+            coVerify(exactly = 1) { accountDataSource.renameAccount(any(), "Savings") }
         }
 
     @Test

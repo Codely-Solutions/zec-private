@@ -13408,7 +13408,7 @@ index 81241a8a6..06602bf47 100644
 -                        isEnabled = !isImporting,
 +                        isEnabled = !isImporting && !isFinalizing,
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
-index a958b4ec7..c09778bae 100644
+index a958b4ec7..2854dfdcf 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.viewModelScope
@@ -13462,6 +13462,9 @@ index a958b4ec7..c09778bae 100644
 +        onContinueClick = { onContinueClick(committedBirthday) },
 @@ -95,0 +123 @@ internal class NameVKVM(
 +            if (leaving || pendingImportRepository.get()?.importedAccount != null) return@guardLoading
+@@ -99 +127 @@ internal class NameVKVM(
+-                    navigateToColorPicker(color.value).collect { picked -> color.update { picked } }
++                    navigateToColorPicker(color.value, sourceEntryId).collect { picked -> color.update { picked } }
 @@ -105 +133,3 @@ internal class NameVKVM(
 -            name.update { AccountNameLimit.cap(value) }
 +            if (!leaving && pendingImportRepository.get()?.importedAccount == null) {
@@ -29008,6 +29011,14 @@ index 930560c21..9484de023 100644
 @@ -420 +424 @@ private fun DecorationBox(
 -            )
 +            ).then(contentModifier)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZodlAccountAvatar.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZodlAccountAvatar.kt
+index 09dae9748..cade7164e 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZodlAccountAvatar.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZodlAccountAvatar.kt
+@@ -94,0 +95 @@ data class AccountAvatarState(
++            isEditEnabled: Boolean = true,
+@@ -102,0 +104 @@ data class AccountAvatarState(
++                        isEnabled = isEditEnabled,
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/listitem/ZashiListItem.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/listitem/ZashiListItem.kt
 index ba351fff0..7a3d7b5ae 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/listitem/ZashiListItem.kt
@@ -36987,7 +36998,7 @@ index a93926c57..16c79db04 100644
 +)
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
-index 4b540bea1..4f0f4b1c2 100644
+index 4b540bea1..1a3a216f4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
 @@ -47,9 +46,0 @@ import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerScreen
@@ -37114,6 +37125,9 @@ index 4b540bea1..4f0f4b1c2 100644
 @@ -358 +332 @@ fun NavGraphBuilder.walletNavGraph(
 -        composable<SwapArgs> { SwapScreen() }
 +        composable<SwapArgs> { SwapScreen(it.id) }
+@@ -360 +334 @@ fun NavGraphBuilder.walletNavGraph(
+-        dialogComposable<ColorPickerArgs> { ColorPickerScreen(it.toRoute()) }
++        dialogComposable<ColorPickerArgs> { ColorPickerScreen(it.toRoute(), it.id) }
 @@ -364,3 +338,3 @@ fun NavGraphBuilder.walletNavGraph(
 -        dialogComposable<SwapQuoteArgs> { SwapQuoteScreen() }
 -        composable<ScanGenericAddressArgs> { ScanGenericAddressScreen(it.toRoute()) }
@@ -49012,6 +49026,31 @@ index dfe3474a2..000000000
 -        }
 -    }
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCase.kt
+index 1cafd41f3..ce7987d0c 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCase.kt
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.commitFrom
+@@ -39 +40 @@ class NavigateToColorPickerUseCase(
+-    operator fun invoke(initial: Color?): Flow<Color> =
++    operator fun invoke(initial: Color?, sourceEntryId: String? = null): Flow<Color> =
+@@ -44 +45,6 @@ class NavigateToColorPickerUseCase(
+-                    .onSubscription { navigationRouter.forward(args) }
++                    .onSubscription {
++                        val opened = navigationRouter.commitFrom(sourceEntryId) {
++                            NavigationCommand.Forward(listOf(args))
++                        }
++                        if (!opened) emit(ColorPickerEvent.Closed(args))
++                    }
+@@ -71 +77,4 @@ class NavigateToColorPickerUseCase(
+-    fun dismiss(args: ColorPickerArgs) {
++    suspend fun dismiss(args: ColorPickerArgs, sourceEntryId: String? = null): Boolean {
++        if (sourceEntryId != null) {
++            return navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
++        }
+@@ -74,0 +84 @@ class NavigateToColorPickerUseCase(
++        return true
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToExportPrivateDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToExportPrivateDataUseCase.kt
 deleted file mode 100644
 index f70fd5535..000000000
@@ -54099,11 +54138,33 @@ index cc829b5e8..ef8018b93 100644
 -                    )
 -                }
 -            },
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerScreen.kt
+index 5b301b191..2b38cf228 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerScreen.kt
+@@ -12,2 +12,2 @@ import java.util.UUID
+-internal fun ColorPickerScreen(args: ColorPickerArgs) {
+-    val vm = koinViewModel<ColorPickerVM> { parametersOf(args) }
++internal fun ColorPickerScreen(args: ColorPickerArgs, sourceEntryId: String) {
++    val vm = koinViewModel<ColorPickerVM> { parametersOf(args, sourceEntryId) }
+@@ -15 +15,2 @@ internal fun ColorPickerScreen(args: ColorPickerArgs) {
+-    ColorPickerView(state)
++    val refusedCloseCount by vm.refusedCloseCount.collectAsStateWithLifecycle()
++    ColorPickerView(state, refusedCloseCount)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
-index db4e24fd1..eece27647 100644
+index db4e24fd1..80525a93d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVM.kt
-@@ -24,6 +24,3 @@ import kotlin.math.roundToInt
+@@ -5,0 +6 @@ import androidx.lifecycle.ViewModel
++import androidx.lifecycle.viewModelScope
+@@ -16,0 +18 @@ import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
+@@ -17,0 +20 @@ import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.update
+@@ -18,0 +22,2 @@ import kotlinx.coroutines.flow.updateAndGet
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.launch
+@@ -24,6 +29,3 @@ import kotlin.math.roundToInt
 - * toolbar's trailing button, back, a drag down or a tap outside close the sheet, and a sheet cleared
 - * without a close, popped or replaced by another navigation, closes it too, so the caller's flow
 - * always ends. Only the first close is reported, because the sheet also reports its own hiding once it
@@ -54113,17 +54174,24 @@ index db4e24fd1..eece27647 100644
 + * caller keeps receiving picks until the sheet's navigation entry is cleared. Every close request
 + * may pop the sheet while it is on top. If a request is declined or missed, picks and another close
 + * remain available. A sheet restored after process death without a caller asks to dismiss itself.
-@@ -58 +55,2 @@ internal class ColorPickerVM(
+@@ -33,0 +36 @@ internal class ColorPickerVM(
++    private val sourceEntryId: String? = null,
+@@ -37,0 +41,3 @@ internal class ColorPickerVM(
++    private var closeJob: Job? = null
++    private val refusedCloses = MutableStateFlow(0)
++    val refusedCloseCount = refusedCloses.asStateFlow()
+@@ -58 +64,2 @@ internal class ColorPickerVM(
 -        reportClosed()
 +        isClosed = true
 +        navigateToColorPicker.onClosed(args)
-@@ -90,4 +88 @@ internal class ColorPickerVM(
--    private fun onClose() {
+@@ -91,2 +98,4 @@ internal class ColorPickerVM(
 -        reportClosed()
 -        navigateToColorPicker.dismiss(args)
--    }
-+    private fun onClose() = navigateToColorPicker.dismiss(args)
-@@ -114,7 +108,0 @@ internal class ColorPickerVM(
++        if (closeJob?.isActive == true || isClosed) return
++        closeJob = viewModelScope.launch {
++            if (!navigateToColorPicker.dismiss(args, sourceEntryId)) refusedCloses.update { it + 1 }
++        }
+@@ -114,7 +122,0 @@ internal class ColorPickerVM(
 -    /** Ends the caller's flow on the last pick, once. */
 -    private fun reportClosed() {
 -        if (isClosed) return
@@ -54131,6 +54199,23 @@ index db4e24fd1..eece27647 100644
 -        navigateToColorPicker.onClosed(args)
 -    }
 -
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
+index bd6f1d343..380431b87 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerView.kt
+@@ -18,0 +19 @@ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
+@@ -36,0 +38 @@ import co.electriccoin.zcash.ui.design.component.rememberZashiFrostState
++import co.electriccoin.zcash.ui.design.component.rememberScreenModalBottomSheetState
+@@ -52,2 +54,6 @@ import co.electriccoin.zcash.ui.design.util.getValue
+-internal fun ColorPickerView(state: ColorPickerState?) {
+-    ZashiScreenModalBottomSheet(state = state, dragHandle = null) { innerState, contentPadding ->
++internal fun ColorPickerView(state: ColorPickerState?, refusedCloseCount: Int = 0) {
++    val sheetState = rememberScreenModalBottomSheetState()
++    LaunchedEffect(refusedCloseCount) {
++        if (refusedCloseCount > 0 && !sheetState.isVisible) sheetState.show()
++    }
++    ZashiScreenModalBottomSheet(state = state, sheetState = sheetState, dragHandle = null) { innerState, contentPadding ->
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/common/BirthdayHeight.kt
 new file mode 100644
 index 000000000..c12c22a84
@@ -55956,42 +56041,112 @@ index 939a2afd0..8b90f14ef 100644
 +internal fun EditAccountScreen(args: EditAccountArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<EditAccountVM> { parametersOf(args, sourceEntryId) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
-index d03354a1e..59f3a7516 100644
+index d03354a1e..b6daf564d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
-@@ -141 +141 @@ internal data class EditAccountState(
+@@ -91 +91,5 @@ internal data class EditAccountState(
+-                                avatar = AccountAvatarState.create(image = image, onEditClick = onAvatarEditClick)
++                                avatar = AccountAvatarState.create(
++                                    image = image,
++                                    isEditEnabled = !isSaving,
++                                    onEditClick = onAvatarEditClick
++                                )
+@@ -100,0 +105 @@ internal data class EditAccountState(
++                        isEnabled = !isSaving,
+@@ -141 +146 @@ internal data class EditAccountState(
 -                name = stringRes("Zodl"),
 +                name = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
-index c930d5920..54befbd2f 100644
+index c930d5920..9df443247 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVM.kt
 @@ -6,0 +7 @@ import androidx.lifecycle.viewModelScope
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -7,0 +9,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -7,0 +9,3 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.discardResultFrom
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -24,0 +28 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+@@ -24,0 +29 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.error.showFrom
-@@ -66,0 +71 @@ class EditAccountVM(
+@@ -25,0 +31 @@ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineStart
+@@ -66,0 +73 @@ class EditAccountVM(
 +    private val sourceEntryId: String? = null,
-@@ -119,0 +125 @@ class EditAccountVM(
+@@ -119,0 +127 @@ class EditAccountVM(
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -123 +129 @@ class EditAccountVM(
+@@ -123 +131 @@ class EditAccountVM(
 -                navigationRouter.back()
 +                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -185 +191 @@ class EditAccountVM(
+@@ -165 +173 @@ class EditAccountVM(
+-        if (colorPickerJob?.isActive == true) return
++        if (isSaving.value || colorPickerJob?.isActive == true) return
+@@ -168 +176 @@ class EditAccountVM(
+-                navigateToColorPicker(pickedColor.value ?: storedColor.value).collect { color ->
++                navigateToColorPicker(pickedColor.value ?: storedColor.value, sourceEntryId).collect { color ->
+@@ -174 +182,3 @@ class EditAccountVM(
+-    private fun onValueChange(value: String) = name.update { AccountNameLimit.cap(value) }
++    private fun onValueChange(value: String) {
++        if (!isSaving.value) name.update { AccountNameLimit.cap(value) }
++    }
+@@ -178 +188 @@ class EditAccountVM(
+-        if (saveJob?.isActive == true) return
++        if (isSaving.value || colorPickerJob?.isActive == true) return
+@@ -180,0 +191 @@ class EditAccountVM(
++        isSaving.value = true
+@@ -182,13 +193 @@ class EditAccountVM(
+-            viewModelScope.launch {
+-                val current = account.first()
+-                if (current == null) {
 -                    navigationRouter.back()
-+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -200 +206 @@ class EditAccountVM(
--                        navigationRouter.back()
+-                    return@launch
+-                }
+-                val isTaken =
+-                    current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
+-                if (isTaken) return@launch
+-                val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
+-                val color = newColor(picked, storedColor.value)
+-                if (renamed == null && color == null) return@launch
+-                isSaving.update { true }
++            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+@@ -195,0 +195,11 @@ class EditAccountVM(
++                    val current = account.first()
++                    if (current == null) {
 +                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -202 +208 @@ class EditAccountVM(
++                        return@launch
++                    }
++                    val isTaken =
++                        current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
++                    if (isTaken) return@launch
++                    val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
++                    val color = newColor(picked, storedColor.value)
++                    if (renamed == null && color == null) return@launch
+@@ -200 +210,4 @@ class EditAccountVM(
+-                        navigationRouter.back()
++                        navigationRouter.stageResultFrom(
++                            sourceEntryId,
++                            isStillAllowed = { name.value == typed && pickedColor.value == picked },
++                        ) { NavigationCommand.Back }
+@@ -202 +215 @@ class EditAccountVM(
 -                        navigateToError(ErrorArgs.General(AccountColorNotSavedException()))
 +                        navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
-@@ -207 +213 @@ class EditAccountVM(
+@@ -207 +220 @@ class EditAccountVM(
 -                    navigateToError(ErrorArgs.General(e))
 +                    navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
+@@ -209 +222 @@ class EditAccountVM(
+-                    isSaving.update { false }
++                    isSaving.value = false
+@@ -215 +228 @@ class EditAccountVM(
+-        if (saveJob?.isActive == true) return
++        if (isSaving.value) return
+@@ -220,2 +233,6 @@ class EditAccountVM(
+-        saveJob?.cancel()
+-        navigationRouter.back()
++        viewModelScope.launch {
++            navigationRouter.commitFrom(sourceEntryId) {
++                saveJob?.cancel()
++                NavigationCommand.Back
++            }
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/AndroidErrorBottomSheet.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/AndroidErrorBottomSheet.kt
 index 7eedf8ff8..c53b3d83b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/AndroidErrorBottomSheet.kt
@@ -73872,14 +74027,15 @@ index 000000000..2ae836acd
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..28aca88f3
+index 000000000..53d064a79
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
-@@ -0,0 +1,330 @@
+@@ -0,0 +1,377 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
 +import androidx.compose.material3.Text
++import androidx.compose.ui.graphics.Color
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 +import androidx.lifecycle.Lifecycle
 +import androidx.lifecycle.LifecycleOwner
@@ -73890,7 +74046,9 @@ index 000000000..28aca88f3
 +import androidx.navigation.compose.dialog
 +import androidx.navigation.compose.rememberNavController
 +import androidx.navigation.toRoute
++import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 +import co.electriccoin.zcash.ui.design.KeyboardManager
++import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 +import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 +import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 +import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
@@ -73900,6 +74058,7 @@ index 000000000..28aca88f3
 +import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 +import io.mockk.mockk
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.toList
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.TestScope
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -74166,6 +74325,48 @@ index 000000000..28aca88f3
 +        }
 +    }
 +
++    @Test
++    @OptIn(ExperimentalCoroutinesApi::class)
++    fun pickerLaunchAndDismissalRequireTheCurrentNavigationEntry() {
++        install()
++        compose.runOnIdle {
++            runTest {
++                val router = NavigationRouterImpl()
++                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
++                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
++                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
++                    router.observePipeline().collect { command ->
++                        if (command is CustomNavigationCommand) navigator.executeCommand(command)
++                    }
++                }
++                val picker = NavigateToColorPickerUseCase(router)
++                val owner = checkNotNull(controller.currentBackStackEntry).id
++                controller.navigate(DeliverySigningSheet)
++                assertTrue(picker(null, owner).toList().isEmpty())
++                assertEquals(DeliverySigningSheet, controller.currentBackStackEntry?.toRoute<DeliverySigningSheet>())
++                assertTrue(controller.popBackStack())
++
++                val values = mutableListOf<Color>()
++                val picks = backgroundScope.launch { picker(null, owner).toList(values) }
++                runCurrent()
++                val pickerEntry = checkNotNull(controller.currentBackStackEntry)
++                val args = pickerEntry.toRoute<ColorPickerArgs>()
++                controller.navigate(DeliverySigningSheet)
++                assertFalse(picker.dismiss(args, pickerEntry.id))
++                assertFalse(picks.isCompleted)
++                assertTrue(controller.popBackStack())
++                picker.onPicked(Color.Green, args)
++                assertTrue(picker.dismiss(args, pickerEntry.id))
++                picker.onClosed(args)
++                runCurrent()
++
++                assertEquals(listOf(Color.Green), values)
++                assertTrue(picks.isCompleted)
++                assertEquals(owner, controller.currentBackStackEntry?.id)
++            }
++        }
++    }
++
 +    private fun install() {
 +        compose.setContent {
 +            controller = rememberNavController()
@@ -74174,6 +74375,7 @@ index 000000000..28aca88f3
 +                composable<DeliveryMigrationArgs> { Text("Migration progress") }
 +                composable<DeliveryOrigin> { Text("Signing") }
 +                dialog<DeliverySigningSheet> { Text("Hardware signing") }
++                dialog<ColorPickerArgs> { Text("Color picker") }
 +                dialog<ErrorDialog> { Text("Seed recovery") }
 +                composable<ScanGiftCardArgs> { Text("External scan") }
 +                composable<ActivityHistoryArgs> { Text("Activity history") }
@@ -89665,6 +89867,43 @@ index b1db33a76..5c6734709 100644
 +            coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
 +            verify { navigationRouter wasNot Called }
 +        }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCaseTest.kt
+index 3827b6ce8..f0e1357c9 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToColorPickerUseCaseTest.kt
+@@ -83 +83 @@ class NavigateToColorPickerUseCaseTest {
+-    fun dismissPopsOnlyTheSheetOfItsOwnRequestWhileItIsOnTop() {
++    fun dismissPopsOnlyTheSheetOfItsOwnRequestWhileItIsOnTop() = runTest {
+@@ -101,0 +102,29 @@ class NavigateToColorPickerUseCaseTest {
++    @Test
++    fun aDeclinedLaunchEndsTheFlowSoTheCallerCanRetry() = runTest {
++        val entry = mockk<NavBackStackEntry> { every { id } returns "picker-caller" }
++        var allowLaunch = false
++        every { router.custom(any()) } answers {
++            val command = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(entry)
++            if (command is NavigationCommand.ForEntry) {
++                if (allowLaunch) {
++                    forwarded.addAll((command.buildCommand() as NavigationCommand.Forward).routes)
++                }
++                command.acknowledge(allowLaunch)
++            }
++        }
++
++        assertTrue(useCase(null, "picker-caller").toList().isEmpty())
++        assertFalse(useCase.hasCollector())
++        allowLaunch = true
++        val values = mutableListOf<Color>()
++        val next = backgroundScope.launch { useCase(null, "picker-caller").toList(values) }
++        runCurrent()
++        val args = forwarded.single() as ColorPickerArgs
++        useCase.onPicked(Color(PICKED), args)
++        useCase.onClosed(args)
++        runCurrent()
++
++        assertEquals(listOf(Color(PICKED)), values)
++        assertTrue(next.isCompleted)
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
 index 639d7ef33..bd1619a52 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
@@ -98040,6 +98279,37 @@ index 000000000..c16940d77
 +        }
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVMTest.kt
+index ff4ff7e3b..b7440bcb3 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVMTest.kt
+@@ -705 +705 @@ class EditAccountVMTest {
+-    fun removeIsIgnoredWhileSaving() =
++    fun editingAndRemoveAreDisabledWhileSaving() =
+@@ -712,5 +712,12 @@ class EditAccountVMTest {
+-            val remove = assertNotNull(assertNotNull(vm.state.value).remove).button
+-
+-            assertNotNull(vm.state.value).saveButton.onClick()
+-            runCurrent()
+-            assertFalse(assertNotNull(assertNotNull(vm.state.value).remove).button.isEnabled)
++            val before = assertNotNull(vm.state.value)
++            val remove = assertNotNull(before.remove).button
++            val avatar = assertNotNull(before.avatar.editButton)
++
++            before.saveButton.onClick()
++            runCurrent()
++            val saving = assertNotNull(vm.state.value)
++            assertFalse(assertNotNull(saving.remove).button.isEnabled)
++            assertFalse(assertNotNull(saving.avatar.editButton).isEnabled)
++            assertFalse(saving.field.isEnabled)
++            before.field.onValueChange("Unsaved edit")
++            avatar.onClick()
+@@ -717,0 +725,3 @@ class EditAccountVMTest {
++            runCurrent()
++            assertEquals("Savings", assertNotNull(vm.state.value).field.value.text())
++            assertTrue(pickerRequests.isEmpty())
+@@ -721,0 +732 @@ class EditAccountVMTest {
++            coVerify(exactly = 1) { accountDataSource.renameAccount(any(), "Savings") }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountViewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountViewTest.kt
 index dec0b8db0..1f2fb5248 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountViewTest.kt

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
@@ -27,6 +28,7 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.showFrom
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -168,42 +170,47 @@ class EditAccountVM(
     }
 
     private fun onAvatarEditClick() {
-        if (colorPickerJob?.isActive == true) return
+        if (isSaving.value || colorPickerJob?.isActive == true) return
         colorPickerJob =
             viewModelScope.launch {
-                navigateToColorPicker(pickedColor.value ?: storedColor.value).collect { color ->
+                navigateToColorPicker(pickedColor.value ?: storedColor.value, sourceEntryId).collect { color ->
                     pickedColor.update { color.takeUnless { it.toArgb() == storedColor.value?.toArgb() } }
                 }
             }
     }
 
-    private fun onValueChange(value: String) = name.update { AccountNameLimit.cap(value) }
+    private fun onValueChange(value: String) {
+        if (!isSaving.value) name.update { AccountNameLimit.cap(value) }
+    }
 
     @Suppress("TooGenericExceptionCaught")
     private fun onSaveClick() {
-        if (saveJob?.isActive == true) return
+        if (isSaving.value || colorPickerJob?.isActive == true) return
         val typed = name.value ?: return
         val picked = pickedColor.value
+        isSaving.value = true
         saveJob =
-            viewModelScope.launch {
-                val current = account.first()
-                if (current == null) {
-                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-                    return@launch
-                }
-                val isTaken =
-                    current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
-                if (isTaken) return@launch
-                val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
-                val color = newColor(picked, storedColor.value)
-                if (renamed == null && color == null) return@launch
-                isSaving.update { true }
+            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
+                    val current = account.first()
+                    if (current == null) {
+                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+                        return@launch
+                    }
+                    val isTaken =
+                        current is ViewOnlyAccount && isAccountNameTaken(typed, excludingAccountKeyId = args.accountKeyId)
+                    if (isTaken) return@launch
+                    val renamed = (current as? ViewOnlyAccount)?.takeIf { canRename(typed, it) }
+                    val color = newColor(picked, storedColor.value)
+                    if (renamed == null && color == null) return@launch
                     renamed?.let { renameViewOnlyAccount(it, typed) }
                     val isColorSaved = color == null || metadataRepository.setAccountColor(current, color)
                     ensureActive()
                     if (isColorSaved) {
-                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
+                        navigationRouter.stageResultFrom(
+                            sourceEntryId,
+                            isStillAllowed = { name.value == typed && pickedColor.value == picked },
+                        ) { NavigationCommand.Back }
                     } else {
                         navigateToError.showFrom(sourceEntryId, ErrorArgs.General(AccountColorNotSavedException()))
                     }
@@ -212,19 +219,23 @@ class EditAccountVM(
                 } catch (e: Exception) {
                     navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
                 } finally {
-                    isSaving.update { false }
+                    isSaving.value = false
                 }
             }
     }
 
     private fun onRemoveClick() {
-        if (saveJob?.isActive == true) return
+        if (isSaving.value) return
         viewOnlyNavigator.forwardToRemoveAccount(args.accountKeyId)
     }
 
     private fun onBack() {
-        saveJob?.cancel()
-        navigationRouter.back()
+        viewModelScope.launch {
+            navigationRouter.commitFrom(sourceEntryId) {
+                saveJob?.cancel()
+                NavigationCommand.Back
+            }
+        }
     }
 
     /** Whether [name] is a new, non-blank name for [account]. */

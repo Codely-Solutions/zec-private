@@ -124,7 +124,7 @@ internal class NameVKVM(
             if (colorPickerJob?.isActive == true) return@guardLoading
             colorPickerJob =
                 viewModelScope.launch {
-                    navigateToColorPicker(color.value).collect { picked -> color.update { picked } }
+                    navigateToColorPicker(color.value, sourceEntryId).collect { picked -> color.update { picked } }
                 }
         }
 

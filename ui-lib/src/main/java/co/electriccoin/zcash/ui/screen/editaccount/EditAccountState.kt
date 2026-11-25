@@ -88,7 +88,11 @@ internal data class EditAccountState(
                         subtitle = null,
                         header =
                             AccountFormHeaderState.createAccountName(
-                                avatar = AccountAvatarState.create(image = image, onEditClick = onAvatarEditClick)
+                                avatar = AccountAvatarState.create(
+                                    image = image,
+                                    isEditEnabled = !isSaving,
+                                    onEditClick = onAvatarEditClick
+                                )
                             ),
                     ),
                 nameField =
@@ -98,6 +102,7 @@ internal data class EditAccountState(
                         isDuplicate = isDuplicate,
                         onValueChange = onValueChange,
                         submit = saveButton,
+                        isEnabled = !isSaving,
                     ),
                 remove = remove,
                 saveButton = saveButton,

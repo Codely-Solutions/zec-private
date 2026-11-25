@@ -331,7 +331,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<CurrencyConversionPickerArgs> { CurrencyConversionPickerScreen(it.toRoute()) }
         composable<SwapArgs> { SwapScreen(it.id) }
         dialogComposable<SwapSlippageArgs> { SwapSlippageScreen(it.toRoute()) }
-        dialogComposable<ColorPickerArgs> { ColorPickerScreen(it.toRoute()) }
+        dialogComposable<ColorPickerArgs> { ColorPickerScreen(it.toRoute(), it.id) }
         dialogComposable<SwapRefundWarningArgs> { SwapRefundWarningScreen(it.toRoute()) }
         dialogComposable<SwapInfoArgs> { SwapInfoScreen() }
         dialogComposable<DepositSwapInfoArgs> { DepositSwapInfoScreen() }

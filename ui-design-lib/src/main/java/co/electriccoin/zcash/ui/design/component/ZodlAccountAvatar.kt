@@ -92,6 +92,7 @@ data class AccountAvatarState(
         /** [image] with the pencil badge that opens the colour picker through [onEditClick], none without it. */
         fun create(
             image: ImageResource,
+            isEditEnabled: Boolean = true,
             onEditClick: (() -> Unit)? = null,
         ) = AccountAvatarState(
             image = image,
@@ -100,6 +101,7 @@ data class AccountAvatarState(
                     IconButtonState(
                         icon = R.drawable.ic_avatar_edit,
                         contentDescription = stringRes(R.string.colorPicker_edit),
+                        isEnabled = isEditEnabled,
                         onClick = it
                     )
                 },

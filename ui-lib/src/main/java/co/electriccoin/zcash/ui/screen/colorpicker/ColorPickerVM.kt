@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.colorpicker
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 import co.electriccoin.zcash.ui.design.component.colorpicker.ColorChannel
@@ -14,8 +15,12 @@ import co.electriccoin.zcash.ui.design.component.colorpicker.spectrumPosition
 import co.electriccoin.zcash.ui.design.component.colorpicker.withChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -28,10 +33,14 @@ import kotlin.math.roundToInt
 internal class ColorPickerVM(
     private val args: ColorPickerArgs,
     private val navigateToColorPicker: NavigateToColorPickerUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val selection = MutableStateFlow(ColorPickerSelection.initial(args.initialArgb?.let { Color(it) }))
 
     private var isClosed = false
+    private var closeJob: Job? = null
+    private val refusedCloses = MutableStateFlow(0)
+    val refusedCloseCount = refusedCloses.asStateFlow()
 
     val state: StateFlow<ColorPickerState> =
         selection.map(::createState).stateIn(viewModel = this, initialValue = createState(selection.value))
@@ -85,7 +94,12 @@ internal class ColorPickerVM(
         )
     }
 
-    private fun onClose() = navigateToColorPicker.dismiss(args)
+    private fun onClose() {
+        if (closeJob?.isActive == true || isClosed) return
+        closeJob = viewModelScope.launch {
+            if (!navigateToColorPicker.dismiss(args, sourceEntryId)) refusedCloses.update { it + 1 }
+        }
+    }
 
     /** Picks the opaque part of [color], which clears every half-typed field. */
     private fun pick(

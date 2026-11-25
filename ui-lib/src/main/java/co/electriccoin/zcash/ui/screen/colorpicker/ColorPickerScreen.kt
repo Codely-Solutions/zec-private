@@ -9,10 +9,11 @@ import org.koin.core.parameter.parametersOf
 import java.util.UUID
 
 @Composable
-internal fun ColorPickerScreen(args: ColorPickerArgs) {
-    val vm = koinViewModel<ColorPickerVM> { parametersOf(args) }
+internal fun ColorPickerScreen(args: ColorPickerArgs, sourceEntryId: String) {
+    val vm = koinViewModel<ColorPickerVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    ColorPickerView(state)
+    val refusedCloseCount by vm.refusedCloseCount.collectAsStateWithLifecycle()
+    ColorPickerView(state, refusedCloseCount)
 }
 
 /**

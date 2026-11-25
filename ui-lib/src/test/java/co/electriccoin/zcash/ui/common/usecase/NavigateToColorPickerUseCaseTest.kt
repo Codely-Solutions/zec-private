@@ -80,7 +80,7 @@ class NavigateToColorPickerUseCaseTest {
         }
 
     @Test
-    fun dismissPopsOnlyTheSheetOfItsOwnRequestWhileItIsOnTop() {
+    fun dismissPopsOnlyTheSheetOfItsOwnRequestWhileItIsOnTop() = runTest {
         val args = ColorPickerArgs(initialArgb = null)
         val block = slot<(NavBackStackEntry?) -> NavigationCommand?>()
         every { router.custom(capture(block)) } returns Unit
@@ -97,6 +97,35 @@ class NavigateToColorPickerUseCaseTest {
             unmockkStatic(NAV_BACK_STACK_ENTRY_KT)
         }
         verify(exactly = 0) { router.back() }
+    }
+
+    @Test
+    fun aDeclinedLaunchEndsTheFlowSoTheCallerCanRetry() = runTest {
+        val entry = mockk<NavBackStackEntry> { every { id } returns "picker-caller" }
+        var allowLaunch = false
+        every { router.custom(any()) } answers {
+            val command = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()(entry)
+            if (command is NavigationCommand.ForEntry) {
+                if (allowLaunch) {
+                    forwarded.addAll((command.buildCommand() as NavigationCommand.Forward).routes)
+                }
+                command.acknowledge(allowLaunch)
+            }
+        }
+
+        assertTrue(useCase(null, "picker-caller").toList().isEmpty())
+        assertFalse(useCase.hasCollector())
+        allowLaunch = true
+        val values = mutableListOf<Color>()
+        val next = backgroundScope.launch { useCase(null, "picker-caller").toList(values) }
+        runCurrent()
+        val args = forwarded.single() as ColorPickerArgs
+        useCase.onPicked(Color(PICKED), args)
+        useCase.onClosed(args)
+        runCurrent()
+
+        assertEquals(listOf(Color(PICKED)), values)
+        assertTrue(next.isCompleted)
     }
 
     @Test

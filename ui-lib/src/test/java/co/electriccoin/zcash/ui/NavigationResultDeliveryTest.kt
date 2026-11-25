@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui
 
 import android.app.Activity
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -12,7 +13,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 import co.electriccoin.zcash.ui.design.KeyboardManager
+import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
@@ -22,6 +25,7 @@ import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -288,6 +292,48 @@ class NavigationResultDeliveryTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun pickerLaunchAndDismissalRequireTheCurrentNavigationEntry() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val router = NavigationRouterImpl()
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                    router.observePipeline().collect { command ->
+                        if (command is CustomNavigationCommand) navigator.executeCommand(command)
+                    }
+                }
+                val picker = NavigateToColorPickerUseCase(router)
+                val owner = checkNotNull(controller.currentBackStackEntry).id
+                controller.navigate(DeliverySigningSheet)
+                assertTrue(picker(null, owner).toList().isEmpty())
+                assertEquals(DeliverySigningSheet, controller.currentBackStackEntry?.toRoute<DeliverySigningSheet>())
+                assertTrue(controller.popBackStack())
+
+                val values = mutableListOf<Color>()
+                val picks = backgroundScope.launch { picker(null, owner).toList(values) }
+                runCurrent()
+                val pickerEntry = checkNotNull(controller.currentBackStackEntry)
+                val args = pickerEntry.toRoute<ColorPickerArgs>()
+                controller.navigate(DeliverySigningSheet)
+                assertFalse(picker.dismiss(args, pickerEntry.id))
+                assertFalse(picks.isCompleted)
+                assertTrue(controller.popBackStack())
+                picker.onPicked(Color.Green, args)
+                assertTrue(picker.dismiss(args, pickerEntry.id))
+                picker.onClosed(args)
+                runCurrent()
+
+                assertEquals(listOf(Color.Green), values)
+                assertTrue(picks.isCompleted)
+                assertEquals(owner, controller.currentBackStackEntry?.id)
+            }
+        }
+    }
+
     private fun install() {
         compose.setContent {
             controller = rememberNavController()
@@ -296,6 +342,7 @@ class NavigationResultDeliveryTest {
                 composable<DeliveryMigrationArgs> { Text("Migration progress") }
                 composable<DeliveryOrigin> { Text("Signing") }
                 dialog<DeliverySigningSheet> { Text("Hardware signing") }
+                dialog<ColorPickerArgs> { Text("Color picker") }
                 dialog<ErrorDialog> { Text("Seed recovery") }
                 composable<ScanGiftCardArgs> { Text("External scan") }
                 composable<ActivityHistoryArgs> { Text("Activity history") }

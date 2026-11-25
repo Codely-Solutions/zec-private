@@ -7,6 +7,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -36,12 +37,17 @@ class NavigateToColorPickerUseCase(
             onBufferOverflow = BufferOverflow.DROP_OLDEST
         )
 
-    operator fun invoke(initial: Color?): Flow<Color> =
+    operator fun invoke(initial: Color?, sourceEntryId: String? = null): Flow<Color> =
         flow {
             val args = ColorPickerArgs(initialArgb = initial?.toArgb())
             emitAll(
                 pipeline
-                    .onSubscription { navigationRouter.forward(args) }
+                    .onSubscription {
+                        val opened = navigationRouter.commitFrom(sourceEntryId) {
+                            NavigationCommand.Forward(listOf(args))
+                        }
+                        if (!opened) emit(ColorPickerEvent.Closed(args))
+                    }
                     .filter { it.args.requestId == args.requestId }
                     .transformWhile { event ->
                         if (event is ColorPickerEvent.Picked) emit(event.color)
@@ -68,10 +74,14 @@ class NavigateToColorPickerUseCase(
      * Pops the sheet of [args] when it is the current destination and nothing otherwise, so a close
      * that comes twice, late, or after the sheet already left never pops another screen.
      */
-    fun dismiss(args: ColorPickerArgs) {
+    suspend fun dismiss(args: ColorPickerArgs, sourceEntryId: String? = null): Boolean {
+        if (sourceEntryId != null) {
+            return navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
+        }
         navigationRouter.custom { current ->
             NavigationCommand.Back.takeIf { current?.isSheetOf(args) == true }
         }
+        return true
     }
 
     /** The sheet already left the back stack: ends the caller's flow on the last picked colour. */

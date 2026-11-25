@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +35,7 @@ import co.electriccoin.zcash.ui.design.component.colorpicker.ZodlColorSpectrum
 import co.electriccoin.zcash.ui.design.component.colorpicker.ZodlColorSwatches
 import co.electriccoin.zcash.ui.design.component.colorpicker.ZodlColorValueField
 import co.electriccoin.zcash.ui.design.component.rememberZashiFrostState
+import co.electriccoin.zcash.ui.design.component.rememberScreenModalBottomSheetState
 import co.electriccoin.zcash.ui.design.component.zashiFrostSource
 import co.electriccoin.zcash.ui.design.component.zashiFrostedHeader
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
@@ -49,8 +51,12 @@ import co.electriccoin.zcash.ui.design.util.getValue
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ColorPickerView(state: ColorPickerState?) {
-    ZashiScreenModalBottomSheet(state = state, dragHandle = null) { innerState, contentPadding ->
+internal fun ColorPickerView(state: ColorPickerState?, refusedCloseCount: Int = 0) {
+    val sheetState = rememberScreenModalBottomSheetState()
+    LaunchedEffect(refusedCloseCount) {
+        if (refusedCloseCount > 0 && !sheetState.isVisible) sheetState.show()
+    }
+    ZashiScreenModalBottomSheet(state = state, sheetState = sheetState, dragHandle = null) { innerState, contentPadding ->
         val hazeState = rememberZashiFrostState()
         Box(modifier = Modifier.weight(1f, false)) {
             Column(
