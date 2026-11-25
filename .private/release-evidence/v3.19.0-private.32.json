@@ -1,0 +1,508 @@
+{
+  "release_tag": "v3.19.0-private.32",
+  "versionCode": 3234035,
+  "versionName": "3.19.0",
+  "upstream": {
+    "tag": "3.19.0-3234",
+    "sha": "a57ea1455840a0d97eb0b2a3d2557480dfe5bda7",
+    "published_at": "2026-10-29T16:12:07Z",
+    "versionCode": 3234035
+  },
+  "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+  "controller_sha": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc",
+  "artifact_run_id": "45717882452",
+  "apk_sha256": "82aedbd41e717c3341919fa6ab291fc7871425b99d4399a14c85924fa98cc662",
+  "core": {
+    "schema": 1,
+    "passed": true,
+    "evidence_class": "real-app-testnet",
+    "network": "zcash-testnet",
+    "tor_enabled": false,
+    "clearnet_fallback": false,
+    "direct_bulk_downloads": true,
+    "personal_wallet_access": false,
+    "real_funds_used": false,
+    "stages": {
+      "fund": {
+        "stage": "fund",
+        "passed": true,
+        "network": "zcash-testnet",
+        "tor_enabled": false,
+        "transport": "direct",
+        "seconds": 253.492272896,
+        "funding_txid": "2534898df44ee0748766abbb0c445ced699d50a499e1c8d7479b9c0d8573fb68",
+        "balance_zatoshi": 10000000,
+        "app_transaction_state": "Confirmed",
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            28,
+            4665503,
+            28,
+            4665503,
+            28,
+            4665503
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4665495,
+            4665495,
+            4665495,
+            4665495,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4665505,
+            4665502,
+            4665502,
+            4665502,
+            0
+          ]
+        }
+      },
+      "upgrade": {
+        "stage": "upgrade",
+        "passed": true,
+        "network": "zcash-testnet",
+        "tor_enabled": false,
+        "transport": "direct",
+        "seconds": 2.897319087,
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            30,
+            4665505,
+            30,
+            4665505,
+            30,
+            4665505
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4665495,
+            4665495,
+            4665495,
+            4665495,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4665507,
+            4665504,
+            4665504,
+            4665504,
+            0
+          ]
+        }
+      },
+      "send": {
+        "stage": "send",
+        "passed": true,
+        "network": "zcash-testnet",
+        "tor_enabled": false,
+        "transport": "direct",
+        "seconds": 61.128496733,
+        "txId": "bdb9a57a836b81c5704125f88449e6a433ae4588bd894a853b35b6742a58ccb8",
+        "fee_zatoshi": 10000,
+        "initial_submit_type": "Success",
+        "manual_resubmissions": 0,
+        "ui_review": true,
+        "ui_cancel_no_submission": true,
+        "ui_approval": true,
+        "ui_approval_actions": 1,
+        "ui_review_sync_checks": 3,
+        "ui_review_sync_wait_millis": 1233,
+        "setup": "production support screen; actual donation review/cancel and approval clicks",
+        "shielded_donation": true,
+        "automatic_identifying_memo": false,
+        "reviewed_memo_verified": true,
+        "clipboard_metadata_verified": true,
+        "newer_clipboard_preserved": true,
+        "clipboard_lease_age_ms": 58052,
+        "multi_recipient_sdk_accepted": true,
+        "multi_recipient_wallet_rejected": true,
+        "multi_recipient_submitted": false,
+        "biometric_prompt_executed": false
+      },
+      "restart": {
+        "stage": "restart",
+        "passed": true,
+        "network": "zcash-testnet",
+        "tor_enabled": false,
+        "transport": "direct",
+        "seconds": 3.627342169,
+        "txId": "bdb9a57a836b81c5704125f88449e6a433ae4588bd894a853b35b6742a58ccb8"
+      },
+      "restore": {
+        "stage": "restore",
+        "passed": true,
+        "network": "zcash-testnet",
+        "tor_enabled": false,
+        "transport": "direct",
+        "seconds": 54.607185954,
+        "txId": "bdb9a57a836b81c5704125f88449e6a433ae4588bd894a853b35b6742a58ccb8",
+        "mined_height": 4665507,
+        "amount_zatoshi": 1000000,
+        "app_transaction_state": "Pending",
+        "reviewed_memo_verified": true
+      }
+    },
+    "instrumentation_pairing": {
+      "stages": {
+        "recipient": {
+          "role": "baseline",
+          "original_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+          "app_version_code": 3234034,
+          "installed_hash_verified": true
+        },
+        "restoreProbe": {
+          "role": "baseline",
+          "original_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+          "app_version_code": 3234034,
+          "installed_hash_verified": true
+        },
+        "sender": {
+          "role": "baseline",
+          "original_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+          "app_version_code": 3234034,
+          "installed_hash_verified": true
+        },
+        "fund": {
+          "role": "baseline",
+          "original_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+          "app_version_code": 3234034,
+          "installed_hash_verified": true
+        },
+        "upgrade": {
+          "role": "candidate",
+          "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+          "app_version_code": 3234035,
+          "installed_hash_verified": true
+        },
+        "send": {
+          "role": "candidate",
+          "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+          "app_version_code": 3234035,
+          "installed_hash_verified": true
+        },
+        "restart": {
+          "role": "candidate",
+          "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+          "app_version_code": 3234035,
+          "installed_hash_verified": true
+        },
+        "restore": {
+          "role": "candidate",
+          "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+          "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+          "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+          "app_version_code": 3234035,
+          "installed_hash_verified": true
+        }
+      },
+      "baseline": {
+        "original_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+        "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+        "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+        "app_version_code": 3234034
+      },
+      "candidate": {
+        "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+        "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+        "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+        "app_version_code": 3234035
+      }
+    },
+    "input_fingerprint": "1d71d41c64b904ff12491c4709278171bd398994bbb1e32d5323094b29e60805",
+    "runtime_input_fingerprint": "9d4c55a504b6984f37bc5f065ff80fc0dddb91d5b37ec733c74b1121f0f0f741",
+    "build_input_fingerprint": "cec56c65bf097d4d14884cb7c1c9b2b498f1ebc7f8f2f4774c6fb96db22e3648",
+    "build_source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+    "baseline_source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+    "baseline_version_code": 3234034,
+    "candidate_version_code": 3234035,
+    "candidate_apk_sha256": "4869879e66925eb2fe34d5d57d5fe318cce14a6d24bed37b3f0bd7da502fc678",
+    "baseline_apk_sha256": "4e5ed5ff5b498285c9a4504529547554254cd7f6d8f362494bc03644ceac82c8",
+    "instrumentation_apk_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+    "baseline_instrumentation_apk_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+    "harness_sha256": "8f2915c201220cdcf11d6b37e5317ff00e63049ab45f780994e90049a1240368",
+    "live_tor_probe": {
+      "role": "candidate",
+      "original_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+      "executed_sha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+      "source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+      "app_version_code": 3234035,
+      "installed_hash_verified": true,
+      "passed": true,
+      "tor_enabled": true
+    },
+    "faucet_readiness": {
+      "stage": "faucet_status",
+      "claim_requests": 0,
+      "passed": true,
+      "network": "testnet",
+      "healthy": true,
+      "auth": "pow",
+      "funding_posture": "available",
+      "http_status": 200,
+      "bundle_sha256": "7039cb16060ab22e669852e55774d894b55f25ea8bd0ab7194d3478429a58725",
+      "setup_seconds": 0.005644321000005448,
+      "bootstrap_seconds": 7.004242954999995,
+      "tor_start_attempts": 1,
+      "tor_binary_sha256": "0769509fb10e5b916d91f824fdb7575ae142f5afe134b16e9ea174074a327ccf",
+      "tor_version": "Tor version 0.4.9.16 (git-c51547ca15ea6659).",
+      "elapsed_seconds": 8.496152117000008
+    },
+    "sync_preflight": {
+      "stage": "sender",
+      "passed": true,
+      "network": "zcash-testnet",
+      "tor_enabled": false,
+      "transport": "direct",
+      "seconds": 8.674324863,
+      "scanned_height": 4665487,
+      "network_height": 4665487,
+      "mode": "caught-up"
+    },
+    "preclaim_readiness": {
+      "passed": true,
+      "route": "direct",
+      "role": "baseline",
+      "restore_verified": true
+    },
+    "funding_setup": {
+      "provider": "argon-testnet",
+      "txid": "2534898df44ee0748766abbb0c445ced699d50a499e1c8d7479b9c0d8573fb68",
+      "claim_id": "6e76559007d02afd",
+      "claim_requests": 1,
+      "tor_transport_verified": true,
+      "proxy_unavailable_failed_closed": true,
+      "persistent_tor_connection": true,
+      "challenge_claim_same_tls": false,
+      "claim_poll_same_tls": true,
+      "challenge_ip_bound": false,
+      "route_evidence": "Pinned owned Tor; unavailable-proxy negative; validated TLS; sole claim and status polling share TLS",
+      "source_blob": "25e617b8f3f3010e1e5b2b17bc81b9661afadf16",
+      "source_url": "https://github.com/anukulpandey/zcash-faucet/blob/main/server/server.js",
+      "proof_seconds": 34.575,
+      "proof_workers": 2,
+      "seconds": 129.743235606,
+      "bundle_sha256": "7039cb16060ab22e669852e55774d894b55f25ea8bd0ab7194d3478429a58725",
+      "setup_seconds": 0.005644321000005448,
+      "bootstrap_seconds": 7.004242954999995,
+      "tor_start_attempts": 1,
+      "tor_binary_sha256": "0769509fb10e5b916d91f824fdb7575ae142f5afe134b16e9ea174074a327ccf",
+      "tor_version": "Tor version 0.4.9.16 (git-c51547ca15ea6659)."
+    },
+    "seconds": 620.715663503,
+    "last_stage": "restore",
+    "transaction_evidence": {
+      "fundingTxId": "2534898df44ee0748766abbb0c445ced699d50a499e1c8d7479b9c0d8573fb68",
+      "fundingProvider": "argon-testnet",
+      "fundedBalance": 10000000,
+      "balanceBeforeSend": 10000000,
+      "feeZatoshi": 10000,
+      "senderConfirmedBalance": 8990000,
+      "restoreMinedHeight": 4665507,
+      "restoreTransactionState": "Pending",
+      "candidateTxIds": [
+        "bdb9a57a836b81c5704125f88449e6a433ae4588bd894a853b35b6742a58ccb8"
+      ],
+      "initialSubmitType": "Success"
+    },
+    "apk_preparation": {
+      "app-zcashtestnet-foss-debug-androidTest.apk": {
+        "originalSha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+        "testedSha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+        "preservedExecutionEntries": 8,
+        "executionEntriesDigest": "4224e23cb4ffb21f0f66a5d955d4f304ebaf528c6dca852fa0dda13be817bfae",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key",
+        "testSignerSha256": "45d4a5c716e524da7174448f40fb850d90f708471f509d63843143fddd681db3"
+      },
+      "app-zcashtestnet-foss-debug.apk": {
+        "originalSha256": "4869879e66925eb2fe34d5d57d5fe318cce14a6d24bed37b3f0bd7da502fc678",
+        "testedSha256": "f6de160bad2782e0973e44d3c2c2f423a93f5459d09ad9d4f5761eea0078499c",
+        "preservedExecutionEntries": 34,
+        "executionEntriesDigest": "1ea34eabd4bc3d34d0e4b0d9455bca5846395600ea96926f02b39cad7612032f",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key",
+        "testSignerSha256": "45d4a5c716e524da7174448f40fb850d90f708471f509d63843143fddd681db3"
+      },
+      "baseline-ui.apk": {
+        "originalSha256": "4e5ed5ff5b498285c9a4504529547554254cd7f6d8f362494bc03644ceac82c8",
+        "testedSha256": "76dff6120d0778d8500dc8a86666f1e77cdea62f6ef3f6b3239e6bfb69ed2d37",
+        "preservedExecutionEntries": 34,
+        "executionEntriesDigest": "c0a42f67f1196f176a40eb073d86e6701fa475ecbe662cc339fa84841cca6977",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key",
+        "testSignerSha256": "45d4a5c716e524da7174448f40fb850d90f708471f509d63843143fddd681db3"
+      },
+      "baseline-androidTest.apk": {
+        "originalSha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014",
+        "testedSha256": "8525a5c4f50973ea3c82d6aa5a72139ab83382da683efff82794675c9fabb6e0",
+        "preservedExecutionEntries": 8,
+        "executionEntriesDigest": "4224e23cb4ffb21f0f66a5d955d4f304ebaf528c6dca852fa0dda13be817bfae",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key",
+        "testSignerSha256": "45d4a5c716e524da7174448f40fb850d90f708471f509d63843143fddd681db3"
+      }
+    },
+    "hosted_fixture": {
+      "release": "v3.19.0-private.31",
+      "reference": "ghcr.io/codely-solutions/zec-private-upgrade-fixtures@sha256:c2edb71dac7ea0580f0400319571b0125680da47ce7304bdaa9a377af468be5d",
+      "digest": "sha256:32d005311f276596691864630c50a5810113e2dc80ae627d3b87336266038f1f",
+      "size_in_bytes": 116249505,
+      "source_sha": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+      "version_code": 3234034,
+      "candidate_apk_sha256": "4e5ed5ff5b498285c9a4504529547554254cd7f6d8f362494bc03644ceac82c8",
+      "instrumentation_apk_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014"
+    },
+    "hosted_reservation": "246196de59e047a7a30ba41da09d641a66bda43a",
+    "rehearsal": false,
+    "workflow_run_id": 45717882452,
+    "producer": {
+      "id": 15070903722,
+      "digest": "sha256:579049c92205da68823175921a26118af4653d5c2c4e3b289a86592bbe0caac4",
+      "size_in_bytes": 77278751
+    },
+    "production_artifact": {
+      "id": 15071453425,
+      "digest": "sha256:358316635cf452f682d9d877ce96ff132ebdb0883f32f6d067dbe43d16718f49",
+      "size_in_bytes": 31342754
+    },
+    "artifact_run_id": 45717882452,
+    "direct_preparation": {
+      "source": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+      "harness_controller": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc",
+      "original_core": {
+        "id": 15070589636,
+        "digest": "sha256:0592256fe363c6587ed43d819598cf12556d10bbe976a494334169b68243095d",
+        "size_in_bytes": 72771633
+      },
+      "candidate_apk_sha256": "4869879e66925eb2fe34d5d57d5fe318cce14a6d24bed37b3f0bd7da502fc678",
+      "candidate_instrumentation_sha256": "a3394924da393a3824d938d75f2c812c8d8d805748c162991e5a252cf746504a",
+      "baseline_apk_sha256": "4e5ed5ff5b498285c9a4504529547554254cd7f6d8f362494bc03644ceac82c8",
+      "baseline_source": "3dcc7e1cfe91c0dfa774298ad4e1dc48be929721",
+      "baseline_instrumentation_sha256": "ec9bb0e617dd1620d1fe920bcf4678a17ac35ac0c76cca341d362e9fcd8c8014"
+    },
+    "artifact_id": 15070903722,
+    "producer_controller_sha": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc"
+  },
+  "production_quotes": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
+    "passed": true,
+    "build_source_sha": "5273efae2e7943d41de0b7d3be050fefccdcc8b5",
+    "candidate_version_code": 3234035,
+    "input_fingerprint": "a3382eadd36c2b750d4b068cb805ca7efb42d076a34dbd02dbc0f3ee8bbb5396",
+    "executed_apk_sha256": "a2c856ab6838ddf6bdddef3afb96ccf2a212c4ac9807d636745f3c242c6b219a",
+    "original_apk_sha256": "1ab04dfef07ef6c326e1eeb3c7ffe9a13c6e36a1238a6eee2635ee2e8ab424f1",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": false,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "recipient_network_mismatch_blocked": true,
+    "corrected_without_leaving_form": true,
+    "independent_comparisons": 3,
+    "reference_states": [
+      "compared",
+      "compared",
+      "compared"
+    ],
+    "production_artifact": {
+      "id": 15071453425,
+      "digest": "sha256:358316635cf452f682d9d877ce96ff132ebdb0883f32f6d067dbe43d16718f49",
+      "size_in_bytes": 31342754
+    },
+    "producer": {
+      "id": 15070034999,
+      "digest": "sha256:9cae21b25ee89c57cee244d26afc082113b7e4c2c40ca152b7c1ce28fb460bd3",
+      "size_in_bytes": 68344055
+    },
+    "workflow_run_id": 45717882452,
+    "artifact_run_id": 45717882452,
+    "bridge": {
+      "producer": {
+        "id": 15070488253,
+        "digest": "sha256:f9fa38dc36c01a5b43ce8f0995fdaa769d91c5579ee75432f86bd3106c5beb7e",
+        "size_in_bytes": 869005
+      },
+      "run_id": 45717882452,
+      "controller": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc",
+      "apk_sha256": "a6eb27682f8ca83bc9c34228fb97df8ef4957d24d86396a691d774050b5f4ace"
+    },
+    "quote_controller_sha": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc",
+    "producer_controller_sha": "d510a13ab1611ff13d3567c65eec59d7fcfe6ebc"
+  },
+  "production_arm_executed": false,
+  "real_funds_used": false,
+  "production_artifact": {
+    "id": 15071453425,
+    "digest": "sha256:358316635cf452f682d9d877ce96ff132ebdb0883f32f6d067dbe43d16718f49",
+    "size_in_bytes": 31342754
+  },
+  "maintenance": {
+    "kind": "custom"
+  }
+}
