@@ -236,12 +236,14 @@ class MigrationKoinGraphSmokeTest {
      */
     @Test
     fun migrationProgressVM_resolvesFromKoin() {
-        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner")) }
+        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner"), "fixture-entry") }
     }
 
     @Test
     fun migrationReviewVM_resolvesFromKoin() {
-        koin.koin.get<MigrationReviewVM>()
+        koin.koin.get<MigrationReviewVM> {
+            parametersOf(MigrationReviewArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
+        }
     }
 
     @Test
@@ -251,12 +253,14 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationKeystoneScanVM_resolvesFromKoin() {
-        koin.koin.get<MigrationKeystoneScanVM>()
+        koin.koin.get<MigrationKeystoneScanVM> {
+            parametersOf(MigrationKeystoneScanArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
+        }
     }
 
     @Test
     fun migrationSendingVM_resolvesFromKoin() {
-        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner")) }
+        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner"), "fixture-entry") }
     }
 
     @Test
@@ -271,7 +275,7 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationCompleteVM_resolvesFromKoin() {
-        koin.koin.get<MigrationCompleteVM>()
+        koin.koin.get<MigrationCompleteVM> { parametersOf(MigrationCompleteArgs(), "fixture-entry") }
     }
 
     @Test

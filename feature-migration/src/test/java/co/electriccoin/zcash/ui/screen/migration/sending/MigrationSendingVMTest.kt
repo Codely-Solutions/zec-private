@@ -1,14 +1,23 @@
 package co.electriccoin.zcash.ui.screen.migration.sending
 
 import androidx.navigation.NavBackStackEntry
+import cash.z.ecc.android.sdk.MigrationAdvanceResult
+import cash.z.ecc.android.sdk.MigrationAdvanceStep
+import cash.z.ecc.android.sdk.MigrationNextAction
+import cash.z.ecc.android.sdk.MigrationTransferState
+import cash.z.ecc.android.sdk.MigrationTransferStates
 import cash.z.ecc.android.sdk.NetworkPrivacyOptions
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.TransferResult
+import cash.z.ecc.android.sdk.fixture.AccountFixture
 import cash.z.ecc.android.sdk.model.TransactionId
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
@@ -38,6 +47,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.util.UUID
 import kotlin.reflect.KClass
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -325,6 +335,78 @@ class MigrationSendingVMTest {
             assertTrue(router.forwardedRoutes.any { it == MigrationTorFailureArgs("fixture-owner") })
         }
 
+    @Test
+    fun recoveryRetryUsesCurrentTransferAndTorChoice() = runTest {
+        val (args, accounts) = recoveryOwner()
+        val sdk = recoverySdk(nextTransferId = 1L)
+        vm(sdk, FakeNavigationRouter(), useTor = true, args = args, accounts = accounts)
+        advanceUntilIdle()
+        coVerify(exactly = 1) {
+            sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), useEstimatedTip = true)
+        }
+    }
+
+    @Test
+    fun recoveryRetryLeavesReplacementTransferAndMarkerUntouched() = runTest {
+        val (args, accounts) = recoveryOwner()
+        val sdk = recoverySdk(nextTransferId = 2L)
+        val pending = mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true)
+        val vm = vm(
+            sdk, FakeNavigationRouter(), args = args, accounts = accounts,
+            pendingMigrationTorFailureStorageProvider = pending,
+        )
+        val collectJob = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+        coVerify(exactly = 0) { pending.store(any<String>(), any()) }
+        assertTrue(vm.state.value.content?.canGoBack == true)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun recoveryRetryDoesNotSendAfterAccountSwitch() = runTest {
+        val (args, accounts) = recoveryOwner(selected = false)
+        val sdk = recoverySdk(nextTransferId = 1L)
+        vm(sdk, FakeNavigationRouter(), args = args, accounts = accounts)
+        advanceUntilIdle()
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
+
+    private fun recoveryOwner(selected: Boolean = true): Pair<MigrationSendingArgs, AccountDataSource> {
+        val account = AccountFixture.new(accountUuid = UUID.fromString("00000000-0000-0000-0000-000000000001"))
+        val owner = mockk<WalletAccount> {
+            every { sdkAccount } returns account
+            every { isSelected } returns selected
+        }
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+        }
+        return MigrationSendingArgs(account.accountUuid.toStorageKeyId(), 1L, 100L) to accounts
+    }
+
+    private fun recoverySdk(nextTransferId: Long) = mockk<OrchardMigrationSdk> {
+        coEvery { getMigrationTransferStates() } returns
+            MigrationTransferStates(
+                transfers = listOf(
+                    MigrationTransferState(
+                        id = 1L,
+                        isTransfer = true,
+                        isSent = false,
+                        isProved = true,
+                        scheduledHeight = 100L,
+                        anchorBoundaryHeight = null,
+                        ready = true,
+                        action = MigrationNextAction.BROADCAST,
+                    )
+                ),
+                tipHeight = 101L,
+            )
+        coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(nextTransferId), null)
+        coEvery { executeNextPendingTransfer(any(), any()) } returns
+            TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = false))
+    }
+
     private fun vm(
         sdk: OrchardMigrationSdk,
         router: FakeNavigationRouter,
@@ -344,11 +426,13 @@ class MigrationSendingVMTest {
                     secondArg<suspend () -> Any?>().invoke()
                 }
             },
+        args: MigrationSendingArgs = MigrationSendingArgs("fixture-owner"),
+        accounts: AccountDataSource? = null,
     ) = MigrationSendingVM(
-        args = MigrationSendingArgs("fixture-owner"),
+        args = args,
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk("fixture-owner") } returns sdk
+                coEvery { this@mockk(args.accountKeyId) } returns sdk
             },
         getMigrationSnapshot = getMigrationSnapshot,
         scheduleNextMigrationWindow = mockk<ScheduleNextMigrationWindowUseCase>(relaxed = true),
@@ -356,11 +440,12 @@ class MigrationSendingVMTest {
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         isMigrationTorEnabledStorageProvider =
             mockk<IsMigrationTorEnabledStorageProvider> {
-                coEvery { this@mockk.get("fixture-owner") } returns useTor
+                coEvery { this@mockk.get(args.accountKeyId) } returns useTor
             },
         pendingMigrationTorFailureDecisionRepository = torDecisionRepository,
         pendingMigrationTorFailureStorageProvider = pendingMigrationTorFailureStorageProvider,
         migrationDriveOnce = migrationDriveOnce,
+        accounts = accounts,
     )
 
     private class FakeNavigationRouter : NavigationRouter {

@@ -20,7 +20,6 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
-import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
 import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
@@ -319,7 +318,7 @@ class CheckMigrationRecoveryUseCaseTest {
             )
             recovery()
             assertEquals(otherAccount, selected.value)
-            coVerify(exactly = 1) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 1) { router.replaceAll(MigrationProgressArgs(ownerKey, offerRetry = true)) }
 
             selected.value = testWalletAccount
             CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
@@ -383,7 +382,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationProgressArgs(ownerKey, offerRetry = true)) }
             coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 
@@ -410,7 +409,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationProgressArgs(ownerKey, offerRetry = true)) }
             coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 

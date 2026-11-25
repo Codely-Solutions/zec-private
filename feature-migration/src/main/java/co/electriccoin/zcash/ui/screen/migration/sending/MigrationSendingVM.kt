@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.screen.migration.sending
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.MigrationAdvanceStep
+import cash.z.ecc.android.sdk.MigrationNextAction
 import cash.z.ecc.android.sdk.NetworkPrivacyOptions
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
@@ -11,7 +13,9 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LceState
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.migration.migrationFailureMessage
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -53,6 +57,7 @@ class MigrationSendingVM(
     private val pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider,
     private val migrationDriveOnce: MigrationDriveOnce,
     private val sourceEntryId: String? = null,
+    private val accounts: AccountDataSource? = null,
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
     private val failure = MutableStateFlow<SendFailure?>(null)
@@ -155,7 +160,9 @@ class MigrationSendingVM(
             // Never got exclusive access — a background step held the lock for the whole retry
             // budget. Same handling as the pre-existing "not ready yet" path below: no send was
             // attempted, so this can't be a Tor failure.
-            pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+            if (!args.isRecoveryRetry) {
+                pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+            }
             failure.value = SendFailure.NotReady
             return
         }
@@ -212,16 +219,17 @@ class MigrationSendingVM(
             // that was never going to attempt a network send in the first place.
             // The foreground sync + Lane A hook will prove it; the user can retry later.
             else -> {
-                pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+                if (!args.isRecoveryRetry) {
+                    pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+                }
                 failure.value = SendFailure.NotReady
             }
         }
     }
 
     /**
-     * The original readiness/retry loop, unchanged — runs entirely inside the caller's
-     * [MigrationDriveOnce.withExclusiveAccess] block (2026-08-06 DRIVE_LOCK bypass fix), so a
-     * background worker/live-driver step can never interleave with it.
+     * Runs under [MigrationDriveOnce.withExclusiveAccess] so the background driver cannot
+     * interleave with a retry or advance its proposed transfer.
      */
     private suspend fun sendReadinessLoop(
         sdk: OrchardMigrationSdk,
@@ -237,6 +245,7 @@ class MigrationSendingVM(
             attempt < SEND_MAX_ATTEMPTS
         ) {
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
+            if (!canRetryTarget(sdk)) break
             withContext(NonCancellable) {
                 outcome = sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
                 val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
@@ -245,6 +254,22 @@ class MigrationSendingVM(
             attempt++
         }
         return outcome
+    }
+
+    private suspend fun canRetryTarget(sdk: OrchardMigrationSdk): Boolean {
+        if (!args.isRecoveryRetry) return true
+        val transfer =
+            sdk.getMigrationTransferStates()?.transfers?.firstOrNull {
+                it.id == args.retryTransferId && it.isTransfer && !it.isSent &&
+                    it.action == MigrationNextAction.BROADCAST
+            } ?: return false
+        val schedule = transfer.scheduledHeight ?: MigrationSendingArgs.UNSET
+        val anchor = transfer.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET
+        if (schedule != args.retryScheduledHeight || anchor != args.retryAnchorBoundaryHeight) return false
+        val next = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
+        val selectedOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
+            ?.sdkAccount?.accountUuid?.toStorageKeyId()
+        return next?.transferId == args.retryTransferId && selectedOwner == args.accountKeyId
     }
 
     companion object {

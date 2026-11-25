@@ -54,16 +54,11 @@ class MigrationTorFailureVM(
         }
     }
 
-    // "Try again" is NOT an in-place Tor retry (that would loop forever on a persistent Tor
-    // outage) — it just dismisses this sheet and sends the user to the standard missed/overdue
-    // transfer resolution screen (Reschedule or Send Now), per spec §6.5.4/§9.1. No decision is
-    // recorded on PendingMigrationTorFailureDecisionRepository: navigating straight to
-    // MigrationProgressArgs (rather than relying on back() to reveal a live listener somewhere on
-    // the stack) works identically regardless of whether this sheet was reached interactively or
-    // via CheckMigrationRecoveryUseCase's background-failure routing.
+    // Return to live progress so a new attempt requires an explicit choice on the current transfer.
+    // Keep the saved Tor preference and leave the decision repository untouched.
     private fun onTryAgain() {
         if (continuing?.isActive != true) {
-            navigationRouter.replaceAll(MigrationProgressArgs(args.accountKeyId))
+            navigationRouter.replaceAll(MigrationProgressArgs(args.accountKeyId, offerRetry = true))
         }
     }
 

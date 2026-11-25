@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
 import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectVM
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedVM
 import co.electriccoin.zcash.ui.screen.connectledger.handshake.LedgerHandshakeVM
@@ -34,6 +35,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.koin.core.KoinApplication
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import kotlin.test.AfterTest
@@ -68,6 +70,7 @@ class LedgerKoinGraphSmokeTest {
                 factory { mockk<PrefillSendUseCase>(relaxed = true) }
 
                 single<SwapRepository> { mockk(relaxed = true) }
+                single<SubmissionProgressStore> { mockk(relaxed = true) }
 
                 single<AccountDataSource> { mockk(relaxed = true) }
                 single<ProposalDataSource> { mockk(relaxed = true) }
@@ -122,7 +125,7 @@ class LedgerKoinGraphSmokeTest {
 
     @Test
     fun ledgerSignVM_resolvesFromKoin() {
-        koin.koin.get<LedgerSignVM>()
+        koin.koin.get<LedgerSignVM> { parametersOf("fixture-sign-entry") }
     }
 
     @Test

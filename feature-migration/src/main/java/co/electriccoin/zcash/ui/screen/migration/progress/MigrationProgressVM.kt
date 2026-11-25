@@ -1,8 +1,11 @@
 package co.electriccoin.zcash.ui.screen.migration.progress
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.MigrationNextAction
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
@@ -28,9 +31,13 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveMigrationLiveReadoutUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
+import co.electriccoin.zcash.ui.stageResultFrom
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +46,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.MathContext
 import kotlin.time.Clock
@@ -52,6 +60,7 @@ class MigrationProgressVM(
     private val navigationRouter: NavigationRouter,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
     private val retry = MutableStateFlow(0)
@@ -83,7 +92,7 @@ class MigrationProgressVM(
                     secondsPerBlock = secondsPerBlock,
                     nowEpochSeconds = Clock.System.now().epochSeconds,
                     nu7ActivationHeight = readout.nu7ActivationHeight,
-                )?.let { createState(it, rate) }
+                )?.let { createState(it, rate).copy(recoveryRetry = recoveryRetry(readout)) }
         }.withLce(sendLce, errorStateMapper::mapToState)
             .stateIn(this)
 
@@ -103,6 +112,43 @@ class MigrationProgressVM(
             val accountKeyId = args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
             emitAll(observeMigrationLiveReadout(accountKeyId))
         }
+
+    private fun recoveryRetry(readout: MigrationLiveReadout): ButtonState? {
+        val owner = args.accountKeyId?.takeIf { args.offerRetry }
+        val nextTransfer = readout.states.transfers.filter { it.isTransfer && !it.isSent }
+            .minByOrNull { it.scheduledHeight }
+        return if (owner != null && nextTransfer?.action == MigrationNextAction.BROADCAST) {
+            val target =
+                MigrationSendingArgs(
+                    accountKeyId = owner,
+                    retryTransferId = nextTransfer.id,
+                    retryScheduledHeight = nextTransfer.scheduledHeight ?: MigrationSendingArgs.UNSET,
+                    retryAnchorBoundaryHeight = nextTransfer.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET,
+                )
+            ButtonState(
+                text = stringRes(DesignR.string.migration_common_retry),
+                onClick = { retryTransfer(target) },
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun retryTransfer(target: MigrationSendingArgs) {
+        viewModelScope.launch {
+            val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+            if (selected == target.accountKeyId && sourceEntryId != null) {
+                navigationRouter.stageResultFrom(sourceEntryId) {
+                    NavigationCommand.Forward(listOf(target))
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
 
     fun navigateBack() = navigationRouter.back()
 

@@ -126,7 +126,8 @@ class SubmitProposalUseCase(
                 }
 
                 is ZodlAccount -> {
-                    submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId, account.sdkAccount.accountUuid)
+                    val owner = if (sourceEntryId != null) account.sdkAccount.accountUuid else null
+                    submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId, owner)
                 }
             }
         } catch (_: BiometricsFailureException) {
@@ -152,12 +153,12 @@ class SubmitProposalUseCase(
         proposal: TransactionProposal,
         reviewedQuote: SwapQuoteData.Success?,
         sourceEntryId: String?,
-        owner: AccountUuid,
+        owner: AccountUuid?,
     ) {
         if (submittedSoftwareProposal?.get() !== proposal) {
             swapRepository.clear()
             submittedSoftwareProposal = WeakReference(proposal)
-            val progress = if (sourceEntryId != null) submissionProgress?.begin(proposal, owner) else null
+            val progress = owner?.let { submissionProgress?.begin(proposal, it) }
             submittedProgressId = progress?.id
             submitZashiProposal(proposal, reviewedQuote, progress)
         }

@@ -57,8 +57,8 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationProgressScreen(args: MigrationProgressArgs) {
-    val vm = koinViewModel<MigrationProgressVM> { parametersOf(args) }
+fun MigrationProgressScreen(args: MigrationProgressArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationProgressVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { state.content?.onBack?.invoke() ?: vm.navigateBack() }
     if (state.content == null && !state.isLoading && state.error == null) {
@@ -184,12 +184,11 @@ fun MigrationProgressView(state: MigrationProgressState) {
 
             Spacer(Modifier.weight(1f))
 
-            // No Send-now / Re-schedule buttons: the engine drives execution and the foreground
-            // pass sends silently while this screen is open — the screen is a pure live status
-            // view now. The only button is "Got it" on completion; genuine attention states
-            // (expired / unprovable anchor) surface via the home banner → reschedule flow.
             Spacer(Modifier.height(28.dp))
 
+            state.recoveryRetry?.let { retry ->
+                ZashiButton(state = retry, modifier = Modifier.fillMaxWidth())
+            }
             if (state.isComplete) {
                 state.onDone?.let { done ->
                     ZashiButton(

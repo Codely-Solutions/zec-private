@@ -245,7 +245,7 @@ class MigrationAppHooksImpl(
                 MigrationAccountRetirement.admit(ownerKey) {
                     launchNavigation.requestMigrationRecovery(
                         ownerKey,
-                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
+                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey, offerRetry = true)))
                     ) {
                         val selected = accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }
                         selected?.sdkAccount?.accountUuid?.toStorageKeyId() == ownerKey &&
@@ -383,7 +383,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
             composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute(), it.id) }
-            composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
+            composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute(), entry.id) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute()) }
             composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }
         }

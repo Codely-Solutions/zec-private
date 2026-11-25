@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.migration.progress
 
 import co.electriccoin.zcash.ui.common.model.migration.MigrationPreparationDetails
+import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
 
 data class MigrationProgressState(
@@ -25,6 +26,7 @@ data class MigrationProgressState(
     val isComplete: Boolean,
     val onBack: () -> Unit,
     val onDone: (() -> Unit)? = null,
+    val recoveryRetry: ButtonState? = null,
 )
 
 /** The live Orchard (source) → Ironwood (destination) balance split shown above the timeline. */
