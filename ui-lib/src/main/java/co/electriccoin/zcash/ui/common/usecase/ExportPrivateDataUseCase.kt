@@ -37,6 +37,7 @@ class ExportPrivateDataUseCase(
 
     suspend operator fun invoke(
         isSourceCurrent: () -> Boolean = { true },
+        isChooserAllowed: () -> Boolean = { true },
         sourceFile: suspend () -> File,
     ): Boolean {
         val owner = selectedSpendableAccount()
@@ -57,7 +58,7 @@ class ExportPrivateDataUseCase(
                         )
                     )
                 )
-                isAllowed() && shareApprovedExport(sourceFile, isAllowed)
+                isAllowed() && shareApprovedExport(sourceFile, isAllowed, isChooserAllowed)
             }
         } catch (_: BiometricsFailureException) {
             false
@@ -73,7 +74,11 @@ class ExportPrivateDataUseCase(
         ?.takeIf { it.isSpendable }
         ?.sdkAccount?.accountUuid
 
-    private suspend fun shareApprovedExport(sourceFile: suspend () -> File, isAllowed: () -> Boolean): Boolean {
+    private suspend fun shareApprovedExport(
+        sourceFile: suspend () -> File,
+        isAllowed: () -> Boolean,
+        isChooserAllowed: () -> Boolean,
+    ): Boolean {
         var staged: File? = null
         var shared = false
         try {
@@ -99,7 +104,7 @@ class ExportPrivateDataUseCase(
             } ?: return false
             withContext(Dispatchers.Main.immediate) {
                 currentCoroutineContext().ensureActive()
-                if (isAllowed()) {
+                if (isAllowed() && isChooserAllowed()) {
                     context.startActivity(intent)
                     shared = true
                 }

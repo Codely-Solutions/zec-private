@@ -10,6 +10,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.forwardFrom
@@ -275,7 +276,9 @@ class ORSwapConfirmationVM(
                 ),
             sharePickerText = stringRes("Swap Deposit Address"),
             filenamePrefix = "swap_deposit_address_",
-            isAllowed = isAllowed,
+            isAllowed = {
+                navigationRouter.isForegroundAtEntry(sourceEntryId) && isAllowed()
+            },
         )
     }
 }

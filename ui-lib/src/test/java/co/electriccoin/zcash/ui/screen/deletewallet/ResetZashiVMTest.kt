@@ -112,6 +112,8 @@ class ResetZashiVMTest {
             assertTrue(text.contains(allWallets) && text.contains("Android"))
             val advice = localized.getString(R.string.deleteWallet_message2)
             val restore = localized.getString(R.string.deleteWallet_message4)
+            val retention = localized.getString(R.string.delete_wallet_text_2)
+            assertTrue(retention.contains(if (language == "en") "until cleanup" else "hasta que se limpien"))
             val final = localized.getString(assertIs<StringResource.ByResource>(confirmation.message).resource)
             assertTrue(advice.contains(if (language == "en") "If you know" else "Si conoces"))
             assertTrue(restore.contains("software") && restore.contains("hardware"))

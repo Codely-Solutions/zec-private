@@ -110,14 +110,13 @@ class LaunchNavigationRequests {
     ) = delivery.withLock {
         pending.update { requests -> requests.filter { it.stillApplies() } }
         val requests = pending.value
-        if (walletReady && requests.any { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }) {
-            return@withLock
-        }
+        val awaitingMigration = walletReady && requests.any { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
         // A migration replacement retains Home but removes every screen above it. Deliver it
         // before queued scanners so their destinations stay available on the same stack.
         for (request in requests.sortedBy { it.command !is NavigationCommand.ReplaceAll }) {
             if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
+            if (awaitingMigration && request.kind != Kind.SEED_RECOVERY_ERROR) continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
                 val isCurrent = {
                     hasAppAccess() && pending.value.admits(request, walletReady, canPresentRecovery())
@@ -171,7 +170,8 @@ private fun List<LaunchNavigationRequests.Request>.admits(
 ): Boolean {
     val recoveryBlocked = request.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && !canPresentRecovery
     if (recoveryBlocked || !request.stillApplies()) return false
-    val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
+    val migrationHasPriority = walletReady && request.kind != LaunchNavigationRequests.Kind.SEED_RECOVERY_ERROR &&
+        request.command !is NavigationCommand.ReplaceAll &&
         any { pending ->
             pending.kind == LaunchNavigationRequests.Kind.MIGRATION_PROGRESS ||
                 (pending.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY &&

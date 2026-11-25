@@ -92,8 +92,9 @@ class ObserveSeedMismatchUseCaseTest {
 
     @Test
     fun terminalFailureWaitsForWalletAccessAndSuccessfulNavigation() = runTest {
-        val exception = SeedMismatchRecoveryException(3)
-        coEvery { recoverFromSeedMismatch() } throws exception
+        coEvery { recoverFromSeedMismatch() } throws SeedMismatchRecoveryException(3)
+        launchNavigation.beginMigrationProgress("unresolved-owner")
+        launchNavigation.requestGiftScan()
         backgroundScope.launch { useCase() }
         runCurrent()
 
@@ -108,7 +109,7 @@ class ObserveSeedMismatchUseCaseTest {
         ) { command, current ->
             assertTrue(current())
             val error = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
-            assertEquals(ErrorArgs.General(exception), navigateToError.argsFor(error))
+            assertEquals(ErrorArgs.SeedRecoveryFailed, navigateToError.argsFor(error))
             attempts++
             accepts
         }
@@ -122,7 +123,10 @@ class ObserveSeedMismatchUseCaseTest {
         tryDelivery()
         tryDelivery()
         assertEquals(2, attempts)
-        assertTrue(launchNavigation.changes.value.isEmpty())
+        assertEquals(
+            listOf(LaunchNavigationRequests.Kind.MIGRATION_PROGRESS, LaunchNavigationRequests.Kind.GIFT_SCAN),
+            launchNavigation.changes.value.map { it.kind },
+        )
     }
 
     @Test

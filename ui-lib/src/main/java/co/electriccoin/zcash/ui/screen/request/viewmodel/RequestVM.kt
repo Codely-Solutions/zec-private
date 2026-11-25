@@ -9,7 +9,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -203,7 +203,10 @@ class RequestVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
-                                    isAllowed = { navigationRouter.isAtEntry(sourceEntryId) && permitted() },
+                                    isAllowed = {
+                                        navigationRouter.isForegroundAtEntry(sourceEntryId) &&
+                                            permitted()
+                                    },
                                 )
                             }
                         },

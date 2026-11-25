@@ -26,6 +26,7 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -203,7 +204,12 @@ class ExportTaxUseCaseTest {
     }
 
     @Test
-    fun stagedTaxReportCannotOpenTheChooserOverAnotherScreen() = runTest {
+    fun stagedTaxReportCannotOpenTheChooserOverAnotherScreenOrInTheBackground() = runTest {
+        assertStagedTaxChooserRefused(ActiveNavigationEntry("scanner", null))
+        assertStagedTaxChooserRefused(ActiveNavigationEntry("tax", null, hostResumed = false))
+    }
+
+    private suspend fun TestScope.assertStagedTaxChooserRefused(afterStaging: ActiveNavigationEntry) {
         val context = RuntimeEnvironment.getApplication()
         val account = EditAccountFixtures.zodl()
         val transactions = mockk<TransactionRepository> {
@@ -226,7 +232,7 @@ class ExportTaxUseCaseTest {
             every { FileProvider.getUriForFile(context, any(), any()) } answers {
                 staged = thirdArg()
                 assertTrue(staged.isFile)
-                entry.value = ActiveNavigationEntry("scanner", null)
+                entry.value = afterStaging
                 Uri.parse("content://synthetic/tax.csv")
             }
             ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk(), mockk(relaxed = true))

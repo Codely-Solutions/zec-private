@@ -27,6 +27,27 @@ def selected_baseline(source, sha, path=None):
     return value
 
 
+def available_local_funding_ledger(source, version):
+    require(type(version) is int and version > 0, 'Positive local funding version required')
+    records = Path(source).resolve().parent / 'records'
+    directory = records / 'local-release-funding'
+    ledger = directory / f'{version}.json'
+    require(all(path.resolve() == path and not path.is_symlink()
+                and not getattr(path, 'is_junction', lambda: False)() for path in (records, directory, ledger)),
+            'Local release funding ledger path is redirected')
+    require(not ledger.exists(), 'Local release funding was attempted for this version; reconcile the original ledger')
+    return ledger
+
+
+def local_upgrade_artifacts(baseline):
+    app = dict(baseline['artifact'], source_sha=baseline['source_sha'])
+    if 'apk_sha256' in baseline:
+        app['apk_sha256'] = baseline['apk_sha256']
+    test = baseline['instrumentation']
+    return dict(upgradeBaseline=app, upgradeBaselineInstrumentation=dict(
+        test['artifact'], source_sha=baseline['source_sha'], apk_sha256=test['apk_sha256']))
+
+
 def require_local_upgrade_pair(local, hosted):
     require(all(local.get(key) == hosted[key] for key in ('release', 'source_sha', 'version_code'))
             and local.get('apk_sha256') == hosted['candidate_apk_sha256']

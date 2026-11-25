@@ -16,7 +16,7 @@ from acceptance_policy import (
     ATTESTATION_PATHS, input_fingerprint, validate_core_sources, validate_direct_core_candidate, validate_quotes,
 )
 from release_metadata import Metadata, require
-from release_inputs import selected_baseline
+from release_inputs import local_upgrade_artifacts, selected_baseline
 
 
 def git(*args):
@@ -181,13 +181,11 @@ def main():
             require(len(prepared)==1 and prepared[0]['testedSha256']==
                     core['instrumentation_pairing'][role]['executed_sha256'],
                     'Installed instrumentation differs from preserved executable payload: '+role)
-        require(core_manifest['baseline_source_sha']==baseline['source_sha'] and
-                core_manifest['baseline_version_code']==baseline['version_code'] and
-                core_manifest['upgradeBaseline']==dict(baseline['artifact'],source_sha=baseline['source_sha']),
+        require(core_manifest['baseline_source_sha'] == baseline['source_sha']
+                and core_manifest['baseline_version_code'] == baseline['version_code']
+                and all(core_manifest.get(label) == expected
+                        for label, expected in local_upgrade_artifacts(baseline).items()),
                 'Selected upgrade baseline changed')
-        require(core_manifest['upgradeBaselineInstrumentation']==dict(baseline['instrumentation']['artifact'],
-            source_sha=baseline['source_sha'],apk_sha256=baseline['instrumentation']['apk_sha256']),
-            'Selected baseline instrumentation archive changed')
         require(all(core.get('stages', {}).get('interruption', {}).get(key) is True for key in
                     ('update_metadata_valid_before', 'update_metadata_valid_after', 'update_blocked_during_outage')),
                 'Real update metadata outage/recovery evidence required')
@@ -199,6 +197,8 @@ def main():
         for key, value in provenance.items():
             require(key not in core or core[key] == value, 'Original execution identity differs: '+key)
             core[key] = value
+    require('apk_sha256' not in baseline or core.get('baseline_apk_sha256') == baseline['apk_sha256'],
+            'Executed baseline app differs from selected upgrade APK')
     validate_direct_core_candidate(core, args.source_sha, version)
     if args.reuse_quote:
         quotes, reused_bytes['quote-acceptance.json'] = reusable(args.reuse_quote,'production-quotes',head)

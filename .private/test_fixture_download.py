@@ -209,6 +209,65 @@ class FixtureDownloadTests(unittest.TestCase):
         self.assertEqual(2, len(uploads))
         self.assertEqual([1, 2, 1, 2, 1, 2], downloads)
 
+    def test_preservation_replaces_only_the_exact_empty_starter(self):
+        from preserve_upgrade_fixture import preserve
+        from test_support import patch_environment
+
+        tag, source, draft_id = 'v3.19.0-private.30', 'a' * 40, 10
+        payloads = {'app.apk': b'app', 'app-androidTest.apk': b'test'}
+        core = dict(build_source_sha=source, candidate_version_code=330, artifact_id=5, workflow_run_id=7,
+                    candidate_apk_sha256=hashlib.sha256(payloads['app.apk']).hexdigest(),
+                    instrumentation_apk_sha256=hashlib.sha256(payloads['app-androidTest.apk']).hexdigest())
+        name = tag + '-TESTNET_UPGRADE_FIXTURE.zip'
+        placeholder = dict(name=name, id=15, state='starter', size=0, digest=None)
+        assets, payload = {name: placeholder}, {}
+        operations = []
+
+        def api(path):
+            if path == 'releases/' + str(draft_id):
+                return dict(id=draft_id, draft=True, tag_name='maintenance-fixtures', assets=list(assets.values()))
+            return {'tag_name': tag}
+
+        def gh(*args):
+            if args[:3] == ('api', '-X', 'DELETE'):
+                self.assertTrue(args[-1].endswith('/15'))
+                self.assertEqual(placeholder, assets.pop(name))
+                operations.append('remove empty starter')
+            elif args[0] == 'release':
+                file = Path(args[-1])
+                self.assertNotIn(file.name, assets)
+                asset_id = 20 + len(assets)
+                raw = file.read_bytes()
+                assets[file.name] = dict(name=file.name, id=asset_id, state='uploaded', size=len(raw),
+                                         digest='sha256:' + hashlib.sha256(raw).hexdigest())
+                payload[asset_id] = raw
+                operations.append(file.name)
+            else:
+                return payload[int(args[-1].split('/')[-1])]
+            return b''
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/maintenance-assets.json').write_text(json.dumps(dict(draft_release_id=draft_id, fixtures={})))
+            with patch('preserve_upgrade_fixture.ROOT', root), \
+                    patch('hosted_fixture.recorded_pair', return_value=({'source_sha': source}, core)), \
+                    patch('preserve_upgrade_fixture.require_recorded_public_release'), \
+                    patch('preserve_upgrade_fixture.original_pair', return_value=payloads), \
+                    patch('preserve_upgrade_fixture.api', side_effect=api), \
+                    patch('preserve_upgrade_fixture.gh', side_effect=gh):
+                for changes in ({'size': 42}, {'state': 'uploaded'}, {'digest': 'sha256:' + '0' * 64}):
+                    assets[name] = dict(placeholder, **changes)
+                    with patch_environment({'CODEX_GUARD_OUTPUT': str(root)}):
+                        with self.assertRaisesRegex(ValueError, 'Invalid existing fixture asset'):
+                            preserve(tag)
+                    self.assertEqual([], operations)
+                assets[name] = placeholder
+                with patch_environment({'CODEX_GUARD_OUTPUT': str(root)}):
+                    preserve(tag)
+                self.assertEqual(['remove empty starter', name, name.replace('.zip', '.json')], operations)
+                self.assertTrue((root / 'fixture-preservation.json').is_file())
+
     def test_hosted_pair_is_deterministic_and_rejects_unexpected_contents(self):
         from hosted_fixture import verify_pair
         from preserve_upgrade_fixture import write_seedless_pair

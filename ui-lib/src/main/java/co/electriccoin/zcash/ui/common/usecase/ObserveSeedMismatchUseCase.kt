@@ -41,7 +41,8 @@ class ObserveSeedMismatchUseCase(
         } catch (e: SeedMismatchRecoveryException) {
             Twig.error(e) { "Seed-mismatch recovery failed, retries exhausted" }
             if (stillApplies()) {
-                launchNavigation.updateSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
+                val route = navigateToError.stage(ErrorArgs.SeedRecoveryFailed)
+                launchNavigation.updateSeedRecoveryError(route, stillApplies)
             }
         } catch (e: Exception) {
             Twig.error(e) { "Seed-mismatch recovery failed" }

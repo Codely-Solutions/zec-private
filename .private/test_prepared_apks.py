@@ -60,6 +60,36 @@ class ArtifactTests(unittest.TestCase):
             receipt.write_text(json.dumps(data))
             with self.assertRaises(ValueError): reuse(receipt, manifest, root, root, receipt_hash)
 
+    def test_cached_pair_checks_both_original_apk_pins_before_copying(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            names = ('candidate.apk', 'candidate-androidTest.apk', 'baseline-ui.apk', 'baseline-androidTest.apk')
+            paths = [root / name for name in names]
+            for path in paths:
+                path.write_bytes(path.name.encode())
+            preparations = {path.name: dict(originalSha256='a' * 64,
+                                           testedSha256=hashlib.sha256(path.read_bytes()).hexdigest())
+                            for path in paths}
+            for role in ('upgradeBaseline', 'upgradeBaselineInstrumentation'):
+                expected = dict(build_source_sha='d' * 40, probeKind='core-testnet',
+                                upgradeBaseline={'apk_sha256': 'a' * 64},
+                                upgradeBaselineInstrumentation={'apk_sha256': 'a' * 64})
+                wrong = dict(expected, **{role: {'apk_sha256': 'b' * 64}})
+                receipt = root / (role + '.json')
+                execution = dict(wrong, baseline_apk_sha256='a' * 64, baseline_instrumentation_apk_sha256='a' * 64)
+                digest = write_receipt(receipt, wrong, execution, paths, preparations)
+                with patch('prepared_apks.verify_prepared'), patch('prepared_apks.shutil.copyfile') as copy:
+                    with self.assertRaisesRegex(ValueError, 'differs from its selected descriptor'):
+                        reuse(receipt, wrong, root / 'rejected', root, digest)
+                    copy.assert_not_called()
+                destination = root / role
+                destination.mkdir()
+                valid = destination / 'valid.json'
+                digest = write_receipt(valid, expected, expected, paths, preparations)
+                with patch('prepared_apks.verify_prepared'):
+                    reused, _, _ = reuse(valid, expected, destination, root, digest)
+                self.assertEqual([path.read_bytes() for path in paths], [path.read_bytes() for path in reused])
+
     def test_active_identity_and_ledger(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary).resolve(); root = state/'job-id'; root.mkdir()

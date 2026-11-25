@@ -22,6 +22,8 @@ import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Z
 import co.electriccoin.zcash.ui.common.voting.VotingSettingsEntry
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorRoute
+import io.mockk.slot
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow
@@ -115,42 +117,32 @@ class ViewOnlySpendGuardTest {
         }
 
     @Test
-    fun zip321ScanFromHomeShowsTheUnsupportedError() =
-        runTest {
-            val useCase =
-                OnZip321ScannedUseCase(
-                    review = review,
-                    navigationRouter = navigationRouter,
-                    prefillSend = mockk(relaxed = true),
-                    navigateToErrorUseCase = navigateToError,
-                )
-
-            useCase(Zip321ParseUriValidation.Valid(
-                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
-            ), ScanArgs(ScanFlow.HOMEPAGE))
-
-            verifyViewOnlyErrorShown()
-            assertNoProposalCreated()
-        }
+    fun zip321ScanFromHomeShowsTheUnsupportedError() = runTest {
+        assertZip321UnsupportedRoute(ScanFlow.HOMEPAGE)
+    }
 
     @Test
-    fun zip321ScanFromSendShowsTheUnsupportedError() =
-        runTest {
-            val useCase =
-                OnZip321ScannedUseCase(
-                    review = review,
-                    navigationRouter = navigationRouter,
-                    prefillSend = mockk(relaxed = true),
-                    navigateToErrorUseCase = navigateToError,
-                )
+    fun zip321ScanFromSendShowsTheUnsupportedError() = runTest {
+        assertZip321UnsupportedRoute(ScanFlow.SEND)
+    }
 
-            useCase(Zip321ParseUriValidation.Valid(
-                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
-            ), ScanArgs(ScanFlow.SEND))
+    private suspend fun assertZip321UnsupportedRoute(flow: ScanFlow) {
+        val errors = NavigateToErrorUseCase(navigationRouter)
+        val useCase = OnZip321ScannedUseCase(review, navigationRouter, mockk(), errors)
+        useCase(
+            Zip321ParseUriValidation.Valid("zcash:t1", mockk { every { payments } returns listOf(mockk()) }),
+            ScanArgs(flow),
+        )
 
-            verify(exactly = 1) { navigateToError(match { it.isViewOnlyError() }, any()) }
-            assertNoProposalCreated()
+        val route = slot<ErrorRoute>()
+        if (flow == ScanFlow.HOMEPAGE) {
+            verify(exactly = 1) { navigationRouter.forward(capture(route)) }
+        } else {
+            verify(exactly = 1) { navigationRouter.replace(capture(route)) }
         }
+        check(requireNotNull(errors.argsFor(route.captured)).isViewOnlyError())
+        assertNoProposalCreated()
+    }
 
     @Test
     fun swapQuoteNeverBecomesAProposal() =

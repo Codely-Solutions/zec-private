@@ -27,7 +27,7 @@ class ErrorVM(
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
     private val viewOnlyContent: ViewOnlyContent,
-    reportAccess: WalletReportAccess,
+    private val reportAccess: WalletReportAccess,
     private val route: ErrorRoute? = null,
 ) : ViewModel() {
     private val reportPermission = reportAccess.bind(viewModelScope)
@@ -42,6 +42,7 @@ class ErrorVM(
 
     private fun createState(args: ErrorArgs): ErrorState =
         when (args) {
+            ErrorArgs.SeedRecoveryFailed -> createSeedRecoveryErrorState()
             is ErrorArgs.SyncError -> createSyncErrorState(args)
             is ErrorArgs.ShieldingError -> createShieldingErrorState(args)
             is ErrorArgs.General -> createGeneralErrorState(args)
@@ -49,6 +50,23 @@ class ErrorVM(
             is ErrorArgs.KeystoneFirmwareUpdateRequired -> createKeystoneFirmwareUpdateRequiredState(args)
             is ErrorArgs.KeystoneAccountUnsupported -> createKeystoneAccountUnsupportedState(args)
         }
+
+    private fun createSeedRecoveryErrorState() = ErrorState(
+        title = stringRes(R.string.wallet_seed_recovery_failed_title),
+        message = stringRes(R.string.wallet_seed_recovery_failed_message),
+        positive = ButtonState(
+            text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
+            onClick = ::onBack,
+        ),
+        negative = ButtonState(
+            text = stringRes(R.string.support_header),
+            onClick = {
+                val allowed = reportAccess.bindToCurrentEntry(reportAccess.captureWallet())
+                sendEmailUseCase.sendBlankSupport(allowed)
+            },
+        ),
+        onBack = ::onBack,
+    )
 
     private fun createSyncErrorState(args: ErrorArgs.SyncError) =
         ErrorState(

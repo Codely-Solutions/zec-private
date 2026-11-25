@@ -85,10 +85,7 @@ data class ActiveNavigationEntry(
 
 internal fun NavigationRouter.bindReportHandoff(allowed: () -> Boolean): () -> Boolean {
     val owner = activeEntry.value?.takeIf { it.hostResumed }?.id
-    return {
-        val current = activeEntry.value
-        owner != null && current != null && current.id == owner && current.hostResumed && allowed()
-    }
+    return { owner != null && isForegroundAtEntry(owner) && allowed() }
 }
 
 interface ActiveNavigationEntryObserver {
@@ -226,6 +223,9 @@ internal suspend fun NavigationRouter.commitFrom(
 
 internal fun NavigationRouter.isAtEntry(sourceEntryId: String?) =
     sourceEntryId == null || activeEntry.value?.id == sourceEntryId
+
+internal fun NavigationRouter.isForegroundAtEntry(sourceEntryId: String?): Boolean =
+    sourceEntryId == null || activeEntry.value?.let { it.id == sourceEntryId && it.hostResumed } == true
 
 internal suspend fun <T> NavigationRouter.whileAtEntry(sourceEntryId: String?, block: suspend () -> T): T? {
     if (sourceEntryId == null) return block()

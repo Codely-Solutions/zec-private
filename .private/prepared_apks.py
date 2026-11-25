@@ -8,6 +8,7 @@ from strip_emulator_apk import verify_prepared
 
 HASH_FIELDS = {'candidate':'candidate_apk_sha256', 'instrumentation':'instrumentation_apk_sha256',
                'baseline':'baseline_apk_sha256', 'baseline-instrumentation':'baseline_instrumentation_apk_sha256'}
+UPGRADE_DESCRIPTORS = {'baseline': 'upgradeBaseline', 'baseline-instrumentation': 'upgradeBaselineInstrumentation'}
 
 
 def binding(manifest):
@@ -58,11 +59,15 @@ def reuse(receipt_path, manifest, root, sdk, expected_sha256):
         path = Path(entry['path'])
         if not path.is_absolute() or path.name != entry['name'] or role(path) != entry['role']:
             raise ValueError('Prepared APK path/name/role mismatch')
+        original = entry['preparation'].get('originalSha256')
         field = HASH_FIELDS.get(entry['role'])
-        if field and field in execution and execution[field] != entry['preparation'].get('originalSha256'):
+        if field and field in execution and execution[field] != original:
             raise ValueError('Prepared original APK role binding mismatch')
-        if field and field in manifest and manifest[field] != entry['preparation'].get('originalSha256'):
+        if field and field in manifest and manifest[field] != original:
             raise ValueError('Prepared manifest APK role binding mismatch')
+        descriptor = manifest.get(UPGRADE_DESCRIPTORS.get(entry['role']), {})
+        if 'apk_sha256' in descriptor and descriptor['apk_sha256'] != original:
+            raise ValueError('Prepared upgrade APK differs from its selected descriptor')
         verify_prepared(path, entry['preparation'], sdk)
         validated.append((path, entry))
     destination = Path(root) / 'apks'

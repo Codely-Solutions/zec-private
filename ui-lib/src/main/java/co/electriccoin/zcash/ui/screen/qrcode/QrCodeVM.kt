@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.WalletAddress
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -83,7 +83,10 @@ class QrCodeVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
-                                    isAllowed = { navigationRouter.isAtEntry(sourceEntryId) && permitted(address) },
+                                    isAllowed = {
+                                        navigationRouter.isForegroundAtEntry(sourceEntryId) &&
+                                            permitted(address)
+                                    },
                                 )
                             }
                         },

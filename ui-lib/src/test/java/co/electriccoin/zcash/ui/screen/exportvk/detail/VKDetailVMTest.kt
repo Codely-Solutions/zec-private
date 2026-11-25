@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavBackStackEntry
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -369,6 +370,22 @@ class VKDetailVMTest {
     }
 
     @Test
+    fun backgroundingTheSameEntryRevokesTheStagedKeyHandoff() = runTest(dispatcher) {
+        val handoff = slot<() -> Boolean>()
+        val share = mockk<ShareQRUseCase> {
+            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), capture(handoff)) } returns true
+        }
+        val router = FakeNavigationRouter().apply { activeEntry.value = ActiveNavigationEntry("key", null) }
+        val vm = startedVm(shareQR = share, router = router, sourceEntryId = "key")
+        reveal(vm)
+        requireNotNull(vm.state.value).secondaryButton.onClick()
+        runCurrent()
+        assertTrue(handoff.captured())
+        router.activeEntry.value = ActiveNavigationEntry("key", null, hostResumed = false)
+        assertFalse(handoff.captured())
+    }
+
+    @Test
     fun leavingTheScreenDeletesTheViewingKeyQrPng() =
         runTest(dispatcher) {
             val deleteSharedQRImages = mockk<DeleteSharedQRImagesUseCase>(relaxed = true)
@@ -442,6 +459,7 @@ class VKDetailVMTest {
         router: FakeNavigationRouter = FakeNavigationRouter(),
         appAccessSession: AppAccessSession = AppAccessSession().apply { unlock() },
         ownerStillCurrent: MutableStateFlow<Boolean> = MutableStateFlow(true),
+        sourceEntryId: String? = null,
     ): VKDetailVM {
         val getVK =
             mockk<GetVKUseCase>(relaxed = true) {
@@ -458,6 +476,7 @@ class VKDetailVMTest {
                 biometricRepository = biometricRepository,
                 navigationRouter = router,
                 appAccessSession = appAccessSession,
+                sourceEntryId = sourceEntryId,
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()
@@ -470,6 +489,7 @@ private const val KEY = "uview1testviewingkeypayload"
 private const val LONGER_KEY_PADDING = 40
 
 private class FakeNavigationRouter : NavigationRouter {
+    override val activeEntry = MutableStateFlow<ActiveNavigationEntry?>(null)
     var backCount = 0
         private set
     var guardedBackCount = 0

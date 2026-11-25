@@ -174,6 +174,58 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Missing real unfunded'):
                 assembly.reusable(path,'production-quotes',SHA)
 
+    def test_successful_prepared_core_manifest_reaches_assembly_with_the_bound_pair(self):
+        from copy import deepcopy
+
+        self.prepare()
+        prepared = json.loads((self.root / 'prepared/core-manifest.json').read_bytes())
+        quotes_path = self.root / 'quotes.json'
+        quotes_path.write_text(json.dumps(self.quote_receipt()))
+        apks = dict(candidate_apk_sha256='f' * 64, instrumentation_apk_sha256='e' * 64,
+                    baseline_apk_sha256=BASELINE['apk_sha256'], baseline_instrumentation_apk_sha256=DIGEST)
+        staged_hash = {role: hashlib.sha256(role.encode()).hexdigest() for role in apks}
+        core = dict(build_source_sha=SHA, candidate_version_code=2, **apks,
+                    instrumentation_pairing={
+                        'baseline': {'executed_sha256': staged_hash['baseline_instrumentation_apk_sha256']},
+                        'candidate': {'executed_sha256': staged_hash['instrumentation_apk_sha256']}},
+                    stages={'interruption': dict(update_metadata_valid_before=True, update_metadata_valid_after=True,
+                                                 update_blocked_during_outage=True)})
+        probe = dict(passed=True, probeArtifact=dict(ARTIFACT, **apks), apkHashes=staged_hash,
+                     apkPreparation={role: dict(executionEntriesUnchanged=True, abi='x86_64', originalSha256=original,
+                                                testedSha256=staged_hash[role]) for role, original in apks.items()})
+        profile = dict(receipt={'job': 'owned', 'sources': prepared['acceptanceRuntimeBindings']},
+                       receipt_sha256='c' * 64, worker='core')
+        out = self.root / 'assembled-fresh'
+        argv = ['assemble_release.py', '--source-sha', SHA, '--candidate-run', '1', '--core-run', '2',
+                '--core-batch', str(self.root / 'closed'), '--reuse-quote', str(quotes_path),
+                '--task-root', str(self.root), '--out', str(out)]
+
+        def assemble(manifest, result=core, downloaded=probe):
+            evidence = {'manifest.json': manifest, 'core-testnet-result.json': deepcopy(result),
+                        'tor-probe-result.json': downloaded}
+            with patch.object(sys, 'argv', argv), patch.object(assembly, 'verify_revision', return_value=SHA), \
+                    patch.object(assembly, 'git', return_value='ZCASH_VERSION_CODE=2'), \
+                    patch.object(assembly, 'Metadata', return_value=FakeMetadata()), \
+                    patch.object(assembly, 'selected_baseline', return_value=BASELINE), \
+                    patch.object(assembly, 'input_fingerprint', return_value=DIGEST), \
+                    patch.object(assembly, 'validate_core_sources') as validate_wallet, \
+                    patch.object(assembly, 'profile', return_value=dict(profile, evidence=evidence.__getitem__)):
+                assembly.main()
+                validate_wallet.assert_called_once()
+
+        changed = deepcopy(prepared)
+        changed['upgradeBaseline']['apk_sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'Selected upgrade baseline changed'):
+            assemble(changed)
+        self.assertFalse(out.exists())
+        changed_probe = dict(probe, probeArtifact=dict(probe['probeArtifact'], baseline_apk_sha256='0' * 64))
+        with self.assertRaisesRegex(ValueError, 'Executed baseline app differs'):
+            assemble(prepared, dict(core, baseline_apk_sha256='0' * 64), changed_probe)
+        self.assertFalse(out.exists())
+        assemble(prepared)
+        self.assertEqual(BASELINE['apk_sha256'],
+                         json.loads((out / '.private/core-acceptance.json').read_bytes())['baseline_apk_sha256'])
+
     def test_assemble_reused_receipts_validates_and_preserves_exact_bytes(self):
         core=json.loads((preparation.SOURCE/'.private/core-acceptance.json').read_text())
         source=core['build_source_sha']
@@ -198,7 +250,7 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(sys,'argv',argv), patch.object(assembly,'verify_revision',return_value=source), \
              patch.object(assembly,'git',return_value=f'ZCASH_VERSION_CODE={version}'), \
              patch.object(assembly,'Metadata',return_value=FakeMetadata()), \
-             patch.object(assembly,'selected_baseline',return_value=BASELINE), \
+             patch.object(assembly,'selected_baseline', return_value={k: v for k, v in BASELINE.items() if k != 'apk_sha256'}), \
              patch.object(assembly,'input_fingerprint',side_effect=fingerprint), \
              patch('acceptance_policy.input_fingerprint',side_effect=fingerprint), \
              patch('acceptance_policy.validate_core',side_effect=isolated_validate):
@@ -228,6 +280,25 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'receipts differ'):
             verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER)
 
+
+    def test_repeat_local_funded_admission_stops_on_the_retained_version_ledger(self):
+        from release_inputs import available_local_funding_ledger
+
+        self.prepare()
+        fixture_source = self.root / 'source'
+        ledger = available_local_funding_ledger(fixture_source, 2)
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text('{"status": "request-starting", "claim_requests": 1}')
+        prepared = self.root / 'prepared'
+        argv = ['admit_release.py', '--prepared', str(prepared), '--owner', 'release-test-owner', '--profile', 'core']
+        with patch.object(sys, 'argv', argv), \
+                patch.object(admit_release, 'available_local_funding_ledger',
+                             side_effect=lambda source, version: available_local_funding_ledger(fixture_source, version)), \
+                patch.dict(sys.modules, {'admit_emulator_batch': None}):
+            with self.assertRaisesRegex(ValueError, 'reconcile the original ledger'):
+                admit_release.main()
+        self.assertEqual('request-starting', json.loads(ledger.read_bytes())['status'])
+        self.assertFalse(available_local_funding_ledger(fixture_source, 3).exists())
 
     def test_admission_owner_and_parallel_refusal_before_launch(self):
         self.prepare()

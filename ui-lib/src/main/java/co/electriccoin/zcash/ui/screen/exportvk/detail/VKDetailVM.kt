@@ -7,7 +7,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.toRoute
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -211,7 +211,7 @@ internal class VKDetailVM(
         }
 
     private fun canShare(grant: AppAccessSession.Grant?) =
-        navigationRouter.isAtEntry(sourceEntryId) &&
+        navigationRouter.isForegroundAtEntry(sourceEntryId) &&
             getVK.isCurrent(args.reviewId, args.type) && reveal.permits(grant)
 
     override fun onCleared() {

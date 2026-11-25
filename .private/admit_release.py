@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+from release_inputs import available_local_funding_ledger
 from release_metadata import require
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -21,6 +22,12 @@ def main():
     preparation = json.loads((prepared / 'preparation.json').read_text())
     require(len(args.profile) == 1 or preparation['execution_plan']['mode'] == 'parallel',
             'Prepared plan requires sequential admission; admit one profile at a time')
+    if 'core' in args.profile:
+        core = json.loads((prepared / 'core-manifest.json').read_bytes())
+        require(core.get('probeKind') == 'core-testnet' and core.get('build_source_sha') == preparation['source']
+                and core.get('stable_candidate_run') == preparation['candidate_run'],
+                'Guarded local funded preparation identity mismatch')
+        available_local_funding_ledger(SOURCE, core['candidate_version_code'])
     import admit_emulator_batch as admission
     admission.PARENT = prepared
     admission.EVIDENCE.update({'prefunding-retries.json', 'quote-block-boundary.json', 'native-price-current.jsonl',

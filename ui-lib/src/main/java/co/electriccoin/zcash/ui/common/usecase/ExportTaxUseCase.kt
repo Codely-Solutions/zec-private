@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -144,7 +145,9 @@ class ExportTaxUseCase(
                     if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
                     check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==
                         approvedAccount.sdkAccount.accountUuid)
-                    if (!canHandOff(sourceEntryId, isAllowed)) return@handoff
+                    if (!canHandOff(sourceEntryId, isAllowed) ||
+                        !navigationRouter.isForegroundAtEntry(sourceEntryId)
+                    ) return@handoff
                     currentCoroutineContext().ensureActive()
                     context.startActivity(intent)
                     shared = true

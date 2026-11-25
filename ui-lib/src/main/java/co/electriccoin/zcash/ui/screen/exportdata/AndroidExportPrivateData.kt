@@ -13,6 +13,7 @@ import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
@@ -51,7 +52,10 @@ internal fun WrapExportPrivateData(entryId: String) {
             onConfirm = {
                 scope.launch {
                     try {
-                        val shared = export(isSourceCurrent = { navigationRouter.isAtEntry(entryId) }) {
+                        val shared = export(
+                            isSourceCurrent = { navigationRouter.isAtEntry(entryId) },
+                            isChooserAllowed = { navigationRouter.isForegroundAtEntry(entryId) },
+                        ) {
                             File(synchronizer.getExistingDataDbFilePath(context, ZcashNetwork.fromResources(context)))
                         }
                         if (shared) close()

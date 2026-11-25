@@ -13,6 +13,12 @@ PROJECT=Path(__file__).resolve().parents[1]
 manifest=load_manifest(PROJECT)
 from ui_capture import validate_request
 validate_request(manifest)
+if manifest.get('probeKind') == 'core-testnet' and 'stable_candidate_run' in manifest:
+    from release_inputs import available_local_funding_ledger
+
+    ledger = available_local_funding_ledger(PROJECT, manifest['candidate_version_code'])
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    os.environ['CORE_FAUCET_LEDGER'] = str(ledger)
 guest_memory=3072 if manifest.get('probeKind')=='core-testnet' else 1536
 from prepared_apks import binding, reuse, write_receipt, export_prepared
 local_receipt=os.environ.get('CODEX_EMULATOR_PREPARED_RECEIPT')

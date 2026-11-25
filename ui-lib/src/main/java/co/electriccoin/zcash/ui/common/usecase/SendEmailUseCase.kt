@@ -98,8 +98,8 @@ class SendEmailUseCase(
     }
 
     /** Opens support without collecting wallet data. */
-    internal fun sendBlankSupport() {
-        sendSupportEmail(context.getString(R.string.app_name), "")
+    internal fun sendBlankSupport(isAllowed: () -> Boolean = { true }) {
+        sendSupportEmail(context.getString(R.string.app_name), "", isAllowed)
     }
 
     /**

@@ -7,7 +7,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
-import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -141,7 +141,10 @@ class SignKeystoneTransactionVM(
                         onClick = {
                             if (attempt != null && ready) {
                                 viewModelScope.launch {
-                                    sharePCZT { navigationRouter.isAtEntry(sourceEntryId) && isReady(attempt) }
+                                    sharePCZT {
+                                navigationRouter.isForegroundAtEntry(sourceEntryId) &&
+                                    isReady(attempt)
+                            }
                                 }
                             }
                         },

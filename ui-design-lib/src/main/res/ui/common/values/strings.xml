@@ -55,6 +55,7 @@
     <string name="balance_widget_available">Available Balance:</string>
     <string name="hide_balance_placeholder">-----</string>
     <string name="hide_balances_content_description">Hide balances</string>
+    <string name="show_balances_content_description">Show balances</string>
     <string name="unable_to_open_email">Unable to launch email app.</string>
     <string name="restoring_wallet_label">[Restoring Your Wallet…]</string>
     <string name="walletStatus_restoringWallet">Restoring Your Wallet…</string>
@@ -298,7 +299,7 @@
     <!-- ===== delete_wallet ===== -->
     <string name="deleteWallet_title">Reset ZEC Private</string>
     <string name="deleteWallet_message2">Save your software wallet’s secret recovery phrase. If you know its birthday height, save that too.</string>
-    <string name="delete_wallet_text_2">Resetting the ZEC Private app will delete the ZEC Private database and cache, and will disconnect all connected hardware wallets.</string>
+    <string name="delete_wallet_text_2">Reset removes the wallet and disconnects hardware wallets. Shared exports can stay in the app’s cache until cleanup runs.</string>
     <string name="deleteWallet_message4">Restore software wallets with their recovery phrases. Reconnect hardware wallets with their devices.</string>
     <string name="deleteWallet_metadataWarn1">Keep encrypted contacts, notes, bookmarks and swap/payment details on this device.</string>
     <string name="deleteWallet_metadataWarn2">Turning this off removes local backups for all wallets. Copies held by Android backup services are outside this reset.</string>
@@ -375,6 +376,8 @@
 
     <!-- ===== feedback ===== -->
     <string name="support_header">Support</string>
+    <string name="wallet_seed_recovery_failed_title">Wallet recovery failed</string>
+    <string name="wallet_seed_recovery_failed_message">Open Support to share a message without wallet details.</string>
     <string name="tabs_send">Send</string>
     <string name="support_confirmation_dialog_title">Export diagnostics</string>
     <string name="support_confirmation_explanation">Choose an app and recipient to share diagnostics. Review the contents before sharing; no support team receives them automatically.</string>

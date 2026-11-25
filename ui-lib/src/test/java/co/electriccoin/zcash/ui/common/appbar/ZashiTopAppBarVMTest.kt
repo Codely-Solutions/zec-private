@@ -3,7 +3,11 @@ package co.electriccoin.zcash.ui.common.appbar
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
+import io.mockk.coEvery
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -102,6 +106,30 @@ class ZashiTopAppBarVMTest {
     }
 
     @Test
+    fun thePrivacyButtonAnnouncesTheActionForTheCurrentBalanceVisibility() = runTest {
+        val hidden = MutableStateFlow("false")
+        val key = StandardPreferenceKeys.IS_HIDE_BALANCES.key
+        val preferences = mockk<PreferenceProvider> {
+            every { observe(key) } returns hidden
+            coEvery { getString(key) } answers { hidden.value }
+            coEvery { putString(key, any()) } answers { hidden.value = secondArg<String>() }
+        }
+        val provider = mockk<StandardPreferenceProvider> { coEvery { this@mockk() } returns preferences }
+        val bar = vm(listOf(zodl(isSelected = true)), preferences = provider)
+        collect(bar)
+        assertEquals(
+            stringRes(R.string.hide_balances_content_description),
+            bar.state.value.balanceVisibilityButton.contentDescription,
+        )
+        bar.state.value.balanceVisibilityButton.onClick()
+        assertEquals("true", hidden.value)
+        assertEquals(
+            stringRes(R.string.show_balances_content_description),
+            bar.state.value.balanceVisibilityButton.contentDescription,
+        )
+    }
+
+    @Test
     fun aViewOnlyAccountDoesNotCountAsAConnectedHardwareWallet() =
         runTest {
             val navigationRouter = mockk<NavigationRouter>(relaxed = true)
@@ -193,12 +221,13 @@ class ZashiTopAppBarVMTest {
     private fun vm(
         accounts: List<WalletAccount>?,
         navigationRouter: NavigationRouter = mockk(relaxed = true),
+        preferences: StandardPreferenceProvider = mockk(relaxed = true),
     ) = ZashiTopAppBarVM(
         getWalletAccountsUseCase =
             mockk<GetWalletAccountsUseCase> {
                 every { observe() } returns MutableStateFlow(accounts)
             },
-        standardPreferenceProvider = mockk(relaxed = true),
+        standardPreferenceProvider = preferences,
         navigationRouter = navigationRouter,
         getVersionInfo =
             mockk<GetVersionInfoProvider> {

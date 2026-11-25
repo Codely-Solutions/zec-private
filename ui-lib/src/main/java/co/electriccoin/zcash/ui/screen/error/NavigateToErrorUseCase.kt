@@ -24,7 +24,8 @@ class NavigateToErrorUseCase(
     internal fun stage(args: ErrorArgs): ErrorRoute {
         val id = UUID.randomUUID().toString()
         val route = when (args) {
-            is ErrorArgs.ShieldingError, is ErrorArgs.General, is ErrorArgs.ShieldingGeneralError -> ErrorDialog(id)
+            is ErrorArgs.ShieldingError, is ErrorArgs.General, is ErrorArgs.ShieldingGeneralError,
+            ErrorArgs.SeedRecoveryFailed -> ErrorDialog(id)
             is ErrorArgs.SyncError -> {
                 if (isSyncError(args.synchronizerError)) SyncErrorArgs(id) else ErrorBottomSheet(id)
             }
@@ -100,6 +101,8 @@ fun NavigateToErrorUseCase.showFrom(sourceEntryId: String?, args: ErrorArgs, rep
 sealed interface ErrorRoute
 
 sealed interface ErrorArgs {
+    data object SeedRecoveryFailed : ErrorArgs
+
     data class SyncError(
         val synchronizerError: SynchronizerError
     ) : ErrorArgs

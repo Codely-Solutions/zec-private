@@ -85,6 +85,40 @@ class ErrorReportHandoffTest {
         coVerify(exactly = 0) { diagnostics() }
     }
 
+    @Test
+    fun terminalSeedRecoveryOffersBlankSupportInTheForegroundWithoutAnAccount() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val application = RuntimeEnvironment.getApplication()
+        val session = AppAccessSession().apply { unlock() }
+        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("error", null))
+        val router = mockk<NavigationRouter> { every { activeEntry } returns entry }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns MutableStateFlow(null) }
+        val reportAccess = WalletReportAccess(
+            session, WalletWriteAccess(), ObserveSelectedWalletAccountUseCase(accounts), router,
+        )
+        val diagnostics = mockk<GetSupportUseCase>()
+        val vm = ErrorVM(
+            ErrorArgs.SeedRecoveryFailed, NavigateToErrorUseCase(router), router,
+            SendEmailUseCase(application, diagnostics, mockk()), mockk(), reportAccess,
+        )
+        try {
+            val action = requireNotNull(vm.state.value.negative)
+            entry.value = entry.value?.copy(hostResumed = false)
+            action.onClick()
+            assertEquals(null, shadowOf(application).nextStartedActivity)
+            entry.value = entry.value?.copy(hostResumed = true)
+            action.onClick()
+            val chooser = shadowOf(application).nextStartedActivity
+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+            val draft = requireNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+            assertEquals("", draft.getStringExtra(Intent.EXTRA_TEXT))
+            coVerify(exactly = 0) { diagnostics() }
+        } finally {
+            vm.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
     private suspend fun TestScope.assertReport(route: Route, change: Change) {
         val application = RuntimeEnvironment.getApplication()
         val session = AppAccessSession().apply { unlock() }

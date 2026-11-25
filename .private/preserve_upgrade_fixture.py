@@ -112,6 +112,12 @@ def fixture_asset(draft, name):
     return matches[0] if matches else None
 
 
+def empty_upload_placeholder(asset):
+    return bool(asset and asset.get('state') == 'starter' and type(asset.get('size')) is int
+                and asset['size'] == 0 and not asset.get('digest')
+                and type(asset.get('id')) is int and asset['id'] > 0)
+
+
 def download_fixture_asset(asset, limit):
     size, asset_id = asset['size'], asset['id']
     if (asset.get('state') != 'uploaded' or type(asset_id) is not int or asset_id <= 0
@@ -141,8 +147,10 @@ def preserve(tag, hosted_archive=None):
     draft = maintenance_draft(release_id)
     fixture = out / (tag + '-TESTNET_UPGRADE_FIXTURE.zip')
     metadata = out / (tag + '-TESTNET_UPGRADE_FIXTURE.json')
-    existing_fixture = fixture_asset(draft, fixture.name)
-    existing_metadata = fixture_asset(draft, metadata.name)
+    previous = {file.name: fixture_asset(draft, file.name) for file in (fixture, metadata)}
+    placeholders = {name: asset for name, asset in previous.items() if empty_upload_placeholder(asset)}
+    existing_fixture = None if fixture.name in placeholders else previous[fixture.name]
+    existing_metadata = None if metadata.name in placeholders else previous[metadata.name]
     registry_reference = None
     if existing_fixture:
         fixture.write_bytes(download_fixture_asset(existing_fixture, MAX_ARCHIVE))
@@ -168,6 +176,12 @@ def preserve(tag, hosted_archive=None):
         metadata.write_bytes((json.dumps(provenance, indent=2) + '\n').encode())
     for file, existing in ((fixture, existing_fixture), (metadata, existing_metadata)):
         if existing is None:
+            placeholder = placeholders.get(file.name)
+            if placeholder:
+                current = fixture_asset(maintenance_draft(release_id), file.name)
+                if current != placeholder or not empty_upload_placeholder(current):
+                    raise ValueError('Fixture upload placeholder changed')
+                gh('api', '-X', 'DELETE', 'repos/' + REPO + '/releases/assets/' + str(placeholder['id']))
             gh('release', 'upload', 'maintenance-fixtures', '--repo', REPO, str(file))
     final = maintenance_draft(release_id)
     index = {}
