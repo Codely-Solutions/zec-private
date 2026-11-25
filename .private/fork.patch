@@ -13408,7 +13408,7 @@ index 81241a8a6..06602bf47 100644
 -                        isEnabled = !isImporting,
 +                        isEnabled = !isImporting && !isFinalizing,
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
-index a958b4ec7..7ca5d7cb4 100644
+index a958b4ec7..c09778bae 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.viewModelScope
@@ -13479,6 +13479,9 @@ index a958b4ec7..7ca5d7cb4 100644
 -                    if (isAccountNameTaken(normalized)) return@launch
 -                    val pending = pendingImportRepository.get()
 +                    if (pendingImportRepository.get() !== pending) return@launch
+@@ -122 +153 @@ internal class NameVKVM(
+-                        navigationRouter.backToRoot()
++                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 @@ -125 +156,5 @@ internal class NameVKVM(
 -                    pendingImportRepository.set(pending.copy(name = normalized, color = color.value))
 +                    if (pending.importedAccount == null) {
@@ -13489,6 +13492,9 @@ index a958b4ec7..7ca5d7cb4 100644
 @@ -128 +163 @@ internal class NameVKVM(
 -                            importViewOnlyAccount()
 +                            importViewOnlyAccount(sourceEntryId)
+@@ -130 +165 @@ internal class NameVKVM(
+-                            navigationRouter.backToRoot()
++                            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 @@ -136,5 +171 @@ internal class NameVKVM(
 -    /**
 -     * Returns to the birthday screen underneath, which still needs the pending key and birthday, so
@@ -13496,13 +13502,17 @@ index a958b4ec7..7ca5d7cb4 100644
 -     * Ignored while the import runs.
 -     */
 +    /** Returns to the birthday screen, retaining any import the SDK has already completed. */
-@@ -142,0 +174,2 @@ internal class NameVKVM(
+@@ -143 +174,2 @@ internal class NameVKVM(
+-            colorPickerJob?.cancel()
 +            if (leaving) return@guardLoading
 +            leaving = true
-@@ -145 +178,3 @@ internal class NameVKVM(
+@@ -145 +177,6 @@ internal class NameVKVM(
 -            navigationRouter.back()
 +            viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
-+                leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
++                leaving = navigationRouter.commitFrom(sourceEntryId) {
++                    colorPickerJob?.cancel()
++                    NavigationCommand.Back
++                }
 +            }
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKScreen.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKScreen.kt
 index 51193fc1e..d972d4a04 100644
@@ -14229,7 +14239,7 @@ index 000000000..99de90350
 +    }
 +}
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
-index 5faf35c95..eb32546c5 100644
+index 5faf35c95..e60e7f8d5 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.viewingkey
@@ -14498,8 +14508,19 @@ index 5faf35c95..eb32546c5 100644
 +        }
 +    }
 +
-@@ -542,0 +677,33 @@ class NameVKVMTest {
-+    @Test
+@@ -544,12 +678,13 @@ class NameVKVMTest {
+-    fun backReturnsToTheBirthdayAndKeepsThePendingKeyAndBirthday() =
+-        runTest {
+-            val vm = vm()
+-            collect(vm)
+-            type(vm, "Vault")
+-
+-            vm.content().onBack()
+-
+-            assertEquals(pending(), repository.get())
+-            verify(exactly = 1) { navigationRouter.back() }
+-            verify(exactly = 0) { navigationRouter.backToRoot() }
+-            coVerify(exactly = 0) { importViewOnlyAccount.invoke() }
 +    fun refusedBackKeepsNameEditableAndAllowsTheOwnedBackToRetry() = runTest {
 +        val nameEntry = mockk<NavBackStackEntry> { every { id } returns "name" }
 +        var top = mockk<NavBackStackEntry> { every { id } returns "scanner" }
@@ -14513,16 +14534,31 @@ index 5faf35c95..eb32546c5 100644
 +                owned.acknowledge(true)
 +                committedBacks++
 +            }
-+        }
+@@ -556,0 +692,4 @@ class NameVKVMTest {
 +        val vm = vm(sourceEntryId = "name")
 +        collect(vm)
-+
++        openPicker(vm)
++        val picker = pickerRequests.single()
+@@ -558,4 +697,8 @@ class NameVKVMTest {
+-    @Test
+-    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
+-        runTest {
+-            repository.clear()
 +        vm.content().onBack()
 +        runCurrent()
 +        assertEquals(0, committedBacks)
++        val picked = Color(PICKED)
++        navigateToColorPicker.onPicked(picked, picker)
++        navigateToColorPicker.onClosed(picker)
++        runCurrent()
++        assertEquals(picked, vm.content().avatarColor())
+@@ -563 +706,2 @@ class NameVKVMTest {
+-            vm()
 +        type(vm, "Vault")
 +        assertEquals("Vault", vm.content().nameField.field.value.text())
-+
+@@ -565,2 +709,8 @@ class NameVKVMTest {
+-            verify(exactly = 1) { navigationRouter.backToRoot() }
+-        }
 +        top = nameEntry
 +        vm.content().onBack()
 +        runCurrent()
@@ -14531,36 +14567,23 @@ index 5faf35c95..eb32546c5 100644
 +        assertEquals("Vault", vm.content().nameField.field.value.text())
 +        verify(exactly = 0) { navigationRouter.back() }
 +    }
-+
-@@ -556,0 +724 @@ class NameVKVMTest {
-+}
-@@ -558,43 +726,3 @@ class NameVKVMTest {
--    @Test
--    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
--        runTest {
--            repository.clear()
--
--            vm()
--
--            verify(exactly = 1) { navigationRouter.backToRoot() }
--        }
--
--    @Test
+@@ -569 +719 @@ class NameVKVMTest {
 -    fun aPickedColorShowsOnTheAvatarAndContinueKeepsItWithThePendingImport() =
--        runTest {
--            val vm = vm()
--            collect(vm)
++    fun backReturnsToTheBirthdayAndKeepsThePendingKeyAndBirthday() =
+@@ -573 +723 @@ class NameVKVMTest {
 -            assertNull(vm.content().avatarColor())
--
++            type(vm, "Vault")
+@@ -575,6 +725 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            val request = pickerRequests.single()
 -            assertNull(request.initialArgb)
 -            navigateToColorPicker.onPicked(Color(PICKED), request)
 -            navigateToColorPicker.onClosed(request)
 -            runCurrent()
--
++            vm.content().onBack()
+@@ -582 +726,0 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
--            assertEquals(pending(), repository.get())
+@@ -584,9 +728,3 @@ class NameVKVMTest {
 -
 -            type(vm, "Savings")
 -            vm
@@ -14570,8 +14593,12 @@ index 5faf35c95..eb32546c5 100644
 -            runCurrent()
 -
 -            assertEquals(pending(name = "Savings", color = Color(PICKED)), repository.get())
--        }
--
++            verify(exactly = 1) { navigationRouter.back() }
++            verify(exactly = 0) { navigationRouter.backToRoot() }
++            coVerify(exactly = 0) { importViewOnlyAccount.invoke() }
+@@ -593,0 +732 @@ class NameVKVMTest {
++}
+@@ -595,6 +734,3 @@ class NameVKVMTest {
 -    @Test
 -    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
 -        runTest {
@@ -14581,11 +14608,11 @@ index 5faf35c95..eb32546c5 100644
 +@OptIn(ExperimentalCoroutinesApi::class)
 +internal abstract class NameVKVMFixture {
 +    protected val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-@@ -602,2 +730 @@ class NameVKVMTest {
+@@ -602,2 +738 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 -        }
 +    protected val pickerRequests = mutableListOf<ColorPickerArgs>()
-@@ -605,15 +732,8 @@ class NameVKVMTest {
+@@ -605,15 +740,8 @@ class NameVKVMTest {
 -    @Test
 -    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
 -        runTest {
@@ -14609,14 +14636,14 @@ index 5faf35c95..eb32546c5 100644
 +                }
 +            }
 +        )
-@@ -621,2 +741,4 @@ class NameVKVMTest {
+@@ -621,2 +749,4 @@ class NameVKVMTest {
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 -        }
 +    protected val accounts =
 +        MutableStateFlow<List<WalletAccount>?>(
 +            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
 +        )
-@@ -624,7 +746 @@ class NameVKVMTest {
+@@ -624,7 +754 @@ class NameVKVMTest {
 -    @Test
 -    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
 -        runTest {
@@ -14625,24 +14652,24 @@ index 5faf35c95..eb32546c5 100644
 -            openPicker(vm)
 -            val request = pickerRequests.single()
 +    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
-@@ -632,3 +748 @@ class NameVKVMTest {
+@@ -632,3 +756 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(OTHER), request)
 -            runCurrent()
 -            assertEquals(Color(OTHER), vm.content().avatarColor())
 +    protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
-@@ -636,4 +750 @@ class NameVKVMTest {
+@@ -636,4 +758 @@ class NameVKVMTest {
 -            navigateToColorPicker.onPicked(Color(PICKED), request)
 -            navigateToColorPicker.onClosed(request)
 -            runCurrent()
 -            assertEquals(Color(PICKED), vm.content().avatarColor())
 +    protected var importAnswer: suspend () -> Unit = {}
-@@ -641,2 +752,3 @@ class NameVKVMTest {
+@@ -641,2 +760,3 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            assertEquals(2, pickerRequests.size)
 +    protected val importViewOnlyAccount =
 +        mockk<ImportViewOnlyAccountUseCase> {
 +            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
-@@ -645,5 +757,6 @@ class NameVKVMTest {
+@@ -645,5 +765,6 @@ class NameVKVMTest {
 -    @Test
 -    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
 -        runTest {
@@ -14654,65 +14681,60 @@ index 5faf35c95..eb32546c5 100644
 +            sendEmail = mockk(relaxed = true),
 +            viewOnlyContent = mockk(relaxed = true),
 +        )
-@@ -651,2 +764,4 @@ class NameVKVMTest {
+@@ -651,2 +772,4 @@ class NameVKVMTest {
 -            openPicker(vm)
 -            openPicker(vm)
 +    @BeforeTest
 +    fun setUp() {
 +        Dispatchers.setMain(StandardTestDispatcher())
 +    }
-@@ -654,2 +769,4 @@ class NameVKVMTest {
+@@ -654,2 +777,4 @@ class NameVKVMTest {
 -            assertEquals(1, pickerRequests.size)
 -        }
 +    @AfterTest
 +    fun tearDown() {
 +        Dispatchers.resetMain()
 +    }
-@@ -657 +774 @@ class NameVKVMTest {
+@@ -657 +782 @@ class NameVKVMTest {
 -    private fun NameVKState.avatarColor() =
 +    protected fun NameVKState.avatarColor() =
-@@ -660 +777 @@ class NameVKVMTest {
+@@ -660 +785 @@ class NameVKVMTest {
 -    private fun TestScope.openPicker(vm: NameVKVM) {
 +    protected fun TestScope.openPicker(vm: NameVKVM) {
-@@ -669 +786 @@ class NameVKVMTest {
+@@ -669 +794 @@ class NameVKVMTest {
 -    private fun TestScope.pickColor(
 +    protected fun TestScope.pickColor(
-@@ -680 +797 @@ class NameVKVMTest {
+@@ -680 +805 @@ class NameVKVMTest {
 -    private fun NameVKVM.content() = assertNotNull(state.value.content)
 +    protected fun NameVKVM.content() = assertNotNull(state.value.content)
-@@ -682 +799 @@ class NameVKVMTest {
+@@ -682 +807 @@ class NameVKVMTest {
 -    private fun pending(
 +    protected fun pending(
-@@ -687 +804 @@ class NameVKVMTest {
+@@ -687 +812 @@ class NameVKVMTest {
 -    private fun TestScope.type(
 +    protected fun TestScope.type(
-@@ -698 +815,4 @@ class NameVKVMTest {
+@@ -698 +823,4 @@ class NameVKVMTest {
 -    private fun vm() =
 +    protected fun vm(
 +        importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount,
 +        sourceEntryId: String? = null,
 +    ) =
-@@ -704 +824 @@ class NameVKVMTest {
+@@ -704 +832 @@ class NameVKVMTest {
 -            importViewOnlyAccount = importViewOnlyAccount,
 +            importViewOnlyAccount = importer,
-@@ -705,0 +826 @@ class NameVKVMTest {
+@@ -705,0 +834 @@ class NameVKVMTest {
 +            sourceEntryId = sourceEntryId,
-@@ -708 +829 @@ class NameVKVMTest {
+@@ -708 +837 @@ class NameVKVMTest {
 -    private fun TestScope.collect(vm: NameVKVM) {
 +    protected fun TestScope.collect(vm: NameVKVM) {
-@@ -713 +834 @@ class NameVKVMTest {
+@@ -713 +842 @@ class NameVKVMTest {
 -    private fun StringResource.text() = (this as StringResource.ByString).value
 +    protected fun StringResource.text() = (this as StringResource.ByString).value
-@@ -715 +836,2 @@ class NameVKVMTest {
+@@ -715 +844,18 @@ class NameVKVMTest {
 -    private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +    protected fun StringResource.args() = (this as StringResource.ByResource).args.toList()
 +}
-@@ -717,5 +839,34 @@ class NameVKVMTest {
--    private companion object {
--        const val UFVK = "uview1namefixture"
--        const val PICKED = 0x80BE38F3
--        const val OTHER = 0xFF0088FF
--        val BIRTHDAY = BlockHeight.new(2_500_000L)
++
 +private const val UFVK = "uview1namefixture"
 +private const val PICKED = 0x80BE38F3
 +private const val OTHER = 0xFF0088FF
@@ -14728,7 +14750,12 @@ index 5faf35c95..eb32546c5 100644
 +    val preferences = mockk<SharedPreferences> {
 +        every { getString("selected_account_uuid", null) } answers { cached }
 +    }
-+
+@@ -717,5 +863,18 @@ class NameVKVMTest {
+-    private companion object {
+-        const val UFVK = "uview1namefixture"
+-        const val PICKED = 0x80BE38F3
+-        const val OTHER = 0xFF0088FF
+-        val BIRTHDAY = BlockHeight.new(2_500_000L)
 +    init {
 +        val editor = mockk<SharedPreferences.Editor> {
 +            every { putString("selected_account_uuid", any()) } answers {
@@ -47517,7 +47544,7 @@ index 000000000..9d1b94657
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
-index 81540cc83..8ced25a90 100644
+index 81540cc83..2d0b8eb8c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -47683,24 +47710,31 @@ index 81540cc83..8ced25a90 100644
 -                if (date.year != previousYear.value) return@mapNotNull null
 +                val date = transaction.timestamp?.atZone(ZoneOffset.UTC) ?: return@mapNotNull null
 +                if (date.year != previousYear) return@mapNotNull null
-@@ -158,6 +220 @@ class ExportTaxUseCase(
+@@ -156,8 +218,5 @@ class ExportTaxUseCase(
+-                        val fee = transaction.fee
+-
 -                        val sentQuantity =
 -                            if (fee != null) {
 -                                stringRes(transaction.amount - fee, HIDDEN)
 -                            } else {
 -                                stringRes(transaction.amount, HIDDEN)
 -                            }
-+                        val sentQuantity = transaction.amount - (fee ?: Zatoshi(0))
-@@ -169 +226 @@ class ExportTaxUseCase(
++                        val overview = transaction.overview
++                        val debit = overview.netValue
++                        // The SDK reports a known wallet-internal pool crossing's net debit as its fee.
++                        val fee = if (overview.poolCrossingValue != null) debit else transaction.fee ?: Zatoshi(0)
++                        val sentQuantity = debit.takeIf { it > fee }?.minus(fee)
+@@ -169,3 +228,3 @@ class ExportTaxUseCase(
 -                            sentQuantity = sentQuantity.getString(context),
-+                            sentQuantity = sentQuantity.toCsvQuantity(),
-@@ -171 +228 @@ class ExportTaxUseCase(
+-                            sentCurrency = CURRENCY_TICKER,
 -                            feeAmount = stringRes(fee ?: Zatoshi(0), HIDDEN).getString(context),
-+                            feeAmount = (fee ?: Zatoshi(0)).toCsvQuantity(),
-@@ -185 +242 @@ class ExportTaxUseCase(
++                            sentQuantity = sentQuantity?.toCsvQuantity().orEmpty(),
++                            sentCurrency = CURRENCY_TICKER.takeIf { sentQuantity != null }.orEmpty(),
++                            feeAmount = fee.toCsvQuantity(),
+@@ -185 +244 @@ class ExportTaxUseCase(
 -                            receivedQuantity = stringRes(transaction.amount, HIDDEN).getString(context),
 +                            receivedQuantity = transaction.amount.toCsvQuantity(),
-@@ -219 +276,15 @@ private data class CsvEntry(
+@@ -219 +278,15 @@ private data class CsvEntry(
 -private const val CSV_SEPARATOR = ","
 +private fun Zatoshi.toCsvQuantity(): String =
 +    convertZatoshiToZec(scale = ZEC_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
@@ -87762,14 +87796,18 @@ index 000000000..639906519
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
 new file mode 100644
-index 000000000..6b4025d20
+index 000000000..10116afb1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,315 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
++import cash.z.ecc.android.sdk.model.BlockHeight
++import cash.z.ecc.android.sdk.model.TransactionId
++import cash.z.ecc.android.sdk.model.TransactionOverview
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
++import cash.z.ecc.android.sdk.model.Zip318Kind
 +import android.net.Uri
 +import androidx.core.content.FileProvider
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
@@ -87784,6 +87822,7 @@ index 000000000..6b4025d20
 +import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 +import co.electriccoin.zcash.ui.common.repository.SendTransaction
 +import co.electriccoin.zcash.ui.common.repository.TransactionRepository
++import co.electriccoin.zcash.ui.common.repository.sentTransactionAmount
 +import io.mockk.coEvery
 +import io.mockk.coVerify
 +import io.mockk.every
@@ -87809,6 +87848,7 @@ index 000000000..6b4025d20
 +import java.io.StringWriter
 +import java.time.Instant
 +import java.time.Year
++import java.time.ZoneOffset
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertFalse
@@ -87845,7 +87885,7 @@ index 000000000..6b4025d20
 +    @Test
 +    fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runTest {
 +        val context = RuntimeEnvironment.getApplication()
-+        val year = Year.now().minusYears(1).value
++        val year = Year.now(ZoneOffset.UTC).minusYears(1).value
 +        val taxCache = File(context.cacheDir, "tax_exports").apply { mkdirs() }
 +        val legacy = listOf(context.cacheDir, taxCache).flatMap { directory ->
 +            listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
@@ -87875,19 +87915,10 @@ index 000000000..6b4025d20
 +            every { timestamp } returns transactionTime
 +            every { amount } returns Zatoshi(100_000_000_001L)
 +        }
-+        val sendWithFee = mockk<SendTransaction.Success> {
-+            every { timestamp } returns transactionTime
-+            every { amount } returns Zatoshi(200_000_000_003L)
-+            every { fee } returns Zatoshi(100_000_000_001L)
-+        }
-+        val sendWithoutFee = mockk<SendTransaction.Pending> {
-+            every { timestamp } returns transactionTime
-+            every { amount } returns Zatoshi(1)
-+            every { fee } returns null
-+        }
++        val outgoing = outgoingTransactions(transactionTime)
 +        val transactions = mockk<TransactionRepository> {
 +            coEvery { getTransactions(any()) } returns
-+                listOf(belowGroupingBoundary, aboveGroupingBoundary, sendWithFee, sendWithoutFee)
++                listOf(belowGroupingBoundary, aboveGroupingBoundary) + outgoing
 +        }
 +        val accounts = mockk<AccountDataSource> {
 +            coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
@@ -87946,9 +87977,61 @@ index 000000000..6b4025d20
 +                listOf(date, "1000.00000001", "ZEC", "", "", "", "", ""),
 +                listOf(date, "", "", "1000.00000002", "ZEC", "1000.00000001", "ZEC", ""),
 +                listOf(date, "", "", "0.00000001", "ZEC", "0", "ZEC", ""),
++                listOf(date, "", "", "", "", "0.00001", "ZEC", ""),
++                listOf(date, "", "", "", "", "0.00002", "ZEC", ""),
 +            ),
 +            rows,
 +        )
++    }
++
++    private fun outgoingTransactions(transactionTime: Instant): List<SendTransaction> {
++        fun sent(overview: TransactionOverview, fee: Zatoshi?) = SendTransaction.Success(
++            id = TransactionId.new(ByteArray(32)),
++            amount = sentTransactionAmount(overview),
++            timestamp = transactionTime,
++            memoCount = 0,
++            fee = fee,
++            transactionOutputs = emptyList(),
++            overview = overview,
++            recipient = null,
++        )
++        val ordinaryTransfer = sent(
++            mockk {
++                every { netValue } returns Zatoshi(200_000_000_003L)
++                every { poolCrossingValue } returns null
++                every { sentNoteCount } returns 1
++                every { raw } returns null
++                every { minedHeight } returns BlockHeight.new(100L)
++                every { zip318Kind } returns Zip318Kind.TRANSFER
++            },
++            Zatoshi(100_000_000_001L),
++        )
++        val sendWithoutFee = mockk<SendTransaction.Pending> {
++            every { timestamp } returns transactionTime
++            every { overview } returns mockk {
++                every { netValue } returns Zatoshi(1)
++                every { poolCrossingValue } returns null
++            }
++            every { fee } returns null
++        }
++        val migration = sent(
++            mockk {
++                every { netValue } returns Zatoshi(1_000)
++                every { poolCrossingValue } returns Zatoshi(500_000)
++            },
++            null,
++        )
++        val historicalSelfTransfer = sent(
++            mockk {
++                every { netValue } returns Zatoshi(2_000)
++                every { poolCrossingValue } returns null
++                every { sentNoteCount } returns 0
++                every { receivedNoteCount } returns 0
++                every { totalReceived } returns Zatoshi(600_000)
++            },
++            Zatoshi(2_000),
++        )
++        return listOf(ordinaryTransfer, sendWithoutFee, migration, historicalSelfTransfer)
 +    }
 +
 +    @Test

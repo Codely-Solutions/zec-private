@@ -1,7 +1,11 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.BlockHeight
+import cash.z.ecc.android.sdk.model.TransactionId
+import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
+import cash.z.ecc.android.sdk.model.Zip318Kind
 import android.net.Uri
 import androidx.core.content.FileProvider
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
@@ -16,6 +20,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
+import co.electriccoin.zcash.ui.common.repository.sentTransactionAmount
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -41,6 +46,7 @@ import java.io.File
 import java.io.StringWriter
 import java.time.Instant
 import java.time.Year
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -77,7 +83,7 @@ class ExportTaxUseCaseTest {
     @Test
     fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runTest {
         val context = RuntimeEnvironment.getApplication()
-        val year = Year.now().minusYears(1).value
+        val year = Year.now(ZoneOffset.UTC).minusYears(1).value
         val taxCache = File(context.cacheDir, "tax_exports").apply { mkdirs() }
         val legacy = listOf(context.cacheDir, taxCache).flatMap { directory ->
             listOf("Zodl", "Ledger", "Keystone", "View_Only").map { prefix ->
@@ -107,19 +113,10 @@ class ExportTaxUseCaseTest {
             every { timestamp } returns transactionTime
             every { amount } returns Zatoshi(100_000_000_001L)
         }
-        val sendWithFee = mockk<SendTransaction.Success> {
-            every { timestamp } returns transactionTime
-            every { amount } returns Zatoshi(200_000_000_003L)
-            every { fee } returns Zatoshi(100_000_000_001L)
-        }
-        val sendWithoutFee = mockk<SendTransaction.Pending> {
-            every { timestamp } returns transactionTime
-            every { amount } returns Zatoshi(1)
-            every { fee } returns null
-        }
+        val outgoing = outgoingTransactions(transactionTime)
         val transactions = mockk<TransactionRepository> {
             coEvery { getTransactions(any()) } returns
-                listOf(belowGroupingBoundary, aboveGroupingBoundary, sendWithFee, sendWithoutFee)
+                listOf(belowGroupingBoundary, aboveGroupingBoundary) + outgoing
         }
         val accounts = mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
@@ -178,9 +175,61 @@ class ExportTaxUseCaseTest {
                 listOf(date, "1000.00000001", "ZEC", "", "", "", "", ""),
                 listOf(date, "", "", "1000.00000002", "ZEC", "1000.00000001", "ZEC", ""),
                 listOf(date, "", "", "0.00000001", "ZEC", "0", "ZEC", ""),
+                listOf(date, "", "", "", "", "0.00001", "ZEC", ""),
+                listOf(date, "", "", "", "", "0.00002", "ZEC", ""),
             ),
             rows,
         )
+    }
+
+    private fun outgoingTransactions(transactionTime: Instant): List<SendTransaction> {
+        fun sent(overview: TransactionOverview, fee: Zatoshi?) = SendTransaction.Success(
+            id = TransactionId.new(ByteArray(32)),
+            amount = sentTransactionAmount(overview),
+            timestamp = transactionTime,
+            memoCount = 0,
+            fee = fee,
+            transactionOutputs = emptyList(),
+            overview = overview,
+            recipient = null,
+        )
+        val ordinaryTransfer = sent(
+            mockk {
+                every { netValue } returns Zatoshi(200_000_000_003L)
+                every { poolCrossingValue } returns null
+                every { sentNoteCount } returns 1
+                every { raw } returns null
+                every { minedHeight } returns BlockHeight.new(100L)
+                every { zip318Kind } returns Zip318Kind.TRANSFER
+            },
+            Zatoshi(100_000_000_001L),
+        )
+        val sendWithoutFee = mockk<SendTransaction.Pending> {
+            every { timestamp } returns transactionTime
+            every { overview } returns mockk {
+                every { netValue } returns Zatoshi(1)
+                every { poolCrossingValue } returns null
+            }
+            every { fee } returns null
+        }
+        val migration = sent(
+            mockk {
+                every { netValue } returns Zatoshi(1_000)
+                every { poolCrossingValue } returns Zatoshi(500_000)
+            },
+            null,
+        )
+        val historicalSelfTransfer = sent(
+            mockk {
+                every { netValue } returns Zatoshi(2_000)
+                every { poolCrossingValue } returns null
+                every { sentNoteCount } returns 0
+                every { receivedNoteCount } returns 0
+                every { totalReceived } returns Zatoshi(600_000)
+            },
+            Zatoshi(2_000),
+        )
+        return listOf(ordinaryTransfer, sendWithoutFee, migration, historicalSelfTransfer)
     }
 
     @Test

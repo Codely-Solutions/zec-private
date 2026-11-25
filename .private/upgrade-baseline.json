@@ -9,7 +9,7 @@
     "size_in_bytes": 72212767,
     "digest": "sha256:dd54d54ae0652e750fff7c176236ed2341a718549eba1a900c4fa5ea4b9292df"
   },
-  "next_use": "Paired revision 21 baseline for the next installed-update acceptance; revision 20 remains rollback",
+  "next_use": "Historical revision 21 pair for diagnostics. Adopt the latest verified hosted pair before direct release acceptance.",
   "instrumentation": {
     "artifact": {
       "release_asset_id": 735385090,

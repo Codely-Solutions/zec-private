@@ -150,7 +150,7 @@ internal class NameVKVM(
                 viewModelScope.launch {
                     if (pendingImportRepository.get() !== pending) return@launch
                     if (pending?.birthday == null) {
-                        navigationRouter.backToRoot()
+                        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                         return@launch
                     }
                     if (pending.importedAccount == null) {
@@ -162,7 +162,7 @@ internal class NameVKVM(
                         try {
                             importViewOnlyAccount(sourceEntryId)
                         } catch (_: ViewOnlyPendingImportMissingException) {
-                            navigationRouter.backToRoot()
+                            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                         }
                     }
                 }
@@ -173,10 +173,12 @@ internal class NameVKVM(
         importLce.guardLoading {
             if (leaving) return@guardLoading
             leaving = true
-            colorPickerJob?.cancel()
             continueJob?.cancel()
             viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
+                leaving = navigationRouter.commitFrom(sourceEntryId) {
+                    colorPickerJob?.cancel()
+                    NavigationCommand.Back
+                }
             }
         }
 }

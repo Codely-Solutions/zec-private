@@ -215,17 +215,19 @@ class ExportTaxUseCase(
                 when (transaction) {
                     is SendTransaction.Success,
                     is SendTransaction.Pending -> {
-                        val fee = transaction.fee
-
-                        val sentQuantity = transaction.amount - (fee ?: Zatoshi(0))
+                        val overview = transaction.overview
+                        val debit = overview.netValue
+                        // The SDK reports a known wallet-internal pool crossing's net debit as its fee.
+                        val fee = if (overview.poolCrossingValue != null) debit else transaction.fee ?: Zatoshi(0)
+                        val sentQuantity = debit.takeIf { it > fee }?.minus(fee)
 
                         CsvEntry(
                             date = dateString,
                             receivedQuantity = "",
                             receivedCurrency = "",
-                            sentQuantity = sentQuantity.toCsvQuantity(),
-                            sentCurrency = CURRENCY_TICKER,
-                            feeAmount = (fee ?: Zatoshi(0)).toCsvQuantity(),
+                            sentQuantity = sentQuantity?.toCsvQuantity().orEmpty(),
+                            sentCurrency = CURRENCY_TICKER.takeIf { sentQuantity != null }.orEmpty(),
+                            feeAmount = fee.toCsvQuantity(),
                             feeCurrency = CURRENCY_TICKER,
                             tag = ""
                         )

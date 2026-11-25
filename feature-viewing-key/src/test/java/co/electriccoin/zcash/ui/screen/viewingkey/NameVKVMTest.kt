@@ -691,10 +691,18 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         }
         val vm = vm(sourceEntryId = "name")
         collect(vm)
+        openPicker(vm)
+        val picker = pickerRequests.single()
 
         vm.content().onBack()
         runCurrent()
         assertEquals(0, committedBacks)
+        val picked = Color(PICKED)
+        navigateToColorPicker.onPicked(picked, picker)
+        navigateToColorPicker.onClosed(picker)
+        runCurrent()
+        assertEquals(picked, vm.content().avatarColor())
+
         type(vm, "Vault")
         assertEquals("Vault", vm.content().nameField.field.value.text())
 
