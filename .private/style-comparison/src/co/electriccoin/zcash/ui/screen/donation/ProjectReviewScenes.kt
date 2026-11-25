@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.donation
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -18,6 +19,7 @@ import co.electriccoin.zcash.ui.screen.home.shieldfunds.ShieldFundsInfoView
 
 /** Synthetic failure and recovery layouts; every storage and destructive callback is inert. */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun ProjectReviewScene(screen: String): Boolean {
     when (screen) {
         "request-fiat-unavailable", "request-fiat-stale", "request-fiat-recovered", "request-fiat-minimum" ->
