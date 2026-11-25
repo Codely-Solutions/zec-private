@@ -4712,7 +4712,7 @@ index 018fa19f5..676e1bd2b 100644
 @@ -136 +133,0 @@ class SubmitLedgerProposalUseCaseTest {
 -                ledgerProposalRepository = ledgerProposalRepository,
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
-index 817fc5154..7e9777bbc 100644
+index 817fc5154..9cbb3fdbe 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.repository.LedgerSelectedDeviceRepository
@@ -4749,7 +4749,7 @@ index 817fc5154..7e9777bbc 100644
 +    fun losingTheOriginatingWalletStopsPairingAndOffersBack() = runTest(dispatcher) {
 +        val pending = CompletableDeferred<PairLedgerDeviceResult>()
 +        val pairing = mockk<PairLedgerDeviceUseCase> {
-+            coEvery { invoke(any(), any()) } coAnswers { pending.await() }
++            coEvery { this@mockk.invoke(any(), any()) } coAnswers { pending.await() }
 +        }
 +        val router = mockk<NavigationRouter>(relaxed = true)
 +        val vm = vm(pairLedgerDevice = pairing, navigationRouter = router)

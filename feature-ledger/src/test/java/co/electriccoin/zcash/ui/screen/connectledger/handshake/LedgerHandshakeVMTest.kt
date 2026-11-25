@@ -82,7 +82,7 @@ class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
     fun losingTheOriginatingWalletStopsPairingAndOffersBack() = runTest(dispatcher) {
         val pending = CompletableDeferred<PairLedgerDeviceResult>()
         val pairing = mockk<PairLedgerDeviceUseCase> {
-            coEvery { invoke(any(), any()) } coAnswers { pending.await() }
+            coEvery { this@mockk.invoke(any(), any()) } coAnswers { pending.await() }
         }
         val router = mockk<NavigationRouter>(relaxed = true)
         val vm = vm(pairLedgerDevice = pairing, navigationRouter = router)

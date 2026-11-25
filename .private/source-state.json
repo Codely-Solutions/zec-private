@@ -525,7 +525,7 @@
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCaseTest.kt": "55d657e75d977802ebfc555f53e269cc554c3a282cddd063691c58edc02b7c41",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt": "1752a5f31af71271b6c3693921e20ee2306487b13d4a0daf05d410bdeaf69777",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/connect/LedgerConnectVMTest.kt": "71f1d9e6df45a33aee0c23c56e5e5d3e78200e9d877ab4ebf6be719fa29cf85f",
-  "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt": "40bf440ed6c17bb9c90a5fc7eb3117fe918f6bc8c2a05038763bfb027cd790cd",
+  "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt": "17d0033f00c1b8a71f002de9b54e8a437cdfa2e08152c89e5371a17fc4641659",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/openapp/LedgerOpenAppVMTest.kt": "b0e3c2874d6f801d91511fc0c009193f9abc301a1e97a6d24a286505487ed390",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/scan/LedgerDeviceScanVMAccountIndexTest.kt": "fc57f1e1f1d48d63e1834f5a2235425b74f8749ee9da4f0c4bad7733a0f75031",
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/scan/LedgerDeviceScanVMCancelTest.kt": "72f4f8df677394d77b51eea73aa327cbc40f91b60c61f72d01d7f5d746bebf1e",
