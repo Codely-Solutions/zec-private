@@ -4,7 +4,9 @@ import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -25,6 +27,7 @@ class RecoverFromSeedMismatchUseCase(
     private val persistableWalletProvider: PersistableWalletProvider,
     private val walletCoordinator: WalletCoordinator,
     private val walletWriteAccess: WalletWriteAccess,
+    private val preferenceRecovery: SdkEncryptedPreferenceRecoveryProvider,
 ) {
     private var attemptVersion: Long? = null
     private var failedAttempts = 0
@@ -50,17 +53,17 @@ class RecoverFromSeedMismatchUseCase(
             throw SeedMismatchRecoveryException(failedAttempts)
         }
 
-        if (!waitForErase(onEraseDelayed)) {
+        val readable = runCatchingRecoverable { preferenceRecovery.checkReadableForErase() }.isSuccess
+        if (!readable || !waitForErase(onEraseDelayed)) {
             failedAttempts += 1
             Twig.error {
-                "Seed-mismatch recovery: deleteSdkDataFlow reported failure " +
-                    "(attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
+                val stage = if (readable) "SDK erase failed" else "SDK encrypted preferences unreadable"
+                "Seed-mismatch recovery: $stage (attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
             }
             throw SeedMismatchRecoveryException(failedAttempts)
         }
 
         failedAttempts = 0
-
     }
 
     private suspend fun waitForErase(onEraseDelayed: () -> Unit): Boolean = coroutineScope {

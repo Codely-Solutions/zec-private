@@ -8,7 +8,10 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -38,7 +41,8 @@ class RecoverFromSeedMismatchUseCaseTest {
     private val access = WalletWriteAccess()
     private val walletProvider = RecordingWalletProvider(wallet, access)
     private val walletCoordinator = mockk<WalletCoordinator>()
-    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access)
+    private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxed = true)
+    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access, preferenceRecovery)
 
     private suspend fun useCase() = recovery(access.token())
 
@@ -74,6 +78,17 @@ class RecoverFromSeedMismatchUseCaseTest {
 
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 
+        assertTrue(walletProvider.replacements.isEmpty())
+    }
+
+    @Test
+    fun unreadablePreferencesRefuseDetachedEraseWithoutRepairingOrReplacingWallet() = runTest {
+        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
+
+        assertEquals(1, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
+        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { preferenceRecovery.ensureReadable() }
+        assertEquals(wallet, walletProvider.persistableWallet.value)
         assertTrue(walletProvider.replacements.isEmpty())
     }
 

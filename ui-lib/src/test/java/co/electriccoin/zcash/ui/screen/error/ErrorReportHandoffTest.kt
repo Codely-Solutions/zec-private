@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -22,7 +23,9 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveTransactionSubmitStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressVM
 import io.mockk.coVerify
 import io.mockk.coEvery
@@ -49,12 +52,31 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 @OptIn(ExperimentalCoroutinesApi::class)
 class ErrorReportHandoffTest {
+    @Test
+    fun uncertainShieldingOffersActivityAndNoFailureReport() {
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val pending = SubmitResult.GrpcFailure(
+            listOf("synthetic"),
+            reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
+        )
+        val state = ErrorVM(
+            ErrorArgs.ShieldingError(pending), mockk(), router, mockk(), mockk(), noReportAccess(),
+        ).state.value
+
+        assertEquals(stringRes(R.string.send_pendingShieldingTitle), state.title)
+        assertEquals(stringRes(R.string.send_pendingSdkStateInfo), state.message)
+        assertNull(state.negative)
+        state.positive.onClick()
+        verify { router.replaceAll(ActivityHistoryArgs) }
+    }
+
     @Test
     fun walletReportsUseTheOriginalGrantAndOwnerAtTheChooser() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))

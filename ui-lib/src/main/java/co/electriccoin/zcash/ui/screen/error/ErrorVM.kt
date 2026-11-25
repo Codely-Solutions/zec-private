@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.viewmodel.STACKTRACE_LIMIT
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,7 +45,11 @@ class ErrorVM(
         when (args) {
             ErrorArgs.SeedRecoveryFailed -> createSeedRecoveryErrorState()
             is ErrorArgs.SyncError -> createSyncErrorState(args)
-            is ErrorArgs.ShieldingError -> createShieldingErrorState(args)
+            is ErrorArgs.ShieldingError -> if (args.error is SubmitResult.GrpcFailure) {
+                createShieldingPendingState()
+            } else {
+                createShieldingErrorState(args)
+            }
             is ErrorArgs.General -> createGeneralErrorState(args)
             is ErrorArgs.ShieldingGeneralError -> createGeneralShieldingErrorState(args)
             is ErrorArgs.KeystoneFirmwareUpdateRequired -> createKeystoneFirmwareUpdateRequiredState(args)
@@ -174,6 +179,17 @@ class ErrorVM(
                 ),
             onBack = ::onBack,
         )
+
+    private fun createShieldingPendingState() = ErrorState(
+        title = stringRes(R.string.send_pendingShieldingTitle),
+        message = stringRes(R.string.send_pendingSdkStateInfo),
+        positive = ButtonState(
+            text = stringRes(R.string.private_recovery_open_activity),
+            onClick = { navigationRouter.replaceAll(ActivityHistoryArgs) },
+        ),
+        negative = null,
+        onBack = ::onBack,
+    )
 
     /**
      * [AccountOperationUnsupportedException] is a product limitation, not a failure — it gets the

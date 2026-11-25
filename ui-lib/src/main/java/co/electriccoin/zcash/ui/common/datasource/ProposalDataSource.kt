@@ -31,8 +31,8 @@ import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import java.math.BigDecimal
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.zecdev.zip321.ZIP321
@@ -304,7 +304,6 @@ class ProposalDataSourceImpl(
                 .redactPcztForSigner(pczt)
         }
 
-    @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
     private suspend fun submitTransactionInternal(
         logTag: String,
         beforeCreation: () -> Unit,
@@ -314,7 +313,8 @@ class ProposalDataSourceImpl(
         withContext(Dispatchers.IO) {
             val synchronizer = synchronizerProvider.getSynchronizer()
             beforeCreation()
-            val transactions = block(synchronizer)
+            val transactions = runCatchingRecoverable { block(synchronizer) }
+                .getOrElse { return@withContext emptyList<CreatedTransaction>().uncertainSdkSubmission() }
 
             if (transactions.isEmpty()) {
                 return@withContext SubmitResult.Failure(
@@ -324,30 +324,28 @@ class ProposalDataSourceImpl(
                 )
             }
 
-            try {
+            val result = runCatchingRecoverable {
                 val endpoints = getSubmissionEndpoints()
                 Twig.info {
                     "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
                 }
-                val result = submitCreatedTransactions(
+                submitCreatedTransactions(
                     synchronizer = synchronizer,
                     transactions = transactions,
                     endpoints = endpoints,
                     logTag = logTag,
                     beforeFirstSubmission = beforeFirstSubmission
                 ).toSubmitResult()
-
-                if (synchronizer is SdkSynchronizer) {
+            }.getOrElse { return@withContext transactions.uncertainSdkSubmission() }
+            if (synchronizer is SdkSynchronizer) {
+                runCatchingRecoverable {
                     synchronizer.refreshTransactions()
                     synchronizer.refreshAllBalances()
+                }.onFailure {
+                    Twig.warn { "Unable to refresh wallet after submission (${it::class.simpleName})" }
                 }
-                result
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val ids = transactions.map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() }
-                throw SdkCreatedTransactionsException(ids, e)
             }
+            if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
         }
 
     private suspend fun submitCreatedTransactions(
@@ -412,10 +410,10 @@ class ProposalDataSourceImpl(
         }
 }
 
-internal class SdkCreatedTransactionsException(
-    val txIds: List<String>,
-    cause: Exception,
-) : IllegalStateException("Submission state is unknown after SDK transaction creation", cause)
+private fun List<CreatedTransaction>.uncertainSdkSubmission() = SubmitResult.GrpcFailure(
+    txIds = map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() },
+    reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
+)
 
 internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
     if (isEmpty()) {

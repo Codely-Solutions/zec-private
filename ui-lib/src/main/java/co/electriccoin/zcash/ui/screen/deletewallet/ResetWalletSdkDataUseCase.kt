@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -17,6 +18,8 @@ class ResetWalletSdkDataUseCase(
     private val context: Context,
     private val coordinator: WalletCoordinator,
     private val walletProvider: PersistableWalletProvider,
+    private val preferenceRecovery: SdkEncryptedPreferenceRecoveryProvider,
+    private val progressStore: ResetProgressStore,
 ) {
     suspend operator fun invoke() {
         val network = walletProvider.getPersistableWallet()?.network ?: ZcashNetwork.fromResources(context)
@@ -27,7 +30,12 @@ class ResetWalletSdkDataUseCase(
         check(ready == true) { "Still waiting for the wallet SDK to close" }
         // The public erasers enforce native instance ownership even if the flow was already null.
         val erased = withTimeoutOrNull(30.seconds) {
-            withContext(Dispatchers.IO) { eraseInactiveSdkData(context, network) }
+            withContext(Dispatchers.IO) {
+                progressStore.withMigrationInputStopped {
+                    preferenceRecovery.ensureReadable()
+                    eraseInactiveSdkData(context, network)
+                }
+            }
             true
         }
         check(erased == true) { "Could not confirm SDK wallet data erasure" }

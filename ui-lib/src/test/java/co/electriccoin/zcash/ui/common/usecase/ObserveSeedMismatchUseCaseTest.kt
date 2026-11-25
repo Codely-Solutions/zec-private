@@ -192,7 +192,7 @@ class ObserveSeedMismatchUseCaseTest {
             walletInitMode = WalletInitMode.ExistingWallet,
         )
         val wallet = RecoveryWallet(initial)
-        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess)
+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
         val observe = ObserveSeedMismatchUseCase(
             synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
         )

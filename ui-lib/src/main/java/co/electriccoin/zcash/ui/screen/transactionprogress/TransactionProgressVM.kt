@@ -402,7 +402,12 @@ class TransactionProgressVM(
                         style = ButtonStyle.PRIMARY
                     )
 
-                    else -> {
+                    else -> if (result.reason == SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN) {
+                        ButtonState(
+                            text = stringRes(R.string.private_recovery_open_activity),
+                            onClick = ::onOpenActivity,
+                        )
+                    } else {
                         ButtonState(
                             text = stringRes(R.string.general_close),
                             onClick = ::onCloseClick,

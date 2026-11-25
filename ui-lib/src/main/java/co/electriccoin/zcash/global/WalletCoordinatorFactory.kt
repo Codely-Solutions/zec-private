@@ -30,7 +30,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
         keySource = "zashi",
         isTorEnabled = isTorEnabledStorageProvider.observe(),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
-        isSyncBlocked = isSyncBlocked(context, sdkWallet),
+        isSyncBlocked = isSyncBlocked(context, sdkWallet, resetProgressStore),
     )
 }
 
@@ -54,18 +54,26 @@ internal fun Flow<PersistableWallet?>.hideResetWallet(resetProgressStore: ResetP
  * picker itself — exists), so `account = null`: [OrchardMigrationSdk.isSyncBlocked] then checks
  * every account in the wallet rather than assuming one.
  */
+private fun isSyncBlocked(
+    context: Context,
+    sdkWallet: Flow<PersistableWallet?>,
+    resetProgressStore: ResetProgressStore,
+) =
+    sdkWallet.observeSdkMigrationSyncBlock(resetProgressStore) { wallet ->
+        OrchardMigrationSdk
+            .new(
+                appContext = context,
+                zcashNetwork = wallet.network,
+                lightWalletEndpoint = wallet.endpoint,
+                account = null,
+            ).isSyncBlocked()
+    }
+
 @OptIn(ExperimentalCoroutinesApi::class)
-private fun isSyncBlocked(context: Context, sdkWallet: Flow<PersistableWallet?>) =
-    sdkWallet.flatMapLatest { wallet ->
-        if (wallet == null) {
-            flowOf(false)
-        } else {
-            OrchardMigrationSdk
-                .new(
-                    appContext = context,
-                    zcashNetwork = wallet.network,
-                    lightWalletEndpoint = wallet.endpoint,
-                    account = null,
-                ).isSyncBlocked()
-        }
+internal fun Flow<PersistableWallet?>.observeSdkMigrationSyncBlock(
+    resetProgressStore: ResetProgressStore,
+    observe: (PersistableWallet) -> Flow<Boolean>,
+): Flow<Boolean> =
+    flatMapLatest { wallet ->
+        if (wallet == null) flowOf(false) else resetProgressStore.observeMigrationSyncBlock { observe(wallet) }
     }

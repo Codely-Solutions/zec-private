@@ -26,6 +26,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.CharConversionException
 import java.io.IOException
+import java.nio.file.Files
 import java.security.InvalidKeyException
 import java.security.KeyStore
 import java.security.KeyStoreException
@@ -214,12 +215,12 @@ interface AndroidPreferenceFactory {
      * Caching no provider is deliberate: the opened store is never handed out, so no second
      * [AndroidPreferenceProvider] — and therefore no second serializing dispatcher — is ever
      * created for a file the SDK opens itself. The ordering that makes that safe is the caller's
-     * to keep: this must complete before anything else opens [filename]. The app's only caller,
-     * the wallet-less self-heal in `WalletRepositoryImpl.init`, awaits it before
-     * `Synchronizer.erase` and runs only on the path where no wallet is stored, so no synchronizer
-     * exists yet to be holding the SDK store open.
+     * to keep. Run it before SDK initialization or after withdrawing the wallet from the SDK.
      */
-    suspend fun ensureEncryptedReadable(context: Context, filename: String) = Unit
+    suspend fun ensureEncryptedReadable(context: Context, filename: String)
+
+    /** Checks existing contents before SDK erase, without quarantining the store or replacing its master key. */
+    suspend fun checkExistingEncryptedReadable(context: Context, filename: String)
 }
 
 /**
@@ -255,7 +256,22 @@ private class AndroidPreferenceFactoryImpl : AndroidPreferenceFactory {
         }
 
     override suspend fun ensureEncryptedReadable(context: Context, filename: String) {
-        withContext(Dispatchers.IO) { openEncrypted(context, filename) }
+        withContext(Dispatchers.IO) { openEncrypted(context, filename, checkContents = true) }
+    }
+
+    override suspend fun checkExistingEncryptedReadable(context: Context, filename: String) {
+        withContext(Dispatchers.IO) {
+            val directory = sharedPreferencesDirectory(context)
+            val preferences = directory.resolve("$filename.xml").toPath()
+            val backup = directory.resolve("$filename.xml.bak").toPath()
+            if (Files.notExists(preferences) && Files.notExists(backup)) return@withContext
+
+            check(androidKeyStore().containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
+                "The existing encrypted preference store has no master key"
+            }
+            // The SDK's encrypted clear reads every entry before committing.
+            createEncryptedSharedPreferences(context, filename).all
+        }
     }
 
     /**
@@ -272,14 +288,19 @@ private class AndroidPreferenceFactoryImpl : AndroidPreferenceFactory {
      */
     private suspend fun openEncrypted(
         context: Context,
-        filename: String
+        filename: String,
+        checkContents: Boolean = false,
     ): SharedPreferences {
         val marker = recreatedMarkerFile(quarantineDirectory(context), filename)
 
         return createEncryptedPreferencesWithRecovery(
             filename = filename,
             isRecreateAllowed = !marker.exists(),
-            create = { createEncryptedSharedPreferences(context, filename) },
+            create = {
+                createEncryptedSharedPreferences(context, filename).also {
+                    if (checkContents) it.all
+                }
+            },
             quarantine = { cause -> quarantineCorruptedEncryptedPreferences(context, filename, cause) },
         ).also { marker.delete() }
     }

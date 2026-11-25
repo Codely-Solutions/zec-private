@@ -210,7 +210,9 @@ class ResetWalletWriteOwnershipTest {
             }
         }
         val coordinator = mockk<WalletCoordinator>()
-        val recover = RecoverFromSeedMismatchUseCase(stagedRead, coordinator, fixture.writeAccess)
+        val recover = RecoverFromSeedMismatchUseCase(
+            stagedRead, coordinator, fixture.writeAccess, mockk(relaxed = true),
+        )
         val recovery = launch { recover(beforeReset) }
         val replacement = originalWallet().copy(endpoint = LightWalletEndpoint("new.example.invalid", 443, true))
         try {
@@ -261,7 +263,9 @@ class ResetWalletWriteOwnershipTest {
         val recoveryCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
         }
-        val recover = RecoverFromSeedMismatchUseCase(fixture.walletProvider, recoveryCoordinator, fixture.writeAccess)
+        val recover = RecoverFromSeedMismatchUseCase(
+            fixture.walletProvider, recoveryCoordinator, fixture.writeAccess, mockk(relaxed = true),
+        )
         val recovery = launch { recover(fixture.writeAccess.token()) }
         val reset = fixture.reset()
         try {
@@ -375,7 +379,7 @@ class ResetWalletWriteOwnershipTest {
                 finish.await()
                 emit(true)
             }
-        }, access)
+        }, access, mockk(relaxed = true))
     }
 
     private inner class Fixture {

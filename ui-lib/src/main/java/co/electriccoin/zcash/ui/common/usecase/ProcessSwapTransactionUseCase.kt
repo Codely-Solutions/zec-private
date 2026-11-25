@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.spackle.Twig
-import co.electriccoin.zcash.ui.common.datasource.SdkCreatedTransactionsException
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -12,7 +11,6 @@ import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
@@ -69,7 +67,6 @@ class ProcessSwapTransactionUseCase(
         createdAt
     }
 
-    @Suppress("TooGenericExceptionCaught")
     suspend fun submitReservedFunding(
         proposal: SwapTransactionProposal,
         validateFunding: () -> Unit,
@@ -84,7 +81,7 @@ class ProcessSwapTransactionUseCase(
         val admission = AtomicReference(FundingAdmission.RESERVED)
         try {
             validate()
-            val result = submit(
+            return submit(
                 {
                     validate()
                     check(admission.compareAndSet(FundingAdmission.RESERVED, FundingAdmission.SDK_ENTERED))
@@ -94,16 +91,6 @@ class ProcessSwapTransactionUseCase(
                     check(admission.compareAndSet(FundingAdmission.SDK_ENTERED, FundingAdmission.ENDPOINT_ENTERED))
                 },
             )
-            return if (admission.get() != FundingAdmission.RESERVED && result is SubmitResult.NonResubmittableError) {
-                uncertainSdkSubmission(result.txIds)
-            } else {
-                result
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            if (admission.get() == FundingAdmission.RESERVED) throw e
-            return uncertainSdkSubmission((e as? SdkCreatedTransactionsException)?.txIds.orEmpty())
         } finally {
             if (admission.getAndSet(FundingAdmission.CLOSED) == FundingAdmission.RESERVED) {
                 // After SDK entry a signed transaction can be stored for SDK background submission.
@@ -111,9 +98,6 @@ class ProcessSwapTransactionUseCase(
             }
         }
     }
-
-    private fun uncertainSdkSubmission(txIds: List<String>) =
-        SubmitResult.GrpcFailure(txIds, reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN)
 
     private enum class FundingAdmission { RESERVED, SDK_ENTERED, ENDPOINT_ENTERED, CLOSED }
 

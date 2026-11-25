@@ -5,9 +5,12 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import com.zodl.slipstream.SlipstreamSynchronizer
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -35,6 +38,7 @@ class ResetWalletSdkDataUseCaseTest {
     private val walletProvider = mockk<PersistableWalletProvider> {
         coEvery { getPersistableWallet() } returns mockk { every { network } returns ZcashNetwork.Testnet }
     }
+    private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxUnitFun = true)
 
     @BeforeTest
     fun setUp() {
@@ -54,9 +58,13 @@ class ResetWalletSdkDataUseCaseTest {
         coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
         coEvery { Synchronizer.erase(context, network) } returns false
 
-        ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
+        useCase(context)()
 
-        coVerify(exactly = 1) { Synchronizer.erase(context, network) }
+        coVerifyOrder {
+            preferenceRecovery.ensureReadable()
+            SlipstreamSynchronizer.erase(context, network)
+            Synchronizer.erase(context, network)
+        }
     }
 
     @Test
@@ -65,7 +73,7 @@ class ResetWalletSdkDataUseCaseTest {
         coEvery { SlipstreamSynchronizer.erase(context, network) } returns false
 
         assertFailsWith<IllegalStateException> {
-            ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
+            useCase(context)()
         }
 
         coVerify(exactly = 0) { Synchronizer.erase(context, network) }
@@ -77,7 +85,7 @@ class ResetWalletSdkDataUseCaseTest {
         val context = fileContext()
 
         assertFailsWith<IllegalStateException> {
-            ResetWalletSdkDataUseCase(context, coordinator, walletProvider)()
+            useCase(context)()
         }
 
         coVerify(exactly = 0) { SlipstreamSynchronizer.erase(context, network) }
@@ -89,7 +97,7 @@ class ResetWalletSdkDataUseCaseTest {
         val context = fileContext()
         coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
         coEvery { Synchronizer.erase(context, network) } returns true
-        val reset = ResetWalletSdkDataUseCase(context, coordinator, walletProvider)
+        val reset = useCase(context)
         val sidecar = File(directory.root, "ZcashSdk_${network.networkName}_Data.db-wal")
         sidecar.writeText("synthetic residue")
 
@@ -98,6 +106,24 @@ class ResetWalletSdkDataUseCaseTest {
         reset()
 
         coVerify(exactly = 2) { Synchronizer.erase(context, network) }
+    }
+
+    @Test
+    fun preferenceRepairFailureLeavesErasureForAnExplicitRetry() = runBlocking {
+        val context = fileContext()
+        coEvery { preferenceRecovery.ensureReadable() } throws IllegalStateException("Synthetic unavailable store")
+
+        assertFailsWith<IllegalStateException> { useCase(context)() }
+
+        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(context, network) }
+        coVerify(exactly = 0) { Synchronizer.erase(context, network) }
+    }
+
+    private suspend fun useCase(context: Context): ResetWalletSdkDataUseCase {
+        val progress = ResetProgressStore(context, DirectorySync {})
+        progress.store(ResetStage.ERASE_SDK)
+        progress.suppressSdkInput()
+        return ResetWalletSdkDataUseCase(context, coordinator, walletProvider, preferenceRecovery, progress)
     }
 
     private fun fileContext(): Context = mockk {

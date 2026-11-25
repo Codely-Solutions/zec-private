@@ -4,8 +4,13 @@ import android.content.Context
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -31,6 +36,7 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
         pending.value && runCatchingRecoverable { readStage() }.getOrNull() == ResetStage.CLEAR_PREFERENCES
     )
     private val sdkInputSuppressed = MutableStateFlow(pending.value)
+    private val migrationInput = Mutex()
 
     val isPending = pending.asStateFlow()
     val isSdkInputSuppressed = sdkInputSuppressed.asStateFlow()
@@ -39,6 +45,18 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
         check(pending.value) { "SDK input suppression requires a pending wallet reset" }
         sdkInputSuppressed.value = true
     }
+
+    internal fun observeMigrationSyncBlock(observe: () -> Flow<Boolean>): Flow<Boolean> = flow {
+        migrationInput.withLock {
+            if (sdkInputSuppressed.value) emit(false) else emitAll(observe())
+        }
+    }
+
+    internal suspend fun <T> withMigrationInputStopped(block: suspend () -> T): T =
+        migrationInput.withLock {
+            check(sdkInputSuppressed.value) { "Wait for SDK input suppression before erasing" }
+            block()
+        }
 
     suspend fun getStage(): ResetStage? =
         withContext(Dispatchers.IO) {

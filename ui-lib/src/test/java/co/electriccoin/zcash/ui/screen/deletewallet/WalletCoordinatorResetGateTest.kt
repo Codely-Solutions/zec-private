@@ -3,21 +3,30 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 import android.content.Context
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.global.hideResetWallet
+import co.electriccoin.zcash.global.observeSdkMigrationSyncBlock
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -99,6 +108,45 @@ class WalletCoordinatorResetGateTest {
         storedWallet = restored
         revision.value += 1
         assertSame(restored, observed.receive())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun explicitErasureWaitsForMigrationPreferenceAccessToFinishAfterSuppression() = runTest {
+        val store = progressStore()
+        val preferences = MutableStateFlow<PersistableWallet?>(mockk())
+        val draining = CompletableDeferred<Unit>()
+        val drained = CompletableDeferred<Unit>()
+        val states = Channel<Boolean>(Channel.UNLIMITED)
+        val syncBlock = preferences.hideResetWallet(store).observeSdkMigrationSyncBlock(store) {
+            flow {
+                try {
+                    emit(true)
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) {
+                        draining.complete(Unit)
+                        drained.await()
+                    }
+                }
+            }
+        }
+        backgroundScope.launch { syncBlock.collect { states.send(it) } }
+        assertTrue(states.receive())
+
+        store.store(ResetStage.ERASE_SDK)
+        store.suppressSdkInput()
+        try {
+            draining.await()
+            val erase = async { store.withMigrationInputStopped { true } }
+            runCurrent()
+            assertFalse(erase.isCompleted)
+            drained.complete(Unit)
+            assertTrue(erase.await())
+            assertFalse(states.receive())
+        } finally {
+            drained.complete(Unit)
+        }
     }
 
     private fun progressStore(sync: DirectorySync = DirectorySync {}): ResetProgressStore =
