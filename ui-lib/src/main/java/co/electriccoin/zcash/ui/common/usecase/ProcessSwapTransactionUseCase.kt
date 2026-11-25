@@ -70,7 +70,7 @@ class ProcessSwapTransactionUseCase(
     suspend fun submitReservedFunding(
         proposal: SwapTransactionProposal,
         validateFunding: () -> Unit,
-        submit: suspend (() -> Unit) -> SubmitResult,
+        submit: suspend (validate: () -> Unit, enterEndpoint: () -> Unit) -> SubmitResult,
     ): SubmitResult {
         val generation = walletWriteAccess.token()
         val validate = {
@@ -81,7 +81,7 @@ class ProcessSwapTransactionUseCase(
         val entryResolved = AtomicBoolean(false)
         try {
             validate()
-            return submit {
+            return submit(validate) {
                 validate()
                 check(entryResolved.compareAndSet(false, true)) { "Swap funding is no longer active" }
             }

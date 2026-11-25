@@ -23,7 +23,6 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -31,7 +30,7 @@ import okhttp3.internal.closeQuietly
 import kotlin.time.Duration.Companion.seconds
 
 class ResetZashiUseCase(
-    private val walletCoordinator: WalletCoordinator,
+    private val resetWalletSdkData: ResetWalletSdkDataUseCase,
     private val synchronizerProvider: SynchronizerProvider,
     private val standardPreferenceProvider: StandardPreferenceProvider,
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider,
@@ -74,7 +73,7 @@ class ResetZashiUseCase(
                     prepareReset(keepFiles, stage)
                     if (stage != ResetStage.CLEAR_PREFERENCES) {
                         closeSynchronizer()
-                        clearSDK()
+                        resetWalletSdkData()
                     }
                     progressStore.store(ResetStage.CLEAR_PREFERENCES)
                     clearSharedPrefs()
@@ -134,16 +133,11 @@ class ResetZashiUseCase(
      * mismatch ([WalletCoordinator.isSeedMismatch]) keeps [SynchronizerProvider.getSynchronizer]'s
      * underlying flow null forever, which would otherwise hang this step indefinitely after
      * local files were already removed. When no synchronizer materializes in time, this is a no-op —
-     * [clearSDK]'s lockout-aware erase still handles teardown of any lingering SDK state.
+     * the lockout-aware erase still handles teardown of any lingering SDK state.
      */
     private suspend fun closeSynchronizer() {
         withTimeoutOrNull(CLOSE_SYNCHRONIZER_TIMEOUT) { synchronizerProvider.getSynchronizer() }
             ?.let { (it as CloseableSynchronizer).closeQuietly() }
-    }
-
-    private suspend fun clearSDK() {
-        val erased = withTimeoutOrNull(ERASE_SDK_TIMEOUT) { walletCoordinator.deleteSdkDataFlow().first() }
-        check(erased == true) { "Could not erase wallet data" }
     }
 
     private suspend fun clearSharedPrefs() {
@@ -155,7 +149,6 @@ class ResetZashiUseCase(
 
     companion object {
         private val PREPARE_RESET_TIMEOUT = 30.seconds
-        private val ERASE_SDK_TIMEOUT = 30.seconds
         private val CLOSE_SYNCHRONIZER_TIMEOUT = 5.seconds
     }
 }

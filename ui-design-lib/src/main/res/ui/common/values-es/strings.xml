@@ -351,7 +351,7 @@
     <string name="export_data_unable_to_share">No se encontró una aplicación con la cual compartir.</string>
     <!-- ===== feedback ===== -->
     <string name="support_header">Soporte</string>
-    <string name="wallet_seed_recovery_failed_title">No se pudo recuperar la billetera</string>
+    <string name="wallet_seed_recovery_failed_title">La recuperación de la billetera requiere atención</string>
     <string name="wallet_seed_recovery_failed_message">Abre Soporte para compartir un mensaje sin datos de la billetera.</string>
     <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
     <string name="support_confirmation_explanation">Elige una aplicación y destinatario para compartir el diagnóstico. Revisa su contenido antes de compartirlo; ningún equipo de soporte lo recibe automáticamente.</string>

@@ -76,17 +76,19 @@ interface ProposalDataSource {
     @Throws(PcztException.AddProofsToPcztException::class)
     suspend fun addProofsToPczt(pczt: Pczt): Pczt
 
-    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
+    /** Checks ownership before SDK creation and enters the funding gate once before any broadcast. */
     suspend fun submitTransaction(
         pcztWithProofs: Pczt,
         pcztWithSignatures: Pczt,
+        beforeCreation: () -> Unit = {},
         beforeFirstSubmission: () -> Unit = {},
     ): SubmitResult
 
-    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
+    /** Checks ownership before SDK creation and enters the funding gate once before any broadcast. */
     suspend fun submitTransaction(
         proposal: Proposal,
         usk: UnifiedSpendingKey,
+        beforeCreation: () -> Unit = {},
         beforeFirstSubmission: () -> Unit = {},
     ): SubmitResult
 
@@ -271,9 +273,10 @@ class ProposalDataSourceImpl(
     override suspend fun submitTransaction(
         pcztWithProofs: Pczt,
         pcztWithSignatures: Pczt,
+        beforeCreation: () -> Unit,
         beforeFirstSubmission: () -> Unit,
     ): SubmitResult =
-        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeFirstSubmission) {
+        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeCreation, beforeFirstSubmission) {
             it.broadcaster.createTransactionFromPczt(
                 pcztWithProofs = pcztWithProofs,
                 pcztWithSignatures = pcztWithSignatures,
@@ -283,9 +286,10 @@ class ProposalDataSourceImpl(
     override suspend fun submitTransaction(
         proposal: Proposal,
         usk: UnifiedSpendingKey,
+        beforeCreation: () -> Unit,
         beforeFirstSubmission: () -> Unit,
     ): SubmitResult =
-        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeFirstSubmission) {
+        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeCreation, beforeFirstSubmission) {
             it.broadcaster.createProposedTransactions(
                 proposal = proposal,
                 usk = usk,
@@ -302,11 +306,13 @@ class ProposalDataSourceImpl(
     @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
     private suspend fun submitTransactionInternal(
         logTag: String,
+        beforeCreation: () -> Unit,
         beforeFirstSubmission: () -> Unit,
         block: suspend (Synchronizer) -> List<CreatedTransaction>
     ): SubmitResult =
         withContext(Dispatchers.IO) {
             val synchronizer = synchronizerProvider.getSynchronizer()
+            beforeCreation()
             val transactions = block(synchronizer)
 
             if (transactions.isEmpty()) {

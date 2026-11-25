@@ -314,7 +314,7 @@ class ResetZashiVMTest {
         assertTrue(reportAccess.captureWallet()())
         val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val reset = ResetZashiUseCase(
-            walletCoordinator = coordinator,
+            resetWalletSdkData = sdkDataResetFixture(directory.root, coordinator),
             synchronizerProvider = mockk {
                 coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
             },

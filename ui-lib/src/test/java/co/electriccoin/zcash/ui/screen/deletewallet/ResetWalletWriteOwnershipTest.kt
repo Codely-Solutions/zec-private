@@ -468,7 +468,7 @@ class ResetWalletWriteOwnershipTest {
             metadata: MetadataRepository = mockk(relaxed = true),
             contacts: AddressBookRepository = mockk(relaxed = true),
         ) = ResetZashiUseCase(
-            walletCoordinator = resetCoordinator,
+            resetWalletSdkData = sdkDataResetFixture(directory.root, resetCoordinator),
             synchronizerProvider = mockk {
                 coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
             },

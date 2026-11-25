@@ -131,8 +131,8 @@ class ScanKeystonePCZTViewModelTest {
         coEvery { proposalDataSource.createProposal(any(), send) } returns approved
         coEvery { proposalDataSource.createPcztFromProposal(any(), sdkProposal) } returns unsigned
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns proven
-        coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) } coAnswers {
-            thirdArg<() -> Unit>().invoke()
+        coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) } coAnswers {
+            arg<() -> Unit>(3).invoke()
             submitted.complete(firstArg<Pczt>().toByteArray() to secondArg<Pczt>().toByteArray())
             SubmitResult.Success(listOf("synthetic-transaction"))
         }
@@ -173,7 +173,7 @@ class ScanKeystonePCZTViewModelTest {
         val (proofBytes, signatureBytes) = submitted.await()
         assertContentEquals(proven.toByteArray(), proofBytes)
         assertContentEquals(signed, signatureBytes)
-        coVerify(exactly = 1) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
+        coVerify(exactly = 1) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any()) }
     }
 
     @Test

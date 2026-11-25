@@ -376,7 +376,7 @@
 
     <!-- ===== feedback ===== -->
     <string name="support_header">Support</string>
-    <string name="wallet_seed_recovery_failed_title">Wallet recovery failed</string>
+    <string name="wallet_seed_recovery_failed_title">Wallet recovery needs attention</string>
     <string name="wallet_seed_recovery_failed_message">Open Support to share a message without wallet details.</string>
     <string name="tabs_send">Send</string>
     <string name="support_confirmation_dialog_title">Export diagnostics</string>

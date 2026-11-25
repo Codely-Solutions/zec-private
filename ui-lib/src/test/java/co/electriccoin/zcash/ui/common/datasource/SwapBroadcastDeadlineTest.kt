@@ -50,6 +50,17 @@ import kotlin.time.Instant
 @Config(sdk = [34])
 class SwapBroadcastDeadlineTest {
     @Test
+    fun expiryWhileWaitingForSynchronizerPreventsSoftwareAndPcztCreation() = runBlocking {
+        for (hardware in listOf(false, true)) {
+            val fixture = Fixture(hardware, pauseBeforeCreation = true)
+            fixture.prepare()
+            assertIs<IllegalStateException>(fixture.whileSuspended { fixture.expire() }.exceptionOrNull())
+            fixture.verifyNoCreation()
+            fixture.verifyNoBroadcast()
+        }
+    }
+
+    @Test
     fun expiryDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware)
@@ -124,7 +135,12 @@ class SwapBroadcastDeadlineTest {
         }
     }
 
-    private class Fixture(private val hardware: Boolean, private val pauseEndpoints: Boolean = false, legs: Int = 1) {
+    private class Fixture(
+        private val hardware: Boolean,
+        private val pauseEndpoints: Boolean = false,
+        legs: Int = 1,
+        private val pauseBeforeCreation: Boolean = false,
+    ) {
         val synchronizer = mockk<Synchronizer>()
         val broadcaster = synchronizer.apply { every { broadcaster } returns mockk() }.broadcaster
         val metadata = mockk<MetadataRepository>(relaxed = true)
@@ -143,8 +159,14 @@ class SwapBroadcastDeadlineTest {
         private val key = mockk<UnifiedSpendingKey>()
         private val accounts = mockk<AccountDataSource>()
         private val signer = mockk<co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider>()
+        private var prepared = false
         private val dataSource = ProposalDataSourceImpl(
-            mockk { coEvery { getSynchronizer() } returns this@Fixture.synchronizer },
+            mockk {
+                coEvery { getSynchronizer() } coAnswers {
+                    if (pauseBeforeCreation && prepared) pause()
+                    this@Fixture.synchronizer
+                }
+            },
             mockk { every { getEndpoints() } returns listOf(endpoint) },
             mockk {
                 coEvery { getServerSelection() } coAnswers {
@@ -214,6 +236,7 @@ class SwapBroadcastDeadlineTest {
             } else {
                 software.transactionProposal.value = reviewed
             }
+            prepared = true
         }
 
         suspend fun submit(): SubmitResult =
@@ -243,6 +266,10 @@ class SwapBroadcastDeadlineTest {
             elapsed = 1_000L
         }
         fun clear() { if (hardware) keystone.clear() else software.clear() }
+        fun verifyNoCreation() {
+            coVerify(exactly = 0) { broadcaster.createProposedTransactions(any(), any()) }
+            coVerify(exactly = 0) { broadcaster.createTransactionFromPczt(any(), any()) }
+        }
         fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
         private suspend fun pause() {
             entered.complete(Unit)

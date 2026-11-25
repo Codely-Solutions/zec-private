@@ -610,7 +610,7 @@ class MigrationReviewVM(
                 }
             } else {
                 val reviewed = zashiProposalRepository.setMigrationSweepProposal(review.proposal)
-                submitProposal(reviewed, sourceEntryId = sourceEntryId)
+                submitProposal(reviewed, sourceEntryId = sourceEntryId, reviewedOwner = account.sdkAccount.accountUuid)
             }
         }
 

@@ -292,6 +292,35 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Unexpected fixture entries'):
                 verify_pair(first, core, prepared=True)
 
+    def test_registry_only_recovery_checks_the_immutable_selection_and_both_accepted_apks(self):
+        from hosted_fixture import MAX_ARCHIVE, REGISTRY, fixture_layer, recovery_digest, verify
+        from preserve_upgrade_fixture import write_seedless_pair
+
+        tag, oci = 'v3.19.0-private.22', 'sha256:' + 'a'*64
+        app, instrumentation = b'exact app', b'exact test'
+        core = dict(build_source_sha='b'*40, candidate_version_code=22,
+                    candidate_apk_sha256=hashlib.sha256(app).hexdigest(),
+                    instrumentation_apk_sha256=hashlib.sha256(instrumentation).hexdigest())
+        with tempfile.TemporaryDirectory() as temp, patch('hosted_fixture.recorded_pair', return_value=({}, core)):
+            archive = Path(temp) / 'fixture.zip'
+            write_seedless_pair(archive, {'app.apk': app, 'app-androidTest.apk': instrumentation}, core['build_source_sha'])
+            archive_digest = 'sha256:' + hashlib.sha256(archive.read_bytes()).hexdigest()
+            layer = dict(size=archive.stat().st_size, mediaType='application/zip', digest=archive_digest,
+                         annotations={'org.opencontainers.image.title': 'fixture.zip'})
+            self.assertEqual(recovery_digest(tag, oci), oci)
+            self.assertEqual(fixture_layer(dict(schemaVersion=2, layers=[layer])), archive_digest)
+            binding = verify(tag, archive, archive_digest, oci)
+            self.assertEqual(binding['reference'], REGISTRY + '@' + oci)
+            self.assertEqual(binding['instrumentation_apk_sha256'], core['instrumentation_apk_sha256'])
+            with self.assertRaisesRegex(ValueError, 'oversized'):
+                fixture_layer(dict(schemaVersion=2, layers=[dict(layer, size=MAX_ARCHIVE + 1)]))
+            with self.assertRaisesRegex(ValueError, 'exact release tag'):
+                recovery_digest('', oci)
+            with self.assertRaisesRegex(ValueError, 'Exact OCI manifest digest'):
+                recovery_digest(tag, 'latest')
+            with self.assertRaisesRegex(ValueError, 'differs from the prepared archive'):
+                verify(tag, archive, 'sha256:' + '0'*64, oci)
+
     def test_scheduled_fixture_recovery_selects_only_an_unpreserved_recorded_pair(self):
         from hosted_fixture import pending_pair
         from release_metadata import Metadata

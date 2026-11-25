@@ -71,7 +71,7 @@ class ZashiProposalRepositoryTest {
         assertSame(draft, repository.transactionProposal.value)
         assertSame(draftState, repository.submitState.value)
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any(), any()) }
     }
 
     @Test
@@ -96,8 +96,8 @@ class ZashiProposalRepositoryTest {
         ready.complete(ShieldTransactionProposal(sdkProposal))
         coEvery { keys.getZashiSpendingKey() } returns mockk()
         val outcome = SubmitResult.Success(listOf("isolated-shield"))
-        coEvery { proposals.submitTransaction(sdkProposal, any<UnifiedSpendingKey>(), any()) } coAnswers {
-            thirdArg<() -> Unit>().invoke()
+        coEvery { proposals.submitTransaction(sdkProposal, any<UnifiedSpendingKey>(), any(), any()) } coAnswers {
+            arg<() -> Unit>(3).invoke()
             outcome
         }
 
@@ -116,9 +116,9 @@ class ZashiProposalRepositoryTest {
         coEvery { proposals.createShieldProposal(account) } returns ShieldTransactionProposal(sdkProposal)
         coEvery { keys.getZashiSpendingKey() } returns key
         var broadcast = false
-        coEvery { proposals.submitTransaction(sdkProposal, key, any()) } coAnswers {
+        coEvery { proposals.submitTransaction(sdkProposal, key, any(), any()) } coAnswers {
             current = false
-            thirdArg<() -> Unit>().invoke()
+            arg<() -> Unit>(3).invoke()
             broadcast = true
             SubmitResult.Success(listOf("synthetic-tx"))
         }
@@ -149,7 +149,7 @@ class ZashiProposalRepositoryTest {
             repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote))
         }
 
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
         val recorded = assertIs<IllegalStateException>(assertIs<SubmitResult.Error>(result.submitResult).cause)
         assertEquals(error.message, recorded.message)
@@ -164,10 +164,10 @@ class ZashiProposalRepositoryTest {
             WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), proposal
         )
         coEvery { keys.getZashiSpendingKey() } returns key
-        coEvery { proposals.submitTransaction(proposal, key, any()) } returns expected
+        coEvery { proposals.submitTransaction(proposal, key, any(), any()) } returns expected
 
         assertEquals(expected, repository.submit())
-        coVerify(exactly = 1) { proposals.submitTransaction(proposal, key, any()) }
+        coVerify(exactly = 1) { proposals.submitTransaction(proposal, key, any(), any()) }
     }
 
     @Test
@@ -185,7 +185,7 @@ class ZashiProposalRepositoryTest {
         }
 
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any(), any()) }
     }
 
     @Test
@@ -202,7 +202,7 @@ class ZashiProposalRepositoryTest {
                 account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
             )
         } returns true
-        coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
+        coEvery { proposals.submitTransaction(reviewed.proposal, key, any(), any()) } returns expected
 
         assertEquals(expected, repository.submit(reviewed, SwapQuoteData.Success(reviewed.quote)))
 
@@ -211,7 +211,7 @@ class ZashiProposalRepositoryTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
             )
-            proposals.submitTransaction(reviewed.proposal, key, any())
+            proposals.submitTransaction(reviewed.proposal, key, any(), any())
         }
     }
 
@@ -247,7 +247,7 @@ class ZashiProposalRepositoryTest {
         }
         approval.await()
 
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any(), any()) }
     }
 
     private suspend fun swapProposal() = ExactInputSwapTransactionProposal(

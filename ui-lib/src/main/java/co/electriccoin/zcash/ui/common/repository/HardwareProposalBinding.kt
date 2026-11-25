@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +15,12 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /** The proposal, device input, proofs and signatures stay with the same preparation. */
-class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt, val owner: AccountUuid?) {
+class PreparedHardwareProposal(
+    val proposal: TransactionProposal,
+    val pczt: Pczt,
+    val owner: AccountUuid?,
+    internal val walletGeneration: Long,
+) {
     internal val id = UUID.randomUUID().toString()
     val proofs = CompletableDeferred<Pczt>()
 
@@ -43,7 +49,7 @@ class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt
 }
 
 /** An approval is invalidated whenever its prepared artifact is replaced or cleared. */
-class HardwareProposalBinding {
+class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess()) {
     private var prepared: PreparedHardwareProposal? = null
     private val approval = MutableStateFlow<PreparedHardwareProposal?>(null)
     internal val approved = approval.asStateFlow()
@@ -51,7 +57,9 @@ class HardwareProposalBinding {
     @Synchronized
     fun prepare(proposal: TransactionProposal, pczt: Pczt, owner: AccountUuid? = null): PreparedHardwareProposal {
         approval.value = null
-        return PreparedHardwareProposal(proposal, pczt, owner).also { prepared = it }
+        val generation = walletWriteAccess.token()
+        check(walletWriteAccess.permits(generation)) { "The wallet changed before signing preparation." }
+        return PreparedHardwareProposal(proposal, pczt, owner, generation).also { prepared = it }
     }
 
     @Synchronized
@@ -61,7 +69,8 @@ class HardwareProposalBinding {
         reviewedQuote: SwapQuoteData.Success? = null,
     ) {
         val artifact = checkNotNull(prepared) { "The transaction has no prepared PCZT." }
-        check(current === artifact.proposal && (expected == null || expected === current)) {
+        check(current === artifact.proposal && (expected == null || expected === current)
+            && walletWriteAccess.permits(artifact.walletGeneration)) {
             "The reviewed transaction changed before signing."
         }
         check(current !is SwapTransactionProposal || current === expected) {
@@ -74,7 +83,7 @@ class HardwareProposalBinding {
 
     @Synchronized
     fun getApproved(current: TransactionProposal?): PreparedHardwareProposal? =
-        approval.value?.takeIf { it.proposal === current }
+        approval.value?.takeIf { it.proposal === current && walletWriteAccess.permits(it.walletGeneration) }
 
     fun requireApproved(
         current: TransactionProposal?,
@@ -87,7 +96,7 @@ class HardwareProposalBinding {
 
     @Synchronized
     fun getPrepared(current: TransactionProposal?): PreparedHardwareProposal? =
-        prepared?.takeIf { it.proposal === current }
+        prepared?.takeIf { it.proposal === current && walletWriteAccess.permits(it.walletGeneration) }
 
     @Synchronized
     fun clear() {

@@ -5,6 +5,9 @@ on:
       release_tag:
         type: string
         default: ''
+      recovery_oci:
+        type: string
+        default: ''
 permissions: {}
 env:
   FIXTURE_REGISTRY: ghcr.io/codely-solutions/zec-private-upgrade-fixtures
@@ -16,6 +19,7 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.select.outputs.tag }}
+      recovery_oci: ${{ steps.select.outputs.recovery_oci }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -25,11 +29,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          RECOVERY_OCI: ${{ inputs.recovery_oci }}
           PREVIOUS_MAIN: ${{ github.event.before }}
-        run: python3 -B .private/hosted_fixture.py select --tag "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+        run: python3 -B .private/hosted_fixture.py select --tag "$RELEASE_TAG" --recover-oci "$RECOVERY_OCI" >> "$GITHUB_OUTPUT"
   store:
     needs: select
-    if: needs.select.outputs.tag != ''
+    if: needs.select.outputs.tag != '' && needs.select.outputs.recovery_oci == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -75,10 +80,15 @@ jobs:
           fi
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "oci_digest=$digest" >> "$GITHUB_OUTPUT"
+          printf 'Stored private fixture manifest %s\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-fixture"
   verify:
     needs: [select, store]
+    if: >-
+      ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.tag != '' &&
+      (needs.store.result == 'success' ||
+       (needs.store.result == 'skipped' && needs.select.outputs.recovery_oci != '')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -99,7 +109,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.select.outputs.tag }}
           ARCHIVE_DIGEST: ${{ needs.store.outputs.archive_digest }}
-          OCI_DIGEST: ${{ needs.store.outputs.oci_digest }}
+          OCI_DIGEST: ${{ needs.select.outputs.recovery_oci || needs.store.outputs.oci_digest }}
+          RECOVERY_OCI: ${{ needs.select.outputs.recovery_oci }}
         run: |
           set -euo pipefail
           gh api "orgs/$GITHUB_REPOSITORY_OWNER/packages/container/zec-private-upgrade-fixtures" \
@@ -109,7 +120,14 @@ jobs:
           cd "$RUNNER_TEMP/zec-fixture"
           printf '%s' "$GH_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config auth.json
           unset GH_TOKEN
-          oras pull --registry-config auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST"
+          if [[ -n "$RECOVERY_OCI" ]]; then
+            oras manifest fetch --registry-config auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST" > manifest.json
+            ARCHIVE_DIGEST=$(python3 -B "$GITHUB_WORKSPACE/.private/hosted_fixture.py" registry-layer --directory "$PWD")
+            export ARCHIVE_DIGEST
+            oras blob fetch --registry-config auth.json --output fixture.zip "$FIXTURE_REGISTRY@$ARCHIVE_DIGEST"
+          else
+            oras pull --registry-config auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST"
+          fi
           binding=$(python3 -B "$GITHUB_WORKSPACE/.private/hosted_fixture.py" verify --tag "$RELEASE_TAG" --directory "$PWD")
           printf '%s\n' "$binding" | tee -a "$GITHUB_STEP_SUMMARY"
           printf 'binding=%s\n' "$binding" >> "$GITHUB_OUTPUT"

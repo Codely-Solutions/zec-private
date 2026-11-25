@@ -212,18 +212,20 @@ class ZashiProposalRepositoryImpl(
                                 ZecSwapComposition.validate(transactionProposal.quote)
                             }
                         }
-                        val submit: suspend (() -> Unit) -> SubmitResult = { beforeSubmission ->
-                            proposalDataSource.submitTransaction(
-                                proposal = transactionProposal.proposal,
-                                usk = spendingKey,
-                                beforeFirstSubmission = beforeSubmission,
-                            )
-                        }
+                        val submit: suspend (() -> Unit, () -> Unit) -> SubmitResult =
+                            { beforeCreation, beforeSubmission ->
+                                proposalDataSource.submitTransaction(
+                                    proposal = transactionProposal.proposal,
+                                    usk = spendingKey,
+                                    beforeCreation = beforeCreation,
+                                    beforeFirstSubmission = beforeSubmission,
+                                )
+                            }
                         val result = if (transactionProposal is SwapTransactionProposal) {
                             processSwapTransaction.submitReservedFunding(transactionProposal, validateFunding, submit)
                         } else {
                             validateFunding()
-                            submit(validateFunding)
+                            submit(validateFunding, validateFunding)
                         }
                         publishOutcome(transactionProposal, result)
                         result
@@ -243,6 +245,7 @@ class ZashiProposalRepositoryImpl(
             proposalDataSource.submitTransaction(
                 proposal = shield.proposal,
                 usk = key,
+                beforeCreation = shield::requireCurrentShieldingApproval,
                 beforeFirstSubmission = shield::requireCurrentShieldingApproval,
             )
         }.await()

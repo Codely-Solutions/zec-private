@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
+import co.electriccoin.zcash.ui.screen.deletewallet.sdkDataResetFixture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -49,10 +50,14 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 
 /** Verifies wallet reset against the production gift repository and data source. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class GiftCardResetTest : GiftCardDataSourceTestFixture() {
+    @get:Rule val resetFiles = TemporaryFolder()
+
     @Test
     fun resetWaitsForTheStartedRedemptionAndNativeCloseBeforeErasingTheWallet() = runTest {
         val submission = CompletableDeferred<Unit>()
@@ -323,7 +328,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         return ResetFixture(repository, store, id)
     }
 
-    private class ResetFixture(
+    private inner class ResetFixture(
         val repository: GiftCardRepositoryImpl,
         val store: GiftCardLinkStoreImpl,
         val id: String,
@@ -344,7 +349,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             coEvery { store(null) } coAnswers { recordStage(null) }
         }
         val reset = ResetZashiUseCase(
-            walletCoordinator = walletCoordinator,
+            resetWalletSdkData = sdkDataResetFixture(resetFiles.root, walletCoordinator),
             synchronizerProvider = mockk {
                 coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
             },

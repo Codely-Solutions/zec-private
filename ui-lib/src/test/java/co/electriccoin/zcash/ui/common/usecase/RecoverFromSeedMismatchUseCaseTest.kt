@@ -12,16 +12,20 @@ import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 class RecoverFromSeedMismatchUseCaseTest {
     private val wallet = PersistableWallet(
@@ -117,13 +121,27 @@ class RecoverFromSeedMismatchUseCaseTest {
         assertEquals(1, walletProvider.replacements.size)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun eraseTimeoutCountsAsFailedAttemptAndThrows() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flow<Boolean> { delay(1.days) }
-
-        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-
-        assertTrue(walletProvider.replacements.isEmpty())
+    fun delayedEraseOffersHelpButKeepsWalletReplacementFencedUntilCompletion() = runTest {
+        val sdkResult = CompletableDeferred<Boolean>()
+        every { walletCoordinator.deleteSdkDataFlow() } returns flow { emit(sdkResult.await()) }
+        val delayed = CompletableDeferred<Unit>()
+        val recovering = launch { recovery(access.token()) { delayed.complete(Unit) } }
+        val replacing = launch { access.replaceWallet { walletProvider.persistableWallet.value = wallet } }
+        try {
+            advanceTimeBy(30.seconds)
+            runCurrent()
+            assertTrue(delayed.isCompleted)
+            assertTrue(walletProvider.replacements.isEmpty())
+            assertTrue(!replacing.isCompleted)
+        } finally {
+            sdkResult.complete(true)
+        }
+        recovering.join()
+        replacing.join()
+        assertEquals(wallet, walletProvider.persistableWallet.value)
+        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
     }
 
     private class RecordingWalletProvider(

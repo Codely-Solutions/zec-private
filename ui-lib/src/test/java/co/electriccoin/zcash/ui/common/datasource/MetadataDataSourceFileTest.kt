@@ -703,7 +703,7 @@ class MetadataDataSourceFileTest {
         val proposal = outgoingProposal(quote, account)
         val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
         assertFailsWith<IllegalStateException> {
-            initial.submitReservedFunding(proposal, {}) { error("SDK must not be entered") }
+            initial.submitReservedFunding(proposal, {}) { _, _ -> error("SDK must not be entered") }
         }.also { assertEquals("Unable to save swap tracking before funding", it.message) }
 
         val reopened = repository(sync.provider)
@@ -712,7 +712,7 @@ class MetadataDataSourceFileTest {
         assertTrue(saved.fundingNotSubmitted)
         val restarted = ProcessSwapTransactionUseCase(reopened, mockk())
         assertFailsWith<IllegalStateException> {
-            restarted.submitReservedFunding(proposal, {}) { error("SDK must not be entered again") }
+            restarted.submitReservedFunding(proposal, {}) { _, _ -> error("SDK must not be entered again") }
         }.also { assertEquals("This swap is already tracked. Check its status before funding.", it.message) }
     }
 
@@ -730,7 +730,7 @@ class MetadataDataSourceFileTest {
         val initial = ProcessSwapTransactionUseCase(repository(provider), mockk())
         var entered = false
         funding = launch(start = CoroutineStart.LAZY) {
-            initial.submitReservedFunding(proposal, {}) {
+            initial.submitReservedFunding(proposal, {}) { _, _ ->
                 entered = true
                 error("SDK must not be entered")
             }
@@ -772,7 +772,7 @@ class MetadataDataSourceFileTest {
         var approved = true
         var broadcast = false
         assertFailsWith<IllegalStateException> {
-            tracking.submitReservedFunding(proposal, { check(approved) }) { firstEntry ->
+            tracking.submitReservedFunding(proposal, { check(approved) }) { _, firstEntry ->
                 approved = false
                 firstEntry()
                 broadcast = true

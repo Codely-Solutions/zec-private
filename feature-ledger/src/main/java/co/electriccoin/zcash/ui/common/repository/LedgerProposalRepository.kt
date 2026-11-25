@@ -41,6 +41,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.model.toLedgerIssue
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -128,6 +129,7 @@ class LedgerProposalRepositoryImpl(
     private val ledgerDeviceDataSource: LedgerDeviceDataSource,
     private val ledgerSigningDataSource: LedgerSigningDataSource,
     private val processSwapTransaction: ProcessSwapTransactionUseCase,
+    walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) : LedgerProposalRepository {
     @VisibleForTesting
     internal var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -139,7 +141,7 @@ class LedgerProposalRepositoryImpl(
     override val signingState = MutableStateFlow<LedgerSigningState?>(null)
 
 
-    private val hardwareProposal = HardwareProposalBinding()
+    private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
 
     private var pcztWithProofsJob: Job? = null
 
@@ -606,10 +608,11 @@ class LedgerProposalRepositoryImpl(
                         ZecSwapComposition.validate(proposal.quote)
                     }
                 }
-                val submit: suspend (() -> Unit) -> SubmitResult = { beforeSubmission ->
+                val submit: suspend (() -> Unit, () -> Unit) -> SubmitResult = { beforeCreation, beforeSubmission ->
                     proposalDataSource.submitTransaction(
                         pcztWithProofs = proofs,
                         pcztWithSignatures = signed,
+                        beforeCreation = beforeCreation,
                         beforeFirstSubmission = beforeSubmission,
                     )
                 }
@@ -617,7 +620,7 @@ class LedgerProposalRepositoryImpl(
                     processSwapTransaction.submitReservedFunding(proposal, validateFunding, submit)
                 } else {
                     validateFunding()
-                    submit(validateFunding)
+                    submit(validateFunding, validateFunding)
                 }
                 submitState.update { SubmitProposalState.Result(result) }
                 result

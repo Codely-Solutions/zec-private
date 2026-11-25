@@ -127,6 +127,8 @@ The main-only signing job fetches the unsigned APK and the two receipts by artif
 
 A manual dispatch of `hosted-core.yml` runs a testnet-only rehearsal from the selected fixture. It uses a separate reservation and cannot supply a release receipt. Use `upgrade_probe=restore` or `upgrade_probe=transport` to isolate that boundary after an installed upgrade without reserving or claiming funds. A later `rehearsal_number` requires diagnosed prior failures and a newer trusted controller. Prior reservations stay protected.
 
+If fixture upload succeeded and recording was interrupted, dispatch `preserve-hosted-fixture.yml` on main with the exact `release_tag` and the `recovery_oci` digest from the original store job summary. The read-only verifier pulls the bounded archive by digest from the private registry and checks both original APK hashes against the accepted pair. Recording verifies the latest public release and writes only the fixture binding against current protected main. The original Actions archive is optional for this recovery path.
+
 The Tor outage test requires parsed updater metadata before the interruption, a blocked updater request during it, and a real response after Tor recovers. The test retries the initial read once on an I/O error through the same app Tor path. Phase markers identify the last successful readiness step. A confirmed GitHub quota response proves reachability only. Independent publication verification still checks actual release discovery.
 
 ## Guarded local acceptance

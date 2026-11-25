@@ -126,6 +126,8 @@ App module build variants:
 - `zcashmainnetRelease` and `zcashtestnetRelease` - are usually used by our CI jobs to prepare binaries for testing and releasing to the Google Play Store
 
 ### Included builds
+> Upstream only. ZEC Private uses published SDK and BIP-39 artifacts. Keep both included-build paths empty. See the [fork development procedure](../.private/DEVELOPMENT.md).
+
 This section is optional.
 
 To simplify implementation of Zcash SDK or BIP-39 features in conjunction with changes to the app, a Gradle [Included Build](https://docs.gradle.org/current/userguide/composite_builds.html) can be configured.

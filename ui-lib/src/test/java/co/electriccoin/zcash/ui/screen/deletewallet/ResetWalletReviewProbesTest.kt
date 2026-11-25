@@ -290,7 +290,7 @@ class ResetWalletReviewProbesTest {
         val reset = newReset()
 
         fun newReset(repository: AddressBookRepository = addressBookRepository) = ResetZashiUseCase(
-            walletCoordinator = walletCoordinator,
+            resetWalletSdkData = sdkDataResetFixture(directory.root, walletCoordinator),
             synchronizerProvider = synchronizerProvider,
             standardPreferenceProvider = standardProvider,
             encryptedPreferenceProvider = encryptedProvider,

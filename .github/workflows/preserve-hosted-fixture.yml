@@ -11,6 +11,9 @@ on:
         description: Independently verified release with recorded testnet execution
         required: true
         type: string
+      recovery_oci:
+        description: Immutable OCI manifest digest for an already uploaded fixture
+        type: string
 permissions: {}
 jobs:
   admit:
@@ -41,3 +44,4 @@ jobs:
     uses: ./.github/workflows/preserve-hosted-fixture-main.yml
     with:
       release_tag: ${{ inputs.release_tag || '' }}
+      recovery_oci: ${{ inputs.recovery_oci || '' }}

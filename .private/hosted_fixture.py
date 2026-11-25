@@ -64,6 +64,13 @@ def select(tag, before):
     return tag
 
 
+def recovery_digest(tag, value):
+    if value:
+        require(bool(tag), 'An exact release tag is required for registry recovery')
+        require(re.fullmatch(r'sha256:[0-9a-f]{64}', value), 'Exact OCI manifest digest required')
+    return value
+
+
 def pending_pair(metadata, root=ROOT):
     latest = metadata.api('/releases/latest')
     tag = latest['tag_name']
@@ -97,6 +104,19 @@ def verify_pair(path, core, *, prepared):
             require(set(names) == set(payloads) | {'source-sha.txt', 'SHA256SUMS'},
                     'Unexpected fixture entries')
         return payloads
+
+
+def fixture_layer(manifest):
+    layers = manifest.get('layers', [])
+    require(manifest.get('schemaVersion') == 2 and isinstance(layers, list) and len(layers) == 1,
+            'An OCI image manifest with one fixture layer is required')
+    layer = layers[0]
+    require(layer.get('mediaType') == 'application/zip'
+            and layer.get('annotations', {}).get('org.opencontainers.image.title') == 'fixture.zip'
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', layer.get('digest', ''))
+            and type(layer.get('size')) is int and 0 < layer['size'] <= MAX_ARCHIVE,
+            'Invalid or oversized registry fixture layer')
+    return layer['digest']
 
 
 def prepare(tag, archive, out, metadata):
@@ -160,21 +180,29 @@ def record(binding, metadata, root=ROOT):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('select', 'prepare', 'verify', 'record'))
+    parser.add_argument('operation', choices=('select', 'prepare', 'verify', 'record', 'registry-layer'))
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--tag', default='')
+    parser.add_argument('--recover-oci', default='')
     parser.add_argument('--extract', action='store_true', help='Extract verified app and instrumentation')
     args = parser.parse_args()
     if args.operation == 'select':
+        recovery = recovery_digest(args.tag, args.recover_oci)
         tag = (pending_pair(Metadata()) if os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
                else select(args.tag, os.environ.get('PREVIOUS_MAIN', '')))
         print('tag=' + tag)
+        print('recovery_oci=' + recovery)
         return
     if args.operation == 'record':
         updated = record(json.loads(os.environ['FIXTURE_BINDING']), Metadata())
         print('updated=' + ('true' if updated else 'false'))
         return
     require(args.directory is not None and args.directory.is_dir(), 'Fixture output directory required')
+    if args.operation == 'registry-layer':
+        manifest = args.directory / 'manifest.json'
+        require(0 < manifest.stat().st_size <= 65536, 'Registry fixture manifest exceeds budget')
+        print(fixture_layer(json.loads(manifest.read_bytes())))
+        return
     out = args.directory / 'fixture.zip'
     if args.operation == 'prepare':
         prepare(args.tag, args.directory / 'producer.zip', out, Metadata())
