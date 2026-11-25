@@ -6,10 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AccountListScreen() {
-    val viewModel = koinViewModel<AccountListVM>()
+fun AccountListScreen(sourceEntryId: String) {
+    val viewModel = koinViewModel<AccountListVM> { parametersOf(sourceEntryId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     BackHandler { state.onBack() }
     AccountListView(state)

@@ -112,13 +112,13 @@ interface LedgerAccountImporter {
         InitializeException.ImportAccountException::class,
         InitializeException.ImportAccountCollisionException::class,
     )
-    suspend fun importAccount(birthday: BlockHeight?)
+    suspend fun importAccount(birthday: BlockHeight?, sourceEntryId: String? = null)
 }
 
 /** Routes from the shared flows into the Ledger screens. */
 interface LedgerNavigator {
     /** Opens the Ledger sign sheet over the current screen for the pending proposal. */
-    fun forwardToSign()
+    fun forwardToSign(sourceEntryId: String? = null, canSign: () -> Boolean = { true })
 
     /** Starts connecting a Ledger (the Choose Hardware Wallet entry point). */
     fun forwardToConnect()

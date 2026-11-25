@@ -4,6 +4,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
@@ -34,11 +35,17 @@ class HWEstimationVM(
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     viewOnlyContent: ViewOnlyContent,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val createAccountLce = mutableLce<Unit>()
 
-    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
+    internal val finalization =
+        observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce, sourceEntryId)
 
     val state: StateFlow<LceState<EstimatedBlockHeightState>> =
         createAccountLce.state
@@ -88,7 +95,7 @@ class HWEstimationVM(
         createAccountLce.guardLoading {
             if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             createAccountLce.execute {
-                createHWWalletAccount(args.enrollment, BlockHeight.new(args.blockHeight))
+                createHWWalletAccount(args.enrollment, BlockHeight.new(args.blockHeight), sourceEntryId)
             }
         }
 

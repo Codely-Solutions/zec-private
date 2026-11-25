@@ -3,7 +3,10 @@ package co.electriccoin.zcash.ui.screen.viewingkey.name
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
@@ -43,7 +46,12 @@ internal class NameVKVM(
     private val isAccountNameTaken: IsAccountNameTakenUseCase,
     private val importViewOnlyAccount: ImportViewOnlyAccountUseCase,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val name = MutableStateFlow(pendingImportRepository.get()?.name.orEmpty())
 
     private val color = MutableStateFlow(pendingImportRepository.get()?.color)
@@ -86,7 +94,7 @@ internal class NameVKVM(
 
     init {
         if (pendingImportRepository.get() == null) {
-            navigationRouter.backToRoot()
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
         }
     }
 
@@ -150,7 +158,7 @@ internal class NameVKVM(
                     }
                     importLce.execute {
                         try {
-                            importViewOnlyAccount()
+                            importViewOnlyAccount(sourceEntryId)
                         } catch (_: ViewOnlyPendingImportMissingException) {
                             navigationRouter.backToRoot()
                         }

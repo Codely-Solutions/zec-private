@@ -130,7 +130,7 @@ class NavigationResultDeliveryTest {
                 assertTrue(dialog.id != review)
 
                 var deliveries = 0
-                router.stageResultFrom(dialog.id) {
+                router.stageResultFrom(dialog.id, retainAfterSourceCloses = true) {
                     deliveries++
                     NavigationCommand.Replace(listOf(ActivityHistoryArgs))
                 }

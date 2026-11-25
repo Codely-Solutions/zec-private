@@ -141,6 +141,9 @@ class MigrationReviewVM(
     private val proposeLce = mutableLce<ReviewProposal>()
     private val confirmLce = mutableLce<Unit>()
     private var reviewedOwnerKey: String? = null
+    private var committedMigration: CommittedMigration? = null
+
+    private data class CommittedMigration(val reviewed: ReviewedMigrationSchedule, val showSchedule: Boolean)
     private val isKeystoneAccount = getSelectedWalletAccount.observe().map { it is KeystoneAccount }
     private val failure = MutableStateFlow<TransferResult?>(null)
 
@@ -238,10 +241,10 @@ class MigrationReviewVM(
         ) { lce, rate, isKeystone, f, confirmState ->
             lce.success?.let { proposal -> createState(proposal, confirmState.loading, rate, isKeystone, f) }
         }.withLce(groupLce(proposeLce, confirmLce)) { error ->
-            val message = if (error.cause is PrivateNoteSplitUnavailable) {
-                stringRes(DesignR.string.migrationReview_privateSplitUnavailable)
-            } else {
-                null
+            val message = when (error.cause) {
+                is PrivateNoteSplitUnavailable -> stringRes(DesignR.string.migrationReview_privateSplitUnavailable)
+                is MigrationFinalizationPending -> stringRes(DesignR.string.private_migration_finish_scheduling)
+                else -> null
             }
             errorStateMapper.mapToState(error, message = message)
         }
@@ -421,6 +424,15 @@ class MigrationReviewVM(
         val account = requireReviewAccount()
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        val committed = committedMigration?.takeIf { it.reviewed === reviewed }
+        if (committed != null) {
+            if (sdk.hasCommitted(reviewed.schedule)) {
+                finishCommittedMigration(committed, accountKeyId)
+            } else {
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+            }
+            return
+        }
         val nativePlanActive = sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         val pending = pendingMigrationScheduleRepository.review(accountKeyId)
         check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
@@ -449,10 +461,9 @@ class MigrationReviewVM(
                 requireReviewAccount()
             }
             sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
-            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
-            navigationRouter.stageResultFrom(sourceEntryId) {
-                NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
-            }
+            val saved = CommittedMigration(reviewed, showSchedule = true)
+            committedMigration = saved
+            finishCommittedMigration(saved, accountKeyId)
         } catch (e: RuntimeException) {
             if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
@@ -472,10 +483,30 @@ class MigrationReviewVM(
     ) {
         if (result is TransferResult.NetworkError && result.retryable && sdk.hasCommitted(reviewed.schedule)) {
             requireReviewAccount()
-            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, false)
-            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+            val saved = CommittedMigration(reviewed, showSchedule = false)
+            committedMigration = saved
+            finishCommittedMigration(saved, accountKeyId)
         } else {
             failure.value = result
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // After native commit, retry only the app's scheduling work.
+    private suspend fun finishCommittedMigration(committed: CommittedMigration, accountKeyId: String) {
+        try {
+            finalizeMigrationSchedule(committed.reviewed.schedule, args.mode, accountKeyId, false)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("Migration scheduling follow-up unavailable (${e.javaClass.simpleName}).")
+            throw MigrationFinalizationPending()
+        }
+        navigationRouter.stageResultFrom(sourceEntryId) {
+            if (committed.showSchedule) {
+                NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
+            } else {
+                NavigationCommand.BackToRoot
+            }
         }
     }
 
@@ -673,6 +704,8 @@ private suspend fun OrchardMigrationSdk.prepareReviewedAutomaticMigration(): Rev
     }
     error("The SDK did not provide a usable migration proposal. Try again.")
 }
+
+private class MigrationFinalizationPending : IllegalStateException()
 
 private suspend fun OrchardMigrationSdk.hasCommitted(schedule: cash.z.ecc.android.sdk.MigrationSchedule): Boolean {
     if (getMigrationStateUnreconciled() !is MigrationState.InProgress) return false

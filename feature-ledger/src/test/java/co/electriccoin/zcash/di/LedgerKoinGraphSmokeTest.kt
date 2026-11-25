@@ -109,17 +109,17 @@ class LedgerKoinGraphSmokeTest {
 
     @Test
     fun ledgerDeviceScanVM_resolvesFromKoin() {
-        koin.koin.get<LedgerDeviceScanVM>()
+        koin.koin.get<LedgerDeviceScanVM> { parametersOf("fixture-entry") }
     }
 
     @Test
     fun ledgerOpenAppVM_resolvesFromKoin() {
-        koin.koin.get<LedgerOpenAppVM>()
+        koin.koin.get<LedgerOpenAppVM> { parametersOf(LedgerOpenAppArgs(), "fixture-entry") }
     }
 
     @Test
     fun ledgerHandshakeVM_resolvesFromKoin() {
-        koin.koin.get<LedgerHandshakeVM>()
+        koin.koin.get<LedgerHandshakeVM> { parametersOf("fixture-entry") }
     }
 
     @Test

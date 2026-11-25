@@ -108,7 +108,7 @@ class PendingNavigation {
             val command = current[sourceEntryId]
             when {
                 command == null -> current
-                contentEntryId in current -> current - sourceEntryId
+                !command.retainAfterSourceCloses || contentEntryId in current -> current - sourceEntryId
                 else -> current - sourceEntryId + (contentEntryId to command.copy(sourceEntryId = contentEntryId))
             }
         }
@@ -135,13 +135,16 @@ internal fun NavigationRouter.forwardFrom(
 fun NavigationRouter.stageResultFrom(
     sourceEntryId: String?,
     isStillAllowed: () -> Boolean = { true },
+    retainAfterSourceCloses: Boolean = false,
     buildCommand: () -> NavigationCommand?,
 ) {
     if (!isStillAllowed()) return
     if (sourceEntryId == null) {
         buildCommand()?.let { dispatchUnscoped(it) }
     } else {
-        val command = NavigationCommand.ForEntry(sourceEntryId, isStillAllowed, buildCommand, acknowledge = {})
+        val command = NavigationCommand.ForEntry(
+            sourceEntryId, isStillAllowed, buildCommand, retainAfterSourceCloses, acknowledge = {}
+        )
         pendingNavigation?.offer(command) ?: custom { command }
     }
 }
@@ -307,6 +310,7 @@ sealed interface NavigationCommand : BaseNavigationCommand {
         val sourceEntryId: String,
         val isStillAllowed: () -> Boolean,
         val buildCommand: () -> NavigationCommand?,
+        val retainAfterSourceCloses: Boolean = false,
         val acknowledge: (Boolean) -> Unit,
     ) : NavigationCommand
 

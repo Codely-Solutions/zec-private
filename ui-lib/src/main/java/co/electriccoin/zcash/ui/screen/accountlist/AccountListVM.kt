@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -31,7 +32,12 @@ class AccountListVM(
     private val viewOnlyNavigator: ViewOnlyNavigator,
     private val viewOnlyContent: ViewOnlyContent,
     private val observeAccountIcon: ObserveAccountIconUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     /**
      * One row callback per account, kept across emissions so an unchanged row's state stays equal
      * and the row skips recomposition on every balance update. A callback carries only the account's
@@ -119,7 +125,7 @@ class AccountListVM(
                     .observe()
                     .value
                     ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
-                    ?.let { selectWalletAccount(it) }
+                    ?.let { selectWalletAccount(it, sourceEntryId = sourceEntryId) }
             }
         }
 

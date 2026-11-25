@@ -52,8 +52,8 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 data class MigrationTransferInvalidArgs(val accountKeyId: String)
 
 @Composable
-fun MigrationTransferInvalidScreen(args: MigrationTransferInvalidArgs) {
-    val vm = koinViewModel<MigrationTransferInvalidVM> { parametersOf(args) }
+fun MigrationTransferInvalidScreen(args: MigrationTransferInvalidArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationTransferInvalidVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler { vm.onBack() }
     if (state.content == null && !state.isLoading && state.error == null) {

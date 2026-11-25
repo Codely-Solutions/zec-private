@@ -11,8 +11,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun HWWBHScreen(args: HWHeightArgs) {
-    val vm = koinViewModel<HWHeightVM> { parametersOf(args) }
+fun HWWBHScreen(args: HWHeightArgs, sourceEntryId: String) {
+    val vm = koinViewModel<HWHeightVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val finalization by vm.finalization.collectAsStateWithLifecycle()
     LceRenderer(state) {

@@ -4,7 +4,9 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavContributor
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
@@ -43,14 +45,18 @@ class LedgerAccountImporterImpl(
 
     override fun hasPendingPairing(): Boolean = ledgerPairingRepository.get() != null
 
-    override suspend fun importAccount(birthday: BlockHeight?) = createLedgerAccount(birthday)
+    override suspend fun importAccount(birthday: BlockHeight?, sourceEntryId: String?) =
+        createLedgerAccount(birthday, sourceEntryId)
 }
 
 class LedgerNavigatorImpl(
     private val navigationRouter: NavigationRouter,
     private val ledgerRepairTargetRepository: LedgerRepairTargetRepository,
 ) : LedgerNavigator {
-    override fun forwardToSign() = navigationRouter.forward(LedgerSignArgs)
+    override fun forwardToSign(sourceEntryId: String?, canSign: () -> Boolean) =
+        navigationRouter.stageResultFrom(sourceEntryId, canSign) {
+            NavigationCommand.Forward(listOf(LedgerSignArgs))
+        }
 
     /**
      * Opens the connect flow to add a Ledger, so no account is left as the target of pairing again.
@@ -69,9 +75,9 @@ class LedgerNavContributorImpl : LedgerNavContributor {
             dialogComposable<LedgerSignArgs> { LedgerSignScreen(it.id) }
             composable<LedgerConnectArgs> { LedgerConnectScreen() }
             composable<LedgerTurnOnArgs> { LedgerTurnOnScreen() }
-            composable<LedgerDeviceScanArgs> { LedgerDeviceScanScreen() }
-            composable<LedgerOpenAppArgs> { LedgerOpenAppScreen(it.toRoute()) }
-            composable<LedgerHandshakeArgs> { LedgerHandshakeScreen() }
+            composable<LedgerDeviceScanArgs> { LedgerDeviceScanScreen(it.id) }
+            composable<LedgerOpenAppArgs> { LedgerOpenAppScreen(it.toRoute(), it.id) }
+            composable<LedgerHandshakeArgs> { LedgerHandshakeScreen(it.id) }
             composable<LedgerConnectedArgs> { LedgerConnectedScreen() }
         }
     }

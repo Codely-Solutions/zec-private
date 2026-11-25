@@ -93,7 +93,7 @@ class MigrationKeystoneScanVM(
                 val pending = pendingKeystonePczts.get(accountKeyId)
                 if (sched == null || pending == null) {
                     // A restored Sign screen has no usable request either.
-                    navigationRouter.backToRoot()
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                     return@launch
                 }
                 if (pending.isFullySigned) {

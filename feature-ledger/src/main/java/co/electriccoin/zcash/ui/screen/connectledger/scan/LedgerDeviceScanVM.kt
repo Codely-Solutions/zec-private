@@ -9,7 +9,10 @@ import cash.z.ecc.android.sdk.ledger.LedgerBluetoothDevice
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ledger.R
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.LedgerIssue
 import co.electriccoin.zcash.ui.common.model.LedgerIssueContext
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
@@ -71,6 +74,7 @@ class LedgerDeviceScanVM(
     ledgerRepairTargetRepository: LedgerRepairTargetRepository,
     private val navigateToError: NavigateToErrorUseCase,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : AndroidViewModel(application) {
     private val internalState = MutableStateFlow(initialState(ledgerRepairTargetRepository))
 
@@ -95,6 +99,7 @@ class LedgerDeviceScanVM(
      * held.
      */
     override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
         stopScan()
         cancelConnect()
         ledgerSelectedDeviceRepository.clear()
@@ -400,9 +405,13 @@ class LedgerDeviceScanVM(
             val isZcashAppRunning = connectLedgerDevice(device, zip32AccountIndex)
             currentCoroutineContext().ensureActive()
             if (isZcashAppRunning) {
-                navigationRouter.forward(LedgerOpenAppArgs(autoOpen = false), LedgerHandshakeArgs)
+                navigationRouter.stageResultFrom(sourceEntryId) {
+                    NavigationCommand.Forward(listOf(LedgerOpenAppArgs(autoOpen = false), LedgerHandshakeArgs))
+                }
             } else {
-                navigationRouter.forward(LedgerOpenAppArgs())
+                navigationRouter.stageResultFrom(sourceEntryId) {
+                    NavigationCommand.Forward(listOf(LedgerOpenAppArgs()))
+                }
             }
             internalState.update {
                 it.copy(

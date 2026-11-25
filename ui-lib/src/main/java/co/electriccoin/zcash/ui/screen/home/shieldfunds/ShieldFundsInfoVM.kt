@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.ShieldFundsInfoProvider
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
@@ -28,7 +29,13 @@ class ShieldFundsInfoVM(
     private val shieldFundsInfoProvider: ShieldFundsInfoProvider,
     private val navigationRouter: NavigationRouter,
     private val shieldFunds: ShieldFundsUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     val state: StateFlow<ShieldFundsInfoState?> =
         combine(
             getSelectedWalletAccount.observe(),
@@ -36,7 +43,7 @@ class ShieldFundsInfoVM(
         ) { account, infoEnabled ->
             val transparentAmount = account?.transparentBalance ?: Zatoshi(0)
             val confirm = account?.takeIf { it.isSpendable }?.let {
-                shieldFunds.confirm(it, closeCurrentScreen = true)
+                shieldFunds.confirm(it, closeCurrentScreen = true, sourceEntryId)
             }
             ShieldFundsInfoState(
                 onBack = ::onBack,

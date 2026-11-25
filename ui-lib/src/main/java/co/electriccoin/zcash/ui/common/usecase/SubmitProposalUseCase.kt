@@ -118,7 +118,7 @@ class SubmitProposalUseCase(
 
                 is LedgerAccount -> {
                     ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote)
-                    ledgerNavigator.forwardToSign()
+                    ledgerNavigator.forwardToSign(sourceEntryId) { currentProposal(account) === proposal }
                 }
 
                 is ViewOnlyAccount -> {
@@ -194,7 +194,7 @@ fun NavigationRouter.showTransactionProgress(
     sourceEntryId: String?,
     submissionId: String?,
     replaceWalletStack: Boolean = false,
-) = stageResultFrom(sourceEntryId) {
+) = stageResultFrom(sourceEntryId, retainAfterSourceCloses = replaceWalletStack) {
     val route = when {
         sourceEntryId == null -> TransactionProgressArgs
         submissionId != null -> BoundTransactionProgressArgs(submissionId)

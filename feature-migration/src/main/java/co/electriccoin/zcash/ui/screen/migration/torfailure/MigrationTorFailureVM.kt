@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.migration.migrationLog
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
@@ -22,7 +25,12 @@ class MigrationTorFailureVM(
     private val args: MigrationTorFailureArgs,
     private val pendingMigrationTorFailureDecisionRepository: PendingMigrationTorFailureDecisionRepository,
     private val isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private var continuing: Job? = null
 
     val state: StateFlow<MigrationTorFailureState?> =
@@ -45,7 +53,7 @@ class MigrationTorFailureVM(
             try {
                 isMigrationTorEnabledStorageProvider.store(args.accountKeyId, false)
                 pendingMigrationTorFailureDecisionRepository.set(args.accountKeyId, useTor = false)
-                navigationRouter.back()
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

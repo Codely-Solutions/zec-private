@@ -368,24 +368,24 @@ class MigrationNavigatorImpl(
 class MigrationNavContributorImpl : MigrationNavContributor {
     override fun contribute(navGraphBuilder: NavGraphBuilder) {
         with(navGraphBuilder) {
-            composable<MigrationSetupArgs> { MigrationSetupScreen() }
-            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
+            composable<MigrationSetupArgs> { MigrationSetupScreen(it.id) }
+            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen(it.id) }
             composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute(), it.id) }
-            composable<MigrationKeystoneSignArgs> { MigrationKeystoneSignScreen(it.toRoute()) }
+            composable<MigrationKeystoneSignArgs> { MigrationKeystoneSignScreen(it.toRoute(), it.id) }
             composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
             composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
             composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
             dialogComposable<MigrationPrivacyArgs> { MigrationPrivacyScreen(it.toRoute()) }
             dialogComposable<MigrationCustomServerTorArgs> { MigrationCustomServerTorScreen(it.toRoute()) }
-            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
+            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute(), entry.id) }
             dialogComposable<MigrationLockExplainerArgs> { MigrationLockExplainerScreen() }
             composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
             composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute(), it.id) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute(), entry.id) }
-            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute()) }
-            composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }
+            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute(), it.id) }
+            composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute(), it.id) }
         }
     }
 }

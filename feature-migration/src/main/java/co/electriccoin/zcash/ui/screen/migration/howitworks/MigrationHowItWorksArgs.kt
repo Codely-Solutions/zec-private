@@ -41,14 +41,15 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
 data object MigrationHowItWorksArgs
 
 @Composable
-fun MigrationHowItWorksScreen() {
-    val vm = koinViewModel<MigrationHowItWorksVM>()
+fun MigrationHowItWorksScreen(sourceEntryId: String) {
+    val vm = koinViewModel<MigrationHowItWorksVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(
         state = state,

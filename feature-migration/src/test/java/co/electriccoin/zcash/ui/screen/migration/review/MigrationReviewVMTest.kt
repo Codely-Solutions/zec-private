@@ -396,6 +396,53 @@ class MigrationReviewVMTest {
     }
 
     @Test
+    fun committedScheduleRetriesOnlyItsFinalizationAfterASchedulerFailure() = runTest {
+        val reviewed = schedule(42L, 100_000L)
+        val native = mockk<cash.z.ecc.android.sdk.MigrationTransferState> {
+            every { isTransfer } returns true
+            every { id } returns 42L
+            every { amountZatoshi } returns 100_000L
+        }
+        var committed = false
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } coAnswers {
+                if (committed) MigrationState.InProgress(mockk(relaxed = true)) else MigrationState.NotStarted
+            }
+            coEvery { proposeMigrationTransfers() } returns reviewed
+            coEvery { getMigrationTransferStates() } returns
+                cash.z.ecc.android.sdk.MigrationTransferStates(listOf(native), 100L)
+            coEvery { signAndStoreMigrationSchedule(reviewed, any()) } coAnswers { committed = true }
+        }
+        var attempts = 0
+        val finalize = mockk<FinalizeMigrationScheduleUseCase> {
+            coEvery { this@mockk(reviewed, MigrationMode.AUTOMATIC, any(), false) } coAnswers {
+                if (++attempts == 1) throw IllegalStateException("synthetic scheduler unavailable")
+            }
+        }
+        val router = FakeNavigationRouter()
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+            finalizeMigrationSchedule = finalize,
+            sourceEntryId = "automatic-review",
+        )
+
+        val confirmation = vm.currentReview()
+        confirmation.onConfirm()
+        advanceUntilIdle()
+        assertTrue(router.scopedCommands.isEmpty())
+        confirmation.onConfirm()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(reviewed, any()) }
+        coVerify(exactly = 2) { finalize(reviewed, MigrationMode.AUTOMATIC, any(), false) }
+        val handoff = router.scopedCommands.single()
+        assertEquals("automatic-review", handoff.sourceEntryId)
+        assertIs<NavigationCommand.Forward>(handoff.buildCommand())
+    }
+
+    @Test
     fun torProtectedSoftwarePlanStopsBeforeAnUnsupportedSplit() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { isNoteSplitNeeded() } returns true

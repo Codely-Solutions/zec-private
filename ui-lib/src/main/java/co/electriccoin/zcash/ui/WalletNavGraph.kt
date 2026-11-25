@@ -231,7 +231,7 @@ fun NavGraphBuilder.walletNavGraph(
 ) {
     navigation<MainAppGraph>(startDestination = HomeArgs) {
         composable<HomeArgs> {
-            AndroidHome()
+            AndroidHome(it.id)
 
             val showIronwoodAnnouncement by
                 walletViewModel.shouldShowIronwoodAnnouncement.collectAsStateWithLifecycle()
@@ -261,7 +261,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
         composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest(it.toRoute(), it.id) }
         composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
-        composable<AccountListArgs> { AccountListScreen() }
+        composable<AccountListArgs> { AccountListScreen(it.id) }
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
         composable<EditAccountArgs> { EditAccountScreen(it.toRoute()) }
         composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute(), it.id) }
@@ -309,7 +309,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SeedInfo> { AndroidSeedInfo() }
         composable<WalletBackupDetail> { AndroidWalletBackupDetail(it.toRoute()) }
         dialogComposable<SeedBackupInfo> { AndroidWalletBackupInfo() }
-        dialogComposable<ShieldFundsInfo> { AndroidShieldFundsInfo() }
+        dialogComposable<ShieldFundsInfo> { AndroidShieldFundsInfo(it.id) }
         dialogComposable<WalletDisconnectedInfo> { AndroidWalletDisconnectedInfo() }
         dialogComposable<WalletRestoringInfo> { AndroidWalletRestoringInfo() }
         dialogComposable<WalletSyncingInfo> { AndroidWalletSyncingInfo() }
@@ -319,7 +319,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
         dialogComposable<ExchangeRateUnavailableArgs> { ExchangeRateUnavailableScreen() }
         dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
-        dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen() }
+        dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen(it.id) }
         dialogComposable<BalanceBreakdownArgs> { BalanceBreakdownScreen() }
         composable<CrashReportOptIn> { AndroidCrashReportOptIn() }
         composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id, walletRoutesAllowed = true) }

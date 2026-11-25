@@ -36,19 +36,21 @@ internal fun NavGraphBuilder.hardwareEnrollmentScreens() {
     }
     composable<HWNewOrActiveArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) { entry ->
         val args = entry.toRoute<HWNewOrActiveArgs>()
-        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWNewOrActiveScreen(args) }
+        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWNewOrActiveScreen(args, entry.id) }
     }
     composable<HWDateArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) { entry ->
         val args = entry.toRoute<HWDateArgs>()
-        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWFirstTransactionScreen(args) }
+        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWFirstTransactionScreen(args, entry.id) }
     }
     composable<HWEstimationArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) { entry ->
         val args = entry.toRoute<HWEstimationArgs>()
-        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWFirstTransactionEstimationScreen(args) }
+        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) {
+            HWFirstTransactionEstimationScreen(args, entry.id)
+        }
     }
     composable<HWHeightArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) { entry ->
         val args = entry.toRoute<HWHeightArgs>()
-        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWWBHScreen(args) }
+        WithPendingEnrollment(entry, args.enrollment.keystoneSessionId) { HWWBHScreen(args, entry.id) }
     }
 }
 

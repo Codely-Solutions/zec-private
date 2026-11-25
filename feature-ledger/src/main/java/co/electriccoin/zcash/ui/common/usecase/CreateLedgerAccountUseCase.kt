@@ -3,7 +3,9 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -38,14 +40,16 @@ class CreateLedgerAccountUseCase(
         InitializeException.ImportAccountException::class,
         InitializeException.ImportAccountCollisionException::class,
     )
-    suspend operator fun invoke(birthday: BlockHeight? = null) {
+    suspend operator fun invoke(birthday: BlockHeight? = null, sourceEntryId: String? = null) {
         val pairing = ledgerPairingRepository.get() ?: throw LedgerPairingMissingException()
         mutex.withLock {
             if (ledgerPairingRepository.get() !== pairing) return
             if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
             val route = withContext(NonCancellable) { importAndSelect(pairing, birthday) }
             currentCoroutineContext().ensureActive()
-            route?.let { navigationRouter.forward(it) }
+            route?.let { destination ->
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
+            }
         }
     }
 

@@ -13,13 +13,13 @@ class CancelLedgerSigningUseCase(
     private val ledgerProposalRepository: LedgerProposalRepository,
     private val navigationRouter: NavigationRouter,
 ) {
-    operator fun invoke() {
+    operator fun invoke(navigateBack: Boolean = true) {
         if (ledgerProposalRepository.transactionProposal.value is ShieldTransactionProposal) {
             ledgerProposalRepository.clear()
         } else {
             ledgerProposalRepository.cancelSigning()
         }
-        navigationRouter.back()
+        if (navigateBack) navigationRouter.back()
     }
 
     /**

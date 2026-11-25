@@ -60,9 +60,9 @@ interface ViewOnlyAccountImporter {
      * @throws co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException if
      *         nothing is pending.
      */
-    fun continueWithBirthday(birthday: BlockHeight?)
+    fun continueWithBirthday(birthday: BlockHeight?, sourceEntryId: String? = null)
 
-    suspend fun finishImport()
+    suspend fun finishImport(sourceEntryId: String? = null)
 }
 
 /**

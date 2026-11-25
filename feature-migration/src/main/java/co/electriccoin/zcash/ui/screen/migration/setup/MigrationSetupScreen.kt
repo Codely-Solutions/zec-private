@@ -70,11 +70,12 @@ import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.common.WalletHeaderIcons
 import co.electriccoin.zcash.ui.screen.common.WalletHeaderIconsState
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Composable
-fun MigrationSetupScreen() {
-    val vm = koinViewModel<MigrationSetupVM>()
+fun MigrationSetupScreen(sourceEntryId: String) {
+    val vm = koinViewModel<MigrationSetupVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(
         state = state,

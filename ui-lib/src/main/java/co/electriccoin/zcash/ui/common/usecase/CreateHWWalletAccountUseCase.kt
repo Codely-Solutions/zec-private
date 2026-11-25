@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
@@ -70,12 +72,16 @@ class CreateHWWalletAccountUseCase(
             HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthdays
         }
 
-    suspend fun finish(enrollment: HWWalletEnrollment, birthday: CommittedEnrollmentBirthday) {
+    suspend fun finish(
+        enrollment: HWWalletEnrollment,
+        birthday: CommittedEnrollmentBirthday,
+        sourceEntryId: String? = null,
+    ) {
         if (committedBirthday(enrollment) != birthday) return
         if (enrollment == HWWalletEnrollment.ViewOnly) {
-            viewOnlyAccountImporter.finishImport()
+            viewOnlyAccountImporter.finishImport(sourceEntryId)
         } else {
-            invoke(enrollment, birthday.height)
+            invoke(enrollment, birthday.height, sourceEntryId)
         }
     }
 
@@ -88,37 +94,40 @@ class CreateHWWalletAccountUseCase(
      */
     suspend operator fun invoke(
         enrollment: HWWalletEnrollment,
-        birthday: BlockHeight?
+        birthday: BlockHeight?,
+        sourceEntryId: String? = null,
     ) {
         if (committedBirthday(enrollment)?.let { it.height != birthday } == true) return
         when (enrollment) {
             is HWWalletEnrollment.Keystone -> {
-                importKeystone(enrollment.sessionId, birthday)
+                importKeystone(enrollment.sessionId, birthday, sourceEntryId)
             }
 
             is HWWalletEnrollment.Ledger -> {
                 try {
-                    ledgerAccountImporter.importAccount(birthday)
+                    ledgerAccountImporter.importAccount(birthday, sourceEntryId)
                 } catch (_: LedgerPairingMissingException) {
-                    navigationRouter.backToRoot()
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                 }
             }
 
             is HWWalletEnrollment.ViewOnly -> {
                 try {
-                    viewOnlyAccountImporter.continueWithBirthday(birthday)
+                    viewOnlyAccountImporter.continueWithBirthday(birthday, sourceEntryId)
                 } catch (_: ViewOnlyPendingImportMissingException) {
-                    navigationRouter.backToRoot()
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                 }
             }
         }
     }
 
-    private suspend fun importKeystone(sessionId: String, birthday: BlockHeight?) {
+    private suspend fun importKeystone(sessionId: String, birthday: BlockHeight?, sourceEntryId: String?) {
         val pending = keystoneSession.enrollment(sessionId)
         val account = pending?.accounts?.accounts?.firstOrNull()
         if (pending == null || account == null) {
-            navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(ScanKeystoneSignInRequest))
+            }
             return
         }
         keystoneSession.importMutex.withLock {
@@ -129,10 +138,12 @@ class CreateHWWalletAccountUseCase(
                 createKeystoneAccount(pending, account, birthday)
             }
             if (keystoneSession.enrollment(sessionId) === pending) {
-                keystoneSession.clear(sessionId)
                 currentCoroutineContext().ensureActive()
                 val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
-                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, next)
+                navigationRouter.stageResultFrom(sourceEntryId, { keystoneSession.enrollment(sessionId) === pending }) {
+                    keystoneSession.clear(sessionId)
+                    NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(next))
+                }
             }
         }
     }

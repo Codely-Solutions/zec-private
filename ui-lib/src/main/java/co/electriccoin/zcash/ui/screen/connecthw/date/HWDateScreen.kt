@@ -11,8 +11,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun HWFirstTransactionScreen(args: HWDateArgs) {
-    val vm = koinViewModel<HWDateVM> { parametersOf(args) }
+fun HWFirstTransactionScreen(args: HWDateArgs, sourceEntryId: String) {
+    val vm = koinViewModel<HWDateVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val finalization by vm.finalization.collectAsStateWithLifecycle()
     LceRenderer(state) {

@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.connecthw.neworactive
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -30,12 +31,18 @@ class HWNewOrActiveVM(
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     viewOnlyContent: ViewOnlyContent,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val newOrActive = branding.newOrActive
     private val createAccountLce = mutableLce<Unit>()
 
-    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
+    internal val finalization =
+        observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce, sourceEntryId)
 
     val state: StateFlow<LceState<HWNewOrActiveState>> =
         createAccountLce.state
@@ -81,7 +88,7 @@ class HWNewOrActiveVM(
         createAccountLce.guardLoading {
             if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             createAccountLce.execute {
-                createHWWalletAccount(args.enrollment, birthday = null)
+                createHWWalletAccount(args.enrollment, birthday = null, sourceEntryId)
             }
         }
 

@@ -2,7 +2,10 @@ package co.electriccoin.zcash.ui.screen.migration.howitworks
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -19,7 +22,12 @@ class MigrationHowItWorksVM(
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val getMigrationPrivacyOrReviewDestination: GetMigrationPrivacyOrReviewDestinationUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val lce = mutableLce<Unit>()
 
     val state: StateFlow<LceState<MigrationHowItWorksState>> =
@@ -37,7 +45,8 @@ class MigrationHowItWorksVM(
         if (onContinueJob?.isActive == true) return
         onContinueJob =
             viewModelScope.launch {
-                navigationRouter.forward(getMigrationPrivacyOrReviewDestination(MigrationMode.AUTOMATIC))
+                val destination = getMigrationPrivacyOrReviewDestination(MigrationMode.AUTOMATIC)
+                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
             }
     }
 

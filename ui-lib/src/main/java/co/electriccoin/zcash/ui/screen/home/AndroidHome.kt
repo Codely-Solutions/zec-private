@@ -23,7 +23,7 @@ import co.electriccoin.zcash.ui.screen.updates.AndroidAppUpdateNotice
 import co.electriccoin.zcash.ui.screen.updates.rememberAppUpdateNotice
 
 @Composable
-internal fun AndroidHome() {
+internal fun AndroidHome(sourceEntryId: String) {
     val donationRouter = koinInject<NavigationRouter>()
     val topAppBarVM = koinActivityViewModel<ZashiTopAppBarVM>()
     val balanceWidgetVM =
@@ -37,7 +37,7 @@ internal fun AndroidHome() {
                 )
             )
         }
-    val homeVM = koinViewModel<HomeVM>()
+    val homeVM = koinViewModel<HomeVM> { parametersOf(sourceEntryId) }
     val activityWidgetVM = koinViewModel<ActivityWidgetVM>()
     val appBarState by topAppBarVM.state.collectAsStateWithLifecycle()
     val balanceState by balanceWidgetVM.state.collectAsStateWithLifecycle()

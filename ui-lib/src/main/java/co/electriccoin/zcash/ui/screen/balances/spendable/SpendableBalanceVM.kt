@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import cash.z.ecc.sdk.extension.typicalFee
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
@@ -29,7 +30,13 @@ class SpendableBalanceVM(
     accountDataSource: AccountDataSource,
     private val navigationRouter: NavigationRouter,
     private val shieldFunds: ShieldFundsUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     val state =
         accountDataSource.selectedAccount.map { account ->
             createState(account)
@@ -166,7 +173,7 @@ class SpendableBalanceVM(
         if (canShield) {
             SpendableBalanceShieldButtonState(
                 amount = balances.transparentBalance,
-                onShieldClick = shieldFunds.confirm(account, closeCurrentScreen = true)
+                onShieldClick = shieldFunds.confirm(account, closeCurrentScreen = true, sourceEntryId)
             )
         } else {
             null

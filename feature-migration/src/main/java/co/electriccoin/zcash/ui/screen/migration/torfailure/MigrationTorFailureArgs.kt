@@ -48,8 +48,8 @@ data class MigrationTorFailureArgs(val accountKeyId: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MigrationTorFailureScreen(args: MigrationTorFailureArgs) {
-    val vm = koinViewModel<MigrationTorFailureVM> { parametersOf(args) }
+fun MigrationTorFailureScreen(args: MigrationTorFailureArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationTorFailureVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     MigrationTorFailureView(state)
 }

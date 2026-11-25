@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.SdkSynchronizer
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
@@ -44,12 +45,18 @@ class HWDateVM(
     private val application: Application,
     private val errorStateMapper: ErrorMapperUseCase,
     viewOnlyContent: ViewOnlyContent,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val selection = MutableStateFlow(WalletFixture.SAPLING_ACTIVATION_YEAR_MONTH)
     private val estimateLce = mutableLce<Unit>()
 
-    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, estimateLce)
+    internal val finalization =
+        observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, estimateLce, sourceEntryId)
 
     val state: StateFlow<LceState<BirthdayPickerState>> =
         combine(selection, estimateLce.state) { yearMonth, estimate ->

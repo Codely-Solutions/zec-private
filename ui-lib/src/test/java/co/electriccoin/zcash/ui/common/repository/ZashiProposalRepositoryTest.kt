@@ -75,6 +75,38 @@ class ZashiProposalRepositoryTest {
     }
 
     @Test
+    fun aLateShieldDoesNotReplaceTheOrdinaryDraftOrItsResult() = runBlocking {
+        val account = EditAccountFixtures.zodl()
+        val sdkProposal = mockk<Proposal>()
+        val approval = ShieldingApproval(account) { true }
+        val started = CompletableDeferred<Unit>()
+        val ready = CompletableDeferred<ShieldTransactionProposal>()
+        coEvery { proposals.createShieldProposal(account) } coAnswers {
+            started.complete(Unit)
+            ready.await()
+        }
+        val preparation = async { repository.createShieldProposal(approval) }
+        started.await()
+        val draft = RegularTransactionProposal(
+            WalletAddress.Unified.new("synthetic-review"), Zatoshi(1), Memo(""), mockk<Proposal>()
+        )
+        repository.transactionProposal.value = draft
+        val draftState = SubmitProposalState.Result(SubmitResult.Success(listOf("earlier-review")))
+        repository.submitState.value = draftState
+        ready.complete(ShieldTransactionProposal(sdkProposal))
+        coEvery { keys.getZashiSpendingKey() } returns mockk()
+        val outcome = SubmitResult.Success(listOf("isolated-shield"))
+        coEvery { proposals.submitTransaction(sdkProposal, any<UnifiedSpendingKey>(), any()) } coAnswers {
+            thirdArg<() -> Unit>().invoke()
+            outcome
+        }
+
+        assertEquals(outcome, repository.submit(preparation.await()))
+        assertSame(draft, repository.transactionProposal.value)
+        assertSame(draftState, repository.submitState.value)
+    }
+
+    @Test
     fun aShieldWhoseOwnerChangesBeforeFirstSdkSubmissionCannotBroadcast() = runBlocking {
         val account = EditAccountFixtures.zodl()
         val sdkProposal = mockk<Proposal>()

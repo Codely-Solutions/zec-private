@@ -206,7 +206,7 @@ class MigrationCompleteVM(
             } catch (e: Exception) {
                 migrationLog("Migration acknowledgment unavailable (${e.javaClass.simpleName}).")
             }
-            navigationRouter.backToRoot()
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSource
 import co.electriccoin.zcash.ui.common.migration.MigrationHomeMessageSource
@@ -79,7 +80,13 @@ class HomeVM(
     private val homeMessageMapper: HomeMessageMapper,
     walletSnapshotDataSource: WalletSnapshotDataSource,
     getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private var hasSyncErrorBeenShown = false
     private var hasRestoreSuccessBeenShown = false
     private var hasAttemptedPendingVotingRouteRecovery = false
@@ -293,7 +300,7 @@ class HomeVM(
             }
 
             is HomeMessageData.ShieldFunds -> {
-                val shield = shieldFundsFromMessage.action(data.account)
+                val shield = shieldFundsFromMessage.action(data.account, sourceEntryId)
                 val onShield: () -> Unit = { viewModelScope.launch { shield() } }
                 homeMessageMapper.createState(
                     data = data,

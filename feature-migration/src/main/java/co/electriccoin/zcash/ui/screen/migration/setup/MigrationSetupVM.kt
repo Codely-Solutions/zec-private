@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.migration.MigrationGateInfo
@@ -50,7 +53,12 @@ class MigrationSetupVM(
     private val getMigrationPrivacyOrReviewDestination: GetMigrationPrivacyOrReviewDestinationUseCase,
     private val getMigrationGateInfo: GetMigrationGateInfoUseCase,
     private val migrationUpgradeNotice: MigrationUpgradeNoticeStorageProvider,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val accountLce = mutableLce<Zatoshi>()
     private val selectedMode = MutableStateFlow(MigrationMode.AUTOMATIC)
 
@@ -143,9 +151,8 @@ class MigrationSetupVM(
         when (effectiveMigrationMode(selectedMode.value, currentGate)) {
             MigrationMode.IMMEDIATE -> {
                 viewModelScope.launch {
-                    navigationRouter.forward(
-                        getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
-                    )
+                    val destination = getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
                 }
             }
 

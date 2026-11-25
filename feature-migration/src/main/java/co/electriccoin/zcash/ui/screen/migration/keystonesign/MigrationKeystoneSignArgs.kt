@@ -18,8 +18,8 @@ data class MigrationKeystoneSignArgs(
 )
 
 @Composable
-fun MigrationKeystoneSignScreen(args: MigrationKeystoneSignArgs) {
-    val vm = koinViewModel<MigrationKeystoneSignVM> { parametersOf(args) }
+fun MigrationKeystoneSignScreen(args: MigrationKeystoneSignArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationKeystoneSignVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()
     BackHandler(state != null) { state?.onBack?.invoke() }

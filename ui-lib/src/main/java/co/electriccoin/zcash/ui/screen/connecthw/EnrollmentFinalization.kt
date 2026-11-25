@@ -36,6 +36,7 @@ internal fun ViewModel.observeEnrollmentFinalization(
     enrollment: HWWalletEnrollment,
     createAccount: CreateHWWalletAccountUseCase,
     lce: MutableLce<Unit>,
+    sourceEntryId: String? = null,
 ) = combine(createAccount.observeCommittedBirthday(enrollment), lce.state) { birthday, operation ->
     birthday?.let { committed ->
         EnrollmentFinalizationState(
@@ -46,7 +47,7 @@ internal fun ViewModel.observeEnrollmentFinalization(
                 isLoading = operation.loading,
                 onClick = {
                     lce.guardLoading {
-                        lce.execute { createAccount.finish(enrollment, committed) }
+                        lce.execute { createAccount.finish(enrollment, committed, sourceEntryId) }
                     }
                 },
             ),

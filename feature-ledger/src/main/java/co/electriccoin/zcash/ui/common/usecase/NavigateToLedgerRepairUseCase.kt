@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
@@ -12,8 +14,8 @@ import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectArgs
  * viewing key is then reported as the wrong Ledger rather than added. The account's ZIP 32 index
  * goes with it when its binding still holds one, so the scan screen can offer it.
  *
- * The account is read before the session ends, so nothing suspends between leaving the sign sheet
- * and opening the flow.
+ * Resolve the account before replacing the signing sheet. The session ends when that sheet can
+ * deliver its repair route.
  */
 class NavigateToLedgerRepairUseCase(
     private val accountDataSource: AccountDataSource,
@@ -21,13 +23,15 @@ class NavigateToLedgerRepairUseCase(
     private val cancelLedgerSigning: CancelLedgerSigningUseCase,
     private val navigationRouter: NavigationRouter,
 ) {
-    suspend operator fun invoke() {
+    suspend operator fun invoke(sourceEntryId: String? = null) {
         val account = accountDataSource.getSelectedAccount()
-        cancelLedgerSigning()
-        ledgerRepairTargetRepository.set(
-            accountUuid = account.sdkAccount.accountUuid,
-            zip32AccountIndex = (account as? LedgerAccount)?.zip32AccountIndex,
-        )
-        navigationRouter.forward(LedgerConnectArgs)
+        navigationRouter.stageResultFrom(sourceEntryId) {
+            cancelLedgerSigning(navigateBack = false)
+            ledgerRepairTargetRepository.set(
+                accountUuid = account.sdkAccount.accountUuid,
+                zip32AccountIndex = (account as? LedgerAccount)?.zip32AccountIndex,
+            )
+            NavigationCommand.Replace(listOf(LedgerConnectArgs))
+        }
     }
 }

@@ -7,7 +7,10 @@ import cash.z.ecc.android.sdk.exception.LedgerException
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ledger.R
 import co.electriccoin.zcash.spackle.Twig
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.LedgerIssue
 import co.electriccoin.zcash.ui.common.model.LedgerIssueContext
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
@@ -56,6 +59,7 @@ class LedgerOpenAppVM(
     private val openLedgerZcashApp: OpenLedgerZcashAppUseCase,
     private val navigateToError: NavigateToErrorUseCase,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : AndroidViewModel(application) {
     private val internalState =
         MutableStateFlow(
@@ -80,6 +84,7 @@ class LedgerOpenAppVM(
     }
 
     override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
         cancelOpenApp()
         super.onCleared()
     }
@@ -200,12 +205,14 @@ class LedgerOpenAppVM(
             when (result) {
                 OpenLedgerZcashAppResult.Opened -> {
                     internalState.update { it.copy(phase = LedgerOpenAppPhase.IDLE) }
-                    navigationRouter.forward(LedgerHandshakeArgs)
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Forward(listOf(LedgerHandshakeArgs))
+                    }
                 }
 
                 OpenLedgerZcashAppResult.NoDevice -> {
                     internalState.update { it.copy(phase = LedgerOpenAppPhase.IDLE) }
-                    navigationRouter.backToRoot()
+                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                 }
             }
         } catch (e: CancellationException) {

@@ -1,6 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
@@ -43,31 +47,41 @@ class ShieldFundsUseCase(
 
     private var job: Job? = null
 
-    fun confirm(account: WalletAccount, closeCurrentScreen: Boolean): () -> Unit {
+    fun confirm(account: WalletAccount, closeCurrentScreen: Boolean, sourceEntryId: String? = null): () -> Unit {
         val wallet = walletWriteAccess.token()
         val owner = account.sdkAccount.accountUuid
         val approval = ShieldingApproval(account) {
             walletWriteAccess.permits(wallet) &&
                 accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
         }
-        return { shield(approval, closeCurrentScreen) }
+        return { shield(approval, closeCurrentScreen, sourceEntryId) }
     }
 
-    private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean) {
-        if (job?.isActive == true || !approval.isCurrent()) return
+    private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean, sourceEntryId: String?) {
+        if (job?.isActive == true || !approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return
+        val outcomeEntryId =
+            if (closeCurrentScreen && sourceEntryId != null) {
+                navigationRouter.activeEntry.value?.contentEntryId ?: sourceEntryId
+            } else {
+                sourceEntryId
+            }
         job =
             scope.launch {
-                if (!approval.isCurrent()) return@launch
+                if (!approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return@launch
                 messageAvailabilityDataSource.onShieldingInitiated()
 
-                if (!approval.isCurrent()) return@launch
+                if (!approval.isCurrent() || !navigationRouter.isAtEntry(sourceEntryId)) return@launch
                 when (approval.account) {
                     is KeystoneAccount -> {
-                        createKeystoneShieldProposal(approval)
+                        navigationRouter.whileAtEntry(sourceEntryId) {
+                            createKeystoneShieldProposal(approval, sourceEntryId)
+                        }
                     }
 
                     is LedgerAccount -> {
-                        createLedgerShieldProposal(approval)
+                        navigationRouter.whileAtEntry(sourceEntryId) {
+                            createLedgerShieldProposal(approval, sourceEntryId)
+                        }
                     }
 
                     is ViewOnlyAccount -> {
@@ -80,25 +94,24 @@ class ShieldFundsUseCase(
 
                     is ZodlAccount -> {
                         if (closeCurrentScreen) {
-                            navigationRouter.back()
+                            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
                         }
-                        shieldZashiFunds(approval)
+                        shieldZashiFunds(approval, outcomeEntryId)
                     }
                 }
             }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun shieldZashiFunds(approval: ShieldingApproval) {
-        var created: ShieldTransactionProposal? = null
+    private suspend fun shieldZashiFunds(approval: ShieldingApproval, outcomeEntryId: String?) {
         try {
-            val proposal = zashiProposalRepository.createShieldProposal(approval).also { created = it }
+            val proposal = zashiProposalRepository.createShieldProposal(approval)
             when (val result = zashiProposalRepository.submit(proposal)) {
                 is SubmitResult.Failure,
                 is SubmitResult.GrpcFailure,
                 is SubmitResult.Error,
                 is SubmitResult.Partial -> {
-                    navigateToError(ErrorArgs.ShieldingError(result))
+                    showShieldError(ErrorArgs.ShieldingError(result), approval, outcomeEntryId)
                 }
 
                 is SubmitResult.Success -> {
@@ -108,21 +121,23 @@ class ShieldFundsUseCase(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
-        } finally {
-            created?.let(zashiProposalRepository::clear)
+            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, outcomeEntryId)
         }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval) {
+    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
         var created: ShieldTransactionProposal? = null
         try {
             val proposal = keystoneProposalRepository.createShieldProposal(approval).also { created = it }
             keystoneProposalRepository.createPCZTFromProposal(approval.account)
             approval.requireCurrent()
             keystoneProposalRepository.approveForSigning(proposal)
-            navigationRouter.forward(SignKeystoneTransactionArgs)
+            navigationRouter.stageResultFrom(sourceEntryId, {
+                approval.isCurrent() && keystoneProposalRepository.transactionProposal.value === proposal
+            }) {
+                NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+            }
         } catch (e: CancellationException) {
             clearOwnedShield(
                 created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
@@ -132,7 +147,7 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
             )
-            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
+            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, sourceEntryId)
         }
     }
 
@@ -141,14 +156,16 @@ class ShieldFundsUseCase(
      * and propagates the cancellation instead of reporting it as a shielding error.
      */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval) {
+    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
         var created: ShieldTransactionProposal? = null
         try {
             val proposal = ledgerProposalPipeline.createShieldProposal(approval).also { created = it }
             ledgerProposalPipeline.createPCZTFromProposal()
             approval.requireCurrent()
             ledgerProposalPipeline.approveForSigning(proposal)
-            ledgerNavigator.forwardToSign()
+            ledgerNavigator.forwardToSign(sourceEntryId) {
+                approval.isCurrent() && ledgerProposalPipeline.transactionProposal.value === proposal
+            }
         } catch (e: CancellationException) {
             clearOwnedShield(
                 created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
@@ -158,7 +175,18 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
             )
-            if (approval.isCurrent()) navigateToError(ErrorArgs.ShieldingGeneralError(e))
+            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, sourceEntryId)
+        }
+    }
+    private fun showShieldError(args: ErrorArgs, approval: ShieldingApproval, outcomeEntryId: String?) {
+        if (approval.isCurrent()) {
+            if (outcomeEntryId == null) {
+                navigateToError(args)
+            } else {
+                navigationRouter.stageResultFrom(outcomeEntryId, approval::isCurrent) {
+                    NavigationCommand.Forward(listOf(navigateToError.stage(args)))
+                }
+            }
         }
     }
 }

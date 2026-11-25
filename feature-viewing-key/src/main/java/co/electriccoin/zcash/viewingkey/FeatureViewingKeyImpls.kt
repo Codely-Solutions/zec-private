@@ -4,7 +4,9 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
 import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
@@ -109,17 +111,17 @@ internal class ViewOnlyAccountImporterImpl(
 
     override fun hasPendingImport(): Boolean = pendingImportRepository.get() != null
 
-    override fun continueWithBirthday(birthday: BlockHeight?) {
+    override fun continueWithBirthday(birthday: BlockHeight?, sourceEntryId: String?) {
         val pending = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
         if (pending.importedAccount != null) return
         if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
             throw ViewOnlyPendingImportMissingException()
         }
-        navigationRouter.forward(NameVKArgs)
+        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(NameVKArgs)) }
     }
 
-    override suspend fun finishImport() {
-        if (pendingImportRepository.get()?.importedAccount != null) importViewOnlyAccount()
+    override suspend fun finishImport(sourceEntryId: String?) {
+        if (pendingImportRepository.get()?.importedAccount != null) importViewOnlyAccount(sourceEntryId)
     }
 }
 
@@ -140,7 +142,7 @@ internal class ViewOnlyNavContributorImpl : ViewOnlyNavContributor {
             dialogComposable<AddVKAccountArgs> { AddVKAccountScreen() }
             composable<ImportVKArgs> { ImportVKScreen() }
             composable<ScanVKArgs> { ScanVKScreen() }
-            composable<NameVKArgs> { NameVKScreen() }
+            composable<NameVKArgs> { NameVKScreen(it.id) }
             composable<ImportedVKArgs> { ImportedVKScreen() }
             dialogComposable<AlreadyImportedVKArgs> { AlreadyImportedVKScreen() }
             dialogComposable<RemoveVKAccountArgs> { RemoveVKAccountScreen(it.toRoute()) }

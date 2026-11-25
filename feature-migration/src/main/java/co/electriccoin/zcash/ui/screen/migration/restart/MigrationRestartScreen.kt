@@ -9,8 +9,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun MigrationRestartScreen(args: MigrationRestartArgs) {
-    val vm = koinViewModel<MigrationRestartVM> { parametersOf(args) }
+fun MigrationRestartScreen(args: MigrationRestartArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationRestartVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     LceRenderer(state) { s ->
         BackHandler { s.onBack() }

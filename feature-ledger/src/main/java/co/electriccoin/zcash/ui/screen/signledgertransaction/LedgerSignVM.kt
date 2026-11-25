@@ -361,7 +361,7 @@ class LedgerSignVM(
      */
     private fun onPairLedgerClick() {
         if (repairJob?.isActive == true) return
-        repairJob = viewModelScope.launch { navigateToLedgerRepair() }
+        repairJob = viewModelScope.launch { navigateToLedgerRepair(sourceEntryId) }
     }
 }
 

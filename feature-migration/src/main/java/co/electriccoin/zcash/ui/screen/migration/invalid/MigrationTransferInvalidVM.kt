@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.AttentionReason
 import cash.z.ecc.android.sdk.MigrationRestartOutcome
 import cash.z.ecc.android.sdk.MigrationState
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
@@ -39,7 +42,12 @@ class MigrationTransferInvalidVM(
     private val restartMigrationScheduleRepository: RestartMigrationScheduleRepository,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val loadLce = mutableLce<Unit>()
     private val restartLce = mutableLce<Unit>()
 
@@ -132,11 +140,15 @@ class MigrationTransferInvalidVM(
             when (outcome) {
                 is MigrationRestartOutcome.Replanned -> {
                     restartMigrationScheduleRepository.set(owner, outcome.schedule)
-                    navigationRouter.replace(MigrationReviewArgs(MigrationMode.AUTOMATIC, owner))
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Replace(listOf(MigrationReviewArgs(MigrationMode.AUTOMATIC, owner)))
+                    }
                 }
 
                 is MigrationRestartOutcome.CancelledUntilNetworkUpgrade -> {
-                    navigationRouter.replace(MigrationSetupArgs)
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Replace(listOf(MigrationSetupArgs))
+                    }
                 }
             }
         }

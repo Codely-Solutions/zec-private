@@ -649,7 +649,7 @@ class LedgerSignVMTest {
             )
             runCurrent()
 
-            verify(exactly = 1) { navigationRouter.forward(LedgerConnectArgs) }
+            verify(exactly = 1) { navigationRouter.replace(LedgerConnectArgs) }
         }
 
     @Test

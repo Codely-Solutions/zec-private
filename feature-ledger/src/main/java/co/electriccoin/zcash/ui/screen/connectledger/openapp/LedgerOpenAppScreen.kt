@@ -10,8 +10,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun LedgerOpenAppScreen(args: LedgerOpenAppArgs) {
-    val vm = koinViewModel<LedgerOpenAppVM> { parametersOf(args) }
+fun LedgerOpenAppScreen(args: LedgerOpenAppArgs, sourceEntryId: String) {
+    val vm = koinViewModel<LedgerOpenAppVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
 
     LedgerBluetoothPermissionGate(

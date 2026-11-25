@@ -148,11 +148,10 @@ class ZashiProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
-        createProposalInternal {
-            approval.requireCurrent()
-            proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
-        }
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
+        approval.requireCurrent()
+        return proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
+    }
 
     override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
         MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
@@ -161,7 +160,9 @@ class ZashiProposalRepositoryImpl(
     override suspend fun submit(
         expectedProposal: TransactionProposal?,
         reviewedQuote: SwapQuoteData.Success?,
-    ): SubmitResult =
+    ): SubmitResult = if (expectedProposal is ShieldTransactionProposal && expectedProposal.approval != null) {
+        submitShield(expectedProposal)
+    } else {
         scope
             .async {
                 val transactionProposal = transactionProposal.value
@@ -224,6 +225,19 @@ class ZashiProposalRepositoryImpl(
                     }
                 }
             }.await()
+    }
+
+    private suspend fun submitShield(shield: ShieldTransactionProposal): SubmitResult =
+        scope.async {
+            shield.requireCurrentShieldingApproval()
+            val key = zashiSpendingKeyDataSource.getZashiSpendingKey()
+            shield.requireCurrentShieldingApproval()
+            proposalDataSource.submitTransaction(
+                proposal = shield.proposal,
+                usk = key,
+                beforeFirstSubmission = shield::requireCurrentShieldingApproval,
+            )
+        }.await()
 
     private fun publishOutcome(expected: TransactionProposal, result: SubmitResult) {
         submitState.update { if (transactionProposal.value === expected) SubmitProposalState.Result(result) else it }

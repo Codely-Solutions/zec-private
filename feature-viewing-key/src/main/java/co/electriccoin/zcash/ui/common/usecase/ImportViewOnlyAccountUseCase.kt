@@ -3,7 +3,9 @@ package co.electriccoin.zcash.ui.common.usecase
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.Account
 import co.electriccoin.zcash.spackle.Twig
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountAlreadyExistsException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountImportException
@@ -56,17 +58,19 @@ internal class ImportViewOnlyAccountUseCase(
      *         process death.
      * @throws ViewOnlyAccountImportException if the SDK rejected the key.
      */
-    suspend operator fun invoke() {
+    suspend operator fun invoke(sourceEntryId: String? = null) {
         val requested = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
         mutex.withLock {
-            if (pendingImportRepository.get() === requested) import(requested)
+            if (pendingImportRepository.get() === requested) import(requested, sourceEntryId)
         }
     }
 
-    private suspend fun import(pending: PendingViewOnlyImport) {
+    private suspend fun import(pending: PendingViewOnlyImport, sourceEntryId: String?) {
         val route = withContext(NonCancellable) { importAndSelect(pending) }
         currentCoroutineContext().ensureActive()
-        route?.let { navigationRouter.forward(it) }
+        route?.let { destination ->
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
+        }
     }
 
     /**

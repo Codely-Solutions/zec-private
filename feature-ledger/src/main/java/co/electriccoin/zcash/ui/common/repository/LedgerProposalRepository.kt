@@ -214,11 +214,17 @@ class LedgerProposalRepositoryImpl(
             )
         }
 
-    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
-        createProposalInternal {
-            approval.requireCurrent()
-            proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
+    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal {
+        val preceding = transactionProposal.value
+        approval.requireCurrent()
+        val shield = proposalDataSource.createShieldProposal(approval.account).copy(approval = approval)
+        currentCoroutineContext().ensureActive()
+        approval.requireCurrent()
+        check(transactionProposal.value === preceding && transactionProposal.compareAndSet(preceding, shield)) {
+            "The transaction changed during shielding preparation."
         }
+        return shield
+    }
 
     override suspend fun createPCZTFromProposal() {
         val transactionProposal = getTransactionProposal()

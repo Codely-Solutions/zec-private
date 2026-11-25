@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.connecthw.height
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
@@ -36,12 +37,18 @@ class HWHeightVM(
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     viewOnlyContent: ViewOnlyContent,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val blockHeightText = MutableStateFlow(NumberTextFieldInnerState())
     private val createAccountLce = mutableLce<Unit>()
 
-    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
+    internal val finalization =
+        observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce, sourceEntryId)
 
     val state: StateFlow<LceState<BlockHeightState>> =
         combine(blockHeightText, createAccountLce.state) { text, lce ->
@@ -85,7 +92,7 @@ class HWHeightVM(
             if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             val height = blockHeightText.value.birthdayHeightOrNull() ?: return@guardLoading
             createAccountLce.execute {
-                createHWWalletAccount(args.enrollment, height)
+                createHWWalletAccount(args.enrollment, height, sourceEntryId)
             }
         }
 

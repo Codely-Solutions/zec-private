@@ -11,8 +11,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun HWFirstTransactionEstimationScreen(args: HWEstimationArgs) {
-    val vm = koinViewModel<HWEstimationVM> { parametersOf(args) }
+fun HWFirstTransactionEstimationScreen(args: HWEstimationArgs, sourceEntryId: String) {
+    val vm = koinViewModel<HWEstimationVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val finalization by vm.finalization.collectAsStateWithLifecycle()
     LceRenderer(state) {

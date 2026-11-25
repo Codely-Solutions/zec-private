@@ -49,8 +49,8 @@ class NavigateToLedgerRepairUseCaseTest {
             assertEquals(accountUuid, repairTarget.get())
             assertEquals(Zip32AccountIndex.new(4), repairTarget.getZip32AccountIndex())
             verifyOrder {
-                cancelLedgerSigning.invoke()
-                navigationRouter.forward(LedgerConnectArgs)
+                cancelLedgerSigning.invoke(navigateBack = false)
+                navigationRouter.replace(LedgerConnectArgs)
             }
         }
 

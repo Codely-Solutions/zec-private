@@ -121,7 +121,7 @@ class SubmitProposalUseCaseTest {
 
             fx.submitReviewed(proposal)
 
-            verify(exactly = 1) { fx.ledgerNavigator.forwardToSign() }
+            verify(exactly = 1) { fx.ledgerNavigator.forwardToSign(null, any()) }
             verify(exactly = 0) { fx.swapRepository.clear() }
             verify(exactly = 0) { fx.prefillSend.clear() }
             verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
@@ -236,7 +236,7 @@ class SubmitProposalUseCaseTest {
         fx.useCase(proposal, publication)
 
         verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, refEq(publication)) }
-        verify(exactly = 2) { fx.ledgerNavigator.forwardToSign() }
+        verify(exactly = 2) { fx.ledgerNavigator.forwardToSign(null, any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction.reserveFunding(any(), any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
     }

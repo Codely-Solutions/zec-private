@@ -2,7 +2,10 @@ package co.electriccoin.zcash.ui.screen.migration.restart
 
 import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.component.destructive
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.groupLce
@@ -38,7 +41,12 @@ class MigrationRestartVM(
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private data class Summary(
         val owner: String,
         val completed: Int,
@@ -123,7 +131,7 @@ class MigrationRestartVM(
                 "The migration restart belongs to a different account"
             }
             restartMigration(owner)
-            navigationRouter.back()
+            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
         }
     }
 }

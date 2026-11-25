@@ -244,6 +244,8 @@ The submission progress tests keep the original proposal and its outcome togethe
 
 The shielding tests bind the displayed account and wallet generation through the native submission callback. The floating-dialog fixture opens a real scanner over signing and delivers the committed result once Review resumes. Migration retries preserve a known transaction ID when scheduling or a status lookup fails. Automatic schedule results return to their originating Review entry.
 
+Shield preparation and outcomes keep their display entry and wallet. A detached software Shield never owns the Send draft. The migration review fixture retries scheduling after a confirmed SDK commit without signing again. Enrollment, pairing and account-selection consumers deliver their results through the same resumed-entry gate.
+
 ## Historical funded coverage
 
 See [published status](STATUS.md) for the current release and its bound acceptance record.

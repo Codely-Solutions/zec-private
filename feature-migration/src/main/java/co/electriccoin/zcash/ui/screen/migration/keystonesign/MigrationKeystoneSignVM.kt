@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
@@ -41,7 +44,12 @@ class MigrationKeystoneSignVM(
     private val pendingSchedule: PendingMigrationScheduleRepository,
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
     private val navigationRouter: NavigationRouter,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
     private val qrParts = MutableStateFlow<List<String>?>(null)
     private val qrFrameIndex = MutableStateFlow(0)
 
@@ -75,7 +83,9 @@ class MigrationKeystoneSignVM(
                 val reviewed = pendingSchedule.review(accountKeyId) ?: return@runCatching null
                 val existing = pendingKeystonePczts.get(accountKeyId)
                 if (existing?.isFullySigned == true) {
-                    navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
+                    navigationRouter.stageResultFrom(sourceEntryId) {
+                        NavigationCommand.Replace(listOf(MigrationScheduledArgs(accountKeyId)))
+                    }
                     return@runCatching null
                 }
                 val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }

@@ -6,11 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AndroidShieldFundsInfo() {
-    val vm = koinViewModel<ShieldFundsInfoVM>()
+fun AndroidShieldFundsInfo(sourceEntryId: String) {
+    val vm = koinViewModel<ShieldFundsInfoVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     ShieldFundsInfoView(state)
 }

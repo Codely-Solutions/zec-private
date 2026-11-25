@@ -1237,6 +1237,7 @@
     <string name="migration_common_allow">Allow</string>
     <string name="migration_common_continue">Continue</string>
     <string name="migration_common_retry">Retry</string>
+    <string name="private_migration_finish_scheduling">Migration saved. Try again to finish scheduling.</string>
     <string name="migration_common_dismiss">Dismiss</string>
     <string name="migration_common_continueWithoutTor">Continue without Tor</string>
     <string name="migration_common_tryAgain">Try again</string>
