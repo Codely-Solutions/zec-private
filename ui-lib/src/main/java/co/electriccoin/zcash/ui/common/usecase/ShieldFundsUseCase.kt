@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
@@ -44,6 +45,7 @@ class ShieldFundsUseCase(
     private val messageAvailabilityDataSource: MessageAvailabilityDataSource,
     private val walletWriteAccess: WalletWriteAccess,
     private val appAccessSession: AppAccessSession,
+    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
 ) {
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
@@ -78,13 +80,15 @@ class ShieldFundsUseCase(
             }
         job =
             scope.launch {
-                val selection = accountDataSource.confirmSelection(account) ?: return@launch
-                val approval = newApproval(account) { sameSession() && selection() }
-                if (!canStartShield(approval, sourceEntryId)) return@launch
-                messageAvailabilityDataSource.onShieldingInitiated()
+                walletTransport.whileOperating {
+                    val selection = accountDataSource.confirmSelection(account) ?: return@whileOperating
+                    val approval = newApproval(account) { sameSession() && selection() }
+                    if (!canStartShield(approval, sourceEntryId)) return@whileOperating
+                    messageAvailabilityDataSource.onShieldingInitiated()
 
-                if (!canStartShield(approval, sourceEntryId)) return@launch
-                performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
+                    if (!canStartShield(approval, sourceEntryId)) return@whileOperating
+                    performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
+                }
             }
     }
 

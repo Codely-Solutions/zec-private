@@ -12,15 +12,20 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.runCurrent
@@ -28,6 +33,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
@@ -62,10 +69,11 @@ class AutomaticServerRepositoryTest {
         mockk<LightWalletEndpointProvider>(relaxed = true) { every { getEndpoints() } returns known }
     private val localBalances = MutableStateFlow<Map<AccountUuid, AccountBalance>?>(null)
     private val synchronizer = mockk<Synchronizer>(relaxed = true) { every { walletBalances } returns localBalances }
+    private val activeSynchronizer = MutableStateFlow<Synchronizer?>(synchronizer)
     private val synchronizerProvider =
         mockk<SynchronizerProvider>(relaxed = true).also {
             coEvery { it.getSynchronizerOrNull() } returns synchronizer
-            every { it.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)
+            every { it.synchronizer } returns activeSynchronizer
         }
 
     /**
@@ -91,6 +99,7 @@ class AutomaticServerRepositoryTest {
 
     private val timeSource = TestTimeSource()
 
+    private val transport = WalletTransportAccess()
     private val repository =
         AutomaticServerRepositoryImpl(
             zashiProposalRepository = zashiProposalRepository,
@@ -101,7 +110,8 @@ class AutomaticServerRepositoryTest {
             persistableWalletProvider = persistableWalletProvider,
             lightWalletEndpointProvider = lightWalletEndpointProvider,
             walletServerSelectionProvider = serverSelectionProvider,
-            evaluationInterval = EvaluationInterval(MINIMUM_EVALUATION_INTERVAL, timeSource)
+            evaluationInterval = EvaluationInterval(MINIMUM_EVALUATION_INTERVAL, timeSource),
+            walletTransport = transport,
         )
 
     @Test
@@ -325,6 +335,32 @@ class AutomaticServerRepositoryTest {
         assertEquals(listOf(known.last()), processed)
         coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
         coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
+    }
+
+    @Test
+    fun aWalletOperationDuringPersistenceWaitsForTheReplacementSynchronizer() = runTest {
+        stubSwitchDecision(balances = emptyMap())
+        val writing = CompletableDeferred<Unit>()
+        val durable = CompletableDeferred<Unit>()
+        coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } coAnswers {
+            writing.complete(Unit)
+            durable.await()
+            true
+        }
+        val transition = async { repository.observeSwitchCandidates(flowOf(Unit)).first() }
+        writing.await()
+
+        val spending = async { transport.whileOperating { transport.current(synchronizerProvider) } }
+        runCurrent()
+        assertFalse(spending.isCompleted)
+        durable.complete(Unit)
+        assertEquals(known.last(), transition.await())
+        runCurrent()
+        assertFalse(spending.isCompleted)
+
+        val replacement = mockk<Synchronizer>()
+        activeSynchronizer.value = replacement
+        assertSame(replacement, spending.await())
     }
 
     @Test

@@ -5,8 +5,12 @@ import cash.z.ecc.android.sdk.model.FirstClassByteArray
 import cash.z.ecc.android.sdk.model.TransactionSubmitResult
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.model.SubmitResult
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.util.CloseableScopeHolderImpl
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -18,10 +22,48 @@ import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.milliseconds
 
 class MultiEndpointTransactionSubmitterTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun remainingEndpointCallbacksPreventAutomaticSwitchAfterSuccessUntilTheyDrain() = runTest {
+        val transport = WalletTransportAccess()
+        val fast = endpoint("fast.example.com")
+        val slow = endpoint("slow.example.com")
+        val transaction = transaction(72)
+        val workerScope = CoroutineScope(
+            backgroundScope.coroutineContext + SupervisorJob(backgroundScope.coroutineContext[Job])
+        )
+        val graceMillis = 100L
+        val result = transport.whileOperating { lease ->
+            val submitter = MultiEndpointTransactionSubmitter(
+                closeableScopeHolder = CloseableScopeHolderImpl(workerScope),
+                gracePeriod = graceMillis.milliseconds,
+                logger = noOpLogger,
+                onDrained = lease.retainUntilDrain(),
+                submit = { _, target ->
+                    if (target == slow) awaitCancellation()
+                    TransactionSubmitResult.Success(transaction.txId)
+                }
+            )
+            submitter.submitTransactions(listOf(transaction), listOf(fast, slow), LOG_TAG)
+        }
+        assertIs<TransactionSubmitResult.Success>(result.single())
+
+        var switched = false
+        transport.ifIdleSwitch { switched = true }
+        assertFalse(switched)
+        advanceTimeBy(graceMillis)
+        runCurrent()
+
+        transport.ifIdleSwitch { switched = true }
+        assertTrue(switched)
+    }
+
     @Test
     fun manualModeSubmitsOnlyToSelectedEndpoint() =
         runTest {

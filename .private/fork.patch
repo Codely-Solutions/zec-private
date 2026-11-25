@@ -36430,7 +36430,7 @@ index 1a21cd376..0f9011394 100644
 +                simpleSwapAssetProvider = get(),
 +                walletWriteAccess = get(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-index 9c294ca9d..af98ba488 100644
+index 9c294ca9d..9d00935ef 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 @@ -22,0 +23,2 @@ import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
@@ -36441,25 +36441,27 @@ index 9c294ca9d..af98ba488 100644
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProviderImpl
 @@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
-@@ -81,0 +83,3 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+@@ -81,0 +83,4 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -84,0 +89 @@ import org.koin.dsl.bind
+@@ -84,0 +90 @@ import org.koin.dsl.bind
 +import org.koin.dsl.binds
-@@ -94 +99,4 @@ val providerModule =
+@@ -94 +100,5 @@ val providerModule =
 -        singleOf(::PersistableWalletProviderImpl) bind PersistableWalletProvider::class
 +        singleOf(::PersistableWalletProviderImpl) binds
 +            arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
 +        single { WalletWriteAccess(get()) }
++        singleOf(::WalletTransportAccess)
 +        singleOf(::WalletEnrollmentAccess)
-@@ -96 +103,0 @@ val providerModule =
+@@ -96 +105,0 @@ val providerModule =
 -        singleOf(::IsServerSelectionAutomaticProviderImpl) bind IsServerSelectionAutomaticProvider::class
-@@ -102,0 +110 @@ val providerModule =
+@@ -102,0 +112 @@ val providerModule =
 +                migrationSyncGate = get(),
-@@ -129,0 +138 @@ val providerModule =
+@@ -129,0 +140 @@ val providerModule =
 +        single { QuoteRequestDiagnostics() }
-@@ -136,0 +146,3 @@ val providerModule =
+@@ -136,0 +148,3 @@ val providerModule =
 +        single {
 +            KrakenPriceProvider(get(), elapsedTimeMillis = get<GetMonotonicTimeProvider>()::invoke)
 +        } bind IndependentPriceProvider::class
@@ -38195,7 +38197,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..f0a50b256 100644
+index 4d388e80f..13d22da17 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -38205,48 +38207,50 @@ index 4d388e80f..f0a50b256 100644
 @@ -27,0 +30,2 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 +import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 +import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
-@@ -28,0 +33 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -28,0 +33,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 +import co.electriccoin.zcash.ui.common.provider.recoverableReads
-@@ -29,0 +35 @@ import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
+@@ -29,0 +36 @@ import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -41 +46,0 @@ import kotlinx.coroutines.channels.Channel
+@@ -41 +47,0 @@ import kotlinx.coroutines.channels.Channel
 -import kotlinx.coroutines.channels.ClosedSendChannelException
-@@ -45,0 +51 @@ import kotlinx.coroutines.flow.MutableSharedFlow
+@@ -45,0 +52 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -70,0 +77,3 @@ interface AccountDataSource {
+@@ -70,0 +78,3 @@ interface AccountDataSource {
 +    val accountSelectionReadState: Flow<AccountSelectionAvailability>
 +        get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 +
-@@ -76,0 +86,3 @@ interface AccountDataSource {
+@@ -76,0 +87,3 @@ interface AccountDataSource {
 +    /** Resolves the expected selected account and returns the guard for the first SDK operation. */
 +    suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)?
 +
-@@ -83,0 +96 @@ interface AccountDataSource {
+@@ -83,0 +97 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -94,0 +108 @@ interface AccountDataSource {
+@@ -94,0 +109 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -113,0 +128 @@ interface AccountDataSource {
+@@ -113,0 +129 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -119 +134,5 @@ interface AccountDataSource {
+@@ -119 +135,5 @@ interface AccountDataSource {
 -    suspend fun requestNextShieldedAddress(): String
 +    /**
 +     * A best-effort request uses the selected account if it is ready, or returns null while it
 +     * loads. A strict request throws when it cannot obtain a fresh address from the requested account.
 +     */
 +    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String?
-@@ -135,0 +155,4 @@ interface AccountDataSource {
+@@ -135,0 +156,4 @@ interface AccountDataSource {
 +data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
 +
 +enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
 +
-@@ -143,0 +167,4 @@ class AccountDataSourceImpl(
+@@ -143,0 +168,5 @@ class AccountDataSourceImpl(
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
 +        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
-@@ -146 +172,0 @@ class AccountDataSourceImpl(
++    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
+@@ -146 +174,0 @@ class AccountDataSourceImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-@@ -149,0 +176,24 @@ class AccountDataSourceImpl(
+@@ -149,0 +178,24 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    private val selectedAccountRead = combine(accountWalletAvailability, accountPreferenceReads, ::Pair)
 +        .flatMapLatest { (wallet, generation) ->
@@ -38271,25 +38275,25 @@ index 4d388e80f..f0a50b256 100644
 +        AccountSelectionAvailability(read?.generation ?: accountPreferenceReads.value, state)
 +    }.distinctUntilChanged()
 +
-@@ -160,0 +211 @@ class AccountDataSourceImpl(
+@@ -160,0 +213 @@ class AccountDataSourceImpl(
 +                val generation = accountPreferenceReads.value
-@@ -173 +223,0 @@ class AccountDataSourceImpl(
+@@ -173 +225,0 @@ class AccountDataSourceImpl(
 -                                        observeIsSelected(sdkAccount, allSdkAccounts),
-@@ -179 +228,0 @@ class AccountDataSourceImpl(
+@@ -179 +230,0 @@ class AccountDataSourceImpl(
 -                                        isSelected,
-@@ -186 +234,0 @@ class AccountDataSourceImpl(
+@@ -186 +236,0 @@ class AccountDataSourceImpl(
 -                                            isSelected = isSelected,
-@@ -193 +241 @@ class AccountDataSourceImpl(
+@@ -193 +243 @@ class AccountDataSourceImpl(
 -                            }.combineToFlow()
 +                            }.combineToFlow().map { AccountRows(generation, it) }
-@@ -196,2 +244,2 @@ class AccountDataSourceImpl(
+@@ -196,2 +246,2 @@ class AccountDataSourceImpl(
 -            }.map { it?.sortedDescending() }
 -            .retainWhileWalletExists(persistableWalletProvider)
 +            }.retainWhileWalletExists(persistableWalletProvider)
 +            .combine(currentSelection) { snapshot, read -> applyAccountSelection(snapshot, read) }
-@@ -219,0 +268,15 @@ class AccountDataSourceImpl(
+@@ -219,0 +270,16 @@ class AccountDataSourceImpl(
 +    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = withContext(Dispatchers.IO) {
-+        val sync = synchronizerProvider.synchronizer.value ?: return@withContext null
++        val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
 +        runCatchingRecoverable {
 +            val selection = selectedAccountUUIDProvider.captureSelection()
 +            val accounts = sync.getAccounts()
@@ -38297,15 +38301,16 @@ index 4d388e80f..f0a50b256 100644
 +            val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
 +            val selected = expected != null && isSelected(expected, uuid, accounts.size, currentAccountList = true)
 +            val permits = {
-+                selectedAccountUUIDProvider.isCurrent(selection) && synchronizerProvider.synchronizer.value === sync
++                selectedAccountUUIDProvider.isCurrent(selection) && !walletTransport.isRetired(sync) &&
++                    synchronizerProvider.synchronizer.value === sync
 +            }
 +            permits.takeIf { selected && it() }
 +        }.getOrNull()
 +    }
 +
-@@ -230,0 +294 @@ class AccountDataSourceImpl(
+@@ -230,0 +297 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -237,15 +301,13 @@ class AccountDataSourceImpl(
+@@ -237,15 +304,13 @@ class AccountDataSourceImpl(
 -            synchronizerProvider
 -                .getSynchronizer()
 -                .importAccountByUfvk(
@@ -38334,18 +38339,18 @@ index 4d388e80f..f0a50b256 100644
 +                    birthday = birthday,
 +                ),
 +            )
-@@ -262,0 +325 @@ class AccountDataSourceImpl(
+@@ -262,0 +328 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -267 +329,0 @@ class AccountDataSourceImpl(
+@@ -267 +332,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -284 +346 @@ class AccountDataSourceImpl(
+@@ -284 +349 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
-@@ -303,0 +366 @@ class AccountDataSourceImpl(
+@@ -303,0 +369 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -309 +371,0 @@ class AccountDataSourceImpl(
+@@ -309 +374,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -354,0 +417,10 @@ class AccountDataSourceImpl(
+@@ -354,0 +420,10 @@ class AccountDataSourceImpl(
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String? {
 +        val requestedAccount = account ?: allAccounts.value?.firstOrNull { it.isSelected }
 +        val address = requestedAccount?.let { rotateShieldedAddress(it) }
@@ -38356,7 +38361,7 @@ index 4d388e80f..f0a50b256 100644
 +        }
 +    }
 +
-@@ -356,22 +428,17 @@ class AccountDataSourceImpl(
+@@ -356,22 +431,17 @@ class AccountDataSourceImpl(
 -    override suspend fun requestNextShieldedAddress(): String {
 -        var result: String? = null
 -        scope
@@ -38396,7 +38401,7 @@ index 4d388e80f..f0a50b256 100644
 +            null
 +        } finally {
 +            responseChannel.close()
-@@ -391,7 +458,3 @@ class AccountDataSourceImpl(
+@@ -391,7 +461,3 @@ class AccountDataSourceImpl(
 -     * Between the cleared selection and the caller's next one there is a short window in which no
 -     * account UUID is stored and the selection falls back to the default account. DisconnectUseCase
 -     * and RemoveViewOnlyAccountUseCase close it by selecting the Zodl account right after this
@@ -38407,43 +38412,43 @@ index 4d388e80f..f0a50b256 100644
 +     * With no surviving selected UUID, the account flow falls back to the default account.
 +     * Clearing the deleted UUID and explicit account selections serialize so a newer selection
 +     * survives account removal.
-@@ -415,3 +478 @@ class AccountDataSourceImpl(
+@@ -415,3 +481 @@ class AccountDataSourceImpl(
 -                if (selectedAccountUUIDProvider.getUUID() == accountUuid) {
 -                    selectedAccountUUIDProvider.clearUUID()
 -                }
 +                selectedAccountUUIDProvider.clearIfSelected(accountUuid)
-@@ -446 +507 @@ class AccountDataSourceImpl(
+@@ -446 +510 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +544 @@ class AccountDataSourceImpl(
+@@ -483 +547 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -487 +548 @@ class AccountDataSourceImpl(
+@@ -487 +551 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -497 +558 @@ class AccountDataSourceImpl(
+@@ -497 +561 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -501 +562 @@ class AccountDataSourceImpl(
+@@ -501 +565 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -515 +576 @@ class AccountDataSourceImpl(
+@@ -515 +579 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -526 +587 @@ class AccountDataSourceImpl(
+@@ -526 +590 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -532 +593 @@ class AccountDataSourceImpl(
+@@ -532 +596 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -536,0 +598 @@ class AccountDataSourceImpl(
+@@ -536,0 +601 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -539 +601,3 @@ class AccountDataSourceImpl(
+@@ -539 +604,3 @@ class AccountDataSourceImpl(
 -            ledgerAccountBindingProvider.observe(sdkAccount.accountUuid)
 +            accountPreferenceReads.flatMapLatest {
 +                ledgerAccountBindingProvider.observe(sdkAccount.accountUuid).recoverableReads().map { it.getOrNull() }
 +            }
-@@ -549,12 +613,20 @@ class AccountDataSourceImpl(
+@@ -549,12 +616,20 @@ class AccountDataSourceImpl(
 -    private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
 -        selectedAccountUUIDProvider
 -            .uuid
@@ -38476,13 +38481,13 @@ index 4d388e80f..f0a50b256 100644
 +    private fun isSelected(sdkAccount: Account, uuid: AccountUuid?, count: Int, currentAccountList: Boolean) =
 +        sdkAccount.accountUuid == uuid ||
 +            (currentAccountList && (count == 1 || (uuid == null && !isOrchardOnlyAccount(sdkAccount))))
-@@ -565 +637 @@ class AccountDataSourceImpl(
+@@ -565 +640 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +648 @@ class AccountDataSourceImpl(
+@@ -576 +651 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -598,6 +670,2 @@ class AccountDataSourceImpl(
+@@ -598,6 +673,2 @@ class AccountDataSourceImpl(
 -                        try {
 -                            it.responseChannel.send(address)
 -                            it.responseChannel.close()
@@ -38491,14 +38496,14 @@ index 4d388e80f..f0a50b256 100644
 -                        }
 +                        it.responseChannel.trySend(address)
 +                        it.responseChannel.close()
-@@ -610,2 +678 @@ class AccountDataSourceImpl(
+@@ -610,2 +681 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +693 @@ class AccountDataSourceImpl(
+@@ -626 +696 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +695,12 @@ class AccountDataSourceImpl(
+@@ -628 +698,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -38512,7 +38517,7 @@ index 4d388e80f..f0a50b256 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -655,0 +734,12 @@ private data class AddressRequest(
+@@ -655,0 +737,12 @@ private data class AddressRequest(
 +private data class SelectedAccountRead(val generation: Long, val result: Result<AccountUuid?>)
 +
 +private data class AccountRows(val generation: Long, val accounts: List<WalletAccount>)
@@ -38525,12 +38530,12 @@ index 4d388e80f..f0a50b256 100644
 +        is ViewOnlyAccount -> copy(isSelected = selected)
 +    }
 +
-@@ -659 +749 @@ private data class AccountSnapshot(
+@@ -659 +752 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -661 +750,0 @@ private data class AccountSnapshot(
+@@ -661 +753,0 @@ private data class AccountSnapshot(
 -    val isSelected: Boolean,
-@@ -665,0 +755,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +758,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -38546,7 +38551,7 @@ index 4d388e80f..f0a50b256 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -667,5 +771,2 @@ private const val RETRY_DELAY = 3L
+@@ -667,5 +774,2 @@ private const val RETRY_DELAY = 3L
 - * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
 - * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
 - * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
@@ -38554,7 +38559,7 @@ index 4d388e80f..f0a50b256 100644
 - * address.
 + * Bounds both submission to the rotation collector and delivery of the address. Receive can
 + * use the current address on timeout. A swap that requires a new address must get one first.
-@@ -720,0 +822,3 @@ class AccountDeletionException(
+@@ -720,0 +825,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -39391,16 +39396,24 @@ index abf14322d..0431cbab9 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
-index c38424cc6..80a6ff4dc 100644
+index c38424cc6..31eed37bb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt
-@@ -35,0 +36 @@ internal interface MultiEndpointTransactionSubmitter {
+@@ -35,0 +36,2 @@ internal interface MultiEndpointTransactionSubmitter {
 +            beforeFirstSubmission: () -> Unit = {},
-@@ -43,0 +45 @@ internal interface MultiEndpointTransactionSubmitter {
++            onDrained: (() -> Unit)? = null,
+@@ -43,0 +46 @@ internal interface MultiEndpointTransactionSubmitter {
 +                beforeFirstSubmission = beforeFirstSubmission,
-@@ -54,0 +57 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -45 +48,5 @@ internal interface MultiEndpointTransactionSubmitter {
+-            )
++            ).also { worker ->
++                onDrained?.let { complete ->
++                    checkNotNull(worker.scope.coroutineContext[Job]).invokeOnCompletion { complete() }
++                }
++            }
+@@ -54,0 +62 @@ private class MultiEndpointTransactionSubmitterImpl(
 +    beforeFirstSubmission: () -> Unit,
-@@ -57,0 +61,7 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -57,0 +66,7 @@ private class MultiEndpointTransactionSubmitterImpl(
 +    // Every endpoint shares one decision at actual SDK entry. Cache failure as well as success:
 +    // no worker may submit after another worker refused the reviewed funding. After first entry,
 +    // all legs retain their SDK retry plans even if the quote expires or a response is uncertain.
@@ -39408,26 +39421,26 @@ index c38424cc6..80a6ff4dc 100644
 +        runCatching(beforeFirstSubmission)
 +    }
 +
-@@ -67,4 +77,2 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -67,4 +82,2 @@ private class MultiEndpointTransactionSubmitterImpl(
 -            // Submit every created transaction even after an earlier one fails. The SDK only records a
 -            // retry plan (and keeps rebroadcasting in the background until the transaction mines or expires)
 -            // for transactions it was asked to submit; skipping later transactions on a failure would strand
 -            // them forever. Matches the iOS Broadcaster integration.
 +            // Explicitly attempt every leg after admission even if an earlier endpoint refused. The SDK
 +            // can independently retry stored transactions. App endpoint admission only controls these calls.
-@@ -149,0 +158,6 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -149,0 +163,6 @@ private class MultiEndpointTransactionSubmitterImpl(
 +                        firstSubmission.value.exceptionOrNull()?.let { cause ->
 +                            completion.completeExceptionally(cause)
 +                            return@async EndpointSubmission(
 +                                endpointLabel, TransactionSubmitResult.NotAttempted(transaction.txId)
 +                            )
 +                        }
-@@ -242 +256 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -242 +261 @@ private class MultiEndpointTransactionSubmitterImpl(
 -                        "$logTag $transactionLabel rejected by all $endpointCount endpoint(s)."
 +                        "$logTag $transactionLabel had no confirmed acceptance from $endpointCount endpoint(s)."
-@@ -305,0 +320 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -305,0 +325 @@ private class MultiEndpointTransactionSubmitterImpl(
 +        // A completed transport failure may still have delivered the transaction to its endpoint.
-@@ -307 +322 @@ private class MultiEndpointTransactionSubmitterImpl(
+@@ -307 +327 @@ private class MultiEndpointTransactionSubmitterImpl(
 -            .firstOrNull { !it.grpcError }
 +            .firstOrNull { it.grpcError }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
@@ -39627,7 +39640,7 @@ index 000000000..f014229ca
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..7d8617e39 100644
+index bf147a8b5..b071baae9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -39638,18 +39651,20 @@ index bf147a8b5..7d8617e39 100644
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
-@@ -29 +32 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
+@@ -29 +32,2 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 -import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
-@@ -30,0 +34,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -30,0 +35,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import java.math.BigDecimal
-@@ -35 +39,0 @@ import org.zecdev.zip321.parser.ParserContext
++import kotlinx.coroutines.CancellationException
+@@ -35 +41,0 @@ import org.zecdev.zip321.parser.ParserContext
 -import java.math.BigDecimal
-@@ -59 +63 @@ interface ProposalDataSource {
+@@ -59 +65 @@ interface ProposalDataSource {
 -    suspend fun createShieldProposal(account: WalletAccount): ShieldTransactionProposal
 +    suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal
-@@ -76,3 +80,15 @@ interface ProposalDataSource {
+@@ -76,3 +82,15 @@ interface ProposalDataSource {
 -    suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult
 -
 -    suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult
@@ -39668,21 +39683,22 @@ index bf147a8b5..7d8617e39 100644
 +        beforeCreation: () -> Unit = {},
 +        beforeFirstSubmission: () -> Unit = {},
 +    ): SubmitResult
-@@ -93,0 +110,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
+@@ -93,0 +112,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
 +class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must contain exactly one payment")
 +
-@@ -103,2 +121 @@ class ProposalDataSourceImpl(
+@@ -103,2 +123,2 @@ class ProposalDataSourceImpl(
 -    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
 -    private val persistableWalletProvider: PersistableWalletProvider,
 +    private val walletServerSelectionProvider: WalletServerSelectionProvider,
-@@ -114 +131,5 @@ class ProposalDataSourceImpl(
++    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
+@@ -114 +134,5 @@ class ProposalDataSourceImpl(
 -                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send),
 +                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send).also { proposal ->
 +                        if (send.destination.address == DonationPolicy.recipient()) {
 +                            DonationPolicy.requireShielded(proposal, send)
 +                        }
 +                    },
-@@ -137 +158,7 @@ class ProposalDataSourceImpl(
+@@ -137 +161,7 @@ class ProposalDataSourceImpl(
 -                        is ZIP321.ParserResult.Request -> request.paymentRequest.payments[0]
 +                        is ZIP321.ParserResult.Request -> {
 +                            // Review shows one payment; the SDK fulfills the entire URI.
@@ -39691,10 +39707,10 @@ index bf147a8b5..7d8617e39 100644
 +                            }
 +                            request.paymentRequest.payments.single()
 +                        }
-@@ -160 +187 @@ class ProposalDataSourceImpl(
+@@ -160 +190 @@ class ProposalDataSourceImpl(
 -                    memo = Memo(payment.memo?.data?.decodeToString() ?: ""),
 +                    memo = Memo(payment.memo?.data?.zip321MemoTextOrNull().orEmpty()),
-@@ -162 +189,8 @@ class ProposalDataSourceImpl(
+@@ -162 +192,8 @@ class ProposalDataSourceImpl(
 -                )
 +                    binaryMemoByteCount = payment.memo?.data?.takeIf { it.zip321MemoTextOrNull() == null }?.size,
 +                ).also { reviewed ->
@@ -39704,18 +39720,34 @@ index bf147a8b5..7d8617e39 100644
 +                        )
 +                    }
 +                }
-@@ -179,0 +214 @@ class ProposalDataSourceImpl(
+@@ -179,0 +217 @@ class ProposalDataSourceImpl(
 +                    fundingAccount = account,
-@@ -197,0 +233 @@ class ProposalDataSourceImpl(
+@@ -197,0 +236 @@ class ProposalDataSourceImpl(
 +                    fundingAccount = account,
-@@ -202 +238 @@ class ProposalDataSourceImpl(
+@@ -202 +241 @@ class ProposalDataSourceImpl(
 -    override suspend fun createShieldProposal(account: WalletAccount): ShieldTransactionProposal =
 +    override suspend fun createShieldProposal(approval: ShieldingApproval): ShieldTransactionProposal =
-@@ -203,0 +240 @@ class ProposalDataSourceImpl(
+@@ -203,0 +243 @@ class ProposalDataSourceImpl(
 +            val account = approval.account
-@@ -205,0 +243 @@ class ProposalDataSourceImpl(
+@@ -205,0 +246 @@ class ProposalDataSourceImpl(
 +                approval.requireReadyToPropose()
-@@ -238,2 +276,7 @@ class ProposalDataSourceImpl(
+@@ -225,4 +266,6 @@ class ProposalDataSourceImpl(
+-            synchronizerProvider.getSynchronizer().createPcztFromProposal(
+-                accountUuid = account.sdkAccount.accountUuid,
+-                proposal = proposal
+-            )
++            walletTransport.whileOperating {
++                requireActiveSynchronizer().createPcztFromProposal(
++                    accountUuid = account.sdkAccount.accountUuid,
++                    proposal = proposal,
++                )
++            }
+@@ -233,3 +276 @@ class ProposalDataSourceImpl(
+-            synchronizerProvider
+-                .getSynchronizer()
+-                .addProofsToPczt(pczt)
++            walletTransport.whileOperating { requireActiveSynchronizer().addProofsToPczt(pczt) }
+@@ -238,2 +279,7 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG) {
 +    override suspend fun submitTransaction(
@@ -39725,7 +39757,7 @@ index bf147a8b5..7d8617e39 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeCreation, beforeFirstSubmission) {
-@@ -246,2 +289,7 @@ class ProposalDataSourceImpl(
+@@ -246,2 +292,7 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_TAG) {
 +    override suspend fun submitTransaction(
@@ -39735,81 +39767,133 @@ index bf147a8b5..7d8617e39 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeCreation, beforeFirstSubmission) {
-@@ -261 +308,0 @@ class ProposalDataSourceImpl(
+@@ -256,3 +307 @@ class ProposalDataSourceImpl(
+-            synchronizerProvider
+-                .getSynchronizer()
+-                .redactPcztForSigner(pczt)
++            walletTransport.whileOperating { requireActiveSynchronizer().redactPcztForSigner(pczt) }
+@@ -261 +309,0 @@ class ProposalDataSourceImpl(
 -    @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
-@@ -263,0 +311,2 @@ class ProposalDataSourceImpl(
+@@ -263,0 +312,2 @@ class ProposalDataSourceImpl(
 +        beforeCreation: () -> Unit,
 +        beforeFirstSubmission: () -> Unit,
-@@ -268 +317,3 @@ class ProposalDataSourceImpl(
+@@ -267,27 +317,13 @@ class ProposalDataSourceImpl(
+-            val synchronizer = synchronizerProvider.getSynchronizer()
 -            val transactions = block(synchronizer)
-+            beforeCreation()
-+            val transactions = runCatchingRecoverable { block(synchronizer) }
-+                .getOrElse { return@withContext emptyList<CreatedTransaction>().uncertainSdkSubmission() }
-@@ -278,6 +329,5 @@ class ProposalDataSourceImpl(
+-
+-            if (transactions.isEmpty()) {
+-                return@withContext SubmitResult.Failure(
+-                    txIds = emptyList(),
+-                    code = MULTI_SUBMIT_EMPTY_TRANSACTION_CODE,
+-                    description = MULTI_SUBMIT_EMPTY_TRANSACTION_DESCRIPTION
+-                )
+-            }
+-
 -            val endpoints = getSubmissionEndpoints()
 -            Twig.info {
 -                "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
 -            }
 -
 -            val submitResults =
-+            val result = runCatchingRecoverable {
-+                val endpoints = getSubmissionEndpoints()
-+                Twig.info {
-+                    "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
-+                }
-@@ -288,7 +338,4 @@ class ProposalDataSourceImpl(
+-                submitCreatedTransactions(
+-                    synchronizer = synchronizer,
+-                    transactions = transactions,
+-                    endpoints = endpoints,
 -                    logTag = logTag
 -                )
 -
 -            Twig.debug { "Internal transaction submit results: $submitResults" }
 -
 -            val result = submitResults.toSubmitResult()
--
-+                    logTag = logTag,
-+                    beforeFirstSubmission = beforeFirstSubmission
-+                ).toSubmitResult()
-+            }.getOrElse { return@withContext transactions.uncertainSdkSubmission() }
-@@ -296,2 +343,6 @@ class ProposalDataSourceImpl(
++            walletTransport.whileOperating { lease ->
++                val synchronizer = requireActiveSynchronizer()
++                beforeCreation()
++                val transactions = runCatchingRecoverable { block(synchronizer) }
++                    .getOrElse { return@whileOperating emptyList<CreatedTransaction>().uncertainSdkSubmission() }
++
++                if (transactions.isEmpty()) {
++                    return@whileOperating SubmitResult.Failure(
++                        txIds = emptyList(),
++                        code = MULTI_SUBMIT_EMPTY_TRANSACTION_CODE,
++                        description = MULTI_SUBMIT_EMPTY_TRANSACTION_DESCRIPTION
++                    )
++                }
+@@ -295,3 +331,24 @@ class ProposalDataSourceImpl(
+-            if (synchronizer is SdkSynchronizer) {
 -                synchronizer.refreshTransactions()
 -                synchronizer.refreshAllBalances()
-+                runCatchingRecoverable {
-+                    synchronizer.refreshTransactions()
-+                    synchronizer.refreshAllBalances()
-+                }.onFailure {
-+                    Twig.warn { "Unable to refresh wallet after submission (${it::class.simpleName})" }
++                val result = runCatchingRecoverable {
++                    val endpoints = getSubmissionEndpoints()
++                    Twig.info {
++                        "$logTag Created ${transactions.size} transaction(s); " +
++                            "submitting to ${endpoints.size} endpoint(s)."
++                    }
++                    submitCreatedTransactions(
++                        synchronizer = synchronizer,
++                        transactions = transactions,
++                        endpoints = endpoints,
++                        logTag = logTag,
++                        beforeFirstSubmission = beforeFirstSubmission,
++                        lease = lease
++                    ).toSubmitResult()
++                }.getOrElse { return@whileOperating transactions.uncertainSdkSubmission() }
++                if (synchronizer is SdkSynchronizer) {
++                    runCatchingRecoverable {
++                        synchronizer.refreshTransactions()
++                        synchronizer.refreshAllBalances()
++                    }.onFailure {
++                        Twig.warn { "Unable to refresh wallet after submission (${it::class.simpleName})" }
++                    }
 +                }
-@@ -299,3 +350 @@ class ProposalDataSourceImpl(
++                if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
+@@ -299,3 +355,0 @@ class ProposalDataSourceImpl(
 -
 -            Twig.debug { "Transaction submit result: $result" }
 -            result
-+            if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
-@@ -308 +357,2 @@ class ProposalDataSourceImpl(
+@@ -308 +362,3 @@ class ProposalDataSourceImpl(
 -        logTag: String
 +        logTag: String,
 +        beforeFirstSubmission: () -> Unit,
-@@ -310,0 +361 @@ class ProposalDataSourceImpl(
++        lease: WalletTransportAccess.Lease,
+@@ -310,0 +367,2 @@ class ProposalDataSourceImpl(
 +            beforeFirstSubmission = beforeFirstSubmission,
-@@ -329 +380 @@ class ProposalDataSourceImpl(
++            onDrained = lease.retainUntilDrain(),
+@@ -329 +387 @@ class ProposalDataSourceImpl(
 -        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
 +        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
-@@ -332,2 +383,2 @@ class ProposalDataSourceImpl(
+@@ -332,2 +390,2 @@ class ProposalDataSourceImpl(
 -                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
 -                currentEndpoint = currentEndpoint,
 +                isAutomaticPreference = selection.isAutomatic,
 +                currentEndpoint = selection.endpoint,
-@@ -336 +387 @@ class ProposalDataSourceImpl(
+@@ -336 +394 @@ class ProposalDataSourceImpl(
 -        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
 +        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
-@@ -347,0 +399,2 @@ class ProposalDataSourceImpl(
+@@ -340 +398 @@ class ProposalDataSourceImpl(
+-    private suspend inline fun <T : Any> getOrThrow(block: (Synchronizer) -> T): T =
++    private suspend fun <T : Any> getOrThrow(block: suspend (Synchronizer) -> T): T =
+@@ -342,2 +400,3 @@ class ProposalDataSourceImpl(
+-            val synchronizer = synchronizerProvider.getSynchronizer()
+-            block(synchronizer)
++            walletTransport.whileOperating { block(requireActiveSynchronizer()) }
++        } catch (e: CancellationException) {
++            throw e
+@@ -347,0 +407,2 @@ class ProposalDataSourceImpl(
 +        } catch (e: UnsupportedZip321PaymentCountException) {
 +            throw e
-@@ -361,0 +415,5 @@ class ProposalDataSourceImpl(
+@@ -351,0 +413,5 @@ class ProposalDataSourceImpl(
++    private suspend fun requireActiveSynchronizer(): Synchronizer =
++        checkNotNull(walletTransport.current(synchronizerProvider)) {
++            "The wallet is connecting to the selected server. Try again when it is ready."
++        }
++
+@@ -361,0 +428,5 @@ class ProposalDataSourceImpl(
 +private fun List<CreatedTransaction>.uncertainSdkSubmission() = SubmitResult.GrpcFailure(
 +    txIds = map { TransactionSubmitResult.NotAttempted(it.txId).txIdString() },
 +    reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
 +)
 +
-@@ -403,8 +460,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
+@@ -403,8 +473,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
 -        firstNonGrpcFailure != null && successCount == 0 && failures.all { !it.grpcError } -> {
 -            SubmitResult.Failure(
 -                txIds = txIds,
@@ -39818,9 +39902,9 @@ index bf147a8b5..7d8617e39 100644
 -            )
 -        }
 -
-@@ -464,0 +515 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -464,0 +528 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +    val fundingAccount: WalletAccount
-@@ -472,0 +524,18 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -472,0 +537,18 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +class ShieldingApproval(
 +    val account: WalletAccount,
 +    private val hasShieldableBalance: () -> Boolean = { true },
@@ -39839,26 +39923,26 @@ index bf147a8b5..7d8617e39 100644
 +    }
 +}
 +
-@@ -474,0 +544 @@ data class ShieldTransactionProposal(
+@@ -474,0 +557 @@ data class ShieldTransactionProposal(
 +    val approval: ShieldingApproval? = null,
-@@ -476,0 +547,4 @@ data class ShieldTransactionProposal(
+@@ -476,0 +560,4 @@ data class ShieldTransactionProposal(
 +fun TransactionProposal.requireCurrentShieldingApproval() {
 +    if (this is ShieldTransactionProposal) checkNotNull(approval).requireCurrent()
 +}
 +
-@@ -481 +555,2 @@ data class RegularTransactionProposal(
+@@ -481 +568,2 @@ data class RegularTransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val isDonation: Boolean = false,
-@@ -488 +563,2 @@ data class Zip321TransactionProposal(
+@@ -488 +576,2 @@ data class Zip321TransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val binaryMemoByteCount: Int? = null,
-@@ -496,0 +573 @@ data class ExactInputSwapTransactionProposal(
+@@ -496,0 +586 @@ data class ExactInputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -504,0 +582 @@ data class ExactOutputSwapTransactionProposal(
+@@ -504,0 +595 @@ data class ExactOutputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -519 +596,0 @@ data class MigrationSweepTransactionProposal(
+@@ -519 +609,0 @@ data class MigrationSweepTransactionProposal(
 -    val amount: Zatoshi,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
@@ -44131,6 +44215,81 @@ index 000000000..7271a9cfe
 +    suspend fun <T> stage(token: WalletEnrollmentToken, block: () -> T): T? =
 +        walletWriteAccess.withSdkRecovery(token.wallet) { if (permits(token)) block() else null }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
+new file mode 100644
+index 000000000..ab49ecd79
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
+@@ -0,0 +1,69 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import cash.z.ecc.android.sdk.Synchronizer
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withTimeoutOrNull
++import java.lang.ref.WeakReference
++import java.util.concurrent.atomic.AtomicInteger
++import kotlin.time.Duration.Companion.seconds
++
++/** Keeps automatic endpoint writes disjoint from admitted wallet operations and their broadcasts. */
++class WalletTransportAccess {
++    private val endpointWrite = Mutex()
++    private val activeOperations = AtomicInteger()
++    @Volatile private var retired: WeakReference<Synchronizer>? = null
++
++    internal suspend fun <T> whileOperating(block: suspend (Lease) -> T): T {
++        val lease = endpointWrite.withLock { retain() }
++        return try {
++            block(lease)
++        } finally {
++            lease.release()
++        }
++    }
++
++    internal suspend fun ifIdleSwitch(block: suspend () -> Unit) {
++        if (!endpointWrite.tryLock()) return
++        try {
++            if (activeOperations.get() == 0) block()
++        } finally {
++            endpointWrite.unlock()
++        }
++    }
++
++    internal fun retire(synchronizer: Synchronizer?) {
++        retired = synchronizer?.let(::WeakReference)
++    }
++
++    internal fun isRetired(synchronizer: Synchronizer): Boolean = retired?.get() === synchronizer
++
++    internal suspend fun current(provider: SynchronizerProvider, waitForInitial: Boolean = true): Synchronizer? {
++        val old = retired?.get()
++        return when {
++            old == null && waitForInitial -> provider.getSynchronizer()
++            old == null -> provider.synchronizer.value
++            else -> withTimeoutOrNull(8.seconds) {
++                provider.synchronizer.first { it != null && it !== old }
++            }
++        }
++    }
++
++    private fun retain(): Lease {
++        activeOperations.incrementAndGet()
++        return Lease()
++    }
++
++    internal inner class Lease {
++        /** Call while the owning operation itself is still active. */
++        fun retainUntilDrain(): () -> Unit {
++            val completion = retain()
++            return completion::release
++        }
++
++        fun release() {
++            activeOperations.decrementAndGet()
++        }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
 new file mode 100644
 index 000000000..7e3b7ceab
@@ -44393,37 +44552,45 @@ index 926e60d9c..0240ac487 100644
 +        }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
-index 322328a32..b790c7374 100644
+index 322328a32..ddadc7645 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
 @@ -11 +10,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
-@@ -14,0 +14,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -14,0 +14,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
-@@ -27,2 +27,0 @@ import kotlinx.coroutines.flow.first
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -19,0 +22,4 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.withContext
+@@ -27,2 +32,0 @@ import kotlinx.coroutines.flow.first
 -import kotlinx.coroutines.flow.flatMapLatest
 -import kotlinx.coroutines.flow.flowOf
-@@ -32 +30,0 @@ import kotlinx.coroutines.flow.mapLatest
+@@ -32 +35,0 @@ import kotlinx.coroutines.flow.mapLatest
 -import kotlinx.coroutines.flow.mapNotNull
-@@ -54 +51,0 @@ class AutomaticServerRepositoryImpl(
+@@ -54 +56,0 @@ class AutomaticServerRepositoryImpl(
 -    private val walletRepository: WalletRepository,
-@@ -62 +59 @@ class AutomaticServerRepositoryImpl(
+@@ -62 +64 @@ class AutomaticServerRepositoryImpl(
 -    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
 +    private val walletServerSelectionProvider: WalletServerSelectionProvider,
-@@ -69 +66,2 @@ class AutomaticServerRepositoryImpl(
+@@ -63,0 +66 @@ class AutomaticServerRepositoryImpl(
++    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
+@@ -69 +72,2 @@ class AutomaticServerRepositoryImpl(
 -            zashiProposalRepository.transactionProposal.value != null ||
 +            zashiProposalRepository.isShieldSubmissionActive ||
 +                zashiProposalRepository.transactionProposal.value != null ||
-@@ -82 +79,0 @@ class AutomaticServerRepositoryImpl(
+@@ -82 +85,0 @@ class AutomaticServerRepositoryImpl(
 -    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -84,2 +81,3 @@ class AutomaticServerRepositoryImpl(
+@@ -84,2 +87,3 @@ class AutomaticServerRepositoryImpl(
 -        isServerSelectionAutomaticProvider
 -            .observe()
 +        walletServerSelectionProvider.serverSelection
 +            .filterNotNull()
 +            .map { it.isAutomatic() }
-@@ -87,25 +85,8 @@ class AutomaticServerRepositoryImpl(
+@@ -87,25 +91,8 @@ class AutomaticServerRepositoryImpl(
 -            .flatMapLatest { isAutomatic ->
 -                if (isAutomatic != null) {
 -                    flowOf(isAutomatic)
@@ -44457,30 +44624,30 @@ index 322328a32..b790c7374 100644
 +        resolveIsServerSelectionAutomatic(
 +            isAutomaticPreference = this?.isAutomatic,
 +            currentEndpoint = this?.endpoint,
-@@ -114 +94,0 @@ class AutomaticServerRepositoryImpl(
+@@ -114 +100,0 @@ class AutomaticServerRepositoryImpl(
 -    }
-@@ -119,3 +99,3 @@ class AutomaticServerRepositoryImpl(
+@@ -119,3 +105,3 @@ class AutomaticServerRepositoryImpl(
 -        if (isServerAutomatic()) return false
 -        val endpoint = persistableWalletProvider.getPersistableWallet()?.endpoint
 -        return endpoint != null && resolveIsEndpointCustom(endpoint, lightWalletEndpointProvider.getEndpoints())
 +        val selection = walletServerSelectionProvider.getServerSelection() ?: return false
 +        return !selection.isAutomatic() &&
 +            resolveIsEndpointCustom(selection.endpoint, lightWalletEndpointProvider.getEndpoints())
-@@ -147,2 +127,3 @@ class AutomaticServerRepositoryImpl(
+@@ -147,2 +133,3 @@ class AutomaticServerRepositoryImpl(
 -                guarded("switch to ${candidate.host}:${candidate.port}") { applyServerSwitch(candidate) }
 -            }
 +                val endpoint = candidate.endpoint
 +                guarded("switch to ${endpoint.host}:${endpoint.port}") { applyServerSwitch(candidate) }
 +            }.map { it.endpoint }
-@@ -167 +148 @@ class AutomaticServerRepositoryImpl(
+@@ -167 +154 @@ class AutomaticServerRepositoryImpl(
 -    internal suspend fun resolveSwitchCandidate(): LightWalletEndpoint? {
 +    internal suspend fun resolveSwitchCandidate(): ServerSwitchCandidate? {
-@@ -168,0 +150 @@ class AutomaticServerRepositoryImpl(
+@@ -168,0 +156 @@ class AutomaticServerRepositoryImpl(
 +        val endpoint = candidate.endpoint
-@@ -173 +155 @@ class AutomaticServerRepositoryImpl(
+@@ -173 +161 @@ class AutomaticServerRepositoryImpl(
 -                    "switch to ${candidate.host}:${candidate.port} anyway"
 +                    "switch to ${endpoint.host}:${endpoint.port} anyway"
-@@ -182,3 +164,4 @@ class AutomaticServerRepositoryImpl(
+@@ -182,3 +170,4 @@ class AutomaticServerRepositoryImpl(
 -    internal suspend fun evaluateServerSwitch(): LightWalletEndpoint? {
 -        if (!isServerAutomatic() || isAppInTransactionState) return null
 -        val current = persistableWalletProvider.getPersistableWallet()?.endpoint ?: return null
@@ -44488,34 +44655,39 @@ index 322328a32..b790c7374 100644
 +        val version = walletServerSelectionProvider.writeVersion
 +        val current = walletServerSelectionProvider.getServerSelection() ?: return null
 +        if (!current.isAutomatic() || isAppInTransactionState) return null
-@@ -187,0 +171 @@ class AutomaticServerRepositoryImpl(
+@@ -187,0 +177 @@ class AutomaticServerRepositoryImpl(
 +        if (isAppInTransactionState) return null
-@@ -190 +174 @@ class AutomaticServerRepositoryImpl(
+@@ -190 +180 @@ class AutomaticServerRepositoryImpl(
 -                current = current,
 +                current = current.endpoint,
-@@ -194 +178 @@ class AutomaticServerRepositoryImpl(
+@@ -194 +184 @@ class AutomaticServerRepositoryImpl(
 -            )
 +            )?.let { ServerSwitchCandidate(it, current, version) }
-@@ -209,3 +193,3 @@ class AutomaticServerRepositoryImpl(
+@@ -209,3 +199,3 @@ class AutomaticServerRepositoryImpl(
 -    private suspend fun applyServerSwitch(candidate: LightWalletEndpoint) {
 -        if (!isServerAutomatic() || isAppInTransactionState) return
 -        if (candidate !in lightWalletEndpointProvider.getEndpoints()) return
 +    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
 +        val endpoint = candidate.endpoint
 +        if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
-@@ -213,3 +197,8 @@ class AutomaticServerRepositoryImpl(
+@@ -213,3 +203,13 @@ class AutomaticServerRepositoryImpl(
 -        Twig.info { "Automatic server: switching to ${candidate.host}:${candidate.port}" }
 -        walletRepository.updateWalletEndpoint(candidate)
 -        synchronizer?.confirmServerSwitch(candidate)
-+        if (isAppInTransactionState) return
-+        Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
-+        val applied = walletServerSelectionProvider.storeServerSelection(
-+            WalletServerSelection(endpoint, isAutomatic = true),
-+            version = candidate.version,
-+            expected = candidate.current
-+        )
-+        if (applied) synchronizer?.confirmServerSwitch(endpoint)
-@@ -218,0 +208,6 @@ class AutomaticServerRepositoryImpl(
++        walletTransport.ifIdleSwitch {
++            if (isAppInTransactionState) return@ifIdleSwitch
++            currentCoroutineContext().ensureActive()
++            Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
++            val applied = withContext(NonCancellable) {
++                walletServerSelectionProvider.storeServerSelection(
++                    WalletServerSelection(endpoint, isAutomatic = true),
++                    version = candidate.version,
++                    expected = candidate.current,
++                ).also { if (it) walletTransport.retire(synchronizer) }
++            }
++            if (applied) synchronizer?.confirmServerSwitch(endpoint)
++        }
+@@ -218,0 +219,6 @@ class AutomaticServerRepositoryImpl(
 +internal data class ServerSwitchCandidate(
 +    val endpoint: LightWalletEndpoint,
 +    val current: WalletServerSelection,
@@ -53193,7 +53365,7 @@ index 73da2bea1..8b71a6a1f 100644
 +                }
 +            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
-index c6e75900c..7303a024b 100644
+index c6e75900c..8fbfa02be 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -53210,12 +53382,14 @@ index c6e75900c..7303a024b 100644
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 @@ -12,0 +21 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -13,0 +23 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
+@@ -13,0 +23,2 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -34,0 +45,2 @@ class ShieldFundsUseCase(
+@@ -34,0 +46,3 @@ class ShieldFundsUseCase(
 +    private val walletWriteAccess: WalletWriteAccess,
 +    private val appAccessSession: AppAccessSession,
-@@ -40,2 +52,27 @@ class ShieldFundsUseCase(
++    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
+@@ -40,2 +54,27 @@ class ShieldFundsUseCase(
 -    operator fun invoke(closeCurrentScreen: Boolean) {
 -        if (job?.isActive == true) return
 +    fun confirm(account: WalletAccount, closeCurrentScreen: Boolean, sourceEntryId: String? = null): () -> Unit {
@@ -53245,11 +53419,9 @@ index c6e75900c..7303a024b 100644
 +            } else {
 +                sourceEntryId
 +            }
-@@ -43,0 +81,3 @@ class ShieldFundsUseCase(
-+                val selection = accountDataSource.confirmSelection(account) ?: return@launch
-+                val approval = newApproval(account) { sameSession() && selection() }
-+                if (!canStartShield(approval, sourceEntryId)) return@launch
-@@ -46,23 +86,35 @@ class ShieldFundsUseCase(
+@@ -44,25 +83,42 @@ class ShieldFundsUseCase(
+-                messageAvailabilityDataSource.onShieldingInitiated()
+-
 -                when (accountDataSource.getSelectedAccount()) {
 -                    is KeystoneAccount -> {
 -                        createKeystoneShieldProposal()
@@ -53273,8 +53445,15 @@ index c6e75900c..7303a024b 100644
 -                        }
 -                        shieldZashiFunds()
 -                    }
-+                if (!canStartShield(approval, sourceEntryId)) return@launch
-+                performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
++                walletTransport.whileOperating {
++                    val selection = accountDataSource.confirmSelection(account) ?: return@whileOperating
++                    val approval = newApproval(account) { sameSession() && selection() }
++                    if (!canStartShield(approval, sourceEntryId)) return@whileOperating
++                    messageAvailabilityDataSource.onShieldingInitiated()
++
++                    if (!canStartShield(approval, sourceEntryId)) return@whileOperating
++                    performShield(approval, closeCurrentScreen, sourceEntryId, outcomeEntryId)
++                }
 +            }
 +    }
 +
@@ -53308,11 +53487,11 @@ index c6e75900c..7303a024b 100644
 +            is ZodlAccount -> {
 +                if (closeCurrentScreen) {
 +                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-@@ -69,0 +122 @@ class ShieldFundsUseCase(
+@@ -69,0 +126 @@ class ShieldFundsUseCase(
 +                shieldZashiFunds(approval, outcomeEntryId)
-@@ -70,0 +124 @@ class ShieldFundsUseCase(
+@@ -70,0 +128 @@ class ShieldFundsUseCase(
 +        }
-@@ -72,0 +127,11 @@ class ShieldFundsUseCase(
+@@ -72,0 +131,11 @@ class ShieldFundsUseCase(
 +    private fun newApproval(account: WalletAccount, isCurrent: () -> Boolean): ShieldingApproval =
 +        ShieldingApproval(
 +            account = account,
@@ -53324,30 +53503,30 @@ index c6e75900c..7303a024b 100644
 +            remainsCurrent = isCurrent,
 +        )
 +
-@@ -74 +139 @@ class ShieldFundsUseCase(
+@@ -74 +143 @@ class ShieldFundsUseCase(
 -    private suspend fun shieldZashiFunds() {
 +    private suspend fun shieldZashiFunds(approval: ShieldingApproval, outcomeEntryId: String?) {
-@@ -76,2 +141,2 @@ class ShieldFundsUseCase(
+@@ -76,2 +145,2 @@ class ShieldFundsUseCase(
 -            zashiProposalRepository.createShieldProposal()
 -            when (val result = zashiProposalRepository.submit()) {
 +            val proposal = zashiProposalRepository.createShieldProposal(approval)
 +            when (val result = zashiProposalRepository.submit(proposal)) {
-@@ -82 +147 @@ class ShieldFundsUseCase(
+@@ -82 +151 @@ class ShieldFundsUseCase(
 -                    navigateToError(ErrorArgs.ShieldingError(result))
 +                    showShieldError(ErrorArgs.ShieldingError(result), approval, outcomeEntryId)
-@@ -88,0 +154,2 @@ class ShieldFundsUseCase(
+@@ -88,0 +158,2 @@ class ShieldFundsUseCase(
 +        } catch (e: CancellationException) {
 +            throw e
-@@ -90,3 +157 @@ class ShieldFundsUseCase(
+@@ -90,3 +161 @@ class ShieldFundsUseCase(
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 -        } finally {
 -            zashiProposalRepository.clear()
 +            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, outcomeEntryId)
-@@ -97 +162,2 @@ class ShieldFundsUseCase(
+@@ -97 +166,2 @@ class ShieldFundsUseCase(
 -    private suspend fun createKeystoneShieldProposal() {
 +    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
 +        var created: ShieldTransactionProposal? = null
-@@ -99,3 +165,14 @@ class ShieldFundsUseCase(
+@@ -99,3 +169,14 @@ class ShieldFundsUseCase(
 -            keystoneProposalRepository.createShieldProposal()
 -            keystoneProposalRepository.createPCZTFromProposal()
 -            navigationRouter.forward(SignKeystoneTransactionArgs)
@@ -53365,33 +53544,33 @@ index c6e75900c..7303a024b 100644
 +                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 +            throw e
-@@ -103,2 +180,4 @@ class ShieldFundsUseCase(
+@@ -103,2 +184,4 @@ class ShieldFundsUseCase(
 -            keystoneProposalRepository.clear()
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 +            clearOwnedShield(
 +                created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
 +            )
 +            showShieldError(ErrorArgs.ShieldingGeneralError(e), approval, sourceEntryId)
-@@ -113 +192,2 @@ class ShieldFundsUseCase(
+@@ -113 +196,2 @@ class ShieldFundsUseCase(
 -    private suspend fun createLedgerShieldProposal() {
 +    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
 +        var created: ShieldTransactionProposal? = null
-@@ -115 +195 @@ class ShieldFundsUseCase(
+@@ -115 +199 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.createShieldProposal()
 +            val proposal = ledgerProposalPipeline.createShieldProposal(approval).also { created = it }
-@@ -117 +197,5 @@ class ShieldFundsUseCase(
+@@ -117 +201,5 @@ class ShieldFundsUseCase(
 -            ledgerNavigator.forwardToSign()
 +            approval.requireCurrent()
 +            ledgerProposalPipeline.approveForSigning(proposal)
 +            ledgerNavigator.forwardToSign(sourceEntryId) {
 +                approval.isCurrent() && ledgerProposalPipeline.transactionProposal.value === proposal
 +            }
-@@ -119 +203,3 @@ class ShieldFundsUseCase(
+@@ -119 +207,3 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 +            clearOwnedShield(
 +                created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
 +            )
-@@ -122,2 +208,15 @@ class ShieldFundsUseCase(
+@@ -122,2 +212,15 @@ class ShieldFundsUseCase(
 -            ledgerProposalPipeline.clear()
 -            navigateToError(ErrorArgs.ShieldingGeneralError(e))
 +            clearOwnedShield(
@@ -53409,7 +53588,7 @@ index c6e75900c..7303a024b 100644
 +                    NavigationCommand.Forward(listOf(navigateToError.stage(args)))
 +                }
 +            }
-@@ -126,0 +226,8 @@ class ShieldFundsUseCase(
+@@ -126,0 +230,8 @@ class ShieldFundsUseCase(
 +
 +private fun clearOwnedShield(
 +    created: ShieldTransactionProposal?,
@@ -77279,57 +77458,58 @@ index 4e28ba3d9..7ffa64524 100644
 -                coEvery { isFlexaAvailable() } returns false
 -            },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-index 5c72d78d5..dec055cf9 100644
+index 5c72d78d5..90f954b71 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-@@ -10,0 +11,3 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+@@ -10,0 +11,4 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 +import co.electriccoin.zcash.preference.api.PreferenceProvider
++import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 +import co.electriccoin.zcash.ui.NavigationRouter
-@@ -18,0 +22 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
+@@ -18,0 +23 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
-@@ -19,0 +24 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -19,0 +25 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
-@@ -20,0 +26 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
+@@ -20,0 +27 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 +import co.electriccoin.zcash.ui.screen.receive.ReceiveArgs
-@@ -24,0 +31 @@ import io.mockk.mockk
+@@ -24,0 +32 @@ import io.mockk.mockk
 +import io.mockk.verify
-@@ -25,0 +33,5 @@ import kotlinx.coroutines.CompletableDeferred
+@@ -25,0 +34,5 @@ import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.async
-@@ -26,0 +39 @@ import kotlinx.coroutines.awaitCancellation
+@@ -26,0 +40 @@ import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.cancelAndJoin
-@@ -27,0 +41 @@ import kotlinx.coroutines.delay
+@@ -27,0 +42 @@ import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.Flow
-@@ -28,0 +43,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -28,0 +44,3 @@ import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.flow.flowOf
-@@ -32,0 +50,3 @@ import kotlinx.coroutines.runBlocking
+@@ -32,0 +51,3 @@ import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
-@@ -72,0 +93,5 @@ class AccountDataSourceImplTest {
+@@ -72,0 +94,5 @@ class AccountDataSourceImplTest {
 +        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +        storedSelection: Flow<AccountUuid?> = flowOf(null),
 +        accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +        synchronizerFlow: MutableStateFlow<Synchronizer?>? = null,
 +        deriveAddress: suspend () -> String = { "unified-address" },
-@@ -78 +103 @@ class AccountDataSourceImplTest {
+@@ -78 +104 @@ class AccountDataSourceImplTest {
 -                coEvery { getCustomUnifiedAddress(any(), any()) } returns "unified-address"
 +                coEvery { getCustomUnifiedAddress(any(), any()) } coAnswers { deriveAddress() }
-@@ -81,0 +107 @@ class AccountDataSourceImplTest {
+@@ -81,0 +108 @@ class AccountDataSourceImplTest {
 +        val activeSynchronizer = synchronizerFlow?.also { it.value = synchronizer } ?: MutableStateFlow(synchronizer)
-@@ -84 +110 @@ class AccountDataSourceImplTest {
+@@ -84 +111 @@ class AccountDataSourceImplTest {
 -                every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
 +                every { this@mockk.synchronizer } returns activeSynchronizer
-@@ -88 +114 @@ class AccountDataSourceImplTest {
+@@ -88 +115 @@ class AccountDataSourceImplTest {
 -                every { uuid } returns MutableStateFlow(null)
 +                every { uuid } returns storedSelection
-@@ -104,0 +131,128 @@ class AccountDataSourceImplTest {
+@@ -104,0 +132,128 @@ class AccountDataSourceImplTest {
 +            scope = scope,
 +            accountPreferenceReads = accountPreferenceReads,
 +        )
@@ -77458,7 +77638,7 @@ index 5c72d78d5..dec055cf9 100644
 +            null to null,
 +            accountBalance(available = 40L, unshielded = 0L) to 40L,
 +            accountBalance(available = 47L, unshielded = 0L) to 47L,
-@@ -105,0 +260,8 @@ class AccountDataSourceImplTest {
+@@ -105,0 +261,8 @@ class AccountDataSourceImplTest {
 +
 +        for ((snapshot, expected) in states) {
 +            walletBalances.value = snapshot
@@ -77467,21 +77647,21 @@ index 5c72d78d5..dec055cf9 100644
 +            }
 +            assertEquals(expected, account.totalBalance?.value)
 +        }
-@@ -303 +465 @@ class AccountDataSourceImplTest {
+@@ -303 +466 @@ class AccountDataSourceImplTest {
 -                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
 +                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
-@@ -341 +503,3 @@ class AccountDataSourceImplTest {
+@@ -341 +504,3 @@ class AccountDataSourceImplTest {
 -            val import = launch { dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null) }
 +            val import = launch {
 +                dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
 +            }
-@@ -374 +538 @@ class AccountDataSourceImplTest {
+@@ -374 +539 @@ class AccountDataSourceImplTest {
 -                    dataSource.importLedgerAccount(pairing = mockk(relaxed = true), birthday = null)
 +                    dataSource.importLedgerAccount(synchronizer, pairing = mockk(relaxed = true), birthday = null)
-@@ -405 +569 @@ class AccountDataSourceImplTest {
+@@ -405 +570 @@ class AccountDataSourceImplTest {
 -                .importLedgerAccount(pairing = pairing, birthday = null)
 +                .importLedgerAccount(synchronizer, pairing = pairing, birthday = null)
-@@ -483,0 +648,29 @@ class AccountDataSourceImplTest {
+@@ -483,0 +649,30 @@ class AccountDataSourceImplTest {
 +    @Test
 +    fun aPersistedSelectionOverridesStaleAccountRowsAtApprovalAndRevokesExistingApproval() = runTest {
 +        val second = Account.new(AccountUuid.new(ByteArray(16) { 7 }))
@@ -77491,9 +77671,10 @@ index 5c72d78d5..dec055cf9 100644
 +            coEvery { getAccounts() } returns listOf(account, second)
 +        }
 +        var stored: String? = null
++        val key = PreferenceKey("selected_account_uuid")
 +        val preferences = mockk<PreferenceProvider>(relaxed = true) {
-+            coEvery { getString(any()) } coAnswers { stored }
-+            coEvery { putStringWithRollback(any(), any()) } coAnswers { stored = secondArg<String?>() }
++            coEvery { getString(key) } coAnswers { stored }
++            coEvery { putStringWithRollback(key, any()) } coAnswers { stored = secondArg<String?>() }
 +        }
 +        val selection = SelectedAccountUUIDProviderImpl(
 +            mockk<EncryptedPreferenceProvider> { coEvery { this@mockk() } returns preferences }
@@ -77511,12 +77692,12 @@ index 5c72d78d5..dec055cf9 100644
 +        assertTrue(assertNotNull(source.confirmSelection(stale.copy(sdkAccount = second)))())
 +    }
 +
-@@ -499,0 +693,4 @@ class AccountDataSourceImplTest {
+@@ -499,0 +695,4 @@ class AccountDataSourceImplTest {
 +        selection: SelectedAccountUUIDProvider = mockk {
 +            every { uuid } returns MutableStateFlow(null)
 +            coEvery { getUUID() } returns null
 +        },
-@@ -508,5 +705 @@ class AccountDataSourceImplTest {
+@@ -508,5 +707 @@ class AccountDataSourceImplTest {
 -            selectedAccountUUIDProvider =
 -                mockk {
 -                    every { uuid } returns MutableStateFlow(null)
@@ -79830,22 +80011,69 @@ index 555126883..1eab9c67b 100644
 -            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles(key) }
 +            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles() }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
-index 6cb0997ff..5cc74da4e 100644
+index 6cb0997ff..2e7a86582 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
-@@ -209 +209 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -9,0 +11,3 @@ import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
+@@ -20,0 +25,2 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
+@@ -24,0 +31,36 @@ class MultiEndpointTransactionSubmitterTest {
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun remainingEndpointCallbacksPreventAutomaticSwitchAfterSuccessUntilTheyDrain() = runTest {
++        val transport = WalletTransportAccess()
++        val fast = endpoint("fast.example.com")
++        val slow = endpoint("slow.example.com")
++        val transaction = transaction(72)
++        val workerScope = CoroutineScope(
++            backgroundScope.coroutineContext + SupervisorJob(backgroundScope.coroutineContext[Job])
++        )
++        val graceMillis = 100L
++        val result = transport.whileOperating { lease ->
++            val submitter = MultiEndpointTransactionSubmitter(
++                closeableScopeHolder = CloseableScopeHolderImpl(workerScope),
++                gracePeriod = graceMillis.milliseconds,
++                logger = noOpLogger,
++                onDrained = lease.retainUntilDrain(),
++                submit = { _, target ->
++                    if (target == slow) awaitCancellation()
++                    TransactionSubmitResult.Success(transaction.txId)
++                }
++            )
++            submitter.submitTransactions(listOf(transaction), listOf(fast, slow), LOG_TAG)
++        }
++        assertIs<TransactionSubmitResult.Success>(result.single())
++
++        var switched = false
++        transport.ifIdleSwitch { switched = true }
++        assertFalse(switched)
++        advanceTimeBy(graceMillis)
++        runCurrent()
++
++        transport.ifIdleSwitch { switched = true }
++        assertTrue(switched)
++    }
++
+@@ -209 +251 @@ class MultiEndpointTransactionSubmitterTest {
 -    fun automaticModeReturnsFirstNonGrpcFailureWhenAllEndpointsFailFast() =
 +    fun automaticModeKeepsMixedRejectionAndTransportFailurePending() =
-@@ -220 +220 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -220 +262 @@ class MultiEndpointTransactionSubmitterTest {
 -                            "third.example.com" -> failure(transaction, code = 19, grpcError = false)
 +                            "third.example.com" -> throw java.io.IOException("fixture response lost")
-@@ -239,3 +239,2 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -239,3 +281,24 @@ class MultiEndpointTransactionSubmitterTest {
 -            assertEquals(false, result.grpcError)
 -            assertEquals(18, result.code)
 -            assertEquals("failure 18", result.description)
 +            assertEquals(true, result.grpcError)
 +            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
-@@ -243,0 +243,23 @@ class MultiEndpointTransactionSubmitterTest {
++        }
++
 +    @Test
 +    fun directAndAutomaticRejectionsRemainPendingWhileTheSdkCanRetry() = runTest {
 +        val transaction = transaction(3)
@@ -79866,13 +80094,12 @@ index 6cb0997ff..5cc74da4e 100644
 +            assertEquals(servers.toSet(), submitted.toSet())
 +            assertEquals(18, assertIs<TransactionSubmitResult.Failure>(results.single()).code)
 +            assertEquals(SubmitResult.GrpcFailure(txIds = listOf(transaction.txIdString())), results.toSubmitResult())
-+        }
+@@ -242,0 +306 @@ class MultiEndpointTransactionSubmitterTest {
 +    }
-+
-@@ -464 +486 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -464 +528 @@ class MultiEndpointTransactionSubmitterTest {
 -    fun nonGrpcFailuresMapToFirstFailureDetail() {
 +    fun allRejectedLegsKeepTheOriginalAttemptPending() {
-@@ -475,5 +497 @@ class MultiEndpointTransactionSubmitterTest {
+@@ -475,5 +539 @@ class MultiEndpointTransactionSubmitterTest {
 -            SubmitResult.Failure(
 -                txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString()),
 -                code = 18,
@@ -85575,79 +85802,100 @@ index 000000000..75d60f528
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
-index bd304eb7c..77a52c339 100644
+index bd304eb7c..9a24af8eb 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 @@ -10 +9,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
-@@ -13,0 +13,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -13,0 +13,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
-@@ -23,0 +25 @@ import kotlinx.coroutines.flow.launchIn
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -17,0 +20 @@ import io.mockk.mockk
++import kotlinx.coroutines.CompletableDeferred
+@@ -18,0 +22 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.async
+@@ -22,0 +27,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
+@@ -23,0 +30 @@ import kotlinx.coroutines.flow.launchIn
 +import kotlinx.coroutines.flow.onEach
-@@ -51 +53,5 @@ class AutomaticServerRepositoryTest {
+@@ -28,0 +36,2 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertSame
+@@ -51 +60,5 @@ class AutomaticServerRepositoryTest {
 -    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
 +    private val serverSelectionProvider = mockk<WalletServerSelectionProvider> {
 +        every { serverSelection } returns MutableStateFlow(null)
 +        every { writeVersion } returns 7L
 +        coEvery { storeServerSelection(any(), any(), any()) } returns true
 +    }
-@@ -86,2 +91,0 @@ class AutomaticServerRepositoryTest {
+@@ -58,0 +72 @@ class AutomaticServerRepositoryTest {
++    private val activeSynchronizer = MutableStateFlow<Synchronizer?>(synchronizer)
+@@ -62 +76 @@ class AutomaticServerRepositoryTest {
+-            every { it.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)
++            every { it.synchronizer } returns activeSynchronizer
+@@ -86,2 +99,0 @@ class AutomaticServerRepositoryTest {
 -    private val walletRepository = mockk<WalletRepository>(relaxed = true)
 -
-@@ -92 +95,0 @@ class AutomaticServerRepositoryTest {
+@@ -89,0 +102 @@ class AutomaticServerRepositoryTest {
++    private val transport = WalletTransportAccess()
+@@ -92 +104,0 @@ class AutomaticServerRepositoryTest {
 -            walletRepository = walletRepository,
-@@ -100 +103 @@ class AutomaticServerRepositoryTest {
+@@ -100,2 +112,3 @@ class AutomaticServerRepositoryTest {
 -            isServerSelectionAutomaticProvider = isAutomaticProvider,
+-            evaluationInterval = EvaluationInterval(MINIMUM_EVALUATION_INTERVAL, timeSource)
 +            walletServerSelectionProvider = serverSelectionProvider,
-@@ -107 +110 @@ class AutomaticServerRepositoryTest {
++            evaluationInterval = EvaluationInterval(MINIMUM_EVALUATION_INTERVAL, timeSource),
++            walletTransport = transport,
+@@ -107 +120 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -114 +117 @@ class AutomaticServerRepositoryTest {
+@@ -114 +127 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 +            selectServer(false)
-@@ -121,3 +124 @@ class AutomaticServerRepositoryTest {
+@@ -121,3 +134 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns
 -                wallet(endpoint("custom.example.com"))
 +            selectServer(null, endpoint("custom.example.com"))
-@@ -131,2 +132 @@ class AutomaticServerRepositoryTest {
+@@ -131,2 +142 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
 +            selectServer(null, known.last())
-@@ -140,2 +140 @@ class AutomaticServerRepositoryTest {
+@@ -140,2 +150 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns null
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +            coEvery { serverSelectionProvider.getServerSelection() } returns null
-@@ -149 +148 @@ class AutomaticServerRepositoryTest {
+@@ -149 +158 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -156,2 +155 @@ class AutomaticServerRepositoryTest {
+@@ -156,2 +165 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
 +            selectServer(false, known.last())
-@@ -165,3 +163 @@ class AutomaticServerRepositoryTest {
+@@ -165,3 +173 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns
 -                wallet(endpoint("custom.example.com"))
 +            selectServer(false, endpoint("custom.example.com"))
-@@ -175,2 +171 @@ class AutomaticServerRepositoryTest {
+@@ -175,2 +181 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +            coEvery { serverSelectionProvider.getServerSelection() } returns null
-@@ -184 +179 @@ class AutomaticServerRepositoryTest {
+@@ -184 +189 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns false
 +            selectServer(false)
-@@ -186 +181 @@ class AutomaticServerRepositoryTest {
+@@ -186 +191 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -193 +188 @@ class AutomaticServerRepositoryTest {
+@@ -193 +198 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -196 +191 @@ class AutomaticServerRepositoryTest {
+@@ -196 +201 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -199,0 +195,9 @@ class AutomaticServerRepositoryTest {
+@@ -199,0 +205,9 @@ class AutomaticServerRepositoryTest {
 +    @Test
 +    fun aDetachedShieldSkipsTheSdkBenchmarkWithoutARegularProposal() = runTest {
 +        selectServer(true)
@@ -85657,53 +85905,53 @@ index bd304eb7c..77a52c339 100644
 +        coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
 +    }
 +
-@@ -203 +207 @@ class AutomaticServerRepositoryTest {
+@@ -203 +217 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -207 +211 @@ class AutomaticServerRepositoryTest {
+@@ -207 +221 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -214 +218 @@ class AutomaticServerRepositoryTest {
+@@ -214 +228 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 +            selectServer(true)
-@@ -217 +221 @@ class AutomaticServerRepositoryTest {
+@@ -217 +231 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -224,2 +228 @@ class AutomaticServerRepositoryTest {
+@@ -224,2 +238 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -228 +231 @@ class AutomaticServerRepositoryTest {
+@@ -228 +241 @@ class AutomaticServerRepositoryTest {
 -            assertNull(repository.evaluateServerSwitch())
 +            assertNull(repository.evaluateServerSwitch()?.endpoint)
-@@ -234,2 +237 @@ class AutomaticServerRepositoryTest {
+@@ -234,2 +247 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -238 +240 @@ class AutomaticServerRepositoryTest {
+@@ -238 +250 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.evaluateServerSwitch())
 +            assertEquals(known.last(), repository.evaluateServerSwitch()?.endpoint)
-@@ -244,2 +246 @@ class AutomaticServerRepositoryTest {
+@@ -244,2 +256 @@ class AutomaticServerRepositoryTest {
 -            coEvery { isAutomaticProvider.get() } returns true
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
 +            selectServer(true, known.first())
-@@ -269 +270 @@ class AutomaticServerRepositoryTest {
+@@ -269 +280 @@ class AutomaticServerRepositoryTest {
 -            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate() })
 +            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate()?.endpoint })
-@@ -277 +278 @@ class AutomaticServerRepositoryTest {
+@@ -277 +288 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.resolveSwitchCandidate())
 +            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
-@@ -285 +286 @@ class AutomaticServerRepositoryTest {
+@@ -285 +296 @@ class AutomaticServerRepositoryTest {
 -            assertEquals(known.last(), repository.resolveSwitchCandidate())
 +            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
-@@ -300 +301,5 @@ class AutomaticServerRepositoryTest {
+@@ -300 +311,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -303,0 +309,41 @@ class AutomaticServerRepositoryTest {
+@@ -303,0 +319,67 @@ class AutomaticServerRepositoryTest {
 +    @Test
 +    fun aShieldStartingAfterEvaluationPreventsApplyingThePreparedSwitch() = runTest {
 +        stubSwitchDecision(balances = null)
@@ -85726,6 +85974,32 @@ index bd304eb7c..77a52c339 100644
 +    }
 +
 +    @Test
++    fun aWalletOperationDuringPersistenceWaitsForTheReplacementSynchronizer() = runTest {
++        stubSwitchDecision(balances = emptyMap())
++        val writing = CompletableDeferred<Unit>()
++        val durable = CompletableDeferred<Unit>()
++        coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } coAnswers {
++            writing.complete(Unit)
++            durable.await()
++            true
++        }
++        val transition = async { repository.observeSwitchCandidates(flowOf(Unit)).first() }
++        writing.await()
++
++        val spending = async { transport.whileOperating { transport.current(synchronizerProvider) } }
++        runCurrent()
++        assertFalse(spending.isCompleted)
++        durable.complete(Unit)
++        assertEquals(known.last(), transition.await())
++        runCurrent()
++        assertFalse(spending.isCompleted)
++
++        val replacement = mockk<Synchronizer>()
++        activeSynchronizer.value = replacement
++        assertSame(replacement, spending.await())
++    }
++
++    @Test
 +    fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =
 +        runTest {
 +            stubSwitchDecision(balances = emptyMap())
@@ -85745,39 +86019,39 @@ index bd304eb7c..77a52c339 100644
 +            coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
 +        }
 +
-@@ -318 +364 @@ class AutomaticServerRepositoryTest {
+@@ -318 +400 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -338 +384 @@ class AutomaticServerRepositoryTest {
+@@ -338 +420 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -375 +421 @@ class AutomaticServerRepositoryTest {
+@@ -375 +457 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
 +            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
-@@ -382 +428,5 @@ class AutomaticServerRepositoryTest {
+@@ -382 +464,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -389 +439,3 @@ class AutomaticServerRepositoryTest {
+@@ -389 +475,3 @@ class AutomaticServerRepositoryTest {
 -            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
 +            coEvery {
 +                serverSelectionProvider.storeServerSelection(any(), any(), any())
 +            } throws IllegalStateException("prefs failed")
-@@ -398 +450,5 @@ class AutomaticServerRepositoryTest {
+@@ -398 +486,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -421,2 +477 @@ class AutomaticServerRepositoryTest {
+@@ -421,2 +513 @@ class AutomaticServerRepositoryTest {
 -        coEvery { isAutomaticProvider.get() } returns true
 -        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
 +        selectServer(true)
-@@ -427,0 +483,4 @@ class AutomaticServerRepositoryTest {
+@@ -427,0 +519,4 @@ class AutomaticServerRepositoryTest {
 +    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
 +        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
 +    }

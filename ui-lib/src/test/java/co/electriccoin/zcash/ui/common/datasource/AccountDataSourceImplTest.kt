@@ -10,6 +10,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -654,9 +655,10 @@ class AccountDataSourceImplTest {
             coEvery { getAccounts() } returns listOf(account, second)
         }
         var stored: String? = null
+        val key = PreferenceKey("selected_account_uuid")
         val preferences = mockk<PreferenceProvider>(relaxed = true) {
-            coEvery { getString(any()) } coAnswers { stored }
-            coEvery { putStringWithRollback(any(), any()) } coAnswers { stored = secondArg<String?>() }
+            coEvery { getString(key) } coAnswers { stored }
+            coEvery { putStringWithRollback(key, any()) } coAnswers { stored = secondArg<String?>() }
         }
         val selection = SelectedAccountUUIDProviderImpl(
             mockk<EncryptedPreferenceProvider> { coEvery { this@mockk() } returns preferences }

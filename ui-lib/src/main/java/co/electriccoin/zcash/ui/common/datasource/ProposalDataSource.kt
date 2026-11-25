@@ -30,9 +30,11 @@ import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import java.math.BigDecimal
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.zecdev.zip321.ZIP321
@@ -119,6 +121,7 @@ class ProposalDataSourceImpl(
     private val synchronizerProvider: SynchronizerProvider,
     private val lightWalletEndpointProvider: LightWalletEndpointProvider,
     private val walletServerSelectionProvider: WalletServerSelectionProvider,
+    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
 ) : ProposalDataSource {
     override suspend fun createProposal(account: WalletAccount, send: ZecSend): RegularTransactionProposal =
         withContext(Dispatchers.IO) {
@@ -260,17 +263,17 @@ class ProposalDataSourceImpl(
     override suspend fun createPcztFromProposal(account: WalletAccount, proposal: Proposal): Pczt =
         withContext(Dispatchers.IO) {
             account.requireSpendable()
-            synchronizerProvider.getSynchronizer().createPcztFromProposal(
-                accountUuid = account.sdkAccount.accountUuid,
-                proposal = proposal
-            )
+            walletTransport.whileOperating {
+                requireActiveSynchronizer().createPcztFromProposal(
+                    accountUuid = account.sdkAccount.accountUuid,
+                    proposal = proposal,
+                )
+            }
         }
 
     override suspend fun addProofsToPczt(pczt: Pczt): Pczt =
         withContext(Dispatchers.IO) {
-            synchronizerProvider
-                .getSynchronizer()
-                .addProofsToPczt(pczt)
+            walletTransport.whileOperating { requireActiveSynchronizer().addProofsToPczt(pczt) }
         }
 
     override suspend fun submitTransaction(
@@ -301,9 +304,7 @@ class ProposalDataSourceImpl(
 
     override suspend fun redactPcztForSigner(pczt: Pczt): Pczt =
         withContext(Dispatchers.IO) {
-            synchronizerProvider
-                .getSynchronizer()
-                .redactPcztForSigner(pczt)
+            walletTransport.whileOperating { requireActiveSynchronizer().redactPcztForSigner(pczt) }
         }
 
     private suspend fun submitTransactionInternal(
@@ -313,41 +314,45 @@ class ProposalDataSourceImpl(
         block: suspend (Synchronizer) -> List<CreatedTransaction>
     ): SubmitResult =
         withContext(Dispatchers.IO) {
-            val synchronizer = synchronizerProvider.getSynchronizer()
-            beforeCreation()
-            val transactions = runCatchingRecoverable { block(synchronizer) }
-                .getOrElse { return@withContext emptyList<CreatedTransaction>().uncertainSdkSubmission() }
+            walletTransport.whileOperating { lease ->
+                val synchronizer = requireActiveSynchronizer()
+                beforeCreation()
+                val transactions = runCatchingRecoverable { block(synchronizer) }
+                    .getOrElse { return@whileOperating emptyList<CreatedTransaction>().uncertainSdkSubmission() }
 
-            if (transactions.isEmpty()) {
-                return@withContext SubmitResult.Failure(
-                    txIds = emptyList(),
-                    code = MULTI_SUBMIT_EMPTY_TRANSACTION_CODE,
-                    description = MULTI_SUBMIT_EMPTY_TRANSACTION_DESCRIPTION
-                )
-            }
+                if (transactions.isEmpty()) {
+                    return@whileOperating SubmitResult.Failure(
+                        txIds = emptyList(),
+                        code = MULTI_SUBMIT_EMPTY_TRANSACTION_CODE,
+                        description = MULTI_SUBMIT_EMPTY_TRANSACTION_DESCRIPTION
+                    )
+                }
 
-            val result = runCatchingRecoverable {
-                val endpoints = getSubmissionEndpoints()
-                Twig.info {
-                    "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
+                val result = runCatchingRecoverable {
+                    val endpoints = getSubmissionEndpoints()
+                    Twig.info {
+                        "$logTag Created ${transactions.size} transaction(s); " +
+                            "submitting to ${endpoints.size} endpoint(s)."
+                    }
+                    submitCreatedTransactions(
+                        synchronizer = synchronizer,
+                        transactions = transactions,
+                        endpoints = endpoints,
+                        logTag = logTag,
+                        beforeFirstSubmission = beforeFirstSubmission,
+                        lease = lease
+                    ).toSubmitResult()
+                }.getOrElse { return@whileOperating transactions.uncertainSdkSubmission() }
+                if (synchronizer is SdkSynchronizer) {
+                    runCatchingRecoverable {
+                        synchronizer.refreshTransactions()
+                        synchronizer.refreshAllBalances()
+                    }.onFailure {
+                        Twig.warn { "Unable to refresh wallet after submission (${it::class.simpleName})" }
+                    }
                 }
-                submitCreatedTransactions(
-                    synchronizer = synchronizer,
-                    transactions = transactions,
-                    endpoints = endpoints,
-                    logTag = logTag,
-                    beforeFirstSubmission = beforeFirstSubmission
-                ).toSubmitResult()
-            }.getOrElse { return@withContext transactions.uncertainSdkSubmission() }
-            if (synchronizer is SdkSynchronizer) {
-                runCatchingRecoverable {
-                    synchronizer.refreshTransactions()
-                    synchronizer.refreshAllBalances()
-                }.onFailure {
-                    Twig.warn { "Unable to refresh wallet after submission (${it::class.simpleName})" }
-                }
+                if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
             }
-            if (result is SubmitResult.NonResubmittableError) transactions.uncertainSdkSubmission() else result
         }
 
     private suspend fun submitCreatedTransactions(
@@ -356,9 +361,11 @@ class ProposalDataSourceImpl(
         endpoints: List<LightWalletEndpoint>,
         logTag: String,
         beforeFirstSubmission: () -> Unit,
+        lease: WalletTransportAccess.Lease,
     ): List<TransactionSubmitResult> =
         MultiEndpointTransactionSubmitter(
             beforeFirstSubmission = beforeFirstSubmission,
+            onDrained = lease.retainUntilDrain(),
             submit = { transaction, endpoint ->
                 synchronizer.broadcaster.submit(transaction, endpoint)
             }
@@ -388,10 +395,11 @@ class ProposalDataSourceImpl(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend inline fun <T : Any> getOrThrow(block: (Synchronizer) -> T): T =
+    private suspend fun <T : Any> getOrThrow(block: suspend (Synchronizer) -> T): T =
         try {
-            val synchronizer = synchronizerProvider.getSynchronizer()
-            block(synchronizer)
+            walletTransport.whileOperating { block(requireActiveSynchronizer()) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: TransactionEncoderException.InsufficientFundsException) {
             throw InsufficientFundsException(e)
         } catch (e: TransactionProposalNotCreatedException) {
@@ -400,6 +408,11 @@ class ProposalDataSourceImpl(
             throw e
         } catch (e: Exception) {
             throw TransactionProposalNotCreatedException(e)
+        }
+
+    private suspend fun requireActiveSynchronizer(): Synchronizer =
+        checkNotNull(walletTransport.current(synchronizerProvider)) {
+            "The wallet is connecting to the selected server. Try again when it is ready."
         }
 
     private suspend fun AddressType.toWalletAddress(value: String) =

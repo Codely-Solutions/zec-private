@@ -34,6 +34,7 @@ internal interface MultiEndpointTransactionSubmitter {
             gracePeriod: Duration = 5.seconds,
             logger: MultiEndpointTransactionSubmitterLogger = TwigMultiEndpointTransactionSubmitterLogger,
             beforeFirstSubmission: () -> Unit = {},
+            onDrained: (() -> Unit)? = null,
             submit: suspend (CreatedTransaction, LightWalletEndpoint) -> TransactionSubmitResult
         ): MultiEndpointTransactionSubmitter =
             MultiEndpointTransactionSubmitterImpl(
@@ -44,7 +45,11 @@ internal interface MultiEndpointTransactionSubmitter {
                 logger = logger,
                 beforeFirstSubmission = beforeFirstSubmission,
                 submit = submit
-            )
+            ).also { worker ->
+                onDrained?.let { complete ->
+                    checkNotNull(worker.scope.coroutineContext[Job]).invokeOnCompletion { complete() }
+                }
+            }
     }
 }
 

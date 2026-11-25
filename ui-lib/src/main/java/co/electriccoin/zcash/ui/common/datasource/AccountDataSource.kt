@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
@@ -168,6 +169,7 @@ class AccountDataSourceImpl(
     private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
     accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
         flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
+    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
 ) : AccountDataSource {
     private val log = loggableNot("AccountDataSource")
 
@@ -266,7 +268,7 @@ class AccountDataSourceImpl(
     override suspend fun getSelectedAccount() = withContext(Dispatchers.IO) { selectedAccount.filterNotNull().first() }
 
     override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = withContext(Dispatchers.IO) {
-        val sync = synchronizerProvider.synchronizer.value ?: return@withContext null
+        val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
         runCatchingRecoverable {
             val selection = selectedAccountUUIDProvider.captureSelection()
             val accounts = sync.getAccounts()
@@ -274,7 +276,8 @@ class AccountDataSourceImpl(
             val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
             val selected = expected != null && isSelected(expected, uuid, accounts.size, currentAccountList = true)
             val permits = {
-                selectedAccountUUIDProvider.isCurrent(selection) && synchronizerProvider.synchronizer.value === sync
+                selectedAccountUUIDProvider.isCurrent(selection) && !walletTransport.isRetired(sync) &&
+                    synchronizerProvider.synchronizer.value === sync
             }
             permits.takeIf { selected && it() }
         }.getOrNull()
