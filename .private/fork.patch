@@ -32455,7 +32455,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..b0441a4d8 100644
+index 67c1e883c..64701da8c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -32481,13 +32481,9 @@ index 67c1e883c..b0441a4d8 100644
 +        override fun close() = Unit
 +    }
 +
-@@ -52,0 +71,101 @@ interface NavigationRouter {
+@@ -52,0 +71,110 @@ interface NavigationRouter {
 +
-+    val pendingForward: StateFlow<NavigationCommand.ForEntry?> get() = noPendingForward
-+
-+    fun stageForward(command: NavigationCommand.ForEntry) = custom { command }
-+
-+    fun completeForward(command: NavigationCommand.ForEntry) = Unit
++    val pendingNavigation: PendingNavigation? get() = null
 +}
 +
 +data class ActiveNavigationEntry(
@@ -32503,7 +32499,18 @@ index 67c1e883c..b0441a4d8 100644
 +}
 +
 +private val noActiveEntry = MutableStateFlow<ActiveNavigationEntry?>(null).asStateFlow()
-+private val noPendingForward = MutableStateFlow<NavigationCommand.ForEntry?>(null).asStateFlow()
++class PendingNavigation {
++    private val pending = MutableStateFlow<NavigationCommand.ForEntry?>(null)
++    internal val commands = pending.asStateFlow()
++
++    internal fun offer(command: NavigationCommand.ForEntry) {
++        pending.value = command
++    }
++
++    internal fun remove(command: NavigationCommand.ForEntry) {
++        pending.compareAndSet(command, null)
++    }
++}
 +
 +internal fun NavigationRouter.forwardFrom(
 +    sourceEntryId: String?,
@@ -32514,20 +32521,22 @@ index 67c1e883c..b0441a4d8 100644
 +    if (sourceEntryId == null) {
 +        buildRoute()?.let { forward(it) }
 +    } else if (isAtEntry(sourceEntryId)) {
-+        stageForward(NavigationCommand.ForEntry(
++        val command = NavigationCommand.ForEntry(
 +            sourceEntryId,
 +            isStillAllowed,
 +            buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
 +            acknowledge = {},
-+        ))
++        )
++        pendingNavigation?.offer(command) ?: custom { command }
 +    }
 +}
 +
 +internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
-+    pendingForward.filterNotNull().collect { command ->
++    val queue = pendingNavigation ?: return
++    queue.commands.filterNotNull().collect { command ->
 +        if (canCommit()) {
 +            navigator.executeCommand(command)
-+            completeForward(command)
++            queue.remove(command)
 +        }
 +    }
 +}
@@ -32583,23 +32592,14 @@ index 67c1e883c..b0441a4d8 100644
 +            monitor.cancel()
 +        }
 +    }
-@@ -54,0 +174 @@ interface NavigationRouter {
+@@ -54,0 +183 @@ interface NavigationRouter {
 +@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
-@@ -62,0 +183,31 @@ class NavigationRouterImpl : NavigationRouter {
+@@ -62,0 +192,22 @@ class NavigationRouterImpl : NavigationRouter {
 +    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
-+    private val pendingForwardState = MutableStateFlow<NavigationCommand.ForEntry?>(null)
 +    private var entryObserver: ActiveNavigationEntryObserver? = null
 +
 +    override val activeEntry = entryState.asStateFlow()
-+    override val pendingForward = pendingForwardState.asStateFlow()
-+
-+    override fun stageForward(command: NavigationCommand.ForEntry) {
-+        pendingForwardState.value = command
-+    }
-+
-+    override fun completeForward(command: NavigationCommand.ForEntry) {
-+        pendingForwardState.compareAndSet(command, null)
-+    }
++    override val pendingNavigation = PendingNavigation()
 +
 +    override fun registerEntryObserver(): ActiveNavigationEntryObserver =
 +        object : ActiveNavigationEntryObserver {
@@ -78462,12 +78462,13 @@ index 000000000..bc0e490ee
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..d4b09a924 100644
+index c01988b65..b50c6d48e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-@@ -4,0 +5,13 @@ import cash.z.ecc.android.sdk.type.AddressType
+@@ -4,0 +5,14 @@ import cash.z.ecc.android.sdk.type.AddressType
 +import co.electriccoin.zcash.ui.BaseNavigationCommand
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
++import co.electriccoin.zcash.ui.PendingNavigation
 +import co.electriccoin.zcash.ui.NavigationCommand
 +import co.electriccoin.zcash.ui.NavigationRouterImpl
 +import kotlinx.coroutines.CompletableDeferred
@@ -78479,18 +78480,16 @@ index c01988b65..d4b09a924 100644
 +import kotlinx.coroutines.test.runTest
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
-@@ -6,0 +20 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+@@ -6,0 +21 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
-@@ -7,0 +22 @@ import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
+@@ -7,0 +23 @@ import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 +import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
-@@ -21,0 +37 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -21,0 +38 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
-@@ -25,0 +42 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -25,0 +43 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
-@@ -27,0 +45 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+@@ -27,0 +46 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.error.ErrorArgs
-@@ -35,0 +54 @@ import io.mockk.mockk
-+import io.mockk.slot
 @@ -37,0 +57 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.CancellationException
 @@ -47,0 +68 @@ import kotlin.test.BeforeTest
@@ -78530,15 +78529,15 @@ index c01988b65..d4b09a924 100644
 +        val result = SwapQuoteData.Success(flexQuote())
 +        val instance = useCase(result)
 +        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("swap-entry", "Swap"))
-+        val delivery = slot<NavigationCommand.ForEntry>()
++        val pending = PendingNavigation()
 +        every { navigationRouter.activeEntry } returns active
-+        every { navigationRouter.stageForward(capture(delivery)) } returns Unit
++        every { navigationRouter.pendingNavigation } returns pending
 +
 +        instance.requestFlexInputIntoZec(
 +            BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
 +            canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
 +        )
-+        val command = delivery.captured
++        val command = checkNotNull(pending.commands.value)
 +        assertEquals("swap-entry", command.sourceEntryId)
 +        verify(exactly = 0) { swapRepository.consumeReview(any()) }
 +        assertEquals(NavigationCommand.Forward(listOf(SwapQuoteArgs)), command.buildCommand())

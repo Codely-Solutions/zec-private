@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouterImpl
 import kotlinx.coroutines.CompletableDeferred
@@ -51,7 +52,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -135,15 +135,15 @@ class RequestSwapQuoteUseCaseTest {
         val result = SwapQuoteData.Success(flexQuote())
         val instance = useCase(result)
         val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("swap-entry", "Swap"))
-        val delivery = slot<NavigationCommand.ForEntry>()
+        val pending = PendingNavigation()
         every { navigationRouter.activeEntry } returns active
-        every { navigationRouter.stageForward(capture(delivery)) } returns Unit
+        every { navigationRouter.pendingNavigation } returns pending
 
         instance.requestFlexInputIntoZec(
             BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
             canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
         )
-        val command = delivery.captured
+        val command = checkNotNull(pending.commands.value)
         assertEquals("swap-entry", command.sourceEntryId)
         verify(exactly = 0) { swapRepository.consumeReview(any()) }
         assertEquals(NavigationCommand.Forward(listOf(SwapQuoteArgs)), command.buildCommand())

@@ -69,11 +69,7 @@ interface NavigationRouter {
 
     fun observePipeline(): Flow<BaseNavigationCommand>
 
-    val pendingForward: StateFlow<NavigationCommand.ForEntry?> get() = noPendingForward
-
-    fun stageForward(command: NavigationCommand.ForEntry) = custom { command }
-
-    fun completeForward(command: NavigationCommand.ForEntry) = Unit
+    val pendingNavigation: PendingNavigation? get() = null
 }
 
 data class ActiveNavigationEntry(
@@ -89,7 +85,18 @@ interface ActiveNavigationEntryObserver {
 }
 
 private val noActiveEntry = MutableStateFlow<ActiveNavigationEntry?>(null).asStateFlow()
-private val noPendingForward = MutableStateFlow<NavigationCommand.ForEntry?>(null).asStateFlow()
+class PendingNavigation {
+    private val pending = MutableStateFlow<NavigationCommand.ForEntry?>(null)
+    internal val commands = pending.asStateFlow()
+
+    internal fun offer(command: NavigationCommand.ForEntry) {
+        pending.value = command
+    }
+
+    internal fun remove(command: NavigationCommand.ForEntry) {
+        pending.compareAndSet(command, null)
+    }
+}
 
 internal fun NavigationRouter.forwardFrom(
     sourceEntryId: String?,
@@ -100,20 +107,22 @@ internal fun NavigationRouter.forwardFrom(
     if (sourceEntryId == null) {
         buildRoute()?.let { forward(it) }
     } else if (isAtEntry(sourceEntryId)) {
-        stageForward(NavigationCommand.ForEntry(
+        val command = NavigationCommand.ForEntry(
             sourceEntryId,
             isStillAllowed,
             buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
             acknowledge = {},
-        ))
+        )
+        pendingNavigation?.offer(command) ?: custom { command }
     }
 }
 
 internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
-    pendingForward.filterNotNull().collect { command ->
+    val queue = pendingNavigation ?: return
+    queue.commands.filterNotNull().collect { command ->
         if (canCommit()) {
             navigator.executeCommand(command)
-            completeForward(command)
+            queue.remove(command)
         }
     }
 }
@@ -181,19 +190,10 @@ class NavigationRouterImpl : NavigationRouter {
 
     private val channel = Channel<BaseNavigationCommand>()
     private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
-    private val pendingForwardState = MutableStateFlow<NavigationCommand.ForEntry?>(null)
     private var entryObserver: ActiveNavigationEntryObserver? = null
 
     override val activeEntry = entryState.asStateFlow()
-    override val pendingForward = pendingForwardState.asStateFlow()
-
-    override fun stageForward(command: NavigationCommand.ForEntry) {
-        pendingForwardState.value = command
-    }
-
-    override fun completeForward(command: NavigationCommand.ForEntry) {
-        pendingForwardState.compareAndSet(command, null)
-    }
+    override val pendingNavigation = PendingNavigation()
 
     override fun registerEntryObserver(): ActiveNavigationEntryObserver =
         object : ActiveNavigationEntryObserver {
