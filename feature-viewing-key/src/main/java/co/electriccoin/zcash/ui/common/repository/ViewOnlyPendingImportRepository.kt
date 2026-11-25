@@ -40,11 +40,12 @@ internal class ViewOnlyPendingImportRepositoryImpl(
     @Synchronized
     override fun get(): PendingViewOnlyImport? {
         val value = pending.value ?: return null
-        if (walletEnrollment != null && value.enrollment?.let(walletEnrollment::permits) != true) {
+        return if (walletEnrollment != null && value.enrollment?.let(walletEnrollment::permits) != true) {
             pending.value = null
-            return null
+            null
+        } else {
+            value
         }
-        return value
     }
 
     @Synchronized

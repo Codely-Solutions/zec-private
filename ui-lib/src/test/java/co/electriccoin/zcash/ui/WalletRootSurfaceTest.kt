@@ -37,4 +37,12 @@ class WalletRootSurfaceTest {
             assertEquals(WalletRootSurface.RESET, walletRootSurface(secretState, isResetPending = true))
         }
     }
+
+    @Test
+    fun savedTorChangeKeepsItsRestartActionThroughWaitingButResetStillWins() {
+        for (secretState in SecretState.entries) {
+            assertEquals(WalletRootSurface.TOR_RESTART, walletRootSurface(secretState, false, restartForTor = true))
+            assertEquals(WalletRootSurface.RESET, walletRootSurface(secretState, true, restartForTor = true))
+        }
+    }
 }

@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.model.GiftCardSummary
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -96,6 +97,9 @@ interface GiftCardDataSource {
      */
     suspend fun awaitPendingCloses()
 
+    /** Called while a transport settings writer prevents new gift operations from starting. */
+    suspend fun canChangeTorMode(): Boolean
+
     /**
      * The card wallets whose data is stored on the device, on every network, whether or not a card is held for them.
      */
@@ -151,6 +155,7 @@ class GiftCardDataSourceImpl(
     private val persistableWalletProvider: PersistableWalletProvider,
     private val synchronizerProvider: SynchronizerProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
+    private val walletTransport: WalletTransportAccess = WalletTransportAccess(),
 ) : GiftCardDataSource {
     internal var scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -166,7 +171,7 @@ class GiftCardDataSourceImpl(
     private var closeFailed = false
 
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun parse(link: String): ParsedGiftCard {
+    override suspend fun parse(link: String): ParsedGiftCard = walletTransport.whileOperating {
         val wallet = persistableWalletProvider.getPersistableWallet() ?: throw GiftCardException.NotAvailable()
         val card =
             try {
@@ -187,12 +192,12 @@ class GiftCardDataSourceImpl(
             }
 
         val handle = GiftCardHandle(UUID.randomUUID().toString())
-        val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, route = route)
+        val held = HeldCard(card = card, network = wallet.network, route = route)
         synchronized(lock) {
             held.priorClose = closeJobs[route.redeemer.alias]
             cards[handle] = held
         }
-        return ParsedGiftCard(
+        ParsedGiftCard(
             summary =
                 GiftCardSummary(
                     handle = handle,
@@ -205,7 +210,7 @@ class GiftCardDataSourceImpl(
         )
     }
 
-    override suspend fun check(handle: GiftCardHandle): GiftCardStatus {
+    override suspend fun check(handle: GiftCardHandle): GiftCardStatus = walletTransport.whileOperating {
         val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
         val redeemer = readyRedeemer(handle, held, allowRouteChange = true)
         val status =
@@ -218,7 +223,7 @@ class GiftCardDataSourceImpl(
             } catch (e: SdkGiftCardException.SyncFailed) {
                 throw GiftCardException.CheckFailed(e)
             }
-        return when (status) {
+        when (status) {
             is GiftCardRedeemer.Status.Ready -> {
                 GiftCardStatus.Ready(spendable = status.balance.spendable, redeemable = status.redeemable)
             }
@@ -244,7 +249,7 @@ class GiftCardDataSourceImpl(
         handle: GiftCardHandle,
         toAddress: String,
         beforeSubmission: () -> Unit,
-    ): GiftCardRedemption {
+    ): GiftCardRedemption = walletTransport.whileOperating {
         val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
         val recipient = RecipientAddress.new(toAddress, held.network)
         val memo = redeemMemo(label = application.getString(R.string.redeemGift_memo), message = held.card.description)
@@ -281,7 +286,7 @@ class GiftCardDataSourceImpl(
         if (!redemption.recordedInDestination) {
             Twig.warn { "Gift card redemption not recorded in the wallet as trusted; it will be found on sync" }
         }
-        return GiftCardRedemption(txId = result.txIdString(), received = redemption.amount)
+        GiftCardRedemption(txId = result.txIdString(), received = redemption.amount)
     }
 
     override fun close(handle: GiftCardHandle) {
@@ -310,6 +315,12 @@ class GiftCardDataSourceImpl(
         synchronized(lock) { closedWallets.clear() }
     }
 
+    override suspend fun canChangeTorMode(): Boolean {
+        if (synchronized(lock) { cards.isNotEmpty() }) return false
+        awaitPendingCloses()
+        return true
+    }
+
     override suspend fun findStoredCardWallets(): List<StoredCardWallet> =
         listOf(ZcashNetwork.Mainnet, ZcashNetwork.Testnet).flatMap { network ->
             GiftCardRedeemers.storedAliases(application, network).map { StoredCardWallet(network, it) }
@@ -320,34 +331,40 @@ class GiftCardDataSourceImpl(
     }
 
     /**
-     * Match the current Tor setting before entering the SDK. A changed route requires a fresh card check
-     * before redemption. Read again after waiting for the previous redeemer's close.
+     * Match the current server and Tor setting before entering the SDK. A changed route requires a fresh
+     * check before redemption. Read again after waiting for the previous redeemer's close.
      */
     private suspend fun readyRedeemer(
         handle: GiftCardHandle,
         held: HeldCard,
         allowRouteChange: Boolean,
     ): GiftCardRedeemer {
-        val usesTor = isTorEnabledStorageProvider.get() == true
+        val requested = readRoute(held)
         val (route, priorClose) = synchronized(lock) {
             if (cards[handle] !== held) {
                 null
             } else {
-                if (allowRouteChange && held.route.usesTor != usesTor) replaceRouteLocked(held, usesTor)
+                if (allowRouteChange && held.route.settings != requested) replaceRouteLocked(held, requested)
                 held.route to held.priorClose
             }
         } ?: throw GiftCardException.UnknownHandle()
         priorClose?.join()
-        val currentTor = isTorEnabledStorageProvider.get() == true
+        val current = readRoute(held)
         val refusal = synchronized(lock) {
             when {
                 cards[handle] !== held -> GiftCardException.UnknownHandle()
-                held.route !== route || route.usesTor != currentTor -> GiftCardException.NotChecked()
+                held.route !== route || route.settings != current -> GiftCardException.NotChecked()
                 else -> null
             }
         }
         if (refusal != null) throw refusal
         return route.redeemer
+    }
+
+    private suspend fun readRoute(held: HeldCard): GiftWalletRoute {
+        val wallet = persistableWalletProvider.getPersistableWallet() ?: throw GiftCardException.NotAvailable()
+        if (wallet.network != held.network) throw GiftCardException.WrongNetwork()
+        return GiftWalletRoute(wallet.endpoint, isTorEnabledStorageProvider.get() == true)
     }
 
     /**
@@ -362,9 +379,9 @@ class GiftCardDataSourceImpl(
         held: HeldCard
     ) {
         try {
-            val usesTor = isTorEnabledStorageProvider.get() == true
+            val requested = readRoute(held)
             synchronized(lock) {
-                if (cards[handle] === held) replaceRouteLocked(held, usesTor)
+                if (cards[handle] === held) replaceRouteLocked(held, requested)
             }
         } catch (e: CancellationException) {
             throw e
@@ -373,8 +390,8 @@ class GiftCardDataSourceImpl(
         }
     }
 
-    private fun replaceRouteLocked(held: HeldCard, usesTor: Boolean) {
-        val fresh = newRedeemer(application, held.card, held.network, held.endpoint, usesTor)
+    private fun replaceRouteLocked(held: HeldCard, requested: GiftWalletRoute) {
+        val fresh = newRedeemer(application, held.card, held.network, requested.endpoint, requested.usesTor)
         closeLocked(held.route.redeemer, network = held.network, wipe = null)
         held.priorClose = closeJobs[fresh.redeemer.alias]
         held.route = fresh
@@ -397,7 +414,12 @@ class GiftCardDataSourceImpl(
             scope.launch {
                 previous?.join()
                 try {
-                    redeemer.close()
+                    // SDK close can return after its own 30-second wait while teardown is still running.
+                    val confirmed = withTimeoutOrNull(CARD_WALLET_CLOSE_CONFIRMATION_TIMEOUT) {
+                        redeemer.close()
+                        true
+                    }
+                    if (confirmed != true) throw GiftWalletRestartRequiredException()
                 } catch (e: Exception) {
                     synchronized(lock) { closeFailed = true }
                     Twig.error { "Closing a gift card wallet failed: ${e::class.simpleName}" }
@@ -415,14 +437,15 @@ class GiftCardDataSourceImpl(
     private class HeldCard(
         val card: GiftCard,
         val network: ZcashNetwork,
-        val endpoint: LightWalletEndpoint,
         var route: RoutedRedeemer,
     ) {
         var priorClose: Job? = null
     }
 }
 
-private data class RoutedRedeemer(val redeemer: GiftCardRedeemer, val usesTor: Boolean)
+private data class GiftWalletRoute(val endpoint: LightWalletEndpoint, val usesTor: Boolean)
+
+private data class RoutedRedeemer(val redeemer: GiftCardRedeemer, val settings: GiftWalletRoute)
 
 private fun newRedeemer(
     application: Application,
@@ -440,7 +463,7 @@ private fun newRedeemer(
                 lightWalletEndpoint = endpoint,
                 isTorEnabled = usesTor
             ),
-            usesTor = usesTor
+            settings = GiftWalletRoute(endpoint, usesTor)
         )
     } catch (e: SdkGiftCardException.NetworkMismatch) {
         throw GiftCardException.WrongNetwork(e)
@@ -484,6 +507,7 @@ private const val CONTINUATION_BYTE_MASK = 0xC0
 private const val CONTINUATION_BYTE = 0x80
 private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
+private val CARD_WALLET_CLOSE_CONFIRMATION_TIMEOUT = 28.seconds
 
 private fun SdkGiftCardException.InvalidLink.toAppException(): GiftCardException =
     when (reason) {

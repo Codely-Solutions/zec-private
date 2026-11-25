@@ -49,6 +49,7 @@ import co.electriccoin.zcash.ui.screen.authentication.WrapAuthentication
 import co.electriccoin.zcash.ui.screen.authentication.view.AnimationConstants
 import co.electriccoin.zcash.ui.screen.authentication.view.WelcomeAnimationAutostart
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.screen.theme.ThemeVM
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import co.electriccoin.zcash.work.WorkIds
@@ -85,6 +86,7 @@ class MainActivity : FragmentActivity() {
     private val handleExternalLink: HandleExternalLinkUseCase by inject()
     private val launchNavigation: LaunchNavigationRequests by inject()
     private val resetProgressStore: ResetProgressStore by inject()
+    private val transportGate: WalletSdkTransportGate by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(restorableNavigationState(savedInstanceState))
@@ -214,7 +216,8 @@ class MainActivity : FragmentActivity() {
             }
 
             !themeVM.isThemeResolved.value ||
-                (!resetProgressStore.isPending.value && SecretState.LOADING == walletViewModel.secretState.value)
+                (!resetProgressStore.isPending.value && !transportGate.restartRequired.value &&
+                    SecretState.LOADING == walletViewModel.secretState.value)
         }
     }
 

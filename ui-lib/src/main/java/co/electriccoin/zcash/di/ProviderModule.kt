@@ -100,7 +100,7 @@ val providerModule =
         singleOf(::PersistableWalletProviderImpl) binds
             arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
         single { WalletWriteAccess(get()) }
-        singleOf(::WalletTransportAccess)
+        single { WalletTransportAccess(get()) }
         singleOf(::WalletEnrollmentAccess)
         singleOf(::PreferredFiatProviderImpl) bind PreferredFiatProvider::class
         single {
@@ -131,7 +131,7 @@ val providerModule =
             HasSeenHowToVoteKeystoneStorageProvider::class
         singleOf(::IsSwapRefundWarningDismissedStorageProviderImpl) bind
             IsSwapRefundWarningDismissedStorageProvider::class
-        singleOf(::IsTorEnabledStorageProviderImpl) bind IsTorEnabledStorageProvider::class
+        single<IsTorEnabledStorageProvider> { IsTorEnabledStorageProviderImpl(get(), get()) }
         singleOf(::AppearanceModeStorageProviderImpl) bind AppearanceModeStorageProvider::class
         singleOf(::IsOledEnabledStorageProviderImpl) bind IsOledEnabledStorageProvider::class
         singleOf(::BlockchainProviderImpl) bind BlockchainProvider::class

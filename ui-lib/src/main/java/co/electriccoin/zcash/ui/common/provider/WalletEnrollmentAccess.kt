@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -13,6 +14,7 @@ data class WalletEnrollmentToken internal constructor(internal val wallet: Long,
 class WalletEnrollmentAccess(
     private val walletWriteAccess: WalletWriteAccess,
     private val walletCoordinator: WalletCoordinator,
+    private val transportGate: WalletSdkTransportGate? = null,
 ) {
     val ownershipChanges = walletWriteAccess.enrollmentChanges
 
@@ -27,7 +29,7 @@ class WalletEnrollmentAccess(
     suspend fun <T> complete(token: WalletEnrollmentToken, block: suspend (Synchronizer) -> T): T? {
         if (!permits(token)) return null
         return walletWriteAccess.withSdkRecovery(token.wallet) {
-            if (!permits(token)) return@withSdkRecovery null
+            if (!permits(token) || transportGate?.restartRequired?.value == true) return@withSdkRecovery null
             val sdk = checkNotNull(walletCoordinator.synchronizer.value) {
                 "The wallet is connecting. Try again when it is ready."
             }

@@ -277,6 +277,7 @@ class KeystoneProposalRepositoryImpl(
         val result = createReviewPczt(transactionProposal, owner)
         currentCoroutineContext().ensureActive()
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
+        transactionProposal.requireCurrentShieldingApproval()
         prepareSigning(transactionProposal, result, owner)
     }
 

@@ -1,16 +1,21 @@
 package co.electriccoin.zcash.ui.screen.tor
 
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.model.PersistableWallet
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
+import co.electriccoin.zcash.ui.common.provider.WalletSdkRead
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
+import co.electriccoin.zcash.ui.common.usecase.TorChangeWalletBusyException
 import co.electriccoin.zcash.ui.screen.tor.optin.TorOptInVM
 import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsVM
 import io.mockk.coEvery
@@ -19,22 +24,88 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TorProtectionSaveTest {
+    @Test
+    fun nativeWorkFinishesBeforeCommitAndRecreatedSettingsCannotReadAStaleRoute() = runTest {
+        val key = PreferenceKey("is_tor_Enabled")
+        val stored = MutableStateFlow<String?>("true")
+        val encrypted = mockk<PreferenceProvider> {
+            every { observe(key) } returns stored
+            coEvery { getString(key) } coAnswers { stored.value }
+            coEvery { putStringWithRollback(key, "false") } coAnswers { stored.value = "false" }
+        }
+        val gate = WalletSdkTransportGate()
+        val transport = WalletTransportAccess(gate)
+        val preference = IsTorEnabledStorageProviderImpl(mockk<EncryptedPreferenceProvider> {
+            coEvery { this@mockk() } returns encrypted
+        }, gate)
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val save = OptInExchangeRateAndTorUseCase(
+            navigation,
+            preference,
+            AppAccessSession().apply { unlock() },
+            WalletWriteAccess(),
+            gate,
+            transport,
+        )
+        val generation = MutableStateFlow(0L)
+        val wallet = mockk<PersistableWallet>()
+        val wallets = MutableStateFlow(WalletSdkRead(0L, wallet))
+        val admitted = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
+        backgroundScope.launch {
+            combine(
+                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.transportInput(preference.observe(), generation),
+            ) { current, tor -> current to tor }.collect { admitted += it }
+        }
+        runCurrent()
+        assertEquals(wallet to true, admitted.last())
+
+        val nativeWorkEnded = CompletableDeferred<Unit>()
+        val spend = launch { transport.whileOperating { nativeWorkEnded.await() } }
+        runCurrent()
+        assertFailsWith<TorChangeWalletBusyException> { save(false) }
+        assertEquals(true, preference.get())
+        assertFalse(gate.restartRequired.value)
+        coVerify(exactly = 0) { encrypted.putStringWithRollback(key, any()) }
+
+        nativeWorkEnded.complete(Unit)
+        spend.join()
+        save(false)
+        runCurrent()
+
+        coVerify(exactly = 1) { encrypted.putStringWithRollback(key, "false") }
+        assertEquals("false", stored.value)
+        assertTrue(gate.restartRequired.value)
+        assertEquals(null to true, admitted.last())
+        assertFailsWith<IllegalStateException> { preference.get() }
+        assertFailsWith<kotlinx.coroutines.CancellationException> {
+            transport.whileOperating { error("A retired engine cannot start a new spend") }
+        }
+        verify(exactly = 0) { navigation.back() }
+    }
+
     @Test
     fun failedStorageKeepsBothTorScreensOpenAndRetryUsesTheAcknowledgedChoice() {
         val dispatcher = UnconfinedTestDispatcher()

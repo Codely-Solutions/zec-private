@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import android.util.Log
+import co.electriccoin.zcash.global.DirectHttpTransportUnavailable
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngineConfig
@@ -36,7 +38,8 @@ internal class TorOnlyRequest(val canRequest: () -> Boolean = { true }) : Abstra
 
 class HttpClientProviderImpl(
     private val synchronizerProvider: SynchronizerProvider,
-    private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider
+    private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
+    private val transportGate: WalletSdkTransportGate? = null,
 ) : HttpClientProvider {
     override suspend fun create(): HttpClient =
         if (requiresTor()) createTor() else createDirect()
@@ -46,12 +49,14 @@ class HttpClientProviderImpl(
     private suspend fun requiresTor() =
         currentCoroutineContext()[TorOnlyRequest.Key] != null || isTorEnabledStorageProvider.get() == true
 
-    override suspend fun createTor() =
-        synchronizerProvider
+    override suspend fun createTor(): HttpClient {
+        transportGate?.checkTransportAvailable()
+        return synchronizerProvider
             .getSynchronizer()
             .getTorHttpClient {
                 configureHttpClient(installTimeouts = false)
             }
+    }
 
     @Suppress("MagicNumber")
     private fun createDirect() =
@@ -64,6 +69,7 @@ class HttpClientProviderImpl(
                 // request — this interceptor is a backstop that fails loudly if a future caller regresses
                 // to create(), rather than silently leaking the user's IP / request timing.
                 addInterceptor { chain ->
+                    transportGate?.requireDirectHttpAllowed()
                     if (chain
                             .request()
                             .url.host
@@ -81,8 +87,8 @@ class HttpClientProviderImpl(
                         !request.url.host.isExchangeRateHost() &&
                         response.status.value in 500..599
                 }
-                retryOnExceptionIf { request, _ ->
-                    !request.url.toString().isVotingHelperPath() &&
+                retryOnExceptionIf { request, failure ->
+                    failure !is DirectHttpTransportUnavailable && !request.url.toString().isVotingHelperPath() &&
                         !request.url.host.isExchangeRateHost()
                 }
                 exponentialDelay()

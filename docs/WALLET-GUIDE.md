@@ -20,6 +20,10 @@ The package is `com.personal.zecprivate.foss`, so it can coexist with the offici
 
 The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. If the check fails, retry there to see a current update offer. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
 
+## Tor protection
+
+After changing Tor protection with a wallet open, follow the prompt to force stop and reopen ZEC Private. The new setting takes effect when the app starts again. Wait for wallet operations to finish before changing it.
+
 ## Swaps and CrossPay
 
 ZEC Private holds Zcash (ZEC); cross-chain swaps use external wallets for other assets. For example, swap Bitcoin (BTC) into shielded ZEC, or use CrossPay to pay a Bitcoin address from ZEC. Available assets and quotes depend on the provider.

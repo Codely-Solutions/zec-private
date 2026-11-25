@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.BlankSurface
+import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ZashiBaseSettingsOptIn
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
@@ -23,7 +24,26 @@ import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.error.DialogView
+import co.electriccoin.zcash.ui.screen.error.ErrorState
 import co.electriccoin.zcash.ui.screen.exchangerate.settings.Option
+
+@Composable
+internal fun TorRestartRequiredView(onOpenSettings: () -> Unit) {
+    DialogView(
+        ErrorState(
+            title = stringRes(R.string.tor_protection_restart_title),
+            message = stringRes(R.string.tor_protection_restart_message),
+            positive = ButtonState(
+                text = stringRes(R.string.tor_protection_open_android_settings),
+                onClick = onOpenSettings,
+            ),
+            negative = null,
+            onBack = {},
+        )
+    )
+}
 
 @Composable
 fun TorSettingsView(state: TorSettingsState) {

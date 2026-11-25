@@ -84,6 +84,23 @@ class ReviewScreenshotTest {
     @Test
     fun captureLargeGiftResetRestart() = captureGiftResetRestart("dark", 2f)
 
+    @Test
+    fun captureTorModeRestart() = captureTorModeRestart("light", 1f)
+
+    @Test
+    fun captureLargeTorModeRestart() = captureTorModeRestart("dark", 2f)
+
+    private fun captureTorModeRestart(theme: String, fontScale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(fontScale) }
+        val scene = Scene("tor-mode-restart", theme, fontScale)
+        show(mutableStateOf(scene))
+        val instructions = text(R.string.tor_protection_restart_message)
+        compose.onNodeWithText(instructions).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.tor_protection_open_android_settings)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.tor_protection_open_android_settings)).assertHasClickAction()
+        capture(scene, "restart-required", instructions)
+    }
+
     private fun captureGiftResetRestart(theme: String, fontScale: Float) {
         compose.runOnUiThread { RuntimeEnvironment.setFontScale(fontScale) }
         val scene = Scene("reset-restart", theme, fontScale)

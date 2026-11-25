@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.screen.tor.optin
 
 import androidx.lifecycle.ViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -10,8 +9,8 @@ import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
+import co.electriccoin.zcash.ui.screen.tor.settings.torSaveErrorMessage
 import kotlinx.coroutines.flow.flowOf
-import co.electriccoin.zcash.ui.design.util.stringRes
 
 class TorOptInVM(
     private val optInExchangeRateAndTor: OptInExchangeRateAndTorUseCase,
@@ -35,7 +34,7 @@ class TorOptInVM(
         ).withLce(save) { error ->
             errorMapper.mapToState(
                 error,
-                message = stringRes(R.string.tor_protection_save_failed),
+                message = torSaveErrorMessage(error.cause),
                 supportWithoutDiagnostics = true,
             )
         }.stateIn(this)

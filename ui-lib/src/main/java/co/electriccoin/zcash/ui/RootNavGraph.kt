@@ -19,6 +19,7 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.toRoute
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
@@ -45,6 +46,8 @@ import co.electriccoin.zcash.ui.screen.error.StoredWalletUnavailableView
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
+import co.electriccoin.zcash.ui.screen.tor.settings.TorRestartRequiredView
+import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -63,21 +66,31 @@ fun RootNavGraph(
 ) {
     val resetProgress = koinInject<ResetProgressStore>()
     val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
-    when (walletRootSurface(secretState, isResetPending)) {
+    val transportGate = koinInject<WalletSdkTransportGate>()
+    val restartForTor by transportGate.restartRequired.collectAsStateWithLifecycle()
+    when (walletRootSurface(secretState, isResetPending, restartForTor)) {
         WalletRootSurface.RESET -> ResetZashiScreen()
+        WalletRootSurface.TOR_RESTART -> {
+            val activity = LocalActivity.current
+            TorRestartRequiredView { activity.startActivity(SettingsUtil.newSettingsIntent(activity.packageName)) }
+        }
         WalletRootSurface.WAITING -> CircularScreenProgressIndicator()
         WalletRootSurface.RECOVERY -> UnavailableWalletRecovery(walletViewModel, resetProgress, hasAppAccess)
         WalletRootSurface.NAVIGATION -> WalletNavHost(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
     }
 }
 
-internal enum class WalletRootSurface { RESET, WAITING, RECOVERY, NAVIGATION }
+internal enum class WalletRootSurface { RESET, TOR_RESTART, WAITING, RECOVERY, NAVIGATION }
 
-internal fun walletRootSurface(secretState: SecretState, isResetPending: Boolean): WalletRootSurface =
-    if (isResetPending) {
-        WalletRootSurface.RESET
-    } else {
-        when (secretState) {
+internal fun walletRootSurface(
+    secretState: SecretState,
+    isResetPending: Boolean,
+    restartForTor: Boolean = false,
+): WalletRootSurface =
+    when {
+        isResetPending -> WalletRootSurface.RESET
+        restartForTor -> WalletRootSurface.TOR_RESTART
+        else -> when (secretState) {
             SecretState.LOADING -> WalletRootSurface.WAITING
             SecretState.UNAVAILABLE -> WalletRootSurface.RECOVERY
             SecretState.READY, SecretState.NONE, SecretState.INCOMPLETE -> WalletRootSurface.NAVIGATION

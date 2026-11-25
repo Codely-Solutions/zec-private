@@ -79,6 +79,8 @@ class FakeGiftCardDataSource(
 
     override suspend fun awaitPendingCloses() = Unit
 
+    override suspend fun canChangeTorMode() = true
+
     override suspend fun findStoredCardWallets(): List<StoredCardWallet> = storedWallets
 
     override suspend fun eraseCardWallet(wallet: StoredCardWallet) {

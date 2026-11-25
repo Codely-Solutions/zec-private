@@ -412,9 +412,15 @@ class WalletRepositoryImpl(
                     walletInitMode = WalletInitMode.NewWallet,
                 )
             candidate = newWallet
-            persistWalletInternal(newWallet)
-            walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
-            persistOnboardingStateInternal(OnboardingState.READY)
+            val mode = transportGate?.let { isTorEnabledStorageProvider.getStoredMode() == true }
+            mode?.let { transportGate.requireWalletMode(it) }
+            try {
+                persistWalletInternal(newWallet)
+                walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
+                persistOnboardingStateInternal(OnboardingState.READY)
+            } finally {
+                mode?.let { transportGate.recordCommittedMode(it) }
+            }
         }
     }
 
@@ -481,20 +487,25 @@ class WalletRepositoryImpl(
             }
             // Commit the accepted setting before the wallet can start a synchronizer.
             isTorEnabledStorageProvider.store(request.enableTor)
-            val restoredWallet =
-                stored ?: candidate ?: PersistableWallet(
-                    network = network,
-                    birthday = birthday,
-                    endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
-                    seedPhrase = seedPhrase,
-                    walletInitMode = WalletInitMode.RestoreWallet,
-                )
-            candidate = restoredWallet
-            persistWalletInternal(restoredWallet)
-            walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
-            walletBackupFlagStorageProvider.store(true)
-            restoreTimestampDataSource.getOrCreate()
-            persistOnboardingStateInternal(OnboardingState.READY)
+            transportGate?.requireWalletMode(request.enableTor)
+            try {
+                val restoredWallet =
+                    stored ?: candidate ?: PersistableWallet(
+                        network = network,
+                        birthday = birthday,
+                        endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
+                        seedPhrase = seedPhrase,
+                        walletInitMode = WalletInitMode.RestoreWallet,
+                    )
+                candidate = restoredWallet
+                persistWalletInternal(restoredWallet)
+                walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
+                walletBackupFlagStorageProvider.store(true)
+                restoreTimestampDataSource.getOrCreate()
+                persistOnboardingStateInternal(OnboardingState.READY)
+            } finally {
+                transportGate?.recordCommittedMode(request.enableTor)
+            }
         }
     }
 

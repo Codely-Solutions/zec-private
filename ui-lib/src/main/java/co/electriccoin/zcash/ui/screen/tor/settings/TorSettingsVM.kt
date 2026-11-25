@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.common.datasource.GiftWalletRestartRequiredException
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
@@ -11,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
+import co.electriccoin.zcash.ui.common.usecase.TorChangeWalletBusyException
 import kotlinx.coroutines.flow.map
 import co.electriccoin.zcash.ui.design.util.stringRes
 
@@ -41,7 +43,7 @@ class TorSettingsVM(
             }.withLce(save) { error ->
                 errorMapper.mapToState(
                     error,
-                    message = stringRes(R.string.tor_protection_save_failed),
+                    message = torSaveErrorMessage(error.cause),
                     supportWithoutDiagnostics = true,
                 )
             }.stateIn(this)
@@ -52,3 +54,11 @@ class TorSettingsVM(
         save.execute { optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId) }
     }
 }
+
+internal fun torSaveErrorMessage(error: Throwable?) = stringRes(
+    when (error) {
+        is TorChangeWalletBusyException -> R.string.tor_protection_wallet_busy
+        is GiftWalletRestartRequiredException -> R.string.tor_protection_gift_restart
+        else -> R.string.tor_protection_save_failed
+    }
+)

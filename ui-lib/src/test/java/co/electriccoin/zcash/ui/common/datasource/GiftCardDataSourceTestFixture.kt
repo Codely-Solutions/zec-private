@@ -99,10 +99,10 @@ abstract class GiftCardDataSourceTestFixture {
             isTorEnabledStorageProvider = isTorEnabledStorageProvider,
         ).also { dataSource -> scope?.let { dataSource.scope = it } }
 
-    private fun wallet(network: ZcashNetwork) =
+    protected fun wallet(network: ZcashNetwork, server: LightWalletEndpoint = ENDPOINT) =
         mockk<PersistableWallet> {
             every { this@mockk.network } returns network
-            every { endpoint } returns ENDPOINT
+            every { endpoint } returns server
         }
 
     protected fun card(

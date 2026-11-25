@@ -16,12 +16,14 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiState
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
 import co.electriccoin.zcash.ui.screen.home.shieldfunds.ShieldFundsInfoState
 import co.electriccoin.zcash.ui.screen.home.shieldfunds.ShieldFundsInfoView
+import co.electriccoin.zcash.ui.screen.tor.settings.TorRestartRequiredView
 
 /** Synthetic failure and recovery layouts; every storage and destructive callback is inert. */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 internal fun ProjectReviewScene(screen: String): Boolean {
     when (screen) {
+        "tor-mode-restart" -> TorRestartRequiredView(onOpenSettings = {})
         "request-fiat-unavailable", "request-fiat-stale", "request-fiat-recovered", "request-fiat-minimum" ->
             RequestFiatScene(screen != "request-fiat-unavailable", screen == "request-fiat-minimum", screen == "request-fiat-stale")
         "tax-export-error", "tax-export-loading" -> co.electriccoin.zcash.ui.screen.taxexport.TaxExportView(
