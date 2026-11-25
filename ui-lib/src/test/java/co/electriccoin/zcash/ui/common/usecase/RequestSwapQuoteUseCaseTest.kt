@@ -325,9 +325,9 @@ class RequestSwapQuoteUseCaseTest {
                 InsufficientFundsException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToInsufficientFunds()
-            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
-            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
-            coVerify(exactly = 1) { zashiProposalRepository.clear() }
+            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.clear(any()) }
+            coVerify(exactly = 0) { zashiProposalRepository.clear(any()) }
         }
 
     @Test
@@ -346,7 +346,7 @@ class RequestSwapQuoteUseCaseTest {
                 TexUnsupportedOnKSException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToTexUnsupported(isLedger = true)
-            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
+            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
         }
 
     @Test
@@ -372,7 +372,7 @@ class RequestSwapQuoteUseCaseTest {
             coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws TestException()
             useCase(swapQuote(originAsset = zec, destinationAsset = btc), ledger()).exactInput()
             assertNavigatedToError()
-            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
+            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
         }
 
     @Test
@@ -489,9 +489,9 @@ class RequestSwapQuoteUseCaseTest {
             useCase(flexQuote(), ledger()).exactInput()
             assertNavigatedToError()
             coVerify(exactly = 0) { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) }
-            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
-            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
-            coVerify(exactly = 1) { zashiProposalRepository.clear() }
+            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
+            coVerify(exactly = 0) { keystoneProposalRepository.clear(any()) }
+            coVerify(exactly = 0) { zashiProposalRepository.clear(any()) }
         }
 
     @Test
@@ -499,7 +499,7 @@ class RequestSwapQuoteUseCaseTest {
         runBlocking {
             useCase(mismatchError(SwapMode.EXACT_INPUT, SwapQuoteMismatchType.REQUESTED_AMOUNT)).exactInput()
 
-            verify(exactly = 1) { swapRepository.clearQuote() }
+            verify(exactly = 1) { swapRepository.clearQuote(any()) }
             verify {
                 navigationRouter.forward(
                     match<SwapQuoteMismatchArgs> {
@@ -558,7 +558,7 @@ class RequestSwapQuoteUseCaseTest {
                     canNavigateToSwapQuote = { false }
                 )
 
-            verify(exactly = 0) { swapRepository.clearQuote() }
+            verify(exactly = 0) { swapRepository.clearQuote(any()) }
             verify(exactly = 0) { navigationRouter.forward(ofType<SwapQuoteMismatchArgs>()) }
         }
 
@@ -684,7 +684,7 @@ class RequestSwapQuoteUseCaseTest {
             canNavigateToSwapQuote = { false }
         )
 
-        verify(exactly = 0) { swapRepository.clearQuote() }
+        verify(exactly = 0) { swapRepository.clearQuote(any()) }
         verify(exactly = 0) { navigateToError(any(), any()) }
         verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
         coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
@@ -891,7 +891,7 @@ class RequestSwapQuoteUseCaseTest {
         job.join()
 
         verify(exactly = 0) { swapRepository.markReviewReady(any()) }
-        verify { zashiProposalRepository.clear() }
+        verify(exactly = 0) { zashiProposalRepository.clear(any()) }
         assertNavigatedToError()
     }
 

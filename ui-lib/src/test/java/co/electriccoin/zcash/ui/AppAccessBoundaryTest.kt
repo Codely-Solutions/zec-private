@@ -207,6 +207,7 @@ class AppAccessBoundaryTest {
                     },
                     getPersistableWallet = wallet,
                     args = parameters.get(),
+                    sourceEntryId = parameters.get(),
                     navigationRouter = mockk(relaxed = true),
                     onUserSavedWalletBackup = mockk(relaxed = true),
                     remindWalletBackupLater = mockk(relaxed = true),
@@ -228,7 +229,7 @@ class AppAccessBoundaryTest {
                         NavHost(navController, startDestination = MainAppGraph) {
                             navigation<MainAppGraph>(startDestination = HomeArgs) {
                                 composable<HomeArgs> { Text("Wallet home", Modifier.testTag("wallet-home")) }
-                                composable<WalletBackup> { AndroidWalletBackup(it.toRoute()) }
+                                composable<WalletBackup> { AndroidWalletBackup(it.toRoute(), it.id) }
                             }
                         }
                     }

@@ -4,28 +4,20 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.isAtEntry
-import co.electriccoin.zcash.ui.whileAtEntry
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.UnsupportedZip321PaymentCountException
-import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
-import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
-import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
-import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
-import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
 import co.electriccoin.zcash.ui.screen.contact.AddZashiABContactArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
-import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow.ADDRESS_BOOK
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow.HOMEPAGE
@@ -33,14 +25,9 @@ import co.electriccoin.zcash.ui.screen.scan.ScanFlow.SEND
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 
 class OnZip321ScannedUseCase(
-    private val keystoneProposalRepository: KeystoneProposalRepository,
-    private val ledgerProposalPipeline: LedgerProposalPipeline,
-    private val zashiProposalRepository: ZashiProposalRepository,
-    private val accountDataSource: AccountDataSource,
+    private val review: PreparePaymentReviewUseCase,
     private val navigationRouter: NavigationRouter,
     private val prefillSend: PrefillSendUseCase,
     private val navigateToErrorUseCase: NavigateToErrorUseCase
@@ -71,27 +58,16 @@ class OnZip321ScannedUseCase(
             }
         }
 
-    private suspend fun prepareProposal(uri: String) =
-        when (accountDataSource.getSelectedAccount()) {
-            is KeystoneAccount -> keystoneProposalRepository.createZip321Proposal(uri).also {
-                keystoneProposalRepository.createPCZTFromProposal()
-            }
-            is LedgerAccount -> ledgerProposalPipeline.createZip321Proposal(uri).also {
-                ledgerProposalPipeline.createPCZTFromProposal()
-            }
-            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
-            is ZodlAccount -> zashiProposalRepository.createZip321Proposal(uri)
-        }
-
     @Suppress("TooGenericExceptionCaught")
     private suspend fun prepareFlow(
         zip321: Zip321ParseUriValidation.Valid,
         sourceEntryId: String?,
         fromHome: Boolean,
-    ): Boolean =
-        try {
-            val proposal = navigationRouter.whileAtEntry(sourceEntryId) { prepareProposal(zip321.zip321Uri) }
-            proposal != null && navigationRouter.commitFrom(sourceEntryId) {
+    ): Boolean {
+        val owner = review.capture(sourceEntryId) ?: return false
+        return try {
+            review.open(owner, PaymentDraft.Zip321(zip321.zip321Uri)) { route, prepared ->
+                val proposal = prepared as Zip321TransactionProposal
                 val editable = proposal.binaryMemoByteCount == null
                 if (editable) {
                     prefillSend.request(
@@ -103,32 +79,27 @@ class OnZip321ScannedUseCase(
                         )
                     )
                 }
-                val routes = if (fromHome && editable) {
-                    listOf(Send(), ReviewTransactionArgs)
-                } else {
-                    listOf(ReviewTransactionArgs)
-                }
-                NavigationCommand.Replace(routes)
+                NavigationCommand.Replace(if (fromHome && editable) listOf(Send(), route) else listOf(route))
             }
         } catch (_: TexUnsupportedOnKSException) {
-            val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            clearIfCurrent(sourceEntryId)
-            navigationRouter.commitFrom(sourceEntryId) {
-                NavigationCommand.Forward(listOf(TEXUnsupportedArgs(isLedger = isLedger)))
+            navigationRouter.commitFrom(sourceEntryId, owner.permits) {
+                NavigationCommand.Forward(listOf(TEXUnsupportedArgs(isLedger = owner.account is LedgerAccount)))
             }
             false
         } catch (_: InsufficientFundsException) {
-            clearIfCurrent(sourceEntryId)
-            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(InsufficientFundsArgs)) }
+            navigationRouter.commitFrom(sourceEntryId, owner.permits) {
+                NavigationCommand.Replace(listOf(InsufficientFundsArgs))
+            }
         } catch (_: TransactionProposalNotCreatedException) {
-            clearIfCurrent(sourceEntryId)
-            editUnpreparedPayment(zip321, sourceEntryId, fromHome)
+            owner.permits() && editUnpreparedPayment(zip321, sourceEntryId, fromHome)
         } catch (error: CancellationException) {
             throw error
-        } catch (e: Exception) {
-            clearIfCurrent(sourceEntryId)
-            showError(sourceEntryId, ErrorArgs.General(e), replaceScanner = !fromHome) && !fromHome
+        } catch (error: Exception) {
+            owner.permits() && showError(
+                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome,
+            ) && !fromHome
         }
+    }
 
     private suspend fun editUnpreparedPayment(
         zip321: Zip321ParseUriValidation.Valid,
@@ -156,14 +127,6 @@ class OnZip321ScannedUseCase(
         if (memo == null || memo.data.zip321MemoTextOrNull() != null) return true
         showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()))
         return false
-    }
-
-    private suspend fun clearIfCurrent(sourceEntryId: String?) {
-        currentCoroutineContext().ensureActive()
-        if (!navigationRouter.isAtEntry(sourceEntryId)) return
-        zashiProposalRepository.clear()
-        keystoneProposalRepository.clear()
-        ledgerProposalPipeline.clear()
     }
 
     private suspend fun showError(

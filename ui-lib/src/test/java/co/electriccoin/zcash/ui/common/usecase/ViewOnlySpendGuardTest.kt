@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
-import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
@@ -80,7 +79,12 @@ class ViewOnlySpendGuardTest {
     private val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
     private val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
     private val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
-    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+    private val navigationRouter = paymentTestRouter("fixture-send")
+    private val review =
+        paymentReviewFixture(
+            accountDataSource, navigationRouter, zashiProposalRepository, keystoneProposalRepository,
+            ledgerProposalPipeline,
+        )
     private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
     private val biometricRepository = mockk<BiometricRepository>(relaxed = true)
 
@@ -99,10 +103,7 @@ class ViewOnlySpendGuardTest {
         runTest {
             val useCase =
                 CreateProposalUseCase(
-                    keystoneProposalRepository = keystoneProposalRepository,
-                    ledgerProposalPipeline = ledgerProposalPipeline,
-                    zashiProposalRepository = zashiProposalRepository,
-                    accountDataSource = accountDataSource,
+                    review = review,
                     navigationRouter = navigationRouter,
                 )
 
@@ -118,10 +119,7 @@ class ViewOnlySpendGuardTest {
         runTest {
             val useCase =
                 OnZip321ScannedUseCase(
-                    keystoneProposalRepository = keystoneProposalRepository,
-                    ledgerProposalPipeline = ledgerProposalPipeline,
-                    zashiProposalRepository = zashiProposalRepository,
-                    accountDataSource = accountDataSource,
+                    review = review,
                     navigationRouter = navigationRouter,
                     prefillSend = mockk(relaxed = true),
                     navigateToErrorUseCase = navigateToError,
@@ -140,10 +138,7 @@ class ViewOnlySpendGuardTest {
         runTest {
             val useCase =
                 OnZip321ScannedUseCase(
-                    keystoneProposalRepository = keystoneProposalRepository,
-                    ledgerProposalPipeline = ledgerProposalPipeline,
-                    zashiProposalRepository = zashiProposalRepository,
-                    accountDataSource = accountDataSource,
+                    review = review,
                     navigationRouter = navigationRouter,
                     prefillSend = mockk(relaxed = true),
                     navigateToErrorUseCase = navigateToError,
@@ -421,6 +416,9 @@ class ViewOnlySpendGuardTest {
     }
 
     private fun assertNoProposalCreated() {
+        coVerify(exactly = 0) { zashiProposalRepository.preparePayment(any(), any()) }
+        coVerify(exactly = 0) { keystoneProposalRepository.preparePayment(any(), any()) }
+        coVerify(exactly = 0) { ledgerProposalPipeline.preparePayment(any(), any()) }
         coVerify(exactly = 0) { zashiProposalRepository.createProposal(any()) }
         coVerify(exactly = 0) { zashiProposalRepository.createZip321Proposal(any()) }
         coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }

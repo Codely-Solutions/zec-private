@@ -360,10 +360,8 @@ class RequestSwapQuoteUseCase(
     ) {
         currentCoroutineContext().ensureActive()
         if (swapRepository.quote.value !== result) return
-        swapRepository.clearQuote()
-        zashiProposalRepository.clear()
-        keystoneProposalRepository.clear()
-        ledgerProposalPipeline.clear()
+        discardPreparedSwap(result, zashiProposalRepository, keystoneProposalRepository, ledgerProposalPipeline)
+        swapRepository.clearQuote(result as? SwapQuoteData.Success)
         if (canNavigate()) navigate()
     }
 

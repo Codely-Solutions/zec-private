@@ -143,6 +143,8 @@ import co.electriccoin.zcash.ui.common.usecase.ShowErrorUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitIncreaseEphemeralGapLimitUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitKSProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
+import co.electriccoin.zcash.ui.common.usecase.ReviewedPaymentStore
+import co.electriccoin.zcash.ui.common.usecase.PreparePaymentReviewUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.SweepOrphanedGiftCardWalletsUseCase
 import co.electriccoin.zcash.ui.common.usecase.UpdateABContactUseCase
@@ -232,6 +234,8 @@ val useCaseModule =
         factoryOf(::ObserveTransactionSubmitStateUseCase)
         factoryOf(::GetProposalUseCase)
         singleOf(::SubmissionProgressStore)
+        singleOf(::ReviewedPaymentStore)
+        factoryOf(::PreparePaymentReviewUseCase)
         singleOf(::SubmitProposalUseCase)
         singleOf(::ProcessSwapTransactionUseCase)
         factoryOf(::GetWalletRestoringStateUseCase)

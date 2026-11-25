@@ -13,6 +13,9 @@ import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
+import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
@@ -40,6 +43,8 @@ import kotlinx.coroutines.flow.StateFlow
  * device transport, pairing, signing session and the Ledger screens live behind these contracts.
  */
 interface LedgerProposalPipeline {
+    suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
+
     val transactionProposal: StateFlow<TransactionProposal?>
 
     val submitState: StateFlow<SubmitProposalState?>
@@ -83,7 +88,7 @@ interface LedgerProposalPipeline {
         reviewedQuote: SwapQuoteData.Success? = null,
     )
 
-    fun clear()
+    fun clear(expected: TransactionProposal? = null)
 
     suspend fun getTransactionProposal(): TransactionProposal
 }

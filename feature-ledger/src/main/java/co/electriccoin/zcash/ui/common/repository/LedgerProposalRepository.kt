@@ -24,7 +24,11 @@ import co.electriccoin.zcash.ui.common.datasource.LedgerSigningDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.preparePayment
+import co.electriccoin.zcash.ui.common.datasource.publishOwnedPayment
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
@@ -171,6 +175,16 @@ class LedgerProposalRepositoryImpl(
     @Volatile
     private var isPickerRequired = false
 
+    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
+        val previous = transactionProposal.value
+        val proposal = proposalDataSource.preparePayment(owner, draft)
+        owner.requireCurrent()
+        val pczt = createReviewPczt(proposal, owner.account)
+        transactionProposal.publishOwnedPayment(owner, previous, proposal)
+        prepareSigning(proposal, pczt, owner.account)
+        return proposal
+    }
+
     override suspend fun createProposal(zecSend: ZecSend) {
         createProposalInternal {
             proposalDataSource.createProposal(
@@ -234,23 +248,27 @@ class LedgerProposalRepositoryImpl(
             is SwapTransactionProposal -> transactionProposal.fundingAccount
             else -> accountDataSource.getSelectedAccount()
         }
-        val result =
-            try {
-                proposalDataSource.createPcztFromProposal(
-                    account = owner,
-                    proposal = transactionProposal.proposal
-                )
-            } catch (e: PcztException.MultiStepProposalUnsupportedException) {
-                if (transactionProposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
-            }
+        val result = createReviewPczt(transactionProposal, owner)
         currentCoroutineContext().ensureActive()
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
+        prepareSigning(transactionProposal, result, owner)
+    }
+
+    private suspend fun createReviewPczt(proposal: TransactionProposal, owner: WalletAccount): Pczt =
+        try {
+            proposalDataSource.createPcztFromProposal(account = owner, proposal = proposal.proposal)
+        } catch (e: PcztException.MultiStepProposalUnsupportedException) {
+            if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
+        }
+
+    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
         cancelSigning()
         submitState.update { null }
-        val prepared = hardwareProposal.prepare(transactionProposal, result, owner.sdkAccount.accountUuid)
+        val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
+
 
     override fun approveForSigning(expectedProposal: TransactionProposal?, reviewedQuote: SwapQuoteData.Success?) =
         hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote)
@@ -622,14 +640,17 @@ class LedgerProposalRepositoryImpl(
 
     override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
 
-    override fun clear() {
+    override fun clear(expected: TransactionProposal?) {
+        if (expected != null && (transactionProposal.value !== expected ||
+                !transactionProposal.compareAndSet(expected, null))
+        ) return
         cancelSigning()
         isPickerRequired = false
 
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = null
 
-        transactionProposal.update { null }
+        if (expected == null) transactionProposal.update { null }
         submitState.update { null }
         hardwareProposal.clear()
     }

@@ -15,7 +15,12 @@ import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
+import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.preparePayment
+import co.electriccoin.zcash.ui.common.datasource.publishOwnedPayment
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
@@ -38,6 +43,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
 interface ZashiProposalRepository {
+    suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
+
     val transactionProposal: StateFlow<TransactionProposal?>
 
     val submitState: StateFlow<SubmitProposalState?>
@@ -97,6 +104,13 @@ class ZashiProposalRepositoryImpl(
     override val transactionProposal = MutableStateFlow<TransactionProposal?>(null)
 
     override val submitState = MutableStateFlow<SubmitProposalState?>(null)
+
+    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
+        val previous = transactionProposal.value
+        val proposal = proposalDataSource.preparePayment(owner, draft)
+        transactionProposal.publishOwnedPayment(owner, previous, proposal)
+        return proposal
+    }
 
     override suspend fun createProposal(zecSend: ZecSend): RegularTransactionProposal =
         createProposalInternal {

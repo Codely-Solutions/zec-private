@@ -116,14 +116,15 @@ class TransactionDetailVM(
                         hasSavedDetails = hasSavedDetails,
                     )
                 }
+                val refresh = retry ?: transaction.swap?.settlementCheckButton(transaction.reloadHandle)
                 val support = createSwapSupportButton(transaction)
                 TransactionDetailState(
                     explorerLinks = createExplorerLinks(transaction),
                     onBack = ::onBack,
                     info = info,
                     header = createTransactionHeaderState(transaction, info),
-                    primaryButton = retry ?: createPrimaryButtonState(transaction, support),
-                    secondaryButton = if (retry != null) support else createSecondaryButtonState(transaction),
+                    primaryButton = refresh ?: createPrimaryButtonState(transaction, support),
+                    secondaryButton = if (refresh != null) support else createSecondaryButtonState(transaction),
                     bookmarkButton =
                         IconButtonState(
                             icon =

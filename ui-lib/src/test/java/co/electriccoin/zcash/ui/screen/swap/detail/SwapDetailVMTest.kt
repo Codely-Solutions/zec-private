@@ -88,6 +88,27 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun failedOrExpiredSettlementCanBeCheckedWithoutReopeningTheFundingWindow() = runTest {
+        val failed = saved(SwapStatus.FAILED)
+        val h = harness(SwapQuoteStatusData(isLoading = false, savedMetadata = failed))
+        val check = assertNotNull(h.state().primaryButton)
+        assertEquals(stringRes(R.string.private_swap_check_status), check.text)
+        check.onClick()
+        verify(exactly = 1) { h.reload.requestReload() }
+        assertEquals(SwapStatus.FAILED, h.state().status.status)
+
+        h.emit(SwapQuoteStatusData(isLoading = false, savedMetadata = saved(SwapStatus.EXPIRED)))
+        assertEquals(stringRes(R.string.private_swap_check_status), h.state().primaryButton?.text)
+
+        h.emit(SwapQuoteStatusData(isLoading = false, savedMetadata = failed.copy(fundingNotSubmitted = true)))
+        assertTrue(h.state().primaryButton?.text != stringRes(R.string.private_swap_check_status))
+
+        h.emit(SwapQuoteStatusData(isLoading = false, savedMetadata = saved(SwapStatus.REFUNDED)))
+        assertEquals(SwapStatus.REFUNDED, h.state().status.status)
+        assertTrue(h.state().primaryButton?.text != stringRes(R.string.private_swap_check_status))
+    }
+
+    @Test
     fun pendingSavedSwapSurvivesTheFirstStatusFailure() = runTest {
         val saved = saved(SwapStatus.PENDING)
         val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))

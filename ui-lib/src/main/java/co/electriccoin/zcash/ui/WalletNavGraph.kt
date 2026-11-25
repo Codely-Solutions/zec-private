@@ -254,7 +254,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ResetZashiArgs> { ResetZashiScreen() }
         composable<AboutArgs> { AboutScreen() }
         composable<co.electriccoin.zcash.ui.screen.donation.DonationArgs> {
-            co.electriccoin.zcash.ui.screen.donation.DonationScreen(it.toRoute())
+            co.electriccoin.zcash.ui.screen.donation.DonationScreen(it.toRoute(), it.id)
         }
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen(it.id) }
@@ -294,7 +294,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<KeystoneConnectedArgs> { KeystoneConnectedScreen() }
         composable<KeepOpenArgs> { KeepOpenScreen(it.toRoute()) }
         dialogComposable<HeightInfoArgs> { HeightInfoScreen() }
-        composable<ReviewTransactionArgs> { AndroidReviewTransaction(it.id) }
+        composable<ReviewTransactionArgs> { AndroidReviewTransaction(it.toRoute(), it.id) }
         composable<TransactionProgressArgs> { TransactionProgressScreen(BoundTransactionProgressArgs(null), it.id) }
         composable<BoundTransactionProgressArgs> { TransactionProgressScreen(it.toRoute(), it.id) }
         composable<ActivityHistoryArgs> { ActivityHistoryScreen() }

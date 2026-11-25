@@ -102,7 +102,7 @@ interface SwapRepository {
 
     fun clearIfCurrent(expected: SwapQuoteData.Success): Boolean
 
-    fun clearQuote()
+    fun clearQuote(expected: SwapQuoteData.Success? = null)
 
     /** Admit only the current request after its local funding preparation succeeds. */
     fun markReviewReady(result: SwapQuoteData): Boolean
@@ -647,8 +647,9 @@ class SwapRepositoryImpl(
         }
     }
 
-    override fun clearQuote() {
+    override fun clearQuote(expected: SwapQuoteData.Success?) {
         synchronized(this) {
+            if (expected != null && quote.value !== expected) return
             quoteGeneration.advance()
             requestQuoteJob?.cancel()
             requestQuoteJob = null

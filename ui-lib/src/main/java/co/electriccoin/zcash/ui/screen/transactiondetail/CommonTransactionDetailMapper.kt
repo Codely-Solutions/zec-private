@@ -4,11 +4,13 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityDetailUnavailableException
 import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
+import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
@@ -23,6 +25,18 @@ import co.electriccoin.zcash.ui.util.isServiceUnavailable
 import io.ktor.client.plugins.ResponseException
 import java.time.Instant
 import java.time.ZoneId
+
+internal fun SwapQuoteStatusData.settlementCheckButton(reloadHandle: ReloadHandle): ButtonState? {
+    val accepted = status?.status ?: savedMetadata?.status
+    val confirmedNoDeposit = savedMetadata?.fundingNotSubmitted == true && status?.originTransactionIds.isNullOrEmpty()
+    val canRecheck = accepted == SwapStatus.FAILED || accepted == SwapStatus.EXPIRED
+    if (isLoading || confirmedNoDeposit || !canRecheck) return null
+    return ButtonState(
+        text = stringRes(R.string.private_swap_check_status),
+        onClick = { reloadHandle.requestReload() },
+        style = ButtonStyle.SECONDARY,
+    )
+}
 
 class CommonTransactionDetailMapper {
     fun createTransactionDetailTimestamp(timestamp: Instant?) =

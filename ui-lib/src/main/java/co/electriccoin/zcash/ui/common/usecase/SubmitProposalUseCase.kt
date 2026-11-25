@@ -74,6 +74,7 @@ class SubmitProposalUseCase(
         reviewedProposal: TransactionProposal?,
         reviewedQuote: SwapQuoteData.Success? = null,
         sourceEntryId: String? = null,
+        reviewedOwner: AccountUuid? = null,
     ) {
         if (!submissionMutex.tryLock()) return
         try {
@@ -88,6 +89,9 @@ class SubmitProposalUseCase(
                     )
             )
             val account = accountDataSource.getSelectedAccount()
+            check(reviewedOwner == null || account.sdkAccount.accountUuid == reviewedOwner) {
+                "The selected account changed. Review the payment again before sending."
+            }
             if (!account.isSpendable) {
                 navigateToError.showFrom(
                     sourceEntryId,

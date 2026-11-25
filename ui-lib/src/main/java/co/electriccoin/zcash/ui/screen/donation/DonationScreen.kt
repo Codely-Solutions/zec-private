@@ -16,25 +16,26 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
-import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.usecase.PreparePaymentReviewUseCase
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.screen.send.model.AmountField
 import co.electriccoin.zcash.ui.screen.send.model.AmountState
 import co.electriccoin.zcash.ui.screen.send.model.MemoState
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.screen.ExternalUrl
-import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @Suppress("MagicNumber", "CyclomaticComplexMethod", "TooGenericExceptionCaught", "LongMethod")
 @Composable
-fun DonationScreen(@Suppress("UNUSED_PARAMETER") args: DonationArgs) {
+fun DonationScreen(@Suppress("UNUSED_PARAMETER") args: DonationArgs, sourceEntryId: String) {
     val router = koinInject<NavigationRouter>()
     val accounts = koinInject<AccountDataSource>()
-    val proposals = koinInject<ZashiProposalRepository>()
+    val review = koinInject<PreparePaymentReviewUseCase>()
     val rates = koinInject<ExchangeRateRepository>()
     val exchangeRate by rates.state.collectAsState()
     val context = LocalContext.current
@@ -89,22 +90,23 @@ fun DonationScreen(@Suppress("UNUSED_PARAMETER") args: DonationArgs) {
                 unsupported = false
                 scope.launch {
                     try {
-                        val selected = accounts.getSelectedAccount()
-                        if (selected !is ZodlAccount) {
+                        val selected = account as? ZodlAccount
+                        if (selected == null) {
                             unsupported = true
                         } else {
+                            val owner = review.capture(sourceEntryId, selected.sdkAccount.accountUuid) ?: return@launch
                             val send = ZecSend(
                                 WalletAddress.Unified.new(requireNotNull(DonationPolicy.recipient())),
                                 reviewedAmount, Memo(reviewedMemo), null
                             )
                             preferences.postpone(System.currentTimeMillis())
-                            proposals.createDonationProposal(send)
-                            router.forward(ReviewTransactionArgs)
+                            review.open(owner, PaymentDraft.Donation(send)) { route, _ ->
+                                NavigationCommand.Forward(listOf(route))
+                            }
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
-                        proposals.clear()
                         failed = true
                     } finally {
                         busy = false

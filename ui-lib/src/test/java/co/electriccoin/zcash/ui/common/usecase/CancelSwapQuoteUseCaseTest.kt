@@ -1,20 +1,22 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
+import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import io.mockk.verifyOrder
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.Test
 
-/**
- * [CancelSwapQuoteUseCase] tears down a pending swap quote: it clears every proposal repository and
- * the cached quote, then pops the quote screen — and must do so in that order (clear state before
- * navigating away).
- */
+/** Cancelling a quote leaves independent payment drafts intact. */
 class CancelSwapQuoteUseCaseTest {
     private val swapRepository = mockk<SwapRepository>(relaxed = true)
     private val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
@@ -31,21 +33,24 @@ class CancelSwapQuoteUseCaseTest {
         )
 
     @Test
-    fun clearsProposalsAndQuoteThenNavigatesBack() {
+    fun clearsOnlyTheExactQuotedProposalThenNavigatesBack() {
+        val quote = mockk<SwapQuote>()
+        val current = SwapQuoteData.Success(quote)
+        val matching = mockk<ExactInputSwapTransactionProposal> { every { this@mockk.quote } returns quote }
+        every { swapRepository.quote } returns MutableStateFlow(current)
+        every { zashiProposalRepository.transactionProposal } returns MutableStateFlow(matching)
+        val unrelated = mockk<RegularTransactionProposal>()
+        every { keystoneProposalRepository.transactionProposal } returns MutableStateFlow(unrelated)
+        every { ledgerProposalPipeline.transactionProposal } returns MutableStateFlow(null)
+
         useCase()
 
-        verify(exactly = 1) { zashiProposalRepository.clear() }
-        verify(exactly = 1) { keystoneProposalRepository.clear() }
-        verify(exactly = 1) { ledgerProposalPipeline.clear() }
-        verify(exactly = 1) { swapRepository.clearQuote() }
-        verify(exactly = 1) { navigationRouter.back() }
-
-        // State is torn down before the screen is popped.
+        verify(exactly = 1) { zashiProposalRepository.clear(matching) }
+        verify(exactly = 0) { keystoneProposalRepository.clear(any()) }
+        verify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
         verifyOrder {
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
-            swapRepository.clearQuote()
+            zashiProposalRepository.clear(matching)
+            swapRepository.clearQuote(current)
             navigationRouter.back()
         }
     }

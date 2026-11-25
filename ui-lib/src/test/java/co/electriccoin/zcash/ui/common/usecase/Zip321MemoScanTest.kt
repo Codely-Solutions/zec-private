@@ -18,6 +18,7 @@ import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -104,10 +105,11 @@ class Zip321MemoScanTest {
     private val provider = mockk<SynchronizerProvider> {
         coEvery { getSynchronizer() } returns this@Zip321MemoScanTest.synchronizer
     }
+    private val selectedAccounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
     private val accounts = mockk<AccountDataSource> {
         coEvery { getSelectedAccount() } returns account
         every { selectedAccount } returns flowOf(account)
-        every { allAccounts } returns MutableStateFlow(listOf(account))
+        every { allAccounts } returns selectedAccounts
     }
     private val proposalDataSource = ProposalDataSourceImpl(provider, mockk(), mockk())
     private val repository = ZashiProposalRepositoryImpl(
@@ -120,10 +122,7 @@ class Zip321MemoScanTest {
     private val prefill = PrefillSendUseCase()
     private val error = NavigateToErrorUseCase(router)
     private val scan = OnZip321ScannedUseCase(
-        keystoneProposalRepository = mockk(relaxed = true),
-        ledgerProposalPipeline = mockk(relaxed = true),
-        zashiProposalRepository = repository,
-        accountDataSource = accounts,
+        review = paymentReviewFixture(accounts, router, repository),
         navigationRouter = router,
         prefillSend = prefill,
         navigateToErrorUseCase = error,
@@ -148,8 +147,8 @@ class Zip321MemoScanTest {
             assertEquals(stringRes(R.string.zip321_binary_memo, byteCount), binaryMessage.message)
             assertSame(sdkProposal, assertNotNull(repository.transactionProposal.value).proposal)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalBinaryUri) }
-            verify(exactly = 1) { router.replace(ReviewTransactionArgs) }
-            verify(exactly = 0) { router.replace(Send(), ReviewTransactionArgs) }
+            verify(exactly = 1) { router.replace(ofType<ReviewTransactionArgs>()) }
+            verify(exactly = 0) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
             withContext(Dispatchers.Default) { assertNoDraft() }
 
             val textBytes = fixture.TEXT.encodeToByteArray().copyOf(512)
@@ -160,7 +159,7 @@ class Zip321MemoScanTest {
             val textMessage = assertNotNull(vm.state.value).items.filterIsInstance<MessageState>().single()
             assertEquals(stringRes(fixture.TEXT), textMessage.message)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalTextUri) }
-            verify(exactly = 1) { router.replace(Send(), ReviewTransactionArgs) }
+            verify(exactly = 1) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
             val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
             assertEquals(expectedTextDraft, draft)
         } finally {
@@ -188,7 +187,7 @@ class Zip321MemoScanTest {
                 )
             }
             assertNotNull(repository.transactionProposal.value)
-            original.navigate(ReviewTransactionArgs)
+            original.navigate(ReviewTransactionArgs())
 
             val restored = sendNavigationController()
             val parcel = Parcel.obtain()
@@ -200,7 +199,7 @@ class Zip321MemoScanTest {
                 parcel.recycle()
             }
             restored.graph = sendReviewGraph(restored)
-            assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
+            assertEquals(ReviewTransactionArgs(), restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
 
             val freshRepository = ZashiProposalRepositoryImpl(
                 accountDataSource = accounts,
@@ -222,7 +221,7 @@ class Zip321MemoScanTest {
                 state.items.filterIsInstance<MessageState>().single().title,
             )
             assertEquals(stringRes(R.string.general_back), state.primaryButton.text)
-            assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
+            assertEquals(ReviewTransactionArgs(), restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
             state.primaryButton.onClick()
             assertEquals(Send(), restored.currentBackStackEntry?.toRoute<Send>())
         } finally {
@@ -243,7 +242,7 @@ class Zip321MemoScanTest {
                         composable<HomeArgs> { }
                         composable<ReviewTransactionArgs> { }
                     }
-                    navigate(ReviewTransactionArgs)
+                    navigate(ReviewTransactionArgs())
                 }
                 val recoveryRouter = mockk<NavigationRouter> {
                     every { back() } answers { check(navigation.popBackStack()) }
@@ -283,7 +282,8 @@ class Zip321MemoScanTest {
         )
         scan(parse(fixture.binary), ScanArgs(ScanFlow.HOMEPAGE))
 
-        cancel()
+        val proposal = assertIs<SendTransactionProposal>(repository.transactionProposal.value)
+        cancel.rejectReviewed(proposal, account.sdkAccount.accountUuid, null)
 
         assertNull(repository.transactionProposal.value)
         verify(exactly = 1) { router.back() }
@@ -321,14 +321,15 @@ class Zip321MemoScanTest {
         scan(request, ScanArgs(ScanFlow.HOMEPAGE))
         verify(exactly = 1) { router.replace(InsufficientFundsArgs) }
 
-        val keystone = EditAccountFixtures.keystone()
+        val keystone = EditAccountFixtures.keystone(isSelected = true)
+        selectedAccounts.value = listOf(keystone)
         coEvery { accounts.getSelectedAccount() } returns keystone
         coEvery { synchronizer.proposeFulfillingPaymentUri(keystone.sdkAccount, request.zip321Uri) } throws sdkFailure
         val keystoneScan = OnZip321ScannedUseCase(
-            keystoneProposalRepository = KeystoneProposalRepositoryImpl(accounts, proposalDataSource, mockk(), mockk()),
-            ledgerProposalPipeline = mockk(relaxed = true),
-            zashiProposalRepository = repository,
-            accountDataSource = accounts,
+            review = paymentReviewFixture(
+                accounts, router, repository,
+                keystone = KeystoneProposalRepositoryImpl(accounts, proposalDataSource, mockk(), mockk()),
+            ),
             navigationRouter = router,
             prefillSend = prefill,
             navigateToErrorUseCase = error,
@@ -407,16 +408,15 @@ class Zip321MemoScanTest {
         try {
             val uri = fixture.uri(fixture.binary)
             coEvery { synchronizer.validateAddress(uri) } returns AddressType.Invalid("A payment URI")
-            var selected: WalletAccount = EditAccountFixtures.keystone()
-            coEvery { accounts.getSelectedAccount() } answers { selected }
+            val keystone = EditAccountFixtures.keystone(isSelected = true)
+            selectedAccounts.value = listOf(keystone)
             val hardwareScan = OnZip321ScannedUseCase(
-                keystoneProposalRepository = mockk {
-                    coEvery { createZip321Proposal(uri) } throws TexUnsupportedOnKSException()
-                    every { clear() } returns Unit
-                },
-                ledgerProposalPipeline = mockk(relaxed = true),
-                zashiProposalRepository = repository,
-                accountDataSource = accounts,
+                review = paymentReviewFixture(
+                    accounts, router, repository,
+                    keystone = mockk<KeystoneProposalRepository> {
+                        coEvery { preparePayment(any(), any()) } throws TexUnsupportedOnKSException()
+                    },
+                ),
                 navigationRouter = router,
                 prefillSend = prefill,
                 navigateToErrorUseCase = error,
@@ -432,13 +432,13 @@ class Zip321MemoScanTest {
             runCurrent()
             scanner.onScanned(uri).join()
             verify(exactly = 1) { router.forward(TEXUnsupportedArgs(isLedger = false)) }
-            verify(exactly = 0) { router.replace(ReviewTransactionArgs) }
+            verify(exactly = 0) { router.replace(ofType<ReviewTransactionArgs>()) }
 
-            selected = account
+            selectedAccounts.value = listOf(account)
             scanner.onResumed()
             scanner.onScanned(uri).join()
             scanner.onScanned(uri).join()
-            verify(exactly = 1) { router.replace(ReviewTransactionArgs) }
+            verify(exactly = 1) { router.replace(ofType<ReviewTransactionArgs>()) }
             assertNotNull(repository.transactionProposal.value)
         } finally {
             store.clear()

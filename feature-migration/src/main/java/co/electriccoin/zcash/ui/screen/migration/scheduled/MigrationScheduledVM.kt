@@ -139,7 +139,7 @@ class MigrationScheduledVM(
                 pendingSchedule.clear(accountKeyId, schedule)
                 pendingKeystonePczts.clear(accountKeyId, pending)
                 isFinalizing.value = false
-                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult as? TransferResult.Success)
+                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
             }
             TransferResult.InvalidNote, TransferResult.Expired ->
                 returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))

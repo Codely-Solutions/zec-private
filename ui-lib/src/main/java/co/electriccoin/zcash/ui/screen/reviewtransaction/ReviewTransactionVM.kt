@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
+import co.electriccoin.zcash.ui.common.usecase.ReviewedPaymentStore
 import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -74,6 +76,8 @@ class ReviewTransactionVM(
     private val navigationRouter: NavigationRouter,
     private val submitProposal: SubmitProposalUseCase,
     private val sourceEntryId: String? = null,
+    private val reviewedPaymentStore: ReviewedPaymentStore? = null,
+    private val args: ReviewTransactionArgs? = null,
 ) : ViewModel() {
     private val isReceiverExpanded = MutableStateFlow(false)
 
@@ -88,6 +92,14 @@ class ReviewTransactionVM(
             replay = 1
         )
 
+    private val reviewProposal = observeProposal.observeSendReview().let { published ->
+        reviewedPaymentStore?.let { store ->
+            combine(published, store.observe(args?.reviewId)) { proposal, approved ->
+                proposal?.takeIf { it === approved }
+            }
+        } ?: published
+    }
+
     @Suppress("DestructuringDeclarationWithTooManyEntries")
     @OptIn(ExperimentalCoroutinesApi::class)
     private val baseState =
@@ -95,7 +107,7 @@ class ReviewTransactionVM(
             combine(observeSelectedWalletAccount.require(), observeAccountIcon.observeAll()) { wallet, colors ->
                 wallet to observeAccountIcon.iconOf(colors, wallet)
             },
-            observeProposal.observeSendReview(),
+            reviewProposal,
             isReceiverExpanded,
             exchangeRate,
             getWalletAccounts.observe()
@@ -151,6 +163,7 @@ class ReviewTransactionVM(
 
     override fun onCleared() {
         navigationRouter.discardResultFrom(sourceEntryId)
+        reviewedPaymentStore?.discard(args?.reviewId)
         super.onCleared()
     }
 
@@ -159,12 +172,16 @@ class ReviewTransactionVM(
         // resubscribe (see the LCE/side-effects convention). Suspends until the first send proposal
         // that spends Orchard notes, then shows the warning sheet once for this screen entry.
         viewModelScope.launch {
-            observeProposal.filterSend().first { it.proposal.usesOrchardInputs() }
+            val proposal = reviewProposal.filterNotNull().first { it.proposal.usesOrchardInputs() }
+            val account = observeSelectedWalletAccount.require().first()
             orchardWarningSheet.value =
                 orchardWarningSheetState(
                     usesOrchardInputs = true,
                     onContinue = ::onOrchardWarningContinue,
-                    onCancel = ::onOrchardWarningCancel,
+                    onCancel = {
+                        orchardWarningSheet.value = null
+                        onBack(proposal, account)
+                    },
                 )
         }
     }
@@ -234,9 +251,9 @@ class ReviewTransactionVM(
                         is ZodlAccount -> stringRes(R.string.tabs_send)
                     },
                 style = orchardPrivacyWarningButtonStyle(transactionProposal.proposal.usesOrchardInputs()),
-                onClick = { onConfirmClick(transactionProposal) }
+                onClick = { onConfirmClick(transactionProposal, selectedWallet) }
             ),
-        onBack = ::onBack,
+        onBack = { onBack(transactionProposal, selectedWallet) },
     )
 
     private fun createZip321State(
@@ -307,14 +324,15 @@ class ReviewTransactionVM(
                         is ViewOnlyAccount -> stringRes(R.string.tabs_send)
                         is ZodlAccount -> stringRes(R.string.tabs_send)
                     },
-                onClick = { onConfirmClick(transactionProposal) }
+                onClick = { onConfirmClick(transactionProposal, selectedWallet) }
             ),
-        onBack = ::onBack,
+        onBack = { onBack(transactionProposal, selectedWallet) },
     )
 
     private fun onExpandReceiverClick() = isReceiverExpanded.update { !it }
 
-    private fun onBack() = viewModelScope.launch { cancelProposalFlow(clearSendForm = false) }
+    private fun onBack(proposal: SendTransactionProposal, account: WalletAccount) =
+        cancelProposalFlow.rejectReviewed(proposal, account.sdkAccount.accountUuid, sourceEntryId)
 
     // "Continue anyway": dismiss the sheet and stay on the review screen; the user still has to tap
     // the primary button to broadcast, exactly as without the warning.
@@ -322,16 +340,13 @@ class ReviewTransactionVM(
         orchardWarningSheet.value = null
     }
 
-    // "Cancel" (and back gesture / scrim tap): dismiss the sheet and leave the review screen back to
-    // Send, reusing the screen's existing cancel-proposal-flow action.
-    private fun onOrchardWarningCancel() {
-        orchardWarningSheet.value = null
-        onBack()
-    }
-
-    private fun onConfirmClick(proposal: SendTransactionProposal) {
+    private fun onConfirmClick(proposal: SendTransactionProposal, selectedWallet: WalletAccount) {
         if (onConfirmClickJob?.isActive == true) return
-        onConfirmClickJob = viewModelScope.launch { submitProposal(proposal, sourceEntryId = sourceEntryId) }
+        onConfirmClickJob = viewModelScope.launch {
+            submitProposal(
+                proposal, sourceEntryId = sourceEntryId, reviewedOwner = selectedWallet.sdkAccount.accountUuid,
+            )
+        }
     }
 
     private fun onAddContactClick(address: String) = navigationRouter.forward(AddZashiABContactArgs(address))

@@ -34,6 +34,7 @@ import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
+import co.electriccoin.zcash.ui.screen.transactiondetail.settlementCheckButton
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
@@ -66,6 +67,7 @@ class SwapDetailVM(
             .observe(args.depositAddress, args.accountKeyId)
             .map { swapData ->
                 val hasDetails = swapData.status != null || swapData.savedMetadata != null
+                val recheck = swapData.data.settlementCheckButton(swapData.handle).takeIf { swapData.error == null }
                 SwapDetailState(
                     transactionHeader = createTransactionHeaderState(swapData),
                     quoteHeader =
@@ -119,11 +121,11 @@ class SwapDetailVM(
                             stringRes(R.string.deposits_info)
                         else -> null
                     },
-                    primaryButton = createPrimaryButtonState(swapData, swapData.error),
-                    supportButton = if (swapData.error != null) {
-                        swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
-                    } else {
-                        null
+                    primaryButton = recheck ?: createPrimaryButtonState(swapData, swapData.error),
+                    supportButton = when {
+                        recheck != null -> createPrimaryButtonState(swapData, null)
+                        swapData.error != null -> swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
+                        else -> null
                     },
                     onBack = ::onBack,
                     showLiveDetails = swapData.status != null || !hasDetails && swapData.error == null,

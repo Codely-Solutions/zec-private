@@ -4,8 +4,7 @@ import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
-import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -14,11 +13,12 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
-import io.mockk.coEvery
+import co.electriccoin.zcash.ui.common.usecase.paymentReviewFixture
+import co.electriccoin.zcash.ui.common.usecase.paymentTestRouter
+import co.electriccoin.zcash.ui.common.usecase.selectedPaymentAccount
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,19 +27,17 @@ import kotlin.test.assertFailsWith
 class SendFiatProposalTest {
     @Test
     fun allSpendingAccountsRejectSubgridFiatBeforeTheirProposalPortsAndCanRetry() = runTest {
-        val accounts = listOf(EditAccountFixtures.zodl(), EditAccountFixtures.keystone(), EditAccountFixtures.ledger())
+        val accounts = listOf(
+            EditAccountFixtures.zodl(), EditAccountFixtures.keystone(isSelected = true),
+            EditAccountFixtures.ledger(isSelected = true),
+        )
         accounts.forEach { account ->
             val proposals = mockk<ZashiProposalRepository>(relaxed = true)
             val keystone = mockk<KeystoneProposalRepository>(relaxed = true)
             val ledger = mockk<LedgerProposalPipeline>(relaxed = true)
+            val router = paymentTestRouter("fixture-send")
             val createProposal = CreateProposalUseCase(
-                keystoneProposalRepository = keystone,
-                ledgerProposalPipeline = ledger,
-                zashiProposalRepository = proposals,
-                accountDataSource = mockk<AccountDataSource> {
-                    coEvery { getSelectedAccount() } returns account
-                },
-                navigationRouter = inactiveRouter(),
+                paymentReviewFixture(selectedPaymentAccount(account), router, proposals, keystone, ledger), router,
             )
             val send = ZecSend(
                 destination = WalletAddress.Unified.new("synthetic-recipient"),
@@ -48,17 +46,19 @@ class SendFiatProposalTest {
                 proposal = null,
             )
             assertFailsWith<IllegalArgumentException> { createProposal.prepare(send, floor = true) }
-            coVerify(exactly = 0) { proposals.createProposal(any()) }
-            coVerify(exactly = 0) { keystone.createProposal(any()) }
-            coVerify(exactly = 0) { ledger.createProposal(any()) }
+            coVerify(exactly = 0) { proposals.preparePayment(any(), any()) }
+            coVerify(exactly = 0) { keystone.preparePayment(any(), any()) }
+            coVerify(exactly = 0) { ledger.preparePayment(any(), any()) }
 
             val expected = send.copy(amount = Zatoshi(5_000))
             createProposal.prepare(expected, floor = true)
             createProposal.prepare(send.copy(amount = Zatoshi(5_001)), floor = true)
             when (account) {
-                is ZodlAccount -> coVerify(exactly = 2) { proposals.createProposal(expected) }
-                is KeystoneAccount -> coVerify(exactly = 2) { keystone.createProposal(expected) }
-                is LedgerAccount -> coVerify(exactly = 2) { ledger.createProposal(expected) }
+                is ZodlAccount -> coVerify(exactly = 2) { proposals.preparePayment(PaymentDraft.Send(expected), any()) }
+                is KeystoneAccount -> coVerify(exactly = 2) {
+                    keystone.preparePayment(PaymentDraft.Send(expected), any())
+                }
+                is LedgerAccount -> coVerify(exactly = 2) { ledger.preparePayment(PaymentDraft.Send(expected), any()) }
                 else -> error("Unexpected test account")
             }
         }
@@ -82,8 +82,8 @@ class SendFiatProposalTest {
             createProposal.prepare(tex, floor = false)
         }
         createProposal.prepare(send, floor = false)
-        coVerify(exactly = 1) { proposals.createProposal(any()) }
-        coVerify(exactly = 1) { proposals.createProposal(send) }
+        coVerify(exactly = 1) { proposals.preparePayment(any(), any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(PaymentDraft.Send(send), any()) }
         assertEquals(Zatoshi(0), send.amount)
     }
 
@@ -104,11 +104,11 @@ class SendFiatProposalTest {
 
         listOf(send, sapling, transparent, tex).forEach { createProposal.prepare(it, floor = false) }
 
-        coVerify(exactly = 4) { proposals.createProposal(any()) }
-        coVerify(exactly = 1) { proposals.createProposal(send) }
-        coVerify(exactly = 1) { proposals.createProposal(sapling) }
-        coVerify(exactly = 1) { proposals.createProposal(transparent.copy(memo = Memo(""))) }
-        coVerify(exactly = 1) { proposals.createProposal(tex.copy(memo = Memo(""))) }
+        coVerify(exactly = 4) { proposals.preparePayment(any(), any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(PaymentDraft.Send(send), any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(PaymentDraft.Send(sapling), any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(PaymentDraft.Send(transparent.copy(memo = Memo(""))), any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(PaymentDraft.Send(tex.copy(memo = Memo(""))), any()) }
     }
 
     @Test
@@ -129,24 +129,17 @@ class SendFiatProposalTest {
             }
             createProposal.prepare(maxSend, floor = fiat)
         }
-        coVerify(exactly = 2) { proposals.createProposal(any()) }
-        coVerify(exactly = 2) { proposals.createProposal(maxSend) }
+        coVerify(exactly = 2) { proposals.preparePayment(any(), any()) }
+        coVerify(exactly = 2) { proposals.preparePayment(PaymentDraft.Send(maxSend), any()) }
     }
 
     private suspend fun CreateProposalUseCase.prepare(send: ZecSend, floor: Boolean) =
         invoke(send, floor, "fixture-send") { true }
 
-    private fun inactiveRouter() = mockk<NavigationRouter>(relaxed = true) {
-        every { activeEntry } returns MutableStateFlow(null)
+    private fun softwareProposal(proposals: ZashiProposalRepository): CreateProposalUseCase {
+        val router = paymentTestRouter("fixture-send")
+        return CreateProposalUseCase(
+            paymentReviewFixture(selectedPaymentAccount(EditAccountFixtures.zodl()), router, proposals), router,
+        )
     }
-
-    private fun softwareProposal(proposals: ZashiProposalRepository) = CreateProposalUseCase(
-        keystoneProposalRepository = mockk(relaxed = true),
-        ledgerProposalPipeline = mockk(relaxed = true),
-        zashiProposalRepository = proposals,
-        accountDataSource = mockk<AccountDataSource> {
-            coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
-        },
-        navigationRouter = inactiveRouter(),
-    )
 }

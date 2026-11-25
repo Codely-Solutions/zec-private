@@ -19,7 +19,11 @@ import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionPropo
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.preparePayment
+import co.electriccoin.zcash.ui.common.datasource.publishOwnedPayment
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
@@ -53,6 +57,8 @@ import kotlinx.coroutines.withContext
 
 @Suppress("TooManyFunctions")
 interface KeystoneProposalRepository {
+    suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal
+
     val transactionProposal: StateFlow<TransactionProposal?>
 
     val submitState: StateFlow<SubmitProposalState?>
@@ -130,7 +136,7 @@ interface KeystoneProposalRepository {
 
     suspend fun submit(expectedProposal: TransactionProposal? = null, preparationId: String? = null): SubmitResult
 
-    fun clear()
+    fun clear(expected: TransactionProposal? = null)
 
     suspend fun getTransactionProposal(): TransactionProposal
 
@@ -183,6 +189,16 @@ class KeystoneProposalRepositoryImpl(
     override fun signingPreparationId(): String? = hardwareProposal.getApproved(transactionProposal.value)?.id
 
     private var pcztWithProofsJob: Job? = null
+
+    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
+        val previous = transactionProposal.value
+        val proposal = proposalDataSource.preparePayment(owner, draft)
+        owner.requireCurrent()
+        val pczt = createReviewPczt(proposal, owner.account)
+        transactionProposal.publishOwnedPayment(owner, previous, proposal)
+        prepareSigning(proposal, pczt, owner.account)
+        return proposal
+    }
 
     override suspend fun createProposal(zecSend: ZecSend) {
         createProposalInternal {
@@ -251,21 +267,25 @@ class KeystoneProposalRepositoryImpl(
         val transactionProposal = getTransactionProposal()
         transactionProposal.requireCurrentShieldingApproval()
         val owner = resolveAccount()
-        val result =
-            try {
-                proposalDataSource.createPcztFromProposal(
-                    account = owner,
-                    proposal = transactionProposal.proposal
-                )
-            } catch (e: PcztException.MultiStepProposalUnsupportedException) {
-                if (transactionProposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
-            }
+        val result = createReviewPczt(transactionProposal, owner)
         currentCoroutineContext().ensureActive()
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
-        val prepared = hardwareProposal.prepare(transactionProposal, result, owner.sdkAccount.accountUuid)
+        prepareSigning(transactionProposal, result, owner)
+    }
+
+    private suspend fun createReviewPczt(proposal: TransactionProposal, owner: WalletAccount): Pczt =
+        try {
+            proposalDataSource.createPcztFromProposal(account = owner, proposal = proposal.proposal)
+        } catch (e: PcztException.MultiStepProposalUnsupportedException) {
+            if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
+        }
+
+    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
+        val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
+
 
     override fun approveForSigning(expectedProposal: TransactionProposal?, reviewedQuote: SwapQuoteData.Success?) =
         hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote)
@@ -371,11 +391,14 @@ class KeystoneProposalRepositoryImpl(
 
     override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
 
-    override fun clear() {
+    override fun clear(expected: TransactionProposal?) {
+        if (expected != null && (transactionProposal.value !== expected ||
+                !transactionProposal.compareAndSet(expected, null))
+        ) return
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = null
 
-        transactionProposal.update { null }
+        if (expected == null) transactionProposal.update { null }
         submitState.update { null }
         hardwareProposal.clear()
     }

@@ -15,16 +15,11 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.KeystoneAccount
-import co.electriccoin.zcash.ui.common.model.LedgerAccount
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.donation.DonationArgs
 import co.electriccoin.zcash.ui.screen.send.Send
-import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -36,12 +31,12 @@ import kotlinx.coroutines.test.runTest
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertFalse
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CancelProposalFlowUseCaseTest {
     @Test
-    fun donationCancellationClearsProposalsAndRetainsDonationFormWithoutClearingSend() =
+    fun donationCancellationClearsItsOwnProposalAndRetainsTheSendForm() =
         runTest {
             val proposal =
                 RegularTransactionProposal(
@@ -51,10 +46,10 @@ class CancelProposalFlowUseCaseTest {
                     proposal = mockk<Proposal>(),
                     isDonation = true
                 )
-            val zashiRepository =
-                mockk<ZashiProposalRepository>(relaxed = true) {
-                    coEvery { getTransactionProposal() } returns proposal
-                }
+            val wallet = EditAccountFixtures.zodl()
+            val zashiRepository = mockk<ZashiProposalRepository>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow(proposal)
+            }
             val keystoneRepository = mockk<KeystoneProposalRepository>(relaxed = true)
             val ledgerPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
             val clearSend = mockk<ObserveClearSendUseCase>(relaxed = true)
@@ -66,19 +61,16 @@ class CancelProposalFlowUseCaseTest {
                     ledgerProposalPipeline = ledgerPipeline,
                     navigationRouter = router,
                     observeClearSend = clearSend,
-                    accountDataSource =
-                        mockk<AccountDataSource> {
-                            coEvery { getSelectedAccount() } returns mockk<ZodlAccount>(relaxed = true)
-                        },
+                    accountDataSource = selectedPaymentAccount(wallet),
                     swapRepository = mockk<SwapRepository>(relaxed = true),
                 )
 
-            useCase()
+            useCase.rejectReviewed(proposal, wallet.sdkAccount.accountUuid, null)
 
-            coVerify(exactly = 1) { zashiRepository.clear() }
-            coVerify(exactly = 1) { keystoneRepository.clear() }
-            coVerify(exactly = 1) { ledgerPipeline.clear() }
-            coVerify(exactly = 0) { clearSend.requestClear() }
+            verify(exactly = 1) { zashiRepository.clear(proposal) }
+            verify(exactly = 0) { keystoneRepository.clear(any()) }
+            verify(exactly = 0) { ledgerPipeline.clear(any()) }
+            verify(exactly = 0) { clearSend.requestClear() }
             assertEquals(1, router.backToCalls.size)
             assertEquals(DonationArgs::class, router.backToCalls.single())
             assertEquals(0, router.backCalls)
@@ -88,10 +80,10 @@ class CancelProposalFlowUseCaseTest {
     fun migrationSweepRejectionPopsToTheActualOrigin() =
         runTest {
             val proposal = MigrationSweepTransactionProposal(mockk<Proposal>())
-            val keystoneProposalRepository =
-                mockk<KeystoneProposalRepository>(relaxed = true) {
-                    coEvery { getTransactionProposal() } returns proposal
-                }
+            val wallet = EditAccountFixtures.keystone(isSelected = true)
+            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow(proposal)
+            }
             val router = FakeNavigationRouter()
             val useCase =
                 CancelProposalFlowUseCase(
@@ -100,16 +92,13 @@ class CancelProposalFlowUseCaseTest {
                     ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true),
                     navigationRouter = router,
                     observeClearSend = mockk<ObserveClearSendUseCase>(relaxed = true),
-                    accountDataSource =
-                        mockk<AccountDataSource> {
-                            coEvery { getSelectedAccount() } returns mockk<KeystoneAccount>(relaxed = true)
-                        },
+                    accountDataSource = selectedPaymentAccount(wallet),
                     swapRepository = mockk<SwapRepository>(relaxed = true),
                 )
 
-            useCase()
+            useCase.rejectKeystone(proposal, wallet.sdkAccount.accountUuid, null)
 
-            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
+            verify(exactly = 1) { keystoneProposalRepository.clear(proposal) }
             assertEquals(0, router.backToCalls.size)
             assertEquals(1, router.backCalls)
         }
@@ -118,10 +107,10 @@ class CancelProposalFlowUseCaseTest {
     fun shieldProposalNavigatesBackInsteadOfSend() =
         runTest {
             val proposal = ShieldTransactionProposal(mockk<Proposal>())
-            val keystoneProposalRepository =
-                mockk<KeystoneProposalRepository>(relaxed = true) {
-                    coEvery { getTransactionProposal() } returns proposal
-                }
+            val wallet = EditAccountFixtures.keystone(isSelected = true)
+            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow(proposal)
+            }
             val router = FakeNavigationRouter()
             val useCase =
                 CancelProposalFlowUseCase(
@@ -130,16 +119,13 @@ class CancelProposalFlowUseCaseTest {
                     ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true),
                     navigationRouter = router,
                     observeClearSend = mockk<ObserveClearSendUseCase>(relaxed = true),
-                    accountDataSource =
-                        mockk<AccountDataSource> {
-                            coEvery { getSelectedAccount() } returns mockk<KeystoneAccount>(relaxed = true)
-                        },
+                    accountDataSource = selectedPaymentAccount(wallet),
                     swapRepository = mockk<SwapRepository>(relaxed = true),
                 )
 
-            useCase()
+            useCase.rejectKeystone(proposal, wallet.sdkAccount.accountUuid, null)
 
-            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
+            verify(exactly = 1) { keystoneProposalRepository.clear(proposal) }
             assertEquals(0, router.backToCalls.size)
             assertEquals(1, router.backCalls)
         }
@@ -154,10 +140,10 @@ class CancelProposalFlowUseCaseTest {
                     memo = Memo(""),
                     proposal = mockk<Proposal>()
                 )
-            val ledgerProposalPipeline =
-                mockk<LedgerProposalPipeline>(relaxed = true) {
-                    coEvery { getTransactionProposal() } returns proposal
-                }
+            val wallet = EditAccountFixtures.ledger(isSelected = true)
+            val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true) {
+                every { transactionProposal } returns MutableStateFlow(proposal)
+            }
             val router = FakeNavigationRouter()
             val useCase =
                 CancelProposalFlowUseCase(
@@ -166,16 +152,13 @@ class CancelProposalFlowUseCaseTest {
                     ledgerProposalPipeline = ledgerProposalPipeline,
                     navigationRouter = router,
                     observeClearSend = mockk<ObserveClearSendUseCase>(relaxed = true),
-                    accountDataSource =
-                        mockk<AccountDataSource> {
-                            coEvery { getSelectedAccount() } returns mockk<LedgerAccount>(relaxed = true)
-                        },
+                    accountDataSource = selectedPaymentAccount(wallet),
                     swapRepository = mockk<SwapRepository>(relaxed = true),
                 )
 
-            useCase()
+            useCase.rejectReviewed(proposal, wallet.sdkAccount.accountUuid, null)
 
-            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
+            verify(exactly = 1) { ledgerProposalPipeline.clear(proposal) }
             assertEquals(1, router.backToCalls.size)
             assertEquals(Send::class, router.backToCalls.single())
             assertEquals(0, router.backCalls)
@@ -199,14 +182,14 @@ class CancelProposalFlowUseCaseTest {
 
         useCase.rejectKeystone(rendered, wallet.sdkAccount.accountUuid, "signing")
         proposals.value = replacement
-        assertNull(queue.commands.value.getValue("signing").buildCommand())
-        verify(exactly = 0) { keystone.clear() }
+        assertFalse(queue.commands.value.getValue("signing").isStillAllowed())
+        verify(exactly = 0) { keystone.clear(any()) }
 
         useCase.rejectKeystone(replacement, wallet.sdkAccount.accountUuid, "signing")
         assertEquals(NavigationCommand.Back, queue.commands.value.getValue("signing").buildCommand())
-        verify(exactly = 1) { keystone.clear() }
-        verify(exactly = 0) { zodl.clear() }
-        verify(exactly = 0) { ledger.clear() }
+        verify(exactly = 1) { keystone.clear(replacement) }
+        verify(exactly = 0) { zodl.clear(any()) }
+        verify(exactly = 0) { ledger.clear(any()) }
     }
 
     private class FakeNavigationRouter : NavigationRouter {

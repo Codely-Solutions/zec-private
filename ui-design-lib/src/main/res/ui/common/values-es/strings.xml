@@ -976,6 +976,7 @@
     <string name="swap_mismatch_asset_format">%1$s (%2$s)</string>
     <string name="deposits_info">Los depósitos pueden tardar varios minutos en confirmarse.</string>
     <string name="private_swap_incomplete_check_support">Consulta con soporte antes de enviar más.</string>
+    <string name="private_swap_check_status">Consultar estado</string>
     <string name="swapAndPay_status_incompleteDeposit">Depósito incompleto</string>
     <string name="swapAndPay_status_pending">Pendiente</string>
     <string name="swapAndPay_status_success">Completado</string>

@@ -9,11 +9,13 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
+import co.electriccoin.zcash.ui.common.usecase.paymentReviewFixture
+import co.electriccoin.zcash.ui.common.usecase.paymentTestRouter
+import co.electriccoin.zcash.ui.common.usecase.selectedPaymentAccount
 import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
@@ -193,26 +195,20 @@ class SendViewModelLedgerTest {
     fun leavingTheFormCancelsPreparationWithoutClearingANewerProposal() = runTest {
         val proposalReady = CompletableDeferred<Unit>()
         val proposals = mockk<ZashiProposalRepository> {
-            coEvery { createProposal(any()) } coAnswers {
+            coEvery { preparePayment(any(), any()) } coAnswers {
                 withContext(NonCancellable) { proposalReady.await() }
                 error("Synthetic late failure")
             }
         }
-        val router = mockk<NavigationRouter>(relaxed = true)
+        val router = paymentTestRouter("fixture-send")
         val create = CreateProposalUseCase(
-            keystoneProposalRepository = mockk(),
-            ledgerProposalPipeline = mockk(),
-            zashiProposalRepository = proposals,
-            accountDataSource = mockk<AccountDataSource> {
-                coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
-            },
-            navigationRouter = router,
+            paymentReviewFixture(selectedPaymentAccount(EditAccountFixtures.zodl()), router, proposals), router,
         )
         val vm = vm(create)
         val stages = mutableListOf<SendStage>()
         vm.onCreateZecSendClick(payment(), amountState(), vm.recipientAddressState.value) { stages += it }
         runCurrent()
-        coVerify(exactly = 1) { proposals.createProposal(any()) }
+        coVerify(exactly = 1) { proposals.preparePayment(any(), any()) }
         vm.cancelProposalPreparation()
         proposalReady.complete(Unit)
         runCurrent()

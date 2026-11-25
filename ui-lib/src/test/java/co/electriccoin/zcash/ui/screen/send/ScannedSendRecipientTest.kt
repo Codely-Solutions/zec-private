@@ -25,10 +25,10 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -38,6 +38,9 @@ import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
+import co.electriccoin.zcash.ui.common.usecase.paymentReviewFixture
+import co.electriccoin.zcash.ui.common.usecase.paymentTestRouter
+import co.electriccoin.zcash.ui.common.usecase.selectedPaymentAccount
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveClearSendUseCase
@@ -115,16 +118,12 @@ class ScannedSendRecipientTest {
             every { observeContactByAddress(any()) } returns flowOf(null)
         }
         val proposals = mockk<ZashiProposalRepository>(relaxed = true) {
-            coEvery { createProposal(any()) } returns mockk()
+            coEvery { preparePayment(any(), any()) } returns mockk()
         }
+        val reviewRouter = paymentTestRouter("fixture-send")
         val createProposal = CreateProposalUseCase(
-            keystoneProposalRepository = mockk(relaxed = true),
-            ledgerProposalPipeline = mockk(relaxed = true),
-            zashiProposalRepository = proposals,
-            accountDataSource = mockk<AccountDataSource> {
-                coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
-            },
-            navigationRouter = mockk(relaxed = true),
+            paymentReviewFixture(selectedPaymentAccount(EditAccountFixtures.zodl()), reviewRouter, proposals),
+            reviewRouter,
         )
         var handle = SavedStateHandle()
         lateinit var send: SendViewModel
@@ -220,7 +219,7 @@ class ScannedSendRecipientTest {
 
             fiat.performTextReplacement("0.01")
             review.assertIsNotEnabled()
-            coVerify(exactly = 0) { proposals.createProposal(any()) }
+            coVerify(exactly = 0) { proposals.preparePayment(any(), any()) }
             fiat.performTextReplacement("0.05")
             assertEquals("0.00005", enteredAmount(token))
             review.assertIsEnabled()
@@ -229,7 +228,9 @@ class ScannedSendRecipientTest {
             review.assertIsEnabled().performClick()
             compose.waitForIdle()
             coVerify(exactly = 1) {
-                proposals.createProposal(match { it.amount == Zatoshi(5_000) && it.destination.address == wallet })
+                proposals.preparePayment(match<PaymentDraft.Send> {
+                    it.value.amount == Zatoshi(5_000) && it.value.destination.address == wallet
+                }, any())
             }
 
             compose.runOnIdle { rates.value = rate(100.0) }
@@ -241,7 +242,7 @@ class ScannedSendRecipientTest {
             review.assertIsNotEnabled()
             fiat.performTextReplacement("2100000000.000001")
             review.assertIsNotEnabled()
-            coVerify(exactly = 1) { proposals.createProposal(any()) }
+            coVerify(exactly = 1) { proposals.preparePayment(any(), any()) }
 
             token.performTextReplacement("21000000")
             review.assertIsEnabled().performClick()
@@ -250,7 +251,9 @@ class ScannedSendRecipientTest {
             review.assertIsEnabled().performClick()
             compose.waitForIdle()
             coVerify(exactly = 2) {
-                proposals.createProposal(match { it.amount == Zatoshi(2_100_000_000_000_000) })
+                proposals.preparePayment(match<PaymentDraft.Send> {
+                    it.value.amount == Zatoshi(2_100_000_000_000_000)
+                }, any())
             }
 
             fiat.performTextReplacement("100")

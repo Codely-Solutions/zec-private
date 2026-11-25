@@ -1475,5 +1475,6 @@
     <string name="private_swap_created_at">Swap created</string>
     <string name="private_swap_saved_output">Saved output</string>
     <string name="private_swap_refresh_unavailable">Status refresh unavailable.</string>
+    <string name="private_swap_check_status">Check status</string>
     <string name="private_swap_refreshing">Refreshing status…</string>
 </resources>

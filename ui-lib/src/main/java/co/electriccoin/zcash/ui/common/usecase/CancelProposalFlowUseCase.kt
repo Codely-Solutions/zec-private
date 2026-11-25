@@ -10,14 +10,18 @@ import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProp
 import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.donation.DonationArgs
@@ -34,47 +38,55 @@ class CancelProposalFlowUseCase(
     private val accountDataSource: AccountDataSource,
     private val swapRepository: SwapRepository,
 ) {
-    suspend operator fun invoke(clearSendForm: Boolean = true) {
-        val proposal =
-            when (accountDataSource.getSelectedAccount()) {
-                is ZodlAccount -> zashiProposalRepository.getTransactionProposal()
-                is KeystoneAccount -> keystoneProposalRepository.getTransactionProposal()
-                is LedgerAccount -> ledgerProposalPipeline.getTransactionProposal()
-                is ViewOnlyAccount -> null
-            }
+    fun rejectKeystone(proposal: TransactionProposal, account: AccountUuid, sourceEntryId: String?) =
+        reject(proposal, account, sourceEntryId, clearSendForm = true)
 
-        zashiProposalRepository.clear()
-        keystoneProposalRepository.clear()
-        ledgerProposalPipeline.clear()
-        navigationRouter.stageResultFrom(null) { cancelRoute(proposal, clearSendForm) }
-    }
+    fun rejectReviewed(proposal: SendTransactionProposal, account: AccountUuid, sourceEntryId: String?) =
+        reject(proposal, account, sourceEntryId, clearSendForm = false)
 
-    fun rejectKeystone(proposal: TransactionProposal, account: AccountUuid, sourceEntryId: String?) {
-        fun isOwner(): Boolean = accountDataSource.allAccounts.value
-            ?.any { it is KeystoneAccount && it.isSelected && it.sdkAccount.accountUuid == account } == true
-
-        if (!isOwner() || keystoneProposalRepository.transactionProposal.value !== proposal) return
-        navigationRouter.stageResultFrom(sourceEntryId, isStillAllowed = ::isOwner) {
-            if (keystoneProposalRepository.transactionProposal.value !== proposal) {
-                null
-            } else {
-                keystoneProposalRepository.clear()
-                cancelRoute(proposal, clearSendForm = true)
-            }
+    private fun reject(
+        proposal: TransactionProposal,
+        owner: AccountUuid,
+        sourceEntryId: String?,
+        clearSendForm: Boolean,
+    ) {
+        val account = selectedAccount(owner) ?: return
+        val isAllowed = { selectedAccount(owner) != null && currentProposal(account) === proposal }
+        navigationRouter.stageResultFrom(sourceEntryId, isAllowed) {
+            clear(account, proposal)
+            cancelRoute(proposal, clearSendForm)
         }
     }
 
-    private fun cancelRoute(proposal: TransactionProposal?, clearSendForm: Boolean): NavigationCommand =
-        when (proposal) {
-            is ExactInputSwapTransactionProposal -> {
-                swapRepository.clearQuote()
-                NavigationCommand.BackTo(SwapArgs::class)
-            }
+    private fun selectedAccount(owner: AccountUuid) =
+        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected && it.sdkAccount.accountUuid == owner }
 
-            is ExactOutputSwapTransactionProposal -> {
-                swapRepository.clearQuote()
-                NavigationCommand.BackTo(PayArgs::class)
-            }
+    private fun currentProposal(account: WalletAccount) =
+        when (account) {
+            is ZodlAccount -> zashiProposalRepository.transactionProposal.value
+            is KeystoneAccount -> keystoneProposalRepository.transactionProposal.value
+            is LedgerAccount -> ledgerProposalPipeline.transactionProposal.value
+            is ViewOnlyAccount -> null
+        }
+
+    private fun clear(account: WalletAccount, proposal: TransactionProposal) {
+        when (account) {
+            is ZodlAccount -> zashiProposalRepository.clear(proposal)
+            is KeystoneAccount -> keystoneProposalRepository.clear(proposal)
+            is LedgerAccount -> ledgerProposalPipeline.clear(proposal)
+            is ViewOnlyAccount -> Unit
+        }
+        if (proposal is SwapTransactionProposal) {
+            val quote = swapRepository.quote.value as? SwapQuoteData.Success
+            if (quote?.quote === proposal.quote) swapRepository.clearQuote(quote)
+        }
+    }
+
+    private fun cancelRoute(proposal: TransactionProposal, clearSendForm: Boolean): NavigationCommand =
+        when (proposal) {
+            is ExactInputSwapTransactionProposal -> NavigationCommand.BackTo(SwapArgs::class)
+
+            is ExactOutputSwapTransactionProposal -> NavigationCommand.BackTo(PayArgs::class)
 
             is MigrationSweepTransactionProposal -> NavigationCommand.Back
 
@@ -102,7 +114,6 @@ class CancelProposalFlowUseCase(
                 if (proposal.isDonation) NavigationCommand.BackTo(DonationArgs::class) else backToSend(clearSendForm)
             }
 
-            else -> backToSend(clearSendForm)
         }
 
     private fun backToSend(clearSendForm: Boolean): NavigationCommand {
