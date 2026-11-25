@@ -499,7 +499,7 @@ class TransactionProgressVM(
         if (canUseOutcome()) viewTransactionDetailAfterSuccessfulProposal(txId)
     }
 
-    private fun openSwapDetails(proposal: SwapTransactionProposal, txId: String) {
+    private fun openSwapDetails(proposal: SwapTransactionProposal, txId: String?) {
         if (canUseOutcome()) viewTransactionDetailAfterSuccessfulProposal(proposal, txId)
     }
 

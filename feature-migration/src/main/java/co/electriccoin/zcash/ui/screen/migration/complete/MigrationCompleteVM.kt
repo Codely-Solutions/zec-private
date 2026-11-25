@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -71,6 +72,11 @@ class MigrationCompleteVM(
     private val submitProposal: SubmitProposalUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private data class Summary(
         val accountKeyId: String,
         val canShowCompletion: Boolean,

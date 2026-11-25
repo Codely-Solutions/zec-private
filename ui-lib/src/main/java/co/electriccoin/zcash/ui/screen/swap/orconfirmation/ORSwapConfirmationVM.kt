@@ -9,6 +9,7 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.forwardFrom
 import co.electriccoin.zcash.ui.R
@@ -60,6 +61,11 @@ class ORSwapConfirmationVM(
     private val appAccessSession: AppAccessSession,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     private val _dialogState = MutableStateFlow<ErrorState?>(null)
     val dialogState = _dialogState.asStateFlow()
 

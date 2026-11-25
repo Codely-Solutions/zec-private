@@ -12,6 +12,7 @@ import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
@@ -94,6 +95,11 @@ class MigrationReviewVM(
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
     private sealed class ReviewProposal {
         data class Automatic(

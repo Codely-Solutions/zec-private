@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
@@ -78,6 +79,11 @@ internal class SwapVM(
     private val navigateToSwapRefundWarning: NavigateToSwapRefundWarningUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sourceEntryId)
+        super.onCleared()
+    }
+
     // VM-owned state. The externally-observed `swapAssets`/`account` fields are injected by the
     // `state` combine below, so the VM only ever updates the fields it owns.
     private val internalState =

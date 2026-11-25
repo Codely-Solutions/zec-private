@@ -144,11 +144,19 @@ internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigato
         .filterNotNull()
         .collect { command ->
             if (canCommit() && queue.commands.value[command.sourceEntryId] === command) {
-                val currentCommand = command.copy(isStillAllowed = {
-                    queue.commands.value[command.sourceEntryId] === command && command.isStillAllowed()
-                })
+                var handled = false
+                val currentCommand = command.copy(
+                    isStillAllowed = {
+                        canCommit() && queue.commands.value[command.sourceEntryId] === command &&
+                            command.isStillAllowed()
+                    },
+                    buildCommand = {
+                        handled = true
+                        command.buildCommand()
+                    },
+                )
                 navigator.executeCommand(currentCommand)
-                queue.remove(command)
+                if (handled || !command.isStillAllowed()) queue.remove(command)
             }
         }
 }

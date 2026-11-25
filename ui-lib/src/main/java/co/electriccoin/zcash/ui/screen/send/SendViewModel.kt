@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.type.AddressType
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
@@ -49,6 +50,11 @@ class SendViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val validateAddress: ValidateAddressUseCase,
 ) : ViewModel() {
+    override fun onCleared() {
+        navigationRouter.discardResultFrom(sendEntryId)
+        super.onCleared()
+    }
+
     private val recipientState = MutableStateFlow(
         savedStateHandle.get<HashMap<String, String>>(RECIPIENT_STATE_KEY)
             ?.let(RecipientAddressState::fromSavedState) ?: RecipientAddressState.new("")
