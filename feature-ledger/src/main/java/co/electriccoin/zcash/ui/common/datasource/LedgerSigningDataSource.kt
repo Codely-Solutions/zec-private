@@ -56,6 +56,7 @@ interface LedgerSigningDataSource {
     suspend fun sign(
         pczt: Pczt,
         account: LedgerAccount,
+        permitsSigning: () -> Boolean = { true },
         onProgress: (LedgerSigningProgress) -> Unit,
     ): Pczt
 
@@ -67,6 +68,8 @@ interface LedgerSigningDataSource {
  * the request was on its way.
  */
 class LedgerLinkMissingException : Exception("No Ledger link is open.")
+
+internal class LedgerPreparationExpired : IllegalStateException("The reviewed Ledger preparation changed.")
 
 /**
  * The Ledger binding stored with the account is missing or corrupt, so the account cannot be signed
@@ -123,6 +126,7 @@ class LedgerSigningDataSourceImpl(
     override suspend fun sign(
         pczt: Pczt,
         account: LedgerAccount,
+        permitsSigning: () -> Boolean,
         onProgress: (LedgerSigningProgress) -> Unit,
     ): Pczt =
         mutex.withLock {
@@ -142,9 +146,11 @@ class LedgerSigningDataSourceImpl(
                     throw LedgerBindingUnusableException(e)
                 }
             try {
+                val synchronizer = synchronizerProvider.getSynchronizer()
+                if (!permitsSigning()) throw LedgerPreparationExpired()
                 Twig.info { "Ledger signing: signing" }
                 val signed =
-                    synchronizerProvider.getSynchronizer().signPcztWithLedger(
+                    synchronizer.signPcztWithLedger(
                         pczt = pczt,
                         accountUuid = account.sdkAccount.accountUuid,
                         binding = binding,

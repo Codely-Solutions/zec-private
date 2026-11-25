@@ -10,6 +10,7 @@
     <string name="wallet_store_unavailable_title">Wallet could not open</string>
     <string name="wallet_store_unavailable_message">The stored wallet could not be read. Try again or contact support.</string>
     <string name="ephemeral_recovery_try_again">No funds were confirmed. Check the address or swap reference and try again.</string>
+    <string name="ephemeral_recovery_success">Funds were successfully discovered.</string>
     <string name="tor_protection_save_failed">Could not save Tor protection. Try again.</string>
     <string name="ephemeral_recovery_tor_unavailable">Tor protection could not be checked.</string>
 </resources>

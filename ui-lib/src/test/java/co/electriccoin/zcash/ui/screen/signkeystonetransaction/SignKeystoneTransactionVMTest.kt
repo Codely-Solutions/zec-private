@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -100,14 +101,14 @@ class SignKeystoneTransactionVMTest {
             entered.complete(Unit)
             withContext(NonCancellable) { finish.await() }
         }
-        h.proposals.value = ShieldTransactionProposal(mockk())
+        h.proposals.value = approvedShield()
         runCurrent()
         entered.await()
         old.positiveButton.onClick()
         old.generateNextQrCode()
         assertEquals(KeystoneQrPreparation.LOADING, h.vm.state.value?.preparation)
         assertNull(h.vm.state.value?.qrData)
-        h.proposals.value = ShieldTransactionProposal(mockk())
+        h.proposals.value = approvedShield()
         coEvery { h.repository.createPCZTEncoder() } returns encoder()
         finish.complete(encoder())
         runCurrent()
@@ -205,7 +206,7 @@ class SignKeystoneTransactionVMTest {
         runCurrent()
         val old = assertNotNull(h.vm.bottomSheetState.value)
         old.negativeButton.onClick()
-        h.proposals.value = ShieldTransactionProposal(mockk())
+        h.proposals.value = approvedShield()
         advanceTimeBy(400)
         runCurrent()
         verify(exactly = 0) { h.cancel.rejectKeystone(any(), any(), null) }
@@ -221,6 +222,26 @@ class SignKeystoneTransactionVMTest {
         verify(exactly = 1) { h.cancel.rejectKeystone(checkNotNull(h.proposals.value), any(), null) }
     }
 
+    @Test
+    fun aRevokedShieldGrantRemovesTheQrAndOffersReturn() = runTest {
+        val h = harness()
+        var approved = true
+        h.proposals.value = approvedShield { approved }
+        coEvery { h.repository.createPCZTEncoder() } returns encoder()
+        start(h.vm)
+        val stale = assertNotNull(h.vm.state.value)
+        assertNotNull(stale.qrData)
+
+        approved = false
+        h.preparationIds.value = null
+        runCurrent()
+        assertNull(h.vm.state.value)
+        stale.positiveButton.onClick()
+        verify(exactly = 0) { h.router.forward(any()) }
+        h.vm.leaveSigning()
+        verify(exactly = 1) { h.router.back() }
+    }
+
     private fun TestScope.start(vm: SignKeystoneTransactionVM) {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect() }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.bottomSheetState.collect() }
@@ -228,11 +249,13 @@ class SignKeystoneTransactionVMTest {
     }
 
     private fun harness(): Harness {
-        val proposals = MutableStateFlow<TransactionProposal?>(ShieldTransactionProposal(mockk()))
+        val proposals = MutableStateFlow<TransactionProposal?>(approvedShield())
+        val preparationIds = MutableStateFlow<String?>("prepared")
         val wallets = MutableStateFlow<List<WalletAccount>?>(listOf(EditAccountFixtures.keystone(isSelected = true)))
         val repository = mockk<KeystoneProposalRepository> {
             every { transactionProposal } returns proposals
             every { signingPreparationId() } returns "prepared"
+            every { signingPreparationIds } returns preparationIds
         }
         val router = mockk<NavigationRouter>(relaxed = true)
         val cancel = mockk<CancelProposalFlowUseCase>(relaxed = true)
@@ -247,8 +270,11 @@ class SignKeystoneTransactionVMTest {
             sharePCZT = mockk(),
         )
         models += vm
-        return Harness(vm, proposals, wallets, repository, router, cancel)
+        return Harness(vm, proposals, wallets, repository, router, cancel, preparationIds)
     }
+
+    private fun approvedShield(isCurrent: () -> Boolean = { true }) =
+        ShieldTransactionProposal(mockk(), ShieldingApproval(mockk(), isCurrent))
 
     private fun encoder() = UREncoder(UR.fromBytes("zcash-pczt", ByteArray(30) { it.toByte() }), 20, 10, 0L)
 
@@ -259,5 +285,6 @@ class SignKeystoneTransactionVMTest {
         val repository: KeystoneProposalRepository,
         val router: NavigationRouter,
         val cancel: CancelProposalFlowUseCase,
+        val preparationIds: MutableStateFlow<String?>,
     )
 }

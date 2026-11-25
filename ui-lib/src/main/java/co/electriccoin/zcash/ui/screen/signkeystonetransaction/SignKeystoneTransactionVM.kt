@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import com.sparrowwallet.hummingbird.UREncoder
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,8 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -56,9 +59,17 @@ class SignKeystoneTransactionVM(
     // The repository holds a single approved proposal even when the selected Keystone account changes.
     private var signingAccount = wallets.value.selectedKeystone()?.sdkAccount?.accountUuid
     private val rejection = MutableStateFlow<Attempt?>(null)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val shieldApprovalCurrent = proposals.flatMapLatest { proposal ->
+        if (proposal is ShieldTransactionProposal) {
+            keystoneProposalRepository.signingPreparationIds.map { it != null }
+        } else {
+            flowOf(true)
+        }
+    }
 
     val bottomSheetState =
-        combine(rejection, proposals, wallets, preparation) { attempt, _, _, _ ->
+        combine(rejection, proposals, wallets, preparation, shieldApprovalCurrent) { attempt, _, _, _, _ ->
             if (attempt == null || !isCurrent(attempt)) return@combine null
             SignKeystoneTransactionBottomSheetState(
                 onBack = { closeRejection(attempt) },
@@ -83,9 +94,13 @@ class SignKeystoneTransactionVM(
         combine(
             proposals,
             wallets,
-            preparation
-        ) { proposal, wallets, prepared ->
+            preparation,
+            shieldApprovalCurrent,
+        ) { proposal, wallets, prepared, shieldApproved ->
             if (proposal == null) return@combine null
+            if (proposal is ShieldTransactionProposal && (!shieldApproved || proposal.approval?.isCurrent() != true)) {
+                return@combine null
+            }
             val wallet = wallets.selectedKeystone() ?: return@combine null
             val account = wallet.sdkAccount.accountUuid
             if (signingAccount != null && signingAccount != account) return@combine null
@@ -231,7 +246,8 @@ class SignKeystoneTransactionVM(
 
     private fun isCurrent(attempt: Attempt): Boolean =
         isActiveSigningAccount(attempt.account) && preparation.value?.attempt === attempt &&
-            proposals.value === attempt.proposal
+            proposals.value === attempt.proposal &&
+            (attempt.proposal !is ShieldTransactionProposal || attempt.proposal.approval?.isCurrent() == true)
 
     private fun isActiveSigningAccount(account: AccountUuid): Boolean =
         viewModelScope.isActive && wallets.value.selectedKeystone()?.sdkAccount?.accountUuid == account

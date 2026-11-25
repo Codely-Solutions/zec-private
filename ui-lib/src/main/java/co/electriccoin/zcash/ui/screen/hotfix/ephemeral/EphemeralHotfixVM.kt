@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
@@ -33,7 +34,12 @@ class EphemeralHotfixVM(
 
     private val isError = MutableStateFlow(false)
     private val isLoading = MutableStateFlow(false)
+    private val isComplete = MutableStateFlow(false)
     private val torReadAttempts = MutableStateFlow(0L)
+
+    init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val torPreference = torReadAttempts.flatMapLatest {
@@ -45,9 +51,10 @@ class EphemeralHotfixVM(
             text,
             isLoading,
             isError,
+            isComplete,
             torPreference,
-        ) { text, isLoading, isError, tor ->
-            createState(text, isLoading, isError, tor)
+        ) { text, isLoading, isError, isComplete, tor ->
+            createState(text, isLoading, isError, isComplete, tor)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -58,6 +65,7 @@ class EphemeralHotfixVM(
         text: String?,
         isLoading: Boolean,
         isError: Boolean,
+        isComplete: Boolean,
         tor: Result<Boolean?>,
     ): EphemeralHotfixState {
         val canDiscover = tor.getOrNull() == true
@@ -69,18 +77,12 @@ class EphemeralHotfixVM(
                         this.text.value = new
                         this.isError.value = false
                     },
-                    isEnabled = !isLoading && canDiscover,
+                    isEnabled = !isLoading && !isComplete && canDiscover,
                     error = stringRes(R.string.ephemeral_recovery_try_again).takeIf { isError }
                 ),
-            button =
-                ButtonState(
-                    text = if (tor.isFailure) stringRes(R.string.wallet_initialization_retry)
-                        else stringRes("Recover Funds"),
-                    onClick = if (tor.isFailure) ::retryTorRead else ::onRecoverFundsClick,
-                    isEnabled = !isLoading && (tor.isFailure || (canDiscover && !text.isNullOrBlank())),
-                    isLoading = isLoading,
-                ),
+            button = createAction(text, isLoading, isComplete, tor),
             info = when {
+                isComplete -> stringRes(R.string.ephemeral_recovery_success)
                 tor.isFailure -> stringRes(R.string.ephemeral_recovery_tor_unavailable)
                 canDiscover -> null
                 else -> stringRes(
@@ -98,17 +100,41 @@ class EphemeralHotfixVM(
         )
     }
 
+    private fun createAction(
+        text: String?, isLoading: Boolean, isComplete: Boolean, tor: Result<Boolean?>,
+    ): ButtonState =
+        when {
+            isComplete -> ButtonState(
+                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_close),
+                onClick = ::onBack,
+            )
+            tor.isFailure -> ButtonState(
+                text = stringRes(R.string.wallet_initialization_retry),
+                onClick = ::retryTorRead,
+                isEnabled = !isLoading,
+                isLoading = isLoading,
+            )
+            else -> ButtonState(
+                text = stringRes("Recover Funds"),
+                onClick = ::onRecoverFundsClick,
+                isEnabled = !isLoading && tor.getOrNull() == true && !text.isNullOrBlank(),
+                isLoading = isLoading,
+            )
+        }
+
     private fun retryTorRead() = torReadAttempts.update { it + 1 }
 
     private fun onBack() = navigationRouter.back()
 
     private fun onRecoverFundsClick() {
-        if (!isLoading.compareAndSet(expect = false, update = true)) return
+        if (isComplete.value || !isLoading.compareAndSet(expect = false, update = true)) return
         isError.value = false
         val address = text.value.orEmpty()
         viewModelScope.launch {
             try {
-                isError.value = !fixEphemeralAddressUseCase(address, sourceEntryId)
+                val discovered = fixEphemeralAddressUseCase(address, sourceEntryId)
+                isComplete.value = discovered
+                isError.value = !discovered
             } finally {
                 isLoading.value = false
             }

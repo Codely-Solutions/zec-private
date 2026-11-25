@@ -24,6 +24,8 @@ import io.mockk.mockkObject
 import io.mockk.slot
 import io.mockk.unmockkAll
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -84,6 +86,32 @@ class LedgerSigningDataSourceTest {
             coVerify(exactly = 1) { transport.close() }
             assertFalse(dataSource.isLinked)
         }
+
+    @Test
+    fun aRevokedPreparationWhileWaitingForTheSdkNeverReachesTheDevice() = runTest {
+        val transport = mockk<LedgerBluetoothTransport>(relaxed = true)
+        coEvery { ledgerScannerProvider.connect(any()) } returns transport
+        dataSource.connect(device()) { }
+        val sdkRequested = CompletableDeferred<Unit>()
+        val sdkReady = CompletableDeferred<Unit>()
+        coEvery { synchronizerProvider.getSynchronizer() } coAnswers {
+            sdkRequested.complete(Unit)
+            sdkReady.await()
+            synchronizer
+        }
+        var approved = true
+        val result = async {
+            assertFailsWith<LedgerPreparationExpired> {
+                dataSource.sign(Pczt(byteArrayOf(0)), ledgerAccount(), permitsSigning = { approved }) { }
+            }
+        }
+        sdkRequested.await()
+        approved = false
+        sdkReady.complete(Unit)
+        result.await()
+        coVerify(exactly = 0) { synchronizer.signPcztWithLedger(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { transport.close() }
+    }
 
     @Test
     fun aUserRejectedFailureKeepsTheLinkOpen() =

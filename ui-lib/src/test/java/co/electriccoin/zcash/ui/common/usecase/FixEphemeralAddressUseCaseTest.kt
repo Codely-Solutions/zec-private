@@ -18,6 +18,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,17 +27,74 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.StandardTestDispatcher
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.PendingNavigation
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FixEphemeralAddressUseCaseTest {
+    @Test
+    fun backgroundedSuccessfulScanKeepsAnOwnerBoundCompletionForTheDialog() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val owner = mockk<WalletAccount> {
+                every { isSelected } returns true
+                every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16)))
+            }
+            val accounts = mockk<AccountDataSource> {
+                every { allAccounts } returns MutableStateFlow(listOf(owner))
+            }
+            val entry = ActiveNavigationEntry("discover", "Discover")
+            val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
+            val pending = PendingNavigation()
+            val navigation = mockk<NavigationRouter>(relaxed = true) {
+                every { activeEntry } returns active
+                every { pendingNavigation } returns pending
+            }
+            val scanStarted = CompletableDeferred<Unit>()
+            val finishScan = CompletableDeferred<Boolean>()
+            val sdk = mockk<Synchronizer> {
+                coEvery { validateAddress("synthetic-address") } returns AddressType.Transparent
+                coEvery { fetchUtxosByAddress(any(), any()) } coAnswers {
+                    scanStarted.complete(Unit)
+                    finishScan.await()
+                }
+            }
+            val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
+            val access = AppAccessSession().apply { unlock() }
+            val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
+            val recover = FixEphemeralAddressUseCase(
+                provider, navigation, accounts, mockk(), mockk(), access, WalletWriteAccess(), tor,
+            )
+            val completion = async { recover("synthetic-address", entry.id) }
+            scanStarted.await()
+            active.value = entry.copy(hostResumed = false)
+            finishScan.complete(true)
+
+            assertTrue(completion.await())
+            verify(exactly = 0) { navigation.back() }
+            val result = assertNotNull(pending.commands.value[entry.id])
+            active.value = entry
+            assertTrue(result.isStillAllowed())
+            access.lock()
+            access.unlock()
+            assertFalse(result.isStillAllowed())
+            coVerify(exactly = 1) { sdk.fetchUtxosByAddress(any(), any()) }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test
     fun failedOrInconclusiveDiscoveryKeepsItsRecoveryAction() = runTest {
         for (failure in Failure.entries) {

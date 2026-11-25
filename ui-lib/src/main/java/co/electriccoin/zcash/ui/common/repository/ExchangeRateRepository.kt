@@ -5,9 +5,11 @@ import cash.z.ecc.android.sdk.model.ObserveFiatCurrencyResult
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateUnavailable
 import co.electriccoin.zcash.ui.common.model.VersionInfo
-import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.ConversionRequestWithdrawn
 import co.electriccoin.zcash.ui.common.provider.CurrencyConversionPreference
+import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.RefreshLock
@@ -49,16 +51,18 @@ interface ExchangeRateRepository {
 }
 
 class ExchangeRateRepositoryImpl(
-    isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
+    private val isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     private val exchangeRateDataSource: ExchangeRateDataSource,
     private val synchronizerProvider: SynchronizerProvider,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val isCmcAvailable: Boolean = VersionInfo.IS_CMC_AVAILABLE,
 ) : ExchangeRateRepository {
     private val refreshPipeline = MutableSharedFlow<Unit>()
 
     private val conversionPreference =
         isExchangeRateEnabledStorageProvider
             .observeSelection()
+            .map { it.withSupportedFiat() }
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
@@ -71,7 +75,10 @@ class ExchangeRateRepositoryImpl(
             .flatMapLatest { (optedIn, fiat) ->
                 if (optedIn == true && fiat != null) {
                     channelFlow {
-                        var cache = ExchangeRateResult(ObserveFiatCurrencyResult(isLoading = true))
+                        var cache = ExchangeRateResult(
+                            observed = ObserveFiatCurrencyResult(isLoading = true),
+                            requestedFiat = fiat,
+                        )
                         launch {
                             refreshPipeline
                                 .onStart { emit(Unit) }
@@ -79,24 +86,27 @@ class ExchangeRateRepositoryImpl(
                                     flow {
                                         emit(cache.copy(observed = cache.observed.copy(isLoading = true)))
                                         emit(
-                                            ExchangeRateResult(
+                                            cache.copy(
                                                 observed =
                                                     cache.observed.copy(
                                                         isLoading = false,
                                                         currencyConversion =
                                                             exchangeRateDataSource
                                                                 .getExchangeRate(fiat)
-                                                    )
+                                                    ),
+                                                error = null,
                                             )
                                         )
                                     }.catch { error ->
-                                        if (shouldFallBackToSynchronizerRoute(VersionInfo.IS_CMC_AVAILABLE, fiat)) {
-                                            synchronizerProvider.getSynchronizer().refreshExchangeRateUsd()
-                                            emitAll(
-                                                exchangeRateDataSource
-                                                    .observeSynchronizerRoute()
-                                                    .map { ExchangeRateResult(observed = it) }
-                                            )
+                                        if (error !is ConversionRequestWithdrawn &&
+                                            shouldFallBackToSynchronizerRoute(isCmcAvailable, fiat)
+                                        ) {
+                                            emitAll(trySynchronizerRoute(fiat).catch {
+                                                emit(cache.copy(
+                                                    observed = cache.observed.copy(isLoading = false),
+                                                    error = classifyExchangeRateError(it),
+                                                ))
+                                            })
                                         } else {
                                             emit(
                                                 cache.copy(
@@ -125,11 +135,27 @@ class ExchangeRateRepositoryImpl(
                 initialValue = ExchangeRateResult(ObserveFiatCurrencyResult(isLoading = true))
             )
 
+    private fun CurrencyConversionPreference.withSupportedFiat(): CurrencyConversionPreference =
+        if (isCmcAvailable || fiat == null) this else copy(fiat = FiatCurrency.USD)
+
+    private fun trySynchronizerRoute(fiat: FiatCurrency) = flow {
+        val synchronizer = synchronizerProvider.getSynchronizer()
+        val selection = runCatchingRecoverable { isExchangeRateEnabledStorageProvider.readSelection() }
+            .getOrNull()?.withSupportedFiat()
+        if (selection == CurrencyConversionPreference(enabled = true, fiat = fiat)) {
+            synchronizer.refreshExchangeRateUsd()
+            emitAll(exchangeRateDataSource.observeSynchronizerRoute().map {
+                ExchangeRateResult(observed = it, requestedFiat = fiat)
+            })
+        } else {
+            emit(ExchangeRateResult(observed = ObserveFiatCurrencyResult(isLoading = false), requestedFiat = fiat))
+        }
+    }
+
     private val usdExchangeRateTimestamp =
-        exchangeRateUsdInternal
-            .map {
-                it.observed.currencyConversion?.timestamp
-            }.distinctUntilChanged()
+        combine(conversionPreference, exchangeRateUsdInternal) { preference, exchangeRate ->
+            exchangeRate.forPreference(preference)?.observed?.currencyConversion?.timestamp
+        }.distinctUntilChanged()
 
     private val refreshExchangeRateUsdLock =
         RefreshLock(
@@ -143,8 +169,8 @@ class ExchangeRateRepositoryImpl(
             lockDuration = WALLET_EXCHANGE_RATE_MAX_AGE,
             onRefresh = { expiredTimestamp ->
                 // The combined UI state may still hold its previous value when collection resumes.
-                val observed = exchangeRateUsdInternal.value.observed
-                if (!observed.isLoading && observed.currencyConversion?.timestamp == expiredTimestamp) {
+                val observed = exchangeRateUsdInternal.value.forPreference(conversionPreference.value)?.observed
+                if (observed?.isLoading == false && observed.currencyConversion?.timestamp == expiredTimestamp) {
                     refreshPipeline.emit(Unit)
                 }
             }
@@ -157,37 +183,38 @@ class ExchangeRateRepositoryImpl(
             staleExchangeRateUsdLock.state,
             refreshExchangeRateUsdLock.state,
         ) { preference, exchangeRate, isStale, isRefreshEnabled ->
-            createState(preference.enabled, exchangeRate, isStale, isRefreshEnabled, preference.fiat)
+            createState(preference, exchangeRate, isStale, isRefreshEnabled)
         }.distinctUntilChanged()
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(5.seconds, replayExpiration = Duration.ZERO),
                 initialValue =
                     createState(
-                        isOptedIn = conversionPreference.value.enabled,
+                        preference = conversionPreference.value,
                         exchangeRate = exchangeRateUsdInternal.value,
                         isStale = false,
                         isRefreshEnabled = false,
-                        expectedCurrency = conversionPreference.value.fiat,
                     )
             )
 
     private fun createState(
-        isOptedIn: Boolean?,
+        preference: CurrencyConversionPreference,
         exchangeRate: ExchangeRateResult,
         isStale: Boolean,
         isRefreshEnabled: Boolean,
-        expectedCurrency: FiatCurrency?,
     ): ExchangeRateState =
-        when (isOptedIn) {
+        when (preference.enabled) {
             true -> {
+                val current = exchangeRate.forPreference(preference)
+                val conversion = current?.observed?.currencyConversion
                 ExchangeRateState.Data(
-                    isLoading = expectedCurrency != null && exchangeRate.observed.isLoading,
-                    isStale = expectedCurrency != null && isStale,
-                    isRefreshEnabled = expectedCurrency != null && isRefreshEnabled,
-                    currencyConversion = expectedCurrency?.let { exchangeRate.observed.currencyConversion },
-                    expectedCurrency = expectedCurrency ?: FiatCurrency.USD,
-                    error = expectedCurrency?.let { exchangeRate.error },
+                    isLoading = preference.fiat != null && current?.observed?.isLoading != false,
+                    isStale = conversion != null && isStale,
+                    isRefreshEnabled = current?.observed?.isLoading == false &&
+                        (conversion == null || isRefreshEnabled),
+                    currencyConversion = conversion,
+                    expectedCurrency = preference.fiat ?: FiatCurrency.USD,
+                    error = current?.error,
                     onRefresh = ::refreshExchangeRateUsd
                 )
             }
@@ -255,6 +282,17 @@ internal fun classifyExchangeRateError(error: Throwable): ExchangeRateError? =
 private data class ExchangeRateResult(
     val observed: ObserveFiatCurrencyResult = ObserveFiatCurrencyResult(),
     val error: ExchangeRateError? = null,
-)
+    val requestedFiat: FiatCurrency? = null,
+) {
+    fun forPreference(preference: CurrencyConversionPreference): ExchangeRateResult? {
+        if (preference.enabled != true || requestedFiat == null || requestedFiat != preference.fiat) return null
+        val conversion = observed.currencyConversion
+        return if (conversion == null || conversion.fiatCurrency == requestedFiat) {
+            this
+        } else {
+            copy(observed = observed.copy(currencyConversion = null))
+        }
+    }
+}
 
 private val USD_EXCHANGE_REFRESH_LOCK_THRESHOLD = 2.minutes

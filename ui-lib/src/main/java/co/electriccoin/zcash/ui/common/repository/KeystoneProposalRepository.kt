@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwarePolicy
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -175,6 +176,7 @@ class KeystoneProposalRepositoryImpl(
     private val keystoneSDKProvider: KeystoneSDKProvider,
     private val processSwapTransaction: ProcessSwapTransactionUseCase,
     walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+    appAccessSession: AppAccessSession = AppAccessSession(),
 ) : KeystoneProposalRepository {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -184,7 +186,9 @@ class KeystoneProposalRepositoryImpl(
 
     private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
 
-    override val signingPreparationIds = combine(transactionProposal, hardwareProposal.approved) { _, _ ->
+    override val signingPreparationIds = combine(
+        transactionProposal, hardwareProposal.approved, appAccessSession.grant,
+    ) { _, _, _ ->
         signingPreparationId()
     }
 

@@ -6,8 +6,9 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.isForegroundAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -78,10 +79,13 @@ class FixEphemeralAddressUseCase(
             accountUuid = account.sdkAccount.accountUuid,
             address = address,
         )
-        if (confirmed && navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back } &&
-            canRecover()
-        ) {
-            showDiscoveredFunds()
+        if (confirmed) {
+            withContext(Dispatchers.Main.immediate) {
+                navigationRouter.stageResultFrom(sourceEntryId, canRecover) {
+                    Toast.makeText(context, R.string.ephemeral_recovery_success, Toast.LENGTH_LONG).show()
+                    NavigationCommand.Back
+                }
+            }
         }
         confirmed
     }
@@ -105,10 +109,6 @@ class FixEphemeralAddressUseCase(
                 }
             }
         }
-
-    private suspend fun showDiscoveredFunds() = withContext(Dispatchers.Main.immediate) {
-        Toast.makeText(context, "Funds were successfully discovered", Toast.LENGTH_LONG).show()
-    }
 
     private companion object {
         val PRE_SCAN_TIMEOUT = 30.seconds

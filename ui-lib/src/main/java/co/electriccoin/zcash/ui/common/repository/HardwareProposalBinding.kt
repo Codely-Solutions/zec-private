@@ -3,7 +3,9 @@ package co.electriccoin.zcash.ui.common.repository
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.requireCurrentShieldingApproval
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -77,13 +79,17 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
             "Review the prepared swap transaction before signing."
         }
         if (current is SwapTransactionProposal) current.requireFundingApproval(reviewedQuote)
+        artifact.proposal.requireCurrentShieldingApproval()
         artifact.reviewedQuote = reviewedQuote
         approval.value = artifact
     }
 
     @Synchronized
     fun getApproved(current: TransactionProposal?): PreparedHardwareProposal? =
-        approval.value?.takeIf { it.proposal === current && walletWriteAccess.permits(it.walletGeneration) }
+        approval.value?.takeIf {
+            it.proposal === current && walletWriteAccess.permits(it.walletGeneration) &&
+                (current !is ShieldTransactionProposal || current.approval?.isCurrent() == true)
+        }
 
     fun requireApproved(
         current: TransactionProposal?,

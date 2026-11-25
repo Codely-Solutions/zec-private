@@ -59,6 +59,7 @@ enum class LedgerIssueKind(
     REJECTED,
     DISCONNECTED,
     NOT_SIGNABLE,
+    EXPIRED_SHIELD_APPROVAL,
     UNBOUND,
     UNKNOWN,
 }
@@ -131,6 +132,13 @@ data class LedgerIssue(
          * signing session with nothing left to sign.
          */
         val unknownWithoutRetry: LedgerIssue = unknown.copy(retry = LedgerIssueRetry.NONE)
+
+        val expiredShieldApproval: LedgerIssue = LedgerIssue(
+            LedgerIssueKind.EXPIRED_SHIELD_APPROVAL,
+            LedgerIssueRetry.NONE,
+            stringRes(co.electriccoin.zcash.ui.R.string.private_keystone_unavailable_title),
+            stringRes(co.electriccoin.zcash.ui.R.string.private_keystone_unavailable_message),
+        )
 
         /**
          * The selected account has no usable Ledger binding, so it cannot be signed for until it is

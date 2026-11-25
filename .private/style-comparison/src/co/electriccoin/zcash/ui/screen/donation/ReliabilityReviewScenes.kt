@@ -10,6 +10,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
@@ -95,6 +96,7 @@ internal fun ReliabilityReviewScene(screen: String, originalAccount: ZodlAccount
                     navigateToError = NavigateToErrorUseCase(navigation),
                     messageAvailabilityDataSource = reviewInterface(emptyMap()),
                     walletWriteAccess = WalletWriteAccess(),
+                    appAccessSession = AppAccessSession(),
                 )
             }
             // The real VM computes its initial state from the synthetic SDK balances. No flow is subscribed.

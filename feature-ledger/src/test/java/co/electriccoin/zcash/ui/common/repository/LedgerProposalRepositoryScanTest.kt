@@ -40,7 +40,7 @@ class LedgerProposalRepositoryScanTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount())
             runCurrent()
             val signed = Pczt(byteArrayOf(5))
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
 
             devices.value = listOf(device("AA"))
             repository.startSigning()
@@ -76,7 +76,7 @@ class LedgerProposalRepositoryScanTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount())
             runCurrent()
             val signed = Pczt(byteArrayOf(5))
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
 
             devices.value = listOf(device("AA"), device("BB"))
             repository.startSigning()
@@ -131,7 +131,7 @@ class LedgerProposalRepositoryScanTest : LedgerProposalRepositoryTestBase() {
                 repository.signingState.value
             )
             coVerify(exactly = 1) { ledgerSigningDataSource.close() }
-            coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any()) }
+            coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any(), any()) }
         }
 
     @Test
@@ -139,7 +139,7 @@ class LedgerProposalRepositoryScanTest : LedgerProposalRepositoryTestBase() {
         runTest(dispatcher) {
             givenPczt(ledgerAccount())
             runCurrent()
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                 repository.signingState.collect { state ->
                     if (state is LedgerSigningState.Selecting) repository.selectDevice("BB")
@@ -236,7 +236,7 @@ class LedgerProposalRepositoryScanTest : LedgerProposalRepositoryTestBase() {
             var signCalls = 0
             val signed = Pczt(byteArrayOf(5))
             val mismatch = mockk<LedgerException.DeviceMismatch>(relaxed = true)
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 signCalls++
                 linked = false
                 if (signCalls == 1) throw mismatch else signed

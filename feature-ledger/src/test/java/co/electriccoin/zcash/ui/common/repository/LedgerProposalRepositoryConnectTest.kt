@@ -47,7 +47,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
                 secondArg<() -> Unit>().invoke()
                 afterReport = repository.signingState.value
             }
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 whenSigning = repository.signingState.value
                 Pczt(byteArrayOf(5))
             }
@@ -69,7 +69,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
         runTest(dispatcher) {
             givenPczt(ledgerAccount())
             runCurrent()
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
             val seen = recordStates()
 
             devices.value = listOf(device("AA"))
@@ -99,7 +99,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
                 secondArg<() -> Unit>().invoke()
             }
             val progress = slot<(LedgerSigningProgress) -> Unit>()
-            coEvery { ledgerSigningDataSource.sign(any(), any(), capture(progress)) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), capture(progress)) } coAnswers {
                 progress.captured(LedgerSigningProgress.IdentifyingDevice)
                 progress.captured(LedgerSigningProgress.Streaming(4, 9))
                 progress.captured(LedgerSigningProgress.AwaitingReviewOnDevice)
@@ -223,7 +223,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
             val report = slot<() -> Unit>()
             coEvery { ledgerSigningDataSource.connect(any(), capture(report)) } returns Unit
             var afterLateReport: LedgerSigningState? = null
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 report.captured.invoke()
                 afterLateReport = repository.signingState.value
                 Pczt(byteArrayOf(5))
@@ -267,7 +267,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
                 repository.signingState.value
             )
             coVerify(exactly = 1) { ledgerSigningDataSource.close() }
-            coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any()) }
+            coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any(), any()) }
         }
 
     @Test
@@ -286,7 +286,7 @@ class LedgerProposalRepositoryConnectTest : LedgerProposalRepositoryTestBase() {
                 afterReports += repository.signingState.value
                 if (connects == 1) throw declined
             }
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
 
             devices.value = listOf(device("AA"))
             repository.startSigning()

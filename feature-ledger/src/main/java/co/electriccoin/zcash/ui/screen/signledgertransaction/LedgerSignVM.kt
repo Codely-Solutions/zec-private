@@ -141,7 +141,8 @@ class LedgerSignVM(
                     if (signingState.issue.kind == LedgerIssueKind.PERMISSIONS) retryLedgerSigning()
                 }
 
-                else -> return@launch
+                LedgerSigningState.Signed -> return@launch
+                else -> startLedgerSigning()
             }
         }
     }

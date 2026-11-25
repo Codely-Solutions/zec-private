@@ -66,11 +66,10 @@ fun StyledExchangeBalance(
     when (state) {
         is ExchangeRateState.Data -> {
             if ((state.isStale && !state.isLoading) || (!state.isLoading && state.currencyConversion == null)) {
-                ExchangeRateUnavailableButton(
-                    textColor = textColor,
-                    style = style,
-                    modifier = modifier
-                )
+                Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+                    ExchangeRateUnavailableButton(textColor = textColor, style = style)
+                    if (state.isRefreshEnabled) ExchangeRateRefreshButton(state, textColor)
+                }
             } else {
                 ExchangeAvailableRateLabelInternal(
                     style = style,
@@ -126,21 +125,26 @@ private fun ExchangeAvailableRateLabelInternal(
                 LottieProgress()
             }
         } else {
-            IconButton(
-                modifier = Modifier.size(refreshTargetSize),
-                onClick = state.onRefresh,
-                enabled = state.isRefreshEnabled,
-            ) {
-                Image(
-                    modifier = Modifier.size(16.dp),
-                    painter = painterResource(R.drawable.ic_exchange_rate_retry),
-                    contentDescription =
-                        stringResource(co.electriccoin.zcash.ui.design.R.string.currencyConversion_refreshAction),
-                    colorFilter =
-                        ColorFilter.tint(if (state.isRefreshEnabled) textColor else ZashiColors.Text.textDisabled)
-                )
-            }
+            ExchangeRateRefreshButton(state, textColor)
         }
+    }
+}
+
+@Composable
+private fun ExchangeRateRefreshButton(state: ExchangeRateState.Data, textColor: Color) {
+    IconButton(
+        modifier = Modifier.size(48.dp),
+        onClick = state.onRefresh,
+        enabled = state.isRefreshEnabled,
+    ) {
+        Image(
+            modifier = Modifier.size(16.dp),
+            painter = painterResource(R.drawable.ic_exchange_rate_retry),
+            contentDescription =
+                stringResource(co.electriccoin.zcash.ui.design.R.string.currencyConversion_refreshAction),
+            colorFilter =
+                ColorFilter.tint(if (state.isRefreshEnabled) textColor else ZashiColors.Text.textDisabled),
+        )
     }
 }
 

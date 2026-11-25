@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+import cash.z.ecc.android.sdk.model.ObserveFiatCurrencyResult
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
@@ -10,6 +12,7 @@ import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.CurrencyConversionPreference
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import io.ktor.client.HttpClient
@@ -100,7 +103,7 @@ class ExchangeRateRepositoryTest {
         val rates = mockk<ExchangeRateDataSource> {
             coEvery { getExchangeRate(euro) } returns quote
         }
-        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope)
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope, isCmcAvailable = true)
 
         backgroundScope.launch { repository.state.collect { } }
         runCurrent()
@@ -128,7 +131,7 @@ class ExchangeRateRepositoryTest {
         val rates = mockk<ExchangeRateDataSource> {
             coEvery { getExchangeRate(FiatCurrency.USD) } returns quote
         }
-        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope)
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope, isCmcAvailable = true)
         backgroundScope.launch { repository.state.collect { } }
         runCurrent()
         assertEquals(quote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
@@ -140,6 +143,108 @@ class ExchangeRateRepositoryTest {
         assertEquals(ExchangeRateState.OptedOut, repository.state.value)
         coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
         coVerify(exactly = 0) { rates.getExchangeRate(FiatCurrency("EUR")) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aCurrencySwitchNeverLabelsThePreviousPriceWithTheNewCurrency() = runTest {
+        val euro = FiatCurrency("EUR")
+        val usdQuote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
+        val eurQuote = FiatCurrencyConversion(Clock.System.now(), 90.0, euro)
+        val nextQuote = CompletableDeferred<FiatCurrencyConversion>()
+        val preference = MutableStateFlow(CurrencyConversionPreference(true, FiatCurrency.USD))
+        val settings = mockk<IsExchangeRateEnabledStorageProvider> {
+            every { observeSelection() } returns preference
+        }
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(FiatCurrency.USD) } returns usdQuote
+            coEvery { getExchangeRate(euro) } coAnswers { nextQuote.await() }
+        }
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope, isCmcAvailable = true)
+        val states = mutableListOf<ExchangeRateState>()
+        backgroundScope.launch { repository.state.collect { states += it } }
+        runCurrent()
+        assertEquals(usdQuote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
+
+        preference.value = CurrencyConversionPreference(true, euro)
+        runCurrent()
+        val waiting = assertIs<ExchangeRateState.Data>(repository.state.value)
+        assertEquals(euro, waiting.expectedCurrency)
+        assertTrue(waiting.isLoading)
+        assertNull(waiting.currencyConversion)
+        nextQuote.complete(eurQuote)
+        runCurrent()
+        assertEquals(eurQuote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
+        assertTrue(states.filterIsInstance<ExchangeRateState.Data>().filter { it.expectedCurrency == euro }
+            .all { it.currencyConversion == null || it.currencyConversion == eurQuote })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theSdkOnlyRouteUsesUsdAndRechecksConsentBeforeSdkAdmission() = runTest {
+        val choice = CurrencyConversionPreference(true, FiatCurrency("EUR"))
+        var committed = choice
+        val settings = mockk<IsExchangeRateEnabledStorageProvider> {
+            every { observeSelection() } returns flowOf(choice)
+            coEvery { readSelection() } answers { committed }
+        }
+        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(FiatCurrency.USD) } throws ExchangeRateUnavailable()
+            every { observeSynchronizerRoute() } returns flowOf(ObserveFiatCurrencyResult(
+                isLoading = false, currencyConversion = quote,
+            ))
+        }
+        val sdk = mockk<Synchronizer>(relaxed = true)
+        val sdkReady = CompletableDeferred<Unit>()
+        val provider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } coAnswers { sdkReady.await(); sdk }
+        }
+        val repository = ExchangeRateRepositoryImpl(settings, rates, provider, backgroundScope, isCmcAvailable = false)
+        backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        committed = choice.copy(enabled = false)
+        sdkReady.complete(Unit)
+        runCurrent()
+        coVerify(exactly = 0) { sdk.refreshExchangeRateUsd() }
+
+        committed = choice
+        assertIs<ExchangeRateState.Data>(repository.state.value).onRefresh()
+        runCurrent()
+        val recovered = assertIs<ExchangeRateState.Data>(repository.state.value)
+        assertEquals(FiatCurrency.USD, recovered.expectedCurrency)
+        assertEquals(quote, recovered.currencyConversion)
+        assertEquals(FiatCurrency("EUR"), committed.fiat)
+        coVerify(exactly = 1) { sdk.refreshExchangeRateUsd() }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun failedFirstRateCanBeRetriedWithTheSameCollector() = runTest {
+        val euro = FiatCurrency("EUR")
+        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, euro)
+        val settings = mockk<IsExchangeRateEnabledStorageProvider> {
+            every { observeSelection() } returns flowOf(CurrencyConversionPreference(true, euro))
+        }
+        var attempts = 0
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(euro) } coAnswers {
+                if (++attempts == 1) throw SocketTimeoutException("Synthetic timeout")
+                quote
+            }
+        }
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope, isCmcAvailable = true)
+        backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        val failed = assertIs<ExchangeRateState.Data>(repository.state.value)
+        assertFalse(failed.isLoading)
+        assertNull(failed.currencyConversion)
+        assertTrue(failed.isRefreshEnabled)
+
+        failed.onRefresh()
+        runCurrent()
+        assertEquals(quote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
+        coVerify(exactly = 2) { rates.getExchangeRate(euro) }
     }
 
     private fun observedSelection(

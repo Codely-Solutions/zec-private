@@ -21,6 +21,7 @@ interface IsExchangeRateEnabledStorageProvider : NullableBooleanStorageProvider 
 
     suspend fun store(amount: Boolean, currency: FiatCurrency?)
 
+    suspend fun readSelection(): CurrencyConversionPreference
     fun observeSelection(): Flow<CurrencyConversionPreference>
 }
 
@@ -53,18 +54,21 @@ class IsExchangeRateEnabledStorageProviderImpl(
             launch { cleanUpLegacyPreference() }
         }
 
+    override suspend fun readSelection(): CurrencyConversionPreference {
+        val fiatKey = PreferredFiatProviderImpl.KEY
+        val values = preferenceHolder().getStringSnapshot(setOf(OPTED_IN_KEY, fiatKey))
+        return CurrencyConversionPreference(
+            enabled = values[OPTED_IN_KEY]?.toBooleanStrictOrNull(),
+            fiat = parsePreferredFiat(values[fiatKey]) ?: FiatCurrency.USD,
+        )
+    }
+
     override fun observeSelection(): Flow<CurrencyConversionPreference> = flow {
         val preferences = preferenceHolder()
-        val fiatKey = PreferredFiatProviderImpl.KEY
-        val keys = setOf(OPTED_IN_KEY, fiatKey)
         emitAll(
-            merge(preferences.observe(OPTED_IN_KEY), preferences.observe(fiatKey)).map {
-                val values = preferences.getStringSnapshot(keys)
-                CurrencyConversionPreference(
-                    enabled = values[OPTED_IN_KEY]?.toBooleanStrictOrNull(),
-                    fiat = parsePreferredFiat(values[fiatKey]) ?: FiatCurrency.USD,
-                )
-            }.distinctUntilChanged()
+            merge(preferences.observe(OPTED_IN_KEY), preferences.observe(PreferredFiatProviderImpl.KEY))
+                .map { readSelection() }
+                .distinctUntilChanged()
         )
     }.retryConversionPreferenceRead(CurrencyConversionPreference(enabled = false, fiat = null))
 

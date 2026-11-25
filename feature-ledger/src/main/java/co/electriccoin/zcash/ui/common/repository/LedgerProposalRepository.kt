@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.LedgerBindingUnusableException
 import co.electriccoin.zcash.ui.common.datasource.LedgerDeviceDataSource
 import co.electriccoin.zcash.ui.common.datasource.LedgerLinkMissingException
+import co.electriccoin.zcash.ui.common.datasource.LedgerPreparationExpired
 import co.electriccoin.zcash.ui.common.datasource.LedgerSigningDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
@@ -279,7 +280,15 @@ class LedgerProposalRepositoryImpl(
         this is SendTransactionProposal && destination is WalletAddress.Tex
 
     override fun startSigning() {
-        if (sessionJob?.isActive == true) return
+        if (shieldApprovalExpired(transactionProposal.value)) {
+            cancelSigning()
+            signingState.value = LedgerSigningState.Failed(LedgerIssue.expiredShieldApproval)
+        } else if (sessionJob?.isActive != true) {
+            startApprovedSession()
+        }
+    }
+
+    private fun startApprovedSession() {
         val prepared = hardwareProposal.getApproved(transactionProposal.value)
         if (prepared == null) {
             Twig.warn { "Ledger signing: no PCZT to sign" }
@@ -294,6 +303,9 @@ class LedgerProposalRepositoryImpl(
                 runSession(session, prepared)
             }
     }
+
+    private fun shieldApprovalExpired(proposal: TransactionProposal?): Boolean =
+        proposal is ShieldTransactionProposal && proposal.approval?.isCurrent() != true
 
     private fun publish(
         session: Int,
@@ -332,10 +344,18 @@ class LedgerProposalRepositoryImpl(
         } catch (e: LedgerBindingUnusableException) {
             Twig.warn { "Ledger signing: session failed with ${e.javaClass.simpleName}" }
             publish(session, LedgerSigningState.Failed(LedgerIssue.unbound))
+        } catch (_: LedgerPreparationExpired) {
+            showRevokedPreparation(session, prepared.proposal)
         } catch (e: Exception) {
             Twig.warn { "Ledger signing: session failed with ${e.javaClass.simpleName}" }
             publish(session, LedgerSigningState.Failed(LedgerIssue.unknown))
         }
+    }
+
+    private fun showRevokedPreparation(session: Int, proposal: TransactionProposal) {
+        val issue = if (shieldApprovalExpired(proposal)) LedgerIssue.expiredShieldApproval
+            else LedgerIssue.unknownWithoutRetry
+        publish(session, LedgerSigningState.Failed(issue))
     }
 
     /**
@@ -529,20 +549,19 @@ class LedgerProposalRepositoryImpl(
         prepared: PreparedHardwareProposal,
         account: LedgerAccount
     ) {
-        check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
-            "The reviewed transaction changed before signing."
+        val permitsSigning = {
+            generation == session && hardwareProposal.getApproved(transactionProposal.value) === prepared
         }
+        if (!permitsSigning()) throw LedgerPreparationExpired()
         Twig.info { "Ledger signing: stage Preparing" }
         publish(session, LedgerSigningState.Preparing)
         val signed =
-            ledgerSigningDataSource.sign(prepared.pczt.clonePczt(), account) { progress ->
+            ledgerSigningDataSource.sign(prepared.pczt.clonePczt(), account, permitsSigning) { progress ->
                 publish(session, progress.toSigningState())
             }
         synchronized(lock) {
             if (generation != session) return
-            check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
-                "The reviewed transaction changed during signing."
-            }
+            if (!permitsSigning()) throw LedgerPreparationExpired()
             prepared.signatures = signed
         }
         Twig.info { "Ledger signing: stage Signed" }

@@ -25,10 +25,13 @@ interface CMCApiProvider {
 }
 
 class CMCApiProviderImpl(
-    private val httpClientProvider: HttpClientProvider
+    private val httpClientProvider: HttpClientProvider,
+    private val conversionSettings: IsExchangeRateEnabledStorageProvider,
 ) : CMCApiProvider {
     override suspend fun getExchangeRateQuote(apiKey: String, fiat: String): GetCMCQuoteResponse =
         execute {
+            val selection = conversionSettings.readSelection()
+            if (selection.enabled != true || selection.fiat?.code != fiat) throw ConversionRequestWithdrawn()
             get("https://$CMC_API_HOST/v1/cryptocurrency/quotes/latest") {
                 parameter("symbol", "ZEC")
                 parameter("convert", fiat)
@@ -58,3 +61,5 @@ class CMCApiProviderImpl(
 // MOB-1378: single source of truth for the exchange-rate provider host. Used both to build the request
 // URL above and by [HttpClientProvider] to refuse the same host on the direct (clearnet) client.
 internal const val CMC_API_HOST = "pro-api.coinmarketcap.com"
+
+internal class ConversionRequestWithdrawn : IllegalStateException("The active conversion selection changed.")

@@ -1,5 +1,9 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
+import io.mockk.coEvery
+import io.mockk.mockk
+
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -8,9 +12,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -23,7 +30,7 @@ class CMCApiProviderTest {
     fun getExchangeRateQuoteUsesTorClientAndNeverTheDirectClient() =
         runTest {
             val httpClientProvider = RecordingHttpClientProvider()
-            val provider = CMCApiProviderImpl(httpClientProvider)
+            val provider = CMCApiProviderImpl(httpClientProvider, enabledConversion())
 
             val response = provider.getExchangeRateQuote(apiKey = "key", fiat = "USD")
 
@@ -47,7 +54,7 @@ class CMCApiProviderTest {
     fun getFiatMapUsesTorClientAndNeverTheDirectClient() =
         runTest {
             val httpClientProvider = RecordingHttpClientProvider()
-            val provider = CMCApiProviderImpl(httpClientProvider)
+            val provider = CMCApiProviderImpl(httpClientProvider, mockk())
 
             val response = provider.getFiatMap(apiKey = "key")
 
@@ -61,6 +68,37 @@ class CMCApiProviderTest {
             assertTrue(httpClientProvider.requestedHosts.all { it == CMC_API_HOST })
             assertEquals(listOf("key"), httpClientProvider.requestedApiKeys)
         }
+    @Test
+    fun aCommittedOptOutWhileTorStartsPreventsTheQuoteRequest() = runTest {
+        val torStarted = CompletableDeferred<Unit>()
+        val resumeTor = CompletableDeferred<Unit>()
+        val httpClientProvider = RecordingHttpClientProvider {
+            torStarted.complete(Unit)
+            resumeTor.await()
+        }
+        val withdrawn = CompletableDeferred<Unit>()
+        val settings = mockk<IsExchangeRateEnabledStorageProvider> {
+            coEvery { readSelection() } answers {
+                CurrencyConversionPreference(!withdrawn.isCompleted, FiatCurrency.USD)
+            }
+        }
+        val provider = CMCApiProviderImpl(httpClientProvider, settings)
+        val request = async {
+            assertFailsWith<ConversionRequestWithdrawn> {
+                provider.getExchangeRateQuote(apiKey = "synthetic-key", fiat = "USD")
+            }
+        }
+        torStarted.await()
+        withdrawn.complete(Unit)
+        resumeTor.complete(Unit)
+        request.await()
+        assertTrue(httpClientProvider.requestedHosts.isEmpty())
+        assertEquals(0, httpClientProvider.createCalls)
+    }
+
+    private fun enabledConversion() = mockk<IsExchangeRateEnabledStorageProvider> {
+        coEvery { readSelection() } returns CurrencyConversionPreference(true, FiatCurrency.USD)
+    }
 }
 
 private const val RATE = 42.0
@@ -70,7 +108,7 @@ private const val FIAT_MAP_JSON =
 
 private const val FIAT_MAP_PATH = "/v1/fiat/map"
 
-private class RecordingHttpClientProvider : HttpClientProvider {
+private class RecordingHttpClientProvider(private val beforeTor: suspend () -> Unit = {}) : HttpClientProvider {
     var createCalls = 0
         private set
     var createTorCalls = 0
@@ -85,6 +123,7 @@ private class RecordingHttpClientProvider : HttpClientProvider {
 
     override suspend fun createTor(): HttpClient {
         createTorCalls++
+        beforeTor()
         return HttpClient(
             MockEngine { request ->
                 requestedHosts += request.url.host

@@ -10,6 +10,8 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.LedgerBindingUnusableException
+import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
 import co.electriccoin.zcash.ui.common.model.LedgerIssueRetry
@@ -57,6 +59,30 @@ import java.math.BigDecimal
 @OptIn(ExperimentalCoroutinesApi::class)
 class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     @Test
+    fun aRevokedShieldApprovalCannotReachLedgerSigningOnResume() = runTest(dispatcher) {
+        val account = ledgerAccount()
+        var approved = true
+        val approval = ShieldingApproval(account) { approved }
+        coEvery { accountDataSource.getSelectedAccount() } returns account
+        coEvery { proposalDataSource.createShieldProposal(account) } returns ShieldTransactionProposal(mockk())
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        every { ledgerSigningDataSource.isLinked } returns true
+        val proposal = repository.createShieldProposal(approval)
+        repository.createPCZTFromProposal()
+        repository.approveForSigning(proposal)
+        repository.startSigning()
+
+        approved = false
+        repository.startSigning()
+        runCurrent()
+        val failure = assertIs<LedgerSigningState.Failed>(repository.signingState.value)
+        assertEquals(LedgerIssueKind.EXPIRED_SHIELD_APPROVAL, failure.issue.kind)
+        assertEquals(LedgerIssueRetry.NONE, failure.issue.retry)
+        coVerify(exactly = 0) { ledgerSigningDataSource.sign(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun recreatedLedgerRepositoryPublishesMissingProposalToReview() = runTest(dispatcher) {
         val account = ledgerAccount()
         every { accountDataSource.selectedAccount } returns flowOf(account)
@@ -75,7 +101,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     @Test
     fun quoteExpiryDuringPcztTransactionCreationReachesTheFinalFundingGuard() = runTest(dispatcher) {
         every { ledgerSigningDataSource.isLinked } returns true
-        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
         var wall = Instant.parse("2099-12-31T23:59:59Z")
         val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 0L
@@ -123,7 +149,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     fun quoteExpiringWhileAwaitingProofsAfterSigningCannotBroadcast() = runTest(dispatcher) {
         val proofsGate = CompletableDeferred<Unit>()
         every { ledgerSigningDataSource.isLinked } returns true
-        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
         var wall = Instant.parse("2099-12-31T23:59:59Z")
         val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 0L
@@ -173,7 +199,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         givenPczt(ledgerAccount(), proofsGate = proofsGate)
         val approved = repository.getTransactionProposal()
         every { ledgerSigningDataSource.isLinked } returns true
-        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
         repository.startSigning()
         runCurrent()
         assertEquals(LedgerSigningState.Signed, repository.signingState.value)
@@ -198,7 +224,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 
             val progress = slot<(LedgerSigningProgress) -> Unit>()
             val signed = Pczt(byteArrayOf(5))
-            coEvery { ledgerSigningDataSource.sign(any(), any(), capture(progress)) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), capture(progress)) } coAnswers {
                 progress.captured(LedgerSigningProgress.IdentifyingDevice)
                 assertEquals(LedgerSigningState.Streaming(0, 0), repository.signingState.value)
 
@@ -231,7 +257,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             runCurrent()
             every { ledgerSigningDataSource.isLinked } returns true
             val signed = Pczt(byteArrayOf(5))
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
             val submitResult = mockk<SubmitResult>(relaxed = true)
             coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any(), any()) } returns submitResult
 
@@ -254,7 +280,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             var signCalls = 0
             val signed = Pczt(byteArrayOf(5))
             val rejected = mockk<LedgerException.UserRejected>(relaxed = true) { every { isRestartable } returns true }
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 signCalls++
                 if (signCalls == 1) throw rejected else signed
             }
@@ -285,7 +311,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             var signCalls = 0
             val signed = Pczt(byteArrayOf(5))
             val disconnected = mockk<LedgerException.Disconnected>(relaxed = true)
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 signCalls++
                 if (signCalls == 1) {
                     linked = false
@@ -344,7 +370,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 
             every { ledgerSigningDataSource.isLinked } returns true
             val signed = Pczt(byteArrayOf(5))
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns signed
             val submitResult = mockk<SubmitResult>(relaxed = true)
             coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any(), any()) } returns submitResult
             repository.startSigning()
@@ -373,7 +399,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         assertSame(reviewed, repository.transactionProposal.value)
         repository.approveForSigning(reviewed, publication)
         every { ledgerSigningDataSource.isLinked } returns true
-        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
         repository.startSigning()
         runCurrent()
 
@@ -419,7 +445,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount(), proofsError = proofsError, proofsGate = proofsGate)
             runCurrent()
             every { ledgerSigningDataSource.isLinked } returns true
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
 
             repository.startSigning()
             runCurrent()
@@ -442,7 +468,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount())
             runCurrent()
             every { ledgerSigningDataSource.isLinked } returns true
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
             val submitResult = mockk<SubmitResult>(relaxed = true)
             coEvery {
                 proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any(), any())
@@ -474,7 +500,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             var signCalls = 0
             val signed = Pczt(byteArrayOf(5))
             val rejected = mockk<LedgerException.UserRejected>(relaxed = true)
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 signCalls++
                 if (signCalls == 1) throw rejected else signed
             }
@@ -502,7 +528,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount())
             runCurrent()
             every { ledgerSigningDataSource.isLinked } returns true
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } throws
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } throws
                 LedgerBindingUnusableException(IllegalArgumentException("corrupt"))
 
             repository.startSigning()
@@ -547,7 +573,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             var signCalls = 0
             val signed = Pczt(byteArrayOf(5))
             val disconnected = mockk<LedgerException.Disconnected>(relaxed = true)
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } coAnswers {
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } coAnswers {
                 signCalls++
                 if (signCalls == 1) {
                     repository.cancelSigning()
@@ -572,7 +598,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             givenPczt(ledgerAccount())
             runCurrent()
             every { ledgerSigningDataSource.isLinked } returns true
-            coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+            coEvery { ledgerSigningDataSource.sign(any(), any(), any(), any()) } returns Pczt(byteArrayOf(5))
             repository.startSigning()
             runCurrent()
             assertEquals(LedgerSigningState.Signed, repository.signingState.value)
