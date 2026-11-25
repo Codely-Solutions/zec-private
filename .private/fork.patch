@@ -46122,10 +46122,10 @@ index 37853a3b4..454815018 100644
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt
 new file mode 100644
-index 000000000..20c133af2
+index 000000000..1f1b6e9cd
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,100 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.AccountUuid
@@ -46166,9 +46166,10 @@ index 000000000..20c133af2
 +        expectedOwner: AccountUuid? = null,
 +        isCurrentDraft: () -> Boolean = { true },
 +    ): PaymentDraftOwner? {
-+        val account = selectedAccount() ?: return null
++        val account = selectedAccount()?.takeIf {
++            expectedOwner == null || expectedOwner == it.sdkAccount.accountUuid
++        } ?: return null
 +        val id = account.sdkAccount.accountUuid
-+        if (expectedOwner != null && expectedOwner != id) return null
 +        val grant = appAccess.grant.value
 +        val wallet = walletWriteAccess.token()
 +        val permitted = {

@@ -1699,7 +1699,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistEndpointException.kt": "b0d5d30cb800d0ac0747a589955790a16ebdb7ce32967e3ff82a1c0521ab8446",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCase.kt": "7ab7befad4f554085da150210a2c9ad9a588cbc0fba38006f60a1e11594daf5d",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCase.kt": "81ee191f3cebb95c4563886f6a06ad257e42b4654d1c400dcdfa3d4000139de8",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt": "d4e0e78398f5bc05d85fef29daa5ca5e56dcc54c39cc474ca3358caf387c1a5e",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt": "21657a729002f285b34e3113c1bb65535cbdf14e263ec275e58d2b65d938dbb8",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt": "a908f85eaefed18fa6641f5fe78c836e170d256423b29fb4a1abec91a4fa4f64",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt": "b7fb64ebbf8af84bb1b4c0e4a53f9b97a5a54bee05383ed2fefa0c123634f6b8",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt": "ddcc029eb585243c3c6549f2ffda33554aa13924dc2bc448d5c7e2a849733c14",

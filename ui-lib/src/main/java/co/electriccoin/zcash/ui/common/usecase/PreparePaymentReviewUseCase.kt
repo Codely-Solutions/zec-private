@@ -38,9 +38,10 @@ class PreparePaymentReviewUseCase(
         expectedOwner: AccountUuid? = null,
         isCurrentDraft: () -> Boolean = { true },
     ): PaymentDraftOwner? {
-        val account = selectedAccount() ?: return null
+        val account = selectedAccount()?.takeIf {
+            expectedOwner == null || expectedOwner == it.sdkAccount.accountUuid
+        } ?: return null
         val id = account.sdkAccount.accountUuid
-        if (expectedOwner != null && expectedOwner != id) return null
         val grant = appAccess.grant.value
         val wallet = walletWriteAccess.token()
         val permitted = {
