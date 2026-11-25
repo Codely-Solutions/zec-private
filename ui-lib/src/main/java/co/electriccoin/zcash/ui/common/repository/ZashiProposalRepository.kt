@@ -80,9 +80,7 @@ interface ZashiProposalRepository {
 
     suspend fun getTransactionProposal(): TransactionProposal
 
-    fun clear()
-
-    fun clearIfCurrent(proposal: TransactionProposal)
+    fun clear(expectedProposal: TransactionProposal? = null)
 }
 
 @Suppress("TooManyFunctions")
@@ -234,13 +232,13 @@ class ZashiProposalRepositoryImpl(
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 
-    override fun clear() {
-        transactionProposal.update { null }
-        submitState.update { null }
-    }
-
-    override fun clearIfCurrent(proposal: TransactionProposal) {
-        if (transactionProposal.value === proposal && transactionProposal.compareAndSet(proposal, null)) {
+    override fun clear(expectedProposal: TransactionProposal?) {
+        if (expectedProposal == null) {
+            transactionProposal.update { null }
+            submitState.update { null }
+        } else if (transactionProposal.value === expectedProposal &&
+            transactionProposal.compareAndSet(expectedProposal, null)
+        ) {
             submitState.update { previous -> if (transactionProposal.value == null) null else previous }
         }
     }

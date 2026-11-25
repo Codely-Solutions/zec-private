@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.exception.PcztException
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
@@ -123,6 +124,8 @@ interface KeystoneProposalRepository {
     @Throws(ParsePCZTException::class)
     suspend fun parsePCZT(ur: UR, preparationId: String): TransactionProposal
 
+    fun signingOwner(expectedProposal: TransactionProposal): AccountUuid?
+
     suspend fun submit(expectedProposal: TransactionProposal? = null, preparationId: String? = null): SubmitResult
 
     fun clear()
@@ -239,10 +242,11 @@ class KeystoneProposalRepositoryImpl(
 
     private suspend fun createAccountBoundPczt(resolveAccount: suspend () -> WalletAccount) {
         val transactionProposal = getTransactionProposal()
+        val owner = resolveAccount()
         val result =
             try {
                 proposalDataSource.createPcztFromProposal(
-                    account = resolveAccount(),
+                    account = owner,
                     proposal = transactionProposal.proposal
                 )
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {
@@ -250,7 +254,7 @@ class KeystoneProposalRepositoryImpl(
             }
         currentCoroutineContext().ensureActive()
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
-        val prepared = hardwareProposal.prepare(transactionProposal, result)
+        val prepared = hardwareProposal.prepare(transactionProposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
@@ -344,6 +348,9 @@ class KeystoneProposalRepositoryImpl(
                 throw e
             }
         }.await()
+
+    override fun signingOwner(expectedProposal: TransactionProposal): AccountUuid? =
+        hardwareProposal.getApproved(transactionProposal.value)?.takeIf { it.proposal === expectedProposal }?.owner
 
     private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
         check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {

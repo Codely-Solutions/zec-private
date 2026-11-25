@@ -94,7 +94,7 @@ class ShieldFundsUseCase(
         } catch (e: Exception) {
             navigateToError(ErrorArgs.ShieldingGeneralError(e))
         } finally {
-            created?.let(zashiProposalRepository::clearIfCurrent)
+            created?.let(zashiProposalRepository::clear)
         }
     }
 

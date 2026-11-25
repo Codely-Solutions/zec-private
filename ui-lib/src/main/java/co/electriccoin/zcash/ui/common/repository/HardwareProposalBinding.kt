@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -13,7 +14,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /** The proposal, device input, proofs and signatures stay with the same preparation. */
-class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt) {
+class PreparedHardwareProposal(val proposal: TransactionProposal, val pczt: Pczt, val owner: AccountUuid?) {
     internal val id = UUID.randomUUID().toString()
     val proofs = CompletableDeferred<Pczt>()
 
@@ -48,9 +49,9 @@ class HardwareProposalBinding {
     internal val approved = approval.asStateFlow()
 
     @Synchronized
-    fun prepare(proposal: TransactionProposal, pczt: Pczt): PreparedHardwareProposal {
+    fun prepare(proposal: TransactionProposal, pczt: Pczt, owner: AccountUuid? = null): PreparedHardwareProposal {
         approval.value = null
-        return PreparedHardwareProposal(proposal, pczt).also { prepared = it }
+        return PreparedHardwareProposal(proposal, pczt, owner).also { prepared = it }
     }
 
     @Synchronized

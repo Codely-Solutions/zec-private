@@ -63,7 +63,7 @@ class ZashiProposalRepositoryTest {
         repository.submitState.value = draftState
 
         assertFailsWith<IllegalStateException> { repository.submit(shield) }
-        repository.clearIfCurrent(shield)
+        repository.clear(shield)
 
         assertSame(draft, repository.transactionProposal.value)
         assertSame(draftState, repository.submitState.value)

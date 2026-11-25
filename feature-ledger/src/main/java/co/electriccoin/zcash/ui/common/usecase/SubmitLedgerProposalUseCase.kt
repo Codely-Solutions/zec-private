@@ -38,7 +38,9 @@ class SubmitLedgerProposalUseCase(
             return
         }
         swapRepository.clear()
-        val progress = if (sourceEntryId != null) submissionProgress?.begin(proposal) else null
+        val progress = sourceEntryId?.let {
+            submissionProgress?.begin(proposal, owner = ledgerProposalRepository.signingOwner(proposal))
+        }
         submitLedgerProposal(proposal, progress)
         navigationRouter.showTransactionProgress(sourceEntryId, progress?.id, replaceWalletStack = true)
     }

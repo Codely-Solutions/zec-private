@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.MissingKeystoneSigningPreparation
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,11 +36,14 @@ class SubmitKSProposalUseCase(
             throw MissingKeystoneSigningPreparation()
         }
         swapRepository.clear()
-        val progress = if (sourceEntryId != null) submissionProgress?.begin(proposal) else null
+        val progress = sourceEntryId?.let {
+            submissionProgress?.begin(proposal, owner = keystoneProposalRepository.signingOwner(proposal))
+        }
         submitKSProposal(proposal, preparationId, progress)
         navigationRouter.showTransactionProgress(sourceEntryId, progress?.id)
     }
 
+    @Suppress("TooGenericExceptionCaught") // Retain the SDK result or a typed failure for its original review.
     private fun submitKSProposal(
         proposal: TransactionProposal,
         preparationId: String,
@@ -52,6 +56,8 @@ class SubmitKSProposalUseCase(
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 progress?.recordFailure(error)
             } finally {

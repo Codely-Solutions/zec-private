@@ -21,8 +21,7 @@ class SubmissionProgressStore(
 ) {
     private val current = MutableStateFlow<SubmissionProgress?>(null)
 
-    fun begin(proposal: TransactionProposal): SubmissionProgress? {
-        val owner = selectedAccount()
+    fun begin(proposal: TransactionProposal, owner: AccountUuid? = selectedAccount()): SubmissionProgress? {
         val wallet = walletWriteAccess.token()
         return if (owner != null && walletWriteAccess.permits(wallet)) {
             SubmissionProgress(UUID.randomUUID().toString(), proposal, owner, wallet)

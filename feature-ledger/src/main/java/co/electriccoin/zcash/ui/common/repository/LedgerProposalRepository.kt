@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.exception.LedgerException
 import cash.z.ecc.android.sdk.exception.PcztException
 import cash.z.ecc.android.sdk.ledger.LedgerBluetoothDevice
 import cash.z.ecc.android.sdk.ledger.LedgerSigningProgress
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
@@ -106,6 +107,8 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
      * with an issue that offers no retry, so the sheet leaves Cancel Transaction as the way out.
      */
     fun failSignedSessionWithoutProposal()
+
+    fun signingOwner(expectedProposal: TransactionProposal): AccountUuid?
 
     suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
@@ -218,11 +221,12 @@ class LedgerProposalRepositoryImpl(
 
     override suspend fun createPCZTFromProposal() {
         val transactionProposal = getTransactionProposal()
+        val owner = (transactionProposal as? SwapTransactionProposal)?.fundingAccount
+            ?: accountDataSource.getSelectedAccount()
         val result =
             try {
                 proposalDataSource.createPcztFromProposal(
-                    account = (transactionProposal as? SwapTransactionProposal)?.fundingAccount
-                        ?: accountDataSource.getSelectedAccount(),
+                    account = owner,
                     proposal = transactionProposal.proposal
                 )
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {
@@ -232,7 +236,7 @@ class LedgerProposalRepositoryImpl(
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
         cancelSigning()
         submitState.update { null }
-        val prepared = hardwareProposal.prepare(transactionProposal, result)
+        val prepared = hardwareProposal.prepare(transactionProposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
@@ -592,6 +596,9 @@ class LedgerProposalRepositoryImpl(
                 throw e
             }
         }.await()
+
+    override fun signingOwner(expectedProposal: TransactionProposal): AccountUuid? =
+        hardwareProposal.getApproved(transactionProposal.value)?.takeIf { it.proposal === expectedProposal }?.owner
 
     private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
         check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {

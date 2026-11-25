@@ -31,7 +31,7 @@ class SubmissionProgressStoreTest {
     @Test
     fun aLateResultCannotMixWithAnotherSubmissionOrWallet() = runTest {
         val original = mockk<TransactionProposal>()
-        val first = checkNotNull(store.begin(original))
+        val first = checkNotNull(store.begin(original, accountA.sdkAccount.accountUuid))
         assertSame(original, store.observe(first.id).first().first)
 
         accounts.value = listOf(accountB)

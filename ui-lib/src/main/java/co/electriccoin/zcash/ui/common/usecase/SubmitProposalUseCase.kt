@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import androidx.annotation.RestrictTo
 import androidx.annotation.VisibleForTesting
+import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.stageResultFrom
@@ -33,6 +34,7 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -124,7 +126,7 @@ class SubmitProposalUseCase(
                 }
 
                 is ZodlAccount -> {
-                    submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId)
+                    submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId, account.sdkAccount.accountUuid)
                 }
             }
         } catch (_: BiometricsFailureException) {
@@ -150,17 +152,19 @@ class SubmitProposalUseCase(
         proposal: TransactionProposal,
         reviewedQuote: SwapQuoteData.Success?,
         sourceEntryId: String?,
+        owner: AccountUuid,
     ) {
         if (submittedSoftwareProposal?.get() !== proposal) {
             swapRepository.clear()
             submittedSoftwareProposal = WeakReference(proposal)
-            val progress = if (sourceEntryId != null) submissionProgress?.begin(proposal) else null
+            val progress = if (sourceEntryId != null) submissionProgress?.begin(proposal, owner) else null
             submittedProgressId = progress?.id
             submitZashiProposal(proposal, reviewedQuote, progress)
         }
         navigationRouter.showTransactionProgress(sourceEntryId, submittedProgressId)
     }
 
+    @Suppress("TooGenericExceptionCaught") // Retain the SDK result or a typed failure for its original review.
     private fun submitZashiProposal(
         proposal: TransactionProposal,
         reviewedQuote: SwapQuoteData.Success?,
@@ -173,6 +177,8 @@ class SubmitProposalUseCase(
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 progress?.recordFailure(error)
             } finally {
