@@ -591,12 +591,18 @@ class MigrationReviewVMTest {
                 vm(
                     router = router,
                     getSelectedWalletAccount = viewOnlySelected(),
+                    getOrchardMigrationSdk = mockk {
+                        val sdk = mockk<OrchardMigrationSdk> {
+                            coEvery { proposeImmediateMigration() } returns proposal
+                        }
+                        coEvery { this@mockk(any<String>()) } returns sdk
+                    },
                     zashiProposalRepository = zashiProposalRepository,
                     keystoneProposalRepository = keystoneProposalRepository,
                     submitProposal = submitProposal,
                 )
 
-            invokeOnConfirmImmediate(vm, proposal)
+            vm.currentReview().onConfirm()
             advanceUntilIdle()
 
             assertRefusedAsViewOnly(vm)

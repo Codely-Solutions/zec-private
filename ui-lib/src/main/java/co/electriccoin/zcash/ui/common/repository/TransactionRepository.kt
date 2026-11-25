@@ -174,8 +174,7 @@ class TransactionRepositoryImpl(
                                                                             }?.let {
                                                                                 ownUnifiedAddress(synchronizer, it)
                                                                             },
-                                                                    canRepeatPayment =
-                                                                        hasOneExternalPayment(recipients, uuid),
+                                                                    recipients = recipients,
                                                                 )
                                                             val key = transaction.txId.txIdString()
                                                             if (transaction.raw != null) {
@@ -263,7 +262,7 @@ class TransactionRepositoryImpl(
                             overview = transaction,
                             accountUuid = accountUuid,
                             recipient = details.recipient,
-                            canRepeatPayment = details.canRepeatPayment,
+                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
                         )
                     }
 
@@ -309,7 +308,7 @@ class TransactionRepositoryImpl(
                             overview = transaction,
                             accountUuid = accountUuid,
                             recipient = details.recipient,
-                            canRepeatPayment = details.canRepeatPayment,
+                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
                         )
                     }
 
@@ -355,7 +354,7 @@ class TransactionRepositoryImpl(
                             overview = transaction,
                             accountUuid = accountUuid,
                             recipient = details.recipient,
-                            canRepeatPayment = details.canRepeatPayment,
+                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
                         )
                     }
 
@@ -592,7 +591,7 @@ val Transaction.isPending: Boolean
 private data class TxDetails(
     val outputs: List<TransactionOutput>,
     val recipient: String?,
-    val canRepeatPayment: Boolean = false,
+    val recipients: List<TransactionRecipient> = emptyList(),
 )
 
 /**

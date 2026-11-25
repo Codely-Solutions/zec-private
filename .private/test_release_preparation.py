@@ -195,8 +195,10 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(summary['core_build_source_sha'],core['build_source_sha'])
         self.assertEqual(len(summary['reused_profiles']),2)
         receipts = {'core-acceptance.json': core_raw, 'quote-acceptance.json': quote_raw}
-        self.assertEqual(verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER, receipts=receipts),
-                         dict(production_artifact=ARTIFACT, production_job_id=17))
+        binding = dict(production_artifact=ARTIFACT, production_job_id=17)
+        self.assertEqual(verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER), binding)
+        self.assertEqual(verify_direct_assembly(
+            out, source, 1, ARTIFACT, PRODUCTION_PRODUCER, receipts=receipts), binding)
         for run, archive, producer in (
             (2, dict(ARTIFACT, id=3), dict(PRODUCTION_PRODUCER, run_id=2, producer_job_id=18)),
             (1, dict(ARTIFACT, digest='sha256:' + 'e' * 64), PRODUCTION_PRODUCER),
@@ -208,6 +210,9 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'receipts differ'):
             verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER,
                                    receipts=dict(receipts, **{'core-acceptance.json': b'different'}))
+        (out/'.private/quote-acceptance.json').write_bytes(b'different')
+        with self.assertRaisesRegex(ValueError, 'receipts differ'):
+            verify_direct_assembly(out, source, 1, ARTIFACT, PRODUCTION_PRODUCER)
 
 
     def test_admission_owner_and_parallel_refusal_before_launch(self):

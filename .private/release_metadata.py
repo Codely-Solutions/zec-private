@@ -69,9 +69,12 @@ def verify_direct_assembly(root, source, run_id, artifact, producer, *, receipts
             and summary.get('production_unsigned_artifact') == artifact
             and summary.get('production_unsigned_producer') == producer,
             'Production artifact or producer differs from the guarded assembly')
-    if receipts is not None:
-        digests = {name: hashlib.sha256(data).hexdigest() for name, data in receipts.items()}
-        require(summary.get('receipt_sha256') == digests, 'Acceptance receipts differ from the guarded assembly')
+    names = ('core-acceptance.json', 'quote-acceptance.json')
+    if receipts is None:
+        receipts = {name: (path.parent / name).read_bytes() for name in names}
+    require(receipts.keys() == set(names), 'Guarded assembly requires both acceptance receipts')
+    digests = {name: hashlib.sha256(data).hexdigest() for name, data in receipts.items()}
+    require(summary.get('receipt_sha256') == digests, 'Acceptance receipts differ from the guarded assembly')
     return {'production_artifact': artifact, 'production_job_id': producer['producer_job_id']}
 
 

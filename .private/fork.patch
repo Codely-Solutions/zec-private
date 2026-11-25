@@ -11033,7 +11033,7 @@ index 20a8edf27..1e3c55a22 100644
 -                    coEvery { this@mockk() } returns Zatoshi(500_000L)
 -                },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..bf9a478c4 100644
+index d0838db0c..62c0f94a3 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 @@ -13,0 +14 @@ import cash.z.ecc.android.sdk.model.Zatoshi
@@ -11069,12 +11069,12 @@ index d0838db0c..bf9a478c4 100644
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -94 +113,3 @@ class MigrationReviewVMTest {
+@@ -94 +113 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
-+            advanceUntilIdle()
+@@ -95,0 +115,3 @@ class MigrationReviewVMTest {
 +            assertNotNull(vm.state.value.content).onConfirm()
-@@ -95,0 +117 @@ class MigrationReviewVMTest {
++            advanceUntilIdle()
 +            collector.cancel()
 @@ -101,2 +123,2 @@ class MigrationReviewVMTest {
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
@@ -11130,13 +11130,14 @@ index d0838db0c..bf9a478c4 100644
 +            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
 +            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
 +            review.onConfirm()
-@@ -297,0 +337,5 @@ class MigrationReviewVMTest {
+@@ -297,0 +337,105 @@ class MigrationReviewVMTest {
 +            val handoff = router.scopedCommands.single()
 +            assertEquals("scheduled-review", handoff.sourceEntryId)
 +            val route = assertIs<NavigationCommand.Forward>(handoff.buildCommand()).routes.single()
 +            assertIs<MigrationScheduledArgs>(route)
 +            assertTrue(router.forwardedRoutes.isEmpty())
-@@ -299,0 +344,238 @@ class MigrationReviewVMTest {
++        }
++
 +    @Test
 +    fun rejectsNegativeHandlesBeforeReviewAndRequiresApprovalForAReplacement() = runTest {
 +        val unusable = schedule(-1L, 400_000L)
@@ -11235,7 +11236,7 @@ index d0838db0c..bf9a478c4 100644
 +            coEvery { this@mockk(reviewed, MigrationMode.AUTOMATIC, any(), false) } coAnswers {
 +                if (++attempts == 1) error("synthetic scheduler unavailable")
 +            }
-+        }
+@@ -298,0 +443,138 @@ class MigrationReviewVMTest {
 +        val router = FakeNavigationRouter("automatic-review")
 +        val vm = vm(
 +            router = router,
@@ -11374,8 +11375,17 @@ index d0838db0c..bf9a478c4 100644
 +        coVerify(exactly = 1) { tor.store(any<String>(), true) }
 +        coVerify(exactly = 0) { tor.store(any<String>(), false) }
 +    }
-+
-@@ -321,4 +603,4 @@ class MigrationReviewVMTest {
+@@ -311,0 +594,6 @@ class MigrationReviewVMTest {
++                    getOrchardMigrationSdk = mockk {
++                        val sdk = mockk<OrchardMigrationSdk> {
++                            coEvery { proposeImmediateMigration() } returns proposal
++                        }
++                        coEvery { this@mockk(any<String>()) } returns sdk
++                    },
+@@ -317 +605 @@ class MigrationReviewVMTest {
+-            invokeOnConfirmImmediate(vm, proposal)
++            vm.currentReview().onConfirm()
+@@ -321,4 +609,4 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
@@ -11384,28 +11394,28 @@ index d0838db0c..bf9a478c4 100644
 +            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
 +            coVerify(exactly = 0) { submitProposal(any()) }
-@@ -336 +618,4 @@ class MigrationReviewVMTest {
+@@ -336 +624,4 @@ class MigrationReviewVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
 +            }
-@@ -342 +627 @@ class MigrationReviewVMTest {
+@@ -342 +633 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -347,4 +632 @@ class MigrationReviewVMTest {
+@@ -347,4 +638 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(
 -                vm,
 -                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
 -            )
 +            vm.currentReview().onConfirm()
-@@ -354 +636 @@ class MigrationReviewVMTest {
+@@ -354 +642 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
 +            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-@@ -359 +641 @@ class MigrationReviewVMTest {
+@@ -359 +647 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
 +            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
-@@ -385,6 +667,2 @@ class MigrationReviewVMTest {
+@@ -385,6 +673,2 @@ class MigrationReviewVMTest {
 -    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
@@ -11414,7 +11424,7 @@ index d0838db0c..bf9a478c4 100644
 -    }
 +    private suspend fun MigrationReviewVM.currentReview() =
 +        requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
-@@ -392,21 +670,8 @@ class MigrationReviewVMTest {
+@@ -392,21 +676,8 @@ class MigrationReviewVMTest {
 -    // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
 -    // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
 -    // that (by design, same as every other LCE-driven VM in this codebase, e.g.
@@ -11444,34 +11454,34 @@ index d0838db0c..bf9a478c4 100644
 +        estimatedDurationHours = 1,
 +        proposalHandle = handle,
 +    )
-@@ -429,0 +695 @@ class MigrationReviewVMTest {
+@@ -429,0 +701 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -430,0 +697,3 @@ class MigrationReviewVMTest {
+@@ -430,0 +703,3 @@ class MigrationReviewVMTest {
 +        pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
 +            PendingMigrationScheduleRepositoryImpl(),
 +        draftTor: Boolean? = null,
-@@ -433,0 +703 @@ class MigrationReviewVMTest {
+@@ -433,0 +709 @@ class MigrationReviewVMTest {
 +        sourceEntryId: String? = null,
-@@ -435 +705 @@ class MigrationReviewVMTest {
+@@ -435 +711 @@ class MigrationReviewVMTest {
 -        args = MigrationReviewArgs(mode = mode),
 +        args = MigrationReviewArgs(mode = mode, useTor = draftTor),
-@@ -437 +707,2 @@ class MigrationReviewVMTest {
+@@ -437 +713,2 @@ class MigrationReviewVMTest {
 -        pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
 +        pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
 +        pendingKeystone = mockk { every { peek(any()) } returns null },
-@@ -439,0 +711 @@ class MigrationReviewVMTest {
+@@ -439,0 +717 @@ class MigrationReviewVMTest {
 +        migrationTorEnabled = migrationTorEnabled,
-@@ -446 +717,0 @@ class MigrationReviewVMTest {
+@@ -446 +723,0 @@ class MigrationReviewVMTest {
 -        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
-@@ -453,0 +725 @@ class MigrationReviewVMTest {
+@@ -453,0 +731 @@ class MigrationReviewVMTest {
 +        sourceEntryId = sourceEntryId,
-@@ -456 +728,2 @@ class MigrationReviewVMTest {
+@@ -456 +734,2 @@ class MigrationReviewVMTest {
 -    private class FakeNavigationRouter : NavigationRouter {
 +    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
 +        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
-@@ -457,0 +731 @@ class MigrationReviewVMTest {
+@@ -457,0 +737 @@ class MigrationReviewVMTest {
 +        val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
-@@ -473 +747,3 @@ class MigrationReviewVMTest {
+@@ -473 +753,3 @@ class MigrationReviewVMTest {
 -        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +            (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
@@ -42755,7 +42765,7 @@ index 36d947b49..f1f8b5575 100644
 +}
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
-index 26bf877f4..52e85c13e 100644
+index 26bf877f4..d7cb1f713 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -42805,7 +42815,7 @@ index 26bf877f4..52e85c13e 100644
 @@ -138,0 +164,2 @@ class TransactionRepositoryImpl(
 +                                                            val recipients =
 +                                                                batchedRecipients[transaction.txId].orEmpty()
-@@ -144,14 +171,8 @@ class TransactionRepositoryImpl(
+@@ -144,14 +171,7 @@ class TransactionRepositoryImpl(
 -                                                                        batchedRecipients[transaction.txId]
 -                                                                            .orEmpty()
 -                                                                            .let { recipients ->
@@ -42826,9 +42836,8 @@ index 26bf877f4..52e85c13e 100644
 +                                                                            }?.let {
 +                                                                                ownUnifiedAddress(synchronizer, it)
 +                                                                            },
-+                                                                    canRepeatPayment =
-+                                                                        hasOneExternalPayment(recipients, uuid),
-@@ -183 +204,20 @@ class TransactionRepositoryImpl(
++                                                                    recipients = recipients,
+@@ -183 +203,20 @@ class TransactionRepositoryImpl(
 -                                                createTransaction(transaction, details)
 +                                                createTransaction(transaction, details, uuid).also { mapped ->
 +                                                    val recipient = mapped.recipient
@@ -42850,7 +42859,7 @@ index 26bf877f4..52e85c13e 100644
 +                                                        }
 +                                                    }
 +                                                }
-@@ -191,14 +231 @@ class TransactionRepositoryImpl(
+@@ -191,14 +230 @@ class TransactionRepositoryImpl(
 -            }.retryWhen { cause, attempt ->
 -                if (cause is CancellationException) {
 -                    false
@@ -42866,76 +42875,76 @@ index 26bf877f4..52e85c13e 100644
 -                initialValue = null
 -            )
 +            }
-@@ -206 +233,5 @@ class TransactionRepositoryImpl(
+@@ -206 +232,5 @@ class TransactionRepositoryImpl(
 -    private fun createTransaction(transaction: TransactionOverview, details: TxDetails): Transaction =
 +    private fun createTransaction(
 +        transaction: TransactionOverview,
 +        details: TxDetails,
 +        accountUuid: AccountUuid,
 +    ): Transaction =
-@@ -218,0 +250 @@ class TransactionRepositoryImpl(
+@@ -218,0 +249 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -232 +264,3 @@ class TransactionRepositoryImpl(
+@@ -232 +263,3 @@ class TransactionRepositoryImpl(
 -                            recipient = details.recipient
 +                            accountUuid = accountUuid,
 +                            recipient = details.recipient,
-+                            canRepeatPayment = details.canRepeatPayment,
-@@ -243,0 +278 @@ class TransactionRepositoryImpl(
++                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
+@@ -243,0 +277 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -260,0 +296 @@ class TransactionRepositoryImpl(
+@@ -260,0 +295 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -274 +310,3 @@ class TransactionRepositoryImpl(
+@@ -274 +309,3 @@ class TransactionRepositoryImpl(
 -                            recipient = details.recipient
 +                            accountUuid = accountUuid,
 +                            recipient = details.recipient,
-+                            canRepeatPayment = details.canRepeatPayment,
-@@ -285,0 +324 @@ class TransactionRepositoryImpl(
++                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
+@@ -285,0 +323 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -302,0 +342 @@ class TransactionRepositoryImpl(
+@@ -302,0 +341 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -316 +356,3 @@ class TransactionRepositoryImpl(
+@@ -316 +355,3 @@ class TransactionRepositoryImpl(
 -                            recipient = details.recipient
 +                            accountUuid = accountUuid,
 +                            recipient = details.recipient,
-+                            canRepeatPayment = details.canRepeatPayment,
-@@ -327,0 +370 @@ class TransactionRepositoryImpl(
++                            canRepeatPayment = hasOneExternalPayment(details.recipients, accountUuid),
+@@ -327,0 +369 @@ class TransactionRepositoryImpl(
 +                            accountUuid = accountUuid,
-@@ -377,0 +421,3 @@ class TransactionRepositoryImpl(
+@@ -377,0 +420,3 @@ class TransactionRepositoryImpl(
 +    override suspend fun getTransactions(accountUuid: AccountUuid): List<Transaction> =
 +        observeTransactions(flowOf(accountUuid)).filterNotNull().first()
 +
-@@ -413,0 +460 @@ sealed interface Transaction {
+@@ -413,0 +459 @@ sealed interface Transaction {
 +    val accountUuid: AccountUuid?
-@@ -423,0 +471,2 @@ sealed interface SendTransaction : Transaction {
+@@ -423,0 +470,2 @@ sealed interface SendTransaction : Transaction {
 +    val canRepeatPayment: Boolean
 +
-@@ -432,0 +482,2 @@ sealed interface SendTransaction : Transaction {
+@@ -432,0 +481,2 @@ sealed interface SendTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
 +        override val canRepeatPayment: Boolean = false,
-@@ -443,0 +495,2 @@ sealed interface SendTransaction : Transaction {
+@@ -443,0 +494,2 @@ sealed interface SendTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
 +        override val canRepeatPayment: Boolean = false,
-@@ -454,0 +508,2 @@ sealed interface SendTransaction : Transaction {
+@@ -454,0 +507,2 @@ sealed interface SendTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
 +        override val canRepeatPayment: Boolean = false,
-@@ -469,0 +525 @@ sealed interface ReceiveTransaction : Transaction {
+@@ -469,0 +524 @@ sealed interface ReceiveTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -479,0 +536 @@ sealed interface ReceiveTransaction : Transaction {
+@@ -479,0 +535 @@ sealed interface ReceiveTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -489,0 +547 @@ sealed interface ReceiveTransaction : Transaction {
+@@ -489,0 +546 @@ sealed interface ReceiveTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -502,0 +561 @@ sealed interface ShieldTransaction : Transaction {
+@@ -502,0 +560 @@ sealed interface ShieldTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -513,0 +573 @@ sealed interface ShieldTransaction : Transaction {
+@@ -513,0 +572 @@ sealed interface ShieldTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -524,0 +585 @@ sealed interface ShieldTransaction : Transaction {
+@@ -524,0 +584 @@ sealed interface ShieldTransaction : Transaction {
 +        override val accountUuid: AccountUuid? = null,
-@@ -533,0 +595 @@ private data class TxDetails(
-+    val canRepeatPayment: Boolean = false,
-@@ -556 +618 @@ internal fun sentTransactionAmount(transaction: TransactionOverview): Zatoshi =
+@@ -533,0 +594 @@ private data class TxDetails(
++    val recipients: List<TransactionRecipient> = emptyList(),
+@@ -556 +617 @@ internal fun sentTransactionAmount(transaction: TransactionOverview): Zatoshi =
 -    if ((transaction.sentNoteCount == 0 && transaction.receivedNoteCount == 0) ||
 +    transaction.poolCrossingValue ?: if ((transaction.sentNoteCount == 0 && transaction.receivedNoteCount == 0) ||
-@@ -576,0 +639,5 @@ internal fun selectDisplayRecipient(recipients: List<TransactionRecipient>): Str
+@@ -576,0 +638,5 @@ internal fun selectDisplayRecipient(recipients: List<TransactionRecipient>): Str
 +internal fun hasOneExternalPayment(recipients: List<TransactionRecipient>, owner: AccountUuid): Boolean =
 +    recipients.filter { it.accountUuid != owner }.singleOrNull()?.let {
 +        it.accountUuid == null && !it.addressValue.isNullOrBlank()
@@ -80063,14 +80072,14 @@ index 000000000..4d8a0b33b
 +        )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt
-index 53c41e420..4fd2e0d21 100644
+index 53c41e420..13dce0ee1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt
 @@ -5,0 +6 @@ import org.junit.Assert.assertEquals
 +import org.junit.Assert.assertFalse
 @@ -6,0 +8 @@ import org.junit.Assert.assertNull
 +import org.junit.Assert.assertTrue
-@@ -37,0 +40,19 @@ class TransactionRepositorySelectDisplayRecipientTest {
+@@ -37,0 +40,20 @@ class TransactionRepositorySelectDisplayRecipientTest {
 +    @Test
 +    fun repeatPaymentRequiresExactlyOneExternalOutputAndOnlyOwnOtherOutputs() {
 +        val owner = accountUuid()
@@ -80083,6 +80092,7 @@ index 53c41e420..4fd2e0d21 100644
 +
 +        assertTrue(hasOneExternalPayment(listOf(external), owner))
 +        assertTrue(hasOneExternalPayment(listOf(change, external), owner))
++        assertFalse(hasOneExternalPayment(listOf(change, external), otherOwner))
 +        for (recipients in listOf(emptyList(), listOf(change), listOf(external, external),
 +            listOf(external, another), listOf(external, unknown), listOf(external, ownOtherAccount))
 +        ) {

@@ -49,6 +49,7 @@ class TransactionRepositorySelectDisplayRecipientTest {
 
         assertTrue(hasOneExternalPayment(listOf(external), owner))
         assertTrue(hasOneExternalPayment(listOf(change, external), owner))
+        assertFalse(hasOneExternalPayment(listOf(change, external), otherOwner))
         for (recipients in listOf(emptyList(), listOf(change), listOf(external, external),
             listOf(external, another), listOf(external, unknown), listOf(external, ownOtherAccount))
         ) {
