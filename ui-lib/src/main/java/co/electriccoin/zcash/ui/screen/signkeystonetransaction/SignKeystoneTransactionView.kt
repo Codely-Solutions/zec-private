@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.common.compose.DisableScreenTimeout
+import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -179,8 +180,11 @@ private fun ZashiAccountInfoListItem(
 @Composable
 private fun ColumnScope.QrContent(ksState: SignKeystoneTransactionState) {
     if (ksState.qrData != null) {
+        SecureScreen()
         ZashiQr(
-            state = ksState.toQrState(),
+            state = ksState.toQrState(
+                contentDescription = stringRes(co.electriccoin.zcash.ui.R.string.private_keystone_open_qr),
+            ).copy(secureDialog = true),
             modifier = Modifier.align(CenterHorizontally),
             colors =
                 QrCodeDefaults.colors(

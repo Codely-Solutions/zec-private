@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui
 
 import android.app.Activity
+import android.view.WindowManager
+import androidx.compose.material3.SnackbarHostState
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
@@ -86,11 +88,16 @@ import co.electriccoin.zcash.ui.screen.request.RequestArgs
 import co.electriccoin.zcash.ui.screen.request.RequestScreenContent
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
 import co.electriccoin.zcash.ui.screen.scankeystone.KeystoneSignatureScanner
+import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
+import co.electriccoin.zcash.ui.screen.scankeystone.view.ScanKeystoneView
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTViewModel
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionScreen
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionVM
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionView
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelState
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelView
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
@@ -107,7 +114,9 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -402,7 +411,7 @@ class RestoredWalletRoutesLayoutTest {
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 var resumed = true
                 requests.requestGiftScan()
-                val first = launch { requests.deliver(true, { resumed }, navigator::executeLaunchCommand) }
+                val first = launch { requests.deliver(true, { resumed }, navigate = navigator::executeLaunchCommand) }
                 runCurrent()
                 resumed = false
                 keyboard.onKeyboardClosed()
@@ -411,7 +420,7 @@ class RestoredWalletRoutesLayoutTest {
                 assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
 
                 resumed = true
-                requests.deliver(true, { resumed }, navigator::executeLaunchCommand)
+                requests.deliver(true, { resumed }, navigate = navigator::executeLaunchCommand)
                 assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
                 assertTrue(requests.saveExternalScans().isEmpty())
             }
@@ -429,7 +438,7 @@ class RestoredWalletRoutesLayoutTest {
                 val requests = LaunchNavigationRequests()
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 requests.requestGiftScan()
-                val first = launch { requests.deliver(true, { true }, navigator::executeLaunchCommand) }
+                val first = launch { requests.deliver(true, { true }, navigate = navigator::executeLaunchCommand) }
                 runCurrent()
 
                 val notice = requests.beginMigrationProgress("owner")
@@ -440,7 +449,7 @@ class RestoredWalletRoutesLayoutTest {
                 assertEquals(home, controller.currentBackStackEntry?.id)
                 assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
 
-                requests.deliver(true, { true }, navigator::executeLaunchCommand)
+                requests.deliver(true, { true }, navigate = navigator::executeLaunchCommand)
                 assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
                 assertEquals(progress, controller.previousBackStackEntry?.toRoute<FixtureMigrationProgress>())
                 assertTrue(requests.saveExternalScans().isEmpty())
@@ -449,12 +458,13 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
-    fun preparedQuoteSurvivesNavigationDeniedByTheActivity() {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun preparedQuoteOpensWhenTheOwningActivityResumes() {
         install()
         compose.runOnIdle {
             runTest {
-                var resumed = false
-                val navigation = collectOwnedNavigation { resumed }
+                val resumed = MutableStateFlow(false)
+                val navigation = collectOwnedNavigation(resumed) { resumed.value }
                 val publication = SwapQuoteData.Success(mockk<SwapQuote>())
                 val swaps = mockk<SwapRepository> {
                     every { quote } returns MutableStateFlow(publication)
@@ -467,8 +477,8 @@ class RestoredWalletRoutesLayoutTest {
                 assertEquals(form, controller.currentBackStackEntry?.id)
                 verify(exactly = 0) { swaps.consumeReview(any()) }
 
-                resumed = true
-                openQuote(sourceEntryId = form) { }
+                resumed.value = true
+                runCurrent()
                 assertEquals(SwapQuoteArgs, controller.currentBackStackEntry?.toRoute<SwapQuoteArgs>())
                 verify(exactly = 1) { swaps.consumeReview(publication) }
             }
@@ -532,6 +542,86 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun automaticRecoveryWaitsWhenTheScannerAlreadyOwnsTheScreen() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val requests = LaunchNavigationRequests()
+                backgroundScope.launch {
+                    requests.deliverOnChanges(controller, true, { true }, navigator::executeLaunchCommand)
+                }
+                requests.requestGiftScan()
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+
+                val progress = FixtureMigrationProgress("owner")
+                requests.requestMigrationRecovery("owner", NavigationCommand.ReplaceAll(listOf(progress)))
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+
+                assertTrue(controller.popBackStack())
+                runCurrent()
+                assertEquals(progress, controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>())
+            }
+        }
+    }
+
+    @Test
+    fun sharedKeystoneViewsProtectTheCameraAndTheFullscreenSigningQr() {
+        val security = ScreenSecurity()
+        val showCamera = mutableStateOf(true)
+        val showSigning = mutableStateOf(false)
+        val button = ButtonState(stringRes("Fixture action"))
+        compose.setContent {
+            CompositionLocalProvider(LocalScreenSecurity provides security) {
+                ZcashTheme {
+                    if (showCamera.value) {
+                        ScanKeystoneView(
+                            snackbarHostState = remember { SnackbarHostState() },
+                            onBack = {}, onScan = {}, onOpenSettings = {}, onScanStateChange = {},
+                            validationResult = ScanValidationState.NONE,
+                            state = ScanKeystoneState(stringRes("Fixture scanner"), null),
+                        )
+                    }
+                    if (showSigning.value) {
+                        SignKeystoneTransactionView(
+                            SignKeystoneTransactionState(
+                                onBack = {}, barTitle = stringRes("Fixture signing"),
+                                title = stringRes("Scan with Keystone"), subtitle = stringRes("Fixture details"),
+                                accountInfo = ZashiAccountInfoListItemState(
+                                    co.electriccoin.zcash.ui.design.R.drawable.ic_item_keystone,
+                                    stringRes("Keystone"), stringRes("Fixture account")
+                                ),
+                                badgeText = stringRes("Hardware"), qrData = "fixture-signing-qr",
+                                generateNextQrCode = {}, secondaryButton = null,
+                                positiveButton = button, negativeButton = button,
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(1, security.referenceCount.value)
+            showCamera.value = false
+            showSigning.value = true
+        }
+        val label = context.getString(R.string.private_keystone_open_qr)
+        compose.onNodeWithContentDescription(label).performClick()
+        compose.runOnIdle {
+            assertEquals(1, security.referenceCount.value)
+            val window = checkNotNull(ShadowDialog.getLatestDialog()?.window)
+            val flag = WindowManager.LayoutParams.FLAG_SECURE
+            assertEquals(flag, window.attributes.flags and flag)
+            showSigning.value = false
+        }
+        compose.runOnIdle { assertEquals(0, security.referenceCount.value) }
+    }
+
+    @Test
     fun bothGeneralScannersAcquireScreenProtectionBeforeRenderingCameraContent() {
         val security = ScreenSecurity()
         val destination = mutableStateOf<ScanFlow?>(null)
@@ -579,7 +669,10 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun TestScope.collectOwnedNavigation(canCommit: () -> Boolean = { true }): NavigationRouterImpl {
+    private fun TestScope.collectOwnedNavigation(
+        resumed: Flow<Boolean> = flowOf(true),
+        canCommit: () -> Boolean = { true },
+    ): NavigationRouterImpl {
         val router = NavigationRouterImpl()
         val observer = router.registerEntryObserver()
         val listener = NavController.OnDestinationChangedListener { nav, _, _ ->
@@ -600,6 +693,9 @@ class RestoredWalletRoutesLayoutTest {
                 controller.removeOnDestinationChangedListener(listener)
                 observer.close()
             }
+        }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            resumed.collectLatest { ready -> if (ready) router.collectPendingForwards(navigator, canCommit) }
         }
         return router
     }

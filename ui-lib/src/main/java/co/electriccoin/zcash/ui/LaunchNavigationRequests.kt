@@ -87,6 +87,7 @@ class LaunchNavigationRequests {
     internal suspend fun deliver(
         walletReady: Boolean,
         hasAppAccess: () -> Boolean,
+        canPresentRecovery: () -> Boolean = { true },
         navigate: suspend (NavigationCommand, isCurrent: () -> Boolean) -> Boolean,
     ) = delivery.withLock {
         val requests = pending.value
@@ -99,7 +100,9 @@ class LaunchNavigationRequests {
             if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
-                val isCurrent = { hasAppAccess() && pending.value.admits(request, walletReady) }
+                val isCurrent = {
+                    hasAppAccess() && pending.value.admits(request, walletReady, canPresentRecovery())
+                }
                 if (isCurrent() && navigate(command, isCurrent)) {
                     pending.update { queue -> queue.filterNot { it === request } }
                 }
@@ -131,11 +134,13 @@ class LaunchNavigationRequests {
 private fun List<LaunchNavigationRequests.Request>.admits(
     request: LaunchNavigationRequests.Request,
     walletReady: Boolean,
+    canPresentRecovery: Boolean,
 ): Boolean {
+    if (request.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && !canPresentRecovery) return false
     val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
         any { pending ->
             pending.kind == LaunchNavigationRequests.Kind.MIGRATION_PROGRESS ||
-                pending.command is NavigationCommand.ReplaceAll
+                (pending.kind == LaunchNavigationRequests.Kind.MIGRATION_RECOVERY && canPresentRecovery)
         }
     return !migrationHasPriority && any { it === request }
 }

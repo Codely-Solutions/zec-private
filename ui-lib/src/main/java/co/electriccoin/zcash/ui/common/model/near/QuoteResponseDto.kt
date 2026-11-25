@@ -21,6 +21,8 @@ data class QuoteResponseDto(
     val quote: QuoteDetails,
     @Transient
     internal val signedEvidence: NearSignedQuoteEvidence? = null,
+    @Transient
+    internal val observedAtProvider: Instant? = null,
 )
 
 @JsonIgnoreUnknownKeys

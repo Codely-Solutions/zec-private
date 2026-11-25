@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.BaseNavigationCommand
@@ -136,19 +135,15 @@ class RequestSwapQuoteUseCaseTest {
         val result = SwapQuoteData.Success(flexQuote())
         val instance = useCase(result)
         val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("swap-entry", "Swap"))
-        val delivery = slot<(NavBackStackEntry?) -> NavigationCommand?>()
+        val delivery = slot<NavigationCommand.ForEntry>()
         every { navigationRouter.activeEntry } returns active
-        every { navigationRouter.custom(capture(delivery)) } returns Unit
+        every { navigationRouter.stageForward(capture(delivery)) } returns Unit
 
         instance.requestFlexInputIntoZec(
             BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
             canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
         )
-        val scanner = mockk<NavBackStackEntry> { every { id } returns "scanner" }
-        assertEquals(null, delivery.captured(scanner))
-        verify(exactly = 0) { swapRepository.consumeReview(any()) }
-        val owningEntry = mockk<NavBackStackEntry> { every { id } returns "swap-entry" }
-        val command = delivery.captured(owningEntry) as NavigationCommand.ForEntry
+        val command = delivery.captured
         assertEquals("swap-entry", command.sourceEntryId)
         verify(exactly = 0) { swapRepository.consumeReview(any()) }
         assertEquals(NavigationCommand.Forward(listOf(SwapQuoteArgs)), command.buildCommand())

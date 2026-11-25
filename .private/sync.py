@@ -52,20 +52,15 @@ def critical(path):
         return True
     if any(part in path for part in ('/design/theme/', '/res/ui/about/', '/res/ui/theme/')):
         return True
-    ui_root = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/'
-    if path.startswith(ui_root) and path.endswith('.kt'):
-        relative = path[len(ui_root):]
-        if '/' not in relative or relative.startswith('util/'):
-            return True
-    # Shared behavior and new screen packages require review even when a filename is unfamiliar.
-    screen_root = ui_root + 'screen/'
-    sensitive_screen = path.startswith(screen_root) and not path.startswith(screen_root + 'colorpicker/')
-    return (sensitive_screen or path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
+    # Retained app and shared design code can own sensitive actions in any runtime variant.
+    ui_source = re.fullmatch(r'ui-(?:design-)?lib/src/([^/]+)/(?:java|kotlin)/.+', path)
+    if ui_source and not re.fullmatch(r'(?:test|androidTest|testFixtures)(?:[A-Z].*)?', ui_source[1]):
+        return True
+    return (path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
                             'app/src/','tools/','scripts/','preference-','crash-',
                             'configuration-','spackle-','build-info-lib/','wallet-foundation-lib/')) or
             path in ('gradlew','gradlew.bat') or
             path.endswith(('.gradle.kts','gradle.lockfile','AndroidManifest.xml')) or
-            path.startswith('ui-lib/src/main/java/co/electriccoin/zcash/ui/common/') or
             '/network/' in path or '/security/' in path or '/di/' in path or
             'network_security' in path or
             (any(part in path for part in ('/src/test/','/src/androidTest/')) and

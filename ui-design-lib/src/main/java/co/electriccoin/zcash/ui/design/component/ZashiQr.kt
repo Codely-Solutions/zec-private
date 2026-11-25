@@ -34,11 +34,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.window.SecureFlagPolicy
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.dimensions.ZashiDimensions
 import co.electriccoin.zcash.ui.design.util.AndroidQrCodeImageGenerator
@@ -68,6 +70,7 @@ fun ZashiQr(
             modifier
                 .clickable(
                     enabled = !state.isBlurred,
+                    role = Role.Button,
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = {
@@ -88,7 +91,8 @@ fun ZashiQr(
                 DialogProperties(
                     usePlatformDefaultWidth = false,
                     dismissOnClickOutside = true,
-                    dismissOnBackPress = true
+                    dismissOnBackPress = true,
+                    securePolicy = if (state.secureDialog) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
                 )
         ) {
             val parent = LocalView.current.parent
@@ -252,6 +256,7 @@ data class QrState(
     val isBlurred: Boolean = false,
     /** Shown in the reveal hint drawn over a blurred QR on devices that cannot blur (below Android S). */
     val hiddenLabel: StringResource? = null,
+    val secureDialog: Boolean = false,
 )
 
 private const val FULLSCREEN_DIM = .9f

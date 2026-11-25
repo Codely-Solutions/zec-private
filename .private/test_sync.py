@@ -176,14 +176,16 @@ class SyncTests(unittest.TestCase):
                        'donation','updates','swap','reviewtransaction','signkeystonetransaction','receive','ironwood'):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
-        self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+        self.assertTrue(sync.critical(base+'colorpicker/Screen.kt'))
         ui_root = base.removesuffix('screen/')
         for path in ('AppAccessBoundary.kt', 'BiometricActivity.kt', 'LaunchNavigationRequests.kt', 'MainActivity.kt',
                      'NavigationExt.kt', 'NavigationRouter.kt', 'Navigator.kt', 'OnboardingNavGraph.kt',
                      'RootNavGraph.kt', 'WalletNavGraph.kt'):
             with self.subTest(path=path):
                 self.assertTrue(sync.critical(ui_root+path))
-        self.assertFalse(sync.critical(ui_root+'fixture/UiPreview.kt'))
+        self.assertFalse(sync.critical((ui_root+'fixture/UiPreview.kt').replace('/src/main/', '/src/testFixtures/')))
+        self.assertFalse(sync.critical('ui-design-lib/src/testRelease/kotlin/LayoutFixture.kt'))
+        self.assertFalse(sync.critical('docs/review-notes.md'))
         for path in ('ui-design-lib/src/main/res/ui/common/drawable-night-v35/app_logo.png',
                      'ui-lib/src/main/res/ui/about/values/strings.xml',
                      'ui-design-lib/src/main/java/example/design/theme/Theme.kt'):
@@ -249,11 +251,17 @@ class SyncTests(unittest.TestCase):
                      'screen/ExternalUrl.kt', 'screen/disconnect/DisconnectVM.kt', 'screen/home/HomeVM.kt',
                      'screen/transactiondetail/TransactionDetailVM.kt', 'screen/addressbook/AddressBookVM.kt',
                      'screen/futurefeature/NewFlowVM.kt')
-        for relative in protected:
-            with self.subTest(relative=relative), \
+        active_sources = (
+            ui_root.replace('/main/', '/foss/') + 'screen/scan/util/QrCodeAnalyzerImpl.kt',
+            ui_root.replace('/main/', '/foss/') + 'common/provider/CrashReportingStorageProviderImpl.kt',
+            ui_root.replace('/java/', '/kotlin/') + 'screen/newflow/NewFlowVM.kt',
+            'ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiQr.kt',
+        )
+        for path in tuple(ui_root+relative for relative in protected) + active_sources:
+            with self.subTest(path=path), \
                     patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \
                     patch.object(sync, 'run', side_effect=commands), \
-                    patch.object(sync, 'changed_paths', return_value=[ui_root+relative]):
+                    patch.object(sync, 'changed_paths', return_value=[path]):
                 with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'):
                     sync.main()
                 self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())

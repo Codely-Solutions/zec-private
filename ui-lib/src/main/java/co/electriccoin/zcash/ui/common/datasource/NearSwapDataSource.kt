@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.datasource
 
+import android.os.SystemClock
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
@@ -43,6 +44,7 @@ import java.math.MathContext
 import java.math.RoundingMode
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 
 class NearSwapDataSource(
     private val nearApiProvider: NearApiProvider,
@@ -51,6 +53,8 @@ class NearSwapDataSource(
     private val blockchainProvider: BlockchainProvider,
     private val synchronizerProvider: SynchronizerProvider,
 ) : SwapDataSource {
+
+    internal var elapsedRealtime: () -> Long = SystemClock::elapsedRealtime
 
     override suspend fun getSupportedTokens(): List<SwapAsset> =
         withContext(Dispatchers.Default) {
@@ -124,6 +128,7 @@ class NearSwapDataSource(
                 appFees = emptyList()
             )
 
+        val requestStartedElapsed = elapsedRealtime()
         val response =
             try {
                 nearApiProvider.requestQuote(request)
@@ -199,6 +204,7 @@ class NearSwapDataSource(
                 destinationAddress = getDestinationAddress(response, originAsset),
                 refundAddress = getRefundAddress(response, originAsset),
                 expectedSlippageToleranceBps = slippageToleranceBps,
+                fundingDeadlineElapsed = response.fundingDeadlineAt(requestStartedElapsed),
             ).also {
                 if (response.quoteRequest.amount.compareTo(request.amount) != 0) {
                     throw SwapQuoteMismatchException.Rejected(
@@ -274,6 +280,13 @@ class NearSwapDataSource(
         }
 }
 
+
+private fun QuoteResponseDto.fundingDeadlineAt(requestStarted: Long): Long {
+    val providerTime = maxOf(timestamp, observedAtProvider ?: timestamp)
+    // Start before the network request and reserve one second for HTTP Date precision.
+    val budget = (quote.deadline - providerTime - 1.seconds).inWholeMilliseconds
+    return requestStarted + budget.coerceIn(0, Long.MAX_VALUE - requestStarted)
+}
 
 /** The only swap provider the app talks to; the id [NearSwapQuote] reports as its `provider`. */
 internal const val NEAR_SWAP_PROVIDER = "near"

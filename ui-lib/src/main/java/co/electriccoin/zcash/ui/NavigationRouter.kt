@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -67,6 +68,12 @@ interface NavigationRouter {
     fun backToRoot()
 
     fun observePipeline(): Flow<BaseNavigationCommand>
+
+    val pendingForward: StateFlow<NavigationCommand.ForEntry?> get() = noPendingForward
+
+    fun stageForward(command: NavigationCommand.ForEntry) = custom { command }
+
+    fun completeForward(command: NavigationCommand.ForEntry) = Unit
 }
 
 data class ActiveNavigationEntry(
@@ -82,6 +89,7 @@ interface ActiveNavigationEntryObserver {
 }
 
 private val noActiveEntry = MutableStateFlow<ActiveNavigationEntry?>(null).asStateFlow()
+private val noPendingForward = MutableStateFlow<NavigationCommand.ForEntry?>(null).asStateFlow()
 
 internal fun NavigationRouter.forwardFrom(
     sourceEntryId: String?,
@@ -91,18 +99,21 @@ internal fun NavigationRouter.forwardFrom(
     if (!isStillAllowed()) return
     if (sourceEntryId == null) {
         buildRoute()?.let { forward(it) }
-    } else {
-        custom { current ->
-            if (current?.id == sourceEntryId && isStillAllowed()) {
-                NavigationCommand.ForEntry(
-                    sourceEntryId,
-                    isStillAllowed,
-                    buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
-                    acknowledge = {},
-                )
-            } else {
-                null
-            }
+    } else if (isAtEntry(sourceEntryId)) {
+        stageForward(NavigationCommand.ForEntry(
+            sourceEntryId,
+            isStillAllowed,
+            buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
+            acknowledge = {},
+        ))
+    }
+}
+
+internal suspend fun NavigationRouter.collectPendingForwards(navigator: Navigator, canCommit: () -> Boolean) {
+    pendingForward.filterNotNull().collect { command ->
+        if (canCommit()) {
+            navigator.executeCommand(command)
+            completeForward(command)
         }
     }
 }
@@ -170,9 +181,19 @@ class NavigationRouterImpl : NavigationRouter {
 
     private val channel = Channel<BaseNavigationCommand>()
     private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
+    private val pendingForwardState = MutableStateFlow<NavigationCommand.ForEntry?>(null)
     private var entryObserver: ActiveNavigationEntryObserver? = null
 
     override val activeEntry = entryState.asStateFlow()
+    override val pendingForward = pendingForwardState.asStateFlow()
+
+    override fun stageForward(command: NavigationCommand.ForEntry) {
+        pendingForwardState.value = command
+    }
+
+    override fun completeForward(command: NavigationCommand.ForEntry) {
+        pendingForwardState.compareAndSet(command, null)
+    }
 
     override fun registerEntryObserver(): ActiveNavigationEntryObserver =
         object : ActiveNavigationEntryObserver {

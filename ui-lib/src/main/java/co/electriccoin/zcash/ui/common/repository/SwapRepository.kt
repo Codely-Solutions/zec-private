@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
 import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
@@ -122,7 +123,7 @@ sealed interface SwapQuoteData {
         private val fundingClock: Clock = Clock.System,
         private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     ) : SwapQuoteData {
-        private var fundingDeadlineElapsed: Long? = null
+        private var fundingDeadlineElapsed = (quote as? NearSwapQuote)?.fundingDeadlineElapsed
         private var fundingExpired = false
 
         @Synchronized

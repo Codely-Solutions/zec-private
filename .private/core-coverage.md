@@ -238,6 +238,8 @@ These maintained cases cover the eight interaction areas identified by the Novem
 - `RestoredWalletRoutesLayoutTest` covers a migration queued during the scanner's IME wait, the ready-wallet and graph gates for rescan, window-protection ownership by both general scanners, and preservation of an acknowledged incoming swap until Activity can open. The camera is substituted.
 - `test_sync` sends synthetic changes to the real controller gate for the private URI grant adapter, gift redemption and tax export. These changes require review before candidate preparation.
 
+The resumed navigator retains a prepared form result until its exact entry can receive it. Layout regressions exercise automatic recovery waiting for Home, shared Keystone camera protection and a secure fullscreen signing QR with a screen-reader label. The NEAR data-source test advances elapsed time during a synthetic provider request and verifies that initial device-clock skew cannot extend funding.
+
 ## Historical funded coverage
 
 See [published status](STATUS.md) for the current release and its bound acceptance record.

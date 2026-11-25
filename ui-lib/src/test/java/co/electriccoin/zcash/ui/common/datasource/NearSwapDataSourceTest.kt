@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.near.ErrorDto
 import co.electriccoin.zcash.ui.common.model.near.SwapInputProvenanceFixture
 import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
 import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
@@ -36,6 +37,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * [NearSwapDataSource] maps the 1Click API: preserving complete supported identities and mapping them to
@@ -184,6 +188,35 @@ class NearSwapDataSourceTest {
             assertEquals(null, captured.referral)
             assertEquals(emptyList(), captured.appFees)
         }
+
+    @Test
+    fun fundingExpiresByProviderTimeEvenWhenTheDeviceStartsSlow() = runBlocking {
+        val deposit = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        val issued = Instant.parse("2030-01-01T00:00:00Z")
+        val deadline = issued + 60.seconds
+        val response = SwapInputProvenanceFixture.status(origin, zec, deposit, SwapType.FLEX_INPUT, "{}")
+            .response.quoteResponse
+        var elapsed = 1_000L
+        dataSource.elapsedRealtime = { elapsed }
+        coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
+            elapsed += 2_000
+            response.copy(
+                timestamp = issued,
+                observedAtProvider = issued + 1.seconds,
+                quoteRequest = firstArg(),
+                quote = response.quote.copy(deadline = deadline),
+            )
+        }
+        val quote = dataSource.requestQuote(
+            SwapMode.FLEX_INPUT, BigDecimal.ONE, "refund", origin, "recipient", zec, BigDecimal.ONE
+        )
+        val publication = SwapQuoteData.Success(quote)
+        val slowDeviceTime = issued - 60.seconds
+
+        assertTrue(publication.canFund(slowDeviceTime, elapsed))
+        assertTrue(publication.canFund(slowDeviceTime, 58_999))
+        assertFalse(publication.canFund(slowDeviceTime, 59_000))
+    }
 
     @Test
     fun freshQuoteBindsTheEchoToWhatWasPostedForEveryMode() = runBlocking {

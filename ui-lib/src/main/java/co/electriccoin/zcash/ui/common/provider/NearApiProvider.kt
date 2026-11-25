@@ -68,7 +68,10 @@ class KtorNearApiProvider(
             }
             diagnostics.trace(QuoteRequestStage.RESPONSE_DECODE) {
                 val quote = response.body<QuoteResponseDto>()
-                quote.copy(signedEvidence = verifiedNearQuoteEvidence(response.bodyAsText()))
+                quote.copy(
+                    signedEvidence = verifiedNearQuoteEvidence(response.bodyAsText()),
+                    observedAtProvider = response.freshProviderTime(),
+                )
             }
         }
 

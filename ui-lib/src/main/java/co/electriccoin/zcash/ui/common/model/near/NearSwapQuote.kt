@@ -28,6 +28,7 @@ data class NearSwapQuote(
     override val destinationAddress: SwapAddress,
     override val refundAddress: SwapAddress,
     val expectedSlippageToleranceBps: Int? = null,
+    internal val fundingDeadlineElapsed: Long? = null,
 ) : SwapQuote {
     init {
         requireNearAssetIdentity(originAsset, response.quoteRequest.originAsset, SwapQuoteMismatchType.ORIGIN_ASSET)

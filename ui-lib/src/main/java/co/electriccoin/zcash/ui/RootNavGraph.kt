@@ -30,11 +30,13 @@ import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.exitTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popEnterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popExitTransition
 import co.electriccoin.zcash.ui.design.util.LocalNavController
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
@@ -96,6 +98,14 @@ fun RootNavGraph(
             when (it) {
                 is CustomNavigationCommand -> navigator.executeCommand(it)
                 is NavigationCommand -> navigator.executeCommand(it)
+            }
+        }
+    }
+
+    LaunchedEffect(navigationRouter, navigator, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            navigationRouter.collectPendingForwards(navigator) {
+                lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
             }
         }
     }
@@ -168,14 +178,28 @@ private fun CollectLaunchRequests(
             navController.currentBackStackEntryFlow.first {
                 it.destination.parent?.route == targetGraph.qualifiedName
             }
-            requests.changes.collect {
-                requests.deliver(
-                    walletReady,
-                    hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
-                    navigate = navigator::executeLaunchCommand
-                )
-            }
+            requests.deliverOnChanges(
+                navController,
+                walletReady,
+                hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
+                navigate = navigator::executeLaunchCommand
+            )
         }
+    }
+}
+
+internal suspend fun LaunchNavigationRequests.deliverOnChanges(
+    navController: NavController,
+    walletReady: Boolean,
+    hasAppAccess: () -> Boolean,
+    navigate: suspend (NavigationCommand, () -> Boolean) -> Boolean,
+) {
+    combine(changes, navController.currentBackStackEntryFlow) { _, _ -> Unit }.collect {
+        deliver(
+            walletReady, hasAppAccess,
+            canPresentRecovery = { navController.currentBackStackEntry?.destination?.hasRoute<HomeArgs>() == true },
+            navigate = navigate,
+        )
     }
 }
 

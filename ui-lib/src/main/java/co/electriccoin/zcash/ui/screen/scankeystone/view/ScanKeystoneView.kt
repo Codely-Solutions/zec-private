@@ -74,6 +74,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.design.component.SmallTopAppBar
 import co.electriccoin.zcash.ui.design.component.TopAppBarBackNavigation
 import co.electriccoin.zcash.ui.design.component.ZashiButton
@@ -116,6 +117,7 @@ fun ScanKeystoneView(
     validationResult: ScanValidationState,
     state: ScanKeystoneState,
 ) = ZcashTheme(appearanceMode = AppearanceMode.DARK) {
+    SecureScreen()
     // forces dark theme for this screen
     val permissionState =
         if (LocalInspectionMode.current) {
