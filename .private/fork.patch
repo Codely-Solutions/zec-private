@@ -3351,38 +3351,42 @@ index 48b59db8e..60a94c2fc 100644
 +    <string name="ledger_error_unknown_message">ZEC Private couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
 +    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
-index af5bff4d4..04ba68db8 100644
+index af5bff4d4..087642f1d 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/di/LedgerKoinGraphSmokeTest.kt
 @@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -20,0 +22 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
+@@ -16,0 +18 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
++import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
+@@ -20,0 +23 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.SubmissionProgressStore
-@@ -29,0 +32 @@ import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignVM
+@@ -29,0 +33 @@ import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignVM
 +import io.mockk.every
-@@ -32,0 +36 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -32,0 +37 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -36,0 +41 @@ import org.koin.core.KoinApplication
+@@ -36,0 +42 @@ import org.koin.core.KoinApplication
 +import org.koin.core.parameter.parametersOf
-@@ -62 +67,3 @@ class LedgerKoinGraphSmokeTest {
+@@ -62 +68,3 @@ class LedgerKoinGraphSmokeTest {
 -                single<NavigationRouter> { mockk(relaxed = true) }
 +                single<NavigationRouter> {
 +                    mockk(relaxed = true) { every { activeEntry } returns MutableStateFlow(null) }
 +                }
-@@ -70,0 +78 @@ class LedgerKoinGraphSmokeTest {
+@@ -70,0 +79 @@ class LedgerKoinGraphSmokeTest {
 +                single<SubmissionProgressStore> { mockk(relaxed = true) }
-@@ -76,0 +85 @@ class LedgerKoinGraphSmokeTest {
+@@ -75,0 +85 @@ class LedgerKoinGraphSmokeTest {
++                single { LedgerEnrollmentFixture().access }
+@@ -76,0 +87 @@ class LedgerKoinGraphSmokeTest {
 +                single { WalletWriteAccess() }
-@@ -105 +114 @@ class LedgerKoinGraphSmokeTest {
+@@ -105 +116 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerDeviceScanVM>()
 +        koin.koin.get<LedgerDeviceScanVM> { parametersOf("fixture-entry") }
-@@ -110 +119 @@ class LedgerKoinGraphSmokeTest {
+@@ -110 +121 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerOpenAppVM>()
 +        koin.koin.get<LedgerOpenAppVM> { parametersOf(LedgerOpenAppArgs(), "fixture-entry") }
-@@ -115 +124 @@ class LedgerKoinGraphSmokeTest {
+@@ -115 +126 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerHandshakeVM>()
 +        koin.koin.get<LedgerHandshakeVM> { parametersOf("fixture-entry") }
-@@ -125 +134 @@ class LedgerKoinGraphSmokeTest {
+@@ -125 +136 @@ class LedgerKoinGraphSmokeTest {
 -        koin.koin.get<LedgerSignVM>()
 +        koin.koin.get<LedgerSignVM> { parametersOf("fixture-sign-entry") }
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/datasource/LedgerSigningDataSourceTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/datasource/LedgerSigningDataSourceTest.kt
@@ -14536,21 +14540,25 @@ index 0aa3a0379..596f81efe 100644
 +            "pnqej5wzj6ereyfe4nej4nm6um766vtlyqyygnu8cp02h7dwv0l4d6zz9m0e0x0ue29edhdkctp04h6wzx93jmyl7dgpqfpf" +
 +            "a85"
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
-index bab9de9e3..a422e1787 100644
+index bab9de9e3..ad1cc57a4 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/di/ViewingKeyKoinGraphSmokeTest.kt
-@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositor
++import co.electriccoin.zcash.ui.common.usecase.ViewOnlyAccountFixtures
+@@ -10,0 +12 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
-@@ -77,0 +79 @@ class ViewingKeyKoinGraphSmokeTest {
+@@ -75,0 +78 @@ class ViewingKeyKoinGraphSmokeTest {
++                single { ViewOnlyAccountFixtures.enrollmentAccess() }
+@@ -77,0 +81 @@ class ViewingKeyKoinGraphSmokeTest {
 +                factory { mockk<ReadClipboardTextUseCase>(relaxed = true) }
-@@ -122,3 +124,3 @@ class ViewingKeyKoinGraphSmokeTest {
+@@ -122,3 +126,3 @@ class ViewingKeyKoinGraphSmokeTest {
 -        koin.koin.get<ImportVKVM>()
 -        koin.koin.get<ScanVKVM>()
 -        koin.koin.get<NameVKVM>()
 +        koin.koin.get<ImportVKVM> { parametersOf("fixture-entry") }
 +        koin.koin.get<ScanVKVM> { parametersOf("fixture-entry") }
 +        koin.koin.get<NameVKVM> { parametersOf("fixture-entry") }
-@@ -128 +130 @@ class ViewingKeyKoinGraphSmokeTest {
+@@ -128 +132 @@ class ViewingKeyKoinGraphSmokeTest {
 -        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID)) }
 +        koin.koin.get<EditAccountVM> { parametersOf(EditAccountArgs(ACCOUNT_KEY_ID), "fixture-entry") }
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt

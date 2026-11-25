@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.LedgerProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
@@ -81,6 +82,7 @@ class LedgerKoinGraphSmokeTest {
                 single<ProposalDataSource> { mockk(relaxed = true) }
 
                 single<SynchronizerProvider> { mockk(relaxed = true) }
+                single { LedgerEnrollmentFixture().access }
                 single<LedgerAccountBindingProvider> { mockk(relaxed = true) }
                 single { WalletWriteAccess() }
 

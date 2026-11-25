@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
+import co.electriccoin.zcash.ui.common.usecase.ViewOnlyAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -74,6 +75,7 @@ class ViewingKeyKoinGraphSmokeTest {
                 single<NavigationRouter> { mockk(relaxed = true) }
                 single<AccountDataSource> { mockk(relaxed = true) }
                 single<SynchronizerProvider> { mockk(relaxed = true) }
+                single { ViewOnlyAccountFixtures.enrollmentAccess() }
                 factory { mockk<GetWalletAccountsUseCase>(relaxed = true) }
                 factory { mockk<ClearClipboardUseCase>(relaxed = true) }
                 factory { mockk<ReadClipboardTextUseCase>(relaxed = true) }
