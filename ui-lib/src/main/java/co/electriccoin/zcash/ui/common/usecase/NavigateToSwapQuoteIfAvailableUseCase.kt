@@ -23,23 +23,24 @@ class NavigateToSwapQuoteIfAvailableUseCase(
             else -> swapRepository.quote.value
         }
         if (value == null || value == SwapQuoteData.Loading) return
-        val mismatchArgs = (value as? SwapQuoteData.Error)?.toMismatchArgs()
 
         hideBottomSheet()
         if (!canNavigate() || swapRepository.quote.value !== value) return
         navigationRouter.forwardFrom(sourceEntryId, canNavigate) {
-            when {
-                !swapRepository.isReviewCurrent(value) -> {
-                    if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
-                    null
-                }
-                sourceEntryId != null && swapRepository.consumeReview(value) == null -> null
-                mismatchArgs == null -> SwapQuoteArgs
-                else -> {
-                    swapRepository.clearQuote()
-                    mismatchArgs
-                }
-            }
+            takeReviewRoute(value, consumeAtDelivery = sourceEntryId != null)
+        }
+    }
+
+    private fun takeReviewRoute(value: SwapQuoteData, consumeAtDelivery: Boolean): Any? {
+        if (!swapRepository.isReviewCurrent(value)) {
+            if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
+            return null
+        }
+        return if (consumeAtDelivery && swapRepository.consumeReview(value) == null) {
+            null
+        } else {
+            val mismatch = (value as? SwapQuoteData.Error)?.toMismatchArgs()
+            mismatch?.also { swapRepository.clearQuote() } ?: SwapQuoteArgs
         }
     }
 }

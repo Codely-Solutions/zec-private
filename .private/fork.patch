@@ -32186,10 +32186,10 @@ index 000000000..ed0e92273
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..87fe101a0
+index 000000000..811e822db
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,141 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
@@ -32291,19 +32291,12 @@ index 000000000..87fe101a0
 +            if (!hasAppAccess()) return@withLock
 +            val command = request.command ?: continue
 +            if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
-+                val isCurrent = { hasAppAccess() && canDeliver(request, walletReady) }
++                val isCurrent = { hasAppAccess() && pending.value.admits(request, walletReady) }
 +                if (isCurrent() && navigate(command, isCurrent)) {
 +                    pending.update { queue -> queue.filterNot { it === request } }
 +                }
 +            }
 +        }
-+    }
-+
-+    private fun canDeliver(request: Request, walletReady: Boolean): Boolean {
-+        val current = pending.value
-+        val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
-+            current.any { it.kind == Kind.MIGRATION_PROGRESS || it.command is NavigationCommand.ReplaceAll }
-+        return !migrationHasPriority && current.any { it === request }
 +    }
 +
 +    private fun offer(kind: Kind, command: NavigationCommand, recoveryOwnerKey: String? = null) {
@@ -32325,6 +32318,18 @@ index 000000000..87fe101a0
 +    )
 +
 +    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
++}
++
++private fun List<LaunchNavigationRequests.Request>.admits(
++    request: LaunchNavigationRequests.Request,
++    walletReady: Boolean,
++): Boolean {
++    val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
++        any { pending ->
++            pending.kind == LaunchNavigationRequests.Kind.MIGRATION_PROGRESS ||
++                pending.command is NavigationCommand.ReplaceAll
++        }
++    return !migrationHasPriority && any { it === request }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 index 048340e48..d9efa65ba 100644
@@ -32433,7 +32438,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..035b709d6 100644
+index 67c1e883c..a10b07ea3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -32498,24 +32503,24 @@ index 67c1e883c..035b709d6 100644
 +}
 +
 +@Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.
++private fun NavigationRouter.dispatchUnscoped(command: NavigationCommand): Unit = when (command) {
++    is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
++    is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
++    is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
++    is NavigationCommand.ReplaceFrom -> replaceFrom(command.route, *command.routes.toTypedArray())
++    is NavigationCommand.BackTo -> backTo(command.route)
++    NavigationCommand.Back -> back()
++    NavigationCommand.BackToRoot -> backToRoot()
++    is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
++}
++
 +internal suspend fun NavigationRouter.commitFrom(
 +    sourceEntryId: String?,
 +    isStillAllowed: () -> Boolean = { true },
 +    buildCommand: () -> NavigationCommand?,
 +): Boolean = if (sourceEntryId == null) {
 +    val command = if (isStillAllowed()) buildCommand() else null
-+    when (command) {
-+        is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
-+        is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
-+        is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
-+        is NavigationCommand.ReplaceFrom -> replaceFrom(command.route, *command.routes.toTypedArray())
-+        is NavigationCommand.BackTo -> backTo(command.route)
-+        NavigationCommand.Back -> back()
-+        NavigationCommand.BackToRoot -> backToRoot()
-+        is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
-+        null -> Unit
-+    }
-+    command != null
++    command?.let { dispatchUnscoped(it) } != null
 +} else withTimeoutOrNull(2.seconds) {
 +    val waiter = currentCoroutineContext().job
 +    val receipt = CompletableDeferred<Boolean>()
@@ -43007,14 +43012,15 @@ index 80a163cdc..c45553fa7 100644
 -    suspend operator fun invoke(onlyChainTicker: String?): SwapAsset? {
 +    suspend operator fun invoke(onlyChainTicker: String? = null): SwapAsset? {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
-index f7385365c..e088bac13 100644
+index f7385365c..c1b24dcc6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCase.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.forwardFrom
-@@ -13,2 +14,12 @@ class NavigateToSwapQuoteIfAvailableUseCase(
+@@ -13,3 +14,12 @@ class NavigateToSwapQuoteIfAvailableUseCase(
 -    suspend operator fun invoke(hideBottomSheet: suspend () -> Unit) {
 -        val value = swapRepository.quote.value
+-        val mismatchArgs = (value as? SwapQuoteData.Error)?.toMismatchArgs()
 +    suspend operator fun invoke(
 +        canNavigate: () -> Boolean = { true },
 +        sourceEntryId: String? = null,
@@ -43027,7 +43033,7 @@ index f7385365c..e088bac13 100644
 +            else -> swapRepository.quote.value
 +        }
 +        if (value == null || value == SwapQuoteData.Loading) return
-@@ -17,8 +28,14 @@ class NavigateToSwapQuoteIfAvailableUseCase(
+@@ -17,9 +27,17 @@ class NavigateToSwapQuoteIfAvailableUseCase(
 -        val isQuoteAvailable = value is SwapQuoteData.Success || value is SwapQuoteData.Error
 -        if (isQuoteAvailable) {
 -            hideBottomSheet()
@@ -43036,20 +43042,24 @@ index f7385365c..e088bac13 100644
 -            } else {
 -                swapRepository.clearQuote()
 -                navigationRouter.forward(mismatchArgs)
+-            }
 +        hideBottomSheet()
 +        if (!canNavigate() || swapRepository.quote.value !== value) return
 +        navigationRouter.forwardFrom(sourceEntryId, canNavigate) {
-+            when {
-+                !swapRepository.isReviewCurrent(value) -> {
-+                    if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
-+                    null
-+                }
-+                sourceEntryId != null && swapRepository.consumeReview(value) == null -> null
-+                mismatchArgs == null -> SwapQuoteArgs
-+                else -> {
-+                    swapRepository.clearQuote()
-+                    mismatchArgs
-+                }
++            takeReviewRoute(value, consumeAtDelivery = sourceEntryId != null)
++        }
++    }
++
++    private fun takeReviewRoute(value: SwapQuoteData, consumeAtDelivery: Boolean): Any? {
++        if (!swapRepository.isReviewCurrent(value)) {
++            if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
++            return null
++        }
++        return if (consumeAtDelivery && swapRepository.consumeReview(value) == null) {
++            null
++        } else {
++            val mismatch = (value as? SwapQuoteData.Error)?.toMismatchArgs()
++            mismatch?.also { swapRepository.clearQuote() } ?: SwapQuoteArgs
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt
 index eeb63a233..148a24024 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapRefundWarningUseCase.kt

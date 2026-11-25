@@ -47,7 +47,7 @@ Use the [development session](DEVELOPMENT.md) for incremental checks and the [pr
 
 ## Build and validation
 
-Upstream changes to the retained root UI and shared UI utilities, gift redemption and tax export require human review before candidate preparation. These paths include app navigation, private-file grants and account-bound actions.
+Upstream changes to retained wallet screens, root UI and shared UI utilities require human review before candidate preparation. The screen gate includes new packages and keeps the decorative color picker separate. It covers app access, private-file grants, account-bound actions and recovery.
 
 Dependency-graph submission and hosted fixture preservation admit the exact `refs/heads/main` before entering their production concurrency queues. The permission-free admission jobs perform a case-sensitive comparison. Only an admitted job calls the reusable workflow for the complete production sequence. The fixture gate also checks the exact repository identity. GitHub's expression string equality is case-insensitive. [GitHub expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#operators)
 

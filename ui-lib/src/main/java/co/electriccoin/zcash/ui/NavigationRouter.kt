@@ -108,24 +108,24 @@ internal fun NavigationRouter.forwardFrom(
 }
 
 @Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.
+private fun NavigationRouter.dispatchUnscoped(command: NavigationCommand): Unit = when (command) {
+    is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
+    is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
+    is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
+    is NavigationCommand.ReplaceFrom -> replaceFrom(command.route, *command.routes.toTypedArray())
+    is NavigationCommand.BackTo -> backTo(command.route)
+    NavigationCommand.Back -> back()
+    NavigationCommand.BackToRoot -> backToRoot()
+    is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
+}
+
 internal suspend fun NavigationRouter.commitFrom(
     sourceEntryId: String?,
     isStillAllowed: () -> Boolean = { true },
     buildCommand: () -> NavigationCommand?,
 ): Boolean = if (sourceEntryId == null) {
     val command = if (isStillAllowed()) buildCommand() else null
-    when (command) {
-        is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
-        is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
-        is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
-        is NavigationCommand.ReplaceFrom -> replaceFrom(command.route, *command.routes.toTypedArray())
-        is NavigationCommand.BackTo -> backTo(command.route)
-        NavigationCommand.Back -> back()
-        NavigationCommand.BackToRoot -> backToRoot()
-        is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
-        null -> Unit
-    }
-    command != null
+    command?.let { dispatchUnscoped(it) } != null
 } else withTimeoutOrNull(2.seconds) {
     val waiter = currentCoroutineContext().job
     val receipt = CompletableDeferred<Boolean>()

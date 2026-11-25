@@ -245,7 +245,10 @@ class SyncTests(unittest.TestCase):
         protected = ('common/usecase/RequestSwapQuoteUseCase.kt', 'BiometricActivity.kt',
                      'NavigationExt.kt', 'OnboardingNavGraph.kt', 'util/FileShareUtil.kt',
                      'util/EmailUtil.kt', 'screen/redeemgift/RedeemGiftVM.kt',
-                     'screen/taxexport/TaxExportViewModel.kt')
+                     'screen/taxexport/TaxExportViewModel.kt', 'screen/ScreenTimeoutVM.kt',
+                     'screen/ExternalUrl.kt', 'screen/disconnect/DisconnectVM.kt', 'screen/home/HomeVM.kt',
+                     'screen/transactiondetail/TransactionDetailVM.kt', 'screen/addressbook/AddressBookVM.kt',
+                     'screen/futurefeature/NewFlowVM.kt')
         for relative in protected:
             with self.subTest(relative=relative), \
                     patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \
