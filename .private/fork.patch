@@ -54942,7 +54942,7 @@ index 263cf2572..d0afabca8 100644
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
 new file mode 100644
-index 000000000..191316551
+index 000000000..be8eb7a12
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
 @@ -0,0 +1,47 @@
@@ -54977,9 +54977,9 @@ index 000000000..191316551
 +    @Synchronized
 +    internal fun enrollment(id: String): Pending? {
 +        val current = pending?.takeIf { it.id == id } ?: return null
-+        if (walletEnrollment.permits(current.owner)) return current
-+        pending = null
-+        return null
++        return current.takeIf { walletEnrollment.permits(it.owner) }.also {
++            if (it == null) pending = null
++        }
 +    }
 +
 +    @Synchronized

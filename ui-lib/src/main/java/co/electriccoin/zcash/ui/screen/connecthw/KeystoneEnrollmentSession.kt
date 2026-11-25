@@ -29,9 +29,9 @@ class KeystoneEnrollmentSession(private val walletEnrollment: WalletEnrollmentAc
     @Synchronized
     internal fun enrollment(id: String): Pending? {
         val current = pending?.takeIf { it.id == id } ?: return null
-        if (walletEnrollment.permits(current.owner)) return current
-        pending = null
-        return null
+        return current.takeIf { walletEnrollment.permits(it.owner) }.also {
+            if (it == null) pending = null
+        }
     }
 
     @Synchronized

@@ -1861,7 +1861,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletBranding.kt": "fa5a1b8eaada0a7f6c04ce30cfab6b327e7f113246cb472e0c2636e6be1b44ec",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollment.kt": "67e9e5fe595ccb4c703e2f7aa2328e4333ad966cb1d514c83594b2b3b7da5b50",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollmentTag.kt": "4acc385da0991696ad2fd907ba5f3dc4a58ed0fc73563a5a76c33c6e5917dce2",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt": "3e15d5bded5cdb7121232813e1a64a6d5024ec0b53ff4af4c48c799bbb1cd3a5",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt": "e0343297f7d45fb304e02c4d27830c80621c7f9618c493622637376a5c8c7d29",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateArgs.kt": "8d44514990236cc2bb427b9f9b0b75023a6e086219a016542f276f36db4a9af0",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateScreen.kt": "c35d7f5f652b98b8d51e3595d1a70ea2bee708741a7022322dabb96b2944b584",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateVM.kt": "97d80c3712dfafdecb56590b9b27e02b8153991e55f5333c5e62cb26455bc54c",
