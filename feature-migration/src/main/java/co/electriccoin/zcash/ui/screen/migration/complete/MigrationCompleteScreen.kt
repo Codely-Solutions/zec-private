@@ -69,6 +69,7 @@ data class MigrationCompleteState(
     val onLockBalance: () -> Unit,
     val onHelp: () -> Unit,
     val canShowCompletion: Boolean = true,
+    val canMigrateResidue: Boolean = true,
     val isMigrating: Boolean = false,
     val isLocking: Boolean = false,
     // MOB-1750: true for a small leftover Orchard balance not tied to an unseen in-app migration
@@ -219,29 +220,31 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                                 ).getValue(),
                         )
                         Spacer(Modifier.height(24.dp))
-                        ZashiButton(
-                            state =
-                                ButtonState(
-                                    text =
-                                        stringRes(
-                                            if (state.isMigrating) {
-                                                DesignR.string.migrationComplete_migrating
-                                            } else {
-                                                DesignR.string.migrationComplete_migrateAnyway
-                                            }
-                                        ),
-                                    onClick = state.onMigrateAnyway,
-                                    isEnabled = !state.isMigrating && !state.isLocking,
-                                    isLoading = state.isMigrating,
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                            defaultPrimaryColors =
-                                ZashiButtonDefaults.secondaryColors(
-                                    contentColor = ZashiColors.Utility.WarningYellow.utilityOrange700,
-                                    borderColor = ZashiColors.Utility.WarningYellow.utilityOrange300,
-                                ),
-                        )
-                        Spacer(Modifier.height(8.dp))
+                        if (state.canMigrateResidue) {
+                            ZashiButton(
+                                state =
+                                    ButtonState(
+                                        text =
+                                            stringRes(
+                                                if (state.isMigrating) {
+                                                    DesignR.string.migrationComplete_migrating
+                                                } else {
+                                                    DesignR.string.migrationComplete_migrateAnyway
+                                                }
+                                            ),
+                                        onClick = state.onMigrateAnyway,
+                                        isEnabled = !state.isMigrating && !state.isLocking,
+                                        isLoading = state.isMigrating,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                defaultPrimaryColors =
+                                    ZashiButtonDefaults.secondaryColors(
+                                        contentColor = ZashiColors.Utility.WarningYellow.utilityOrange700,
+                                        borderColor = ZashiColors.Utility.WarningYellow.utilityOrange300,
+                                    ),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
                         ZashiButton(
                             state =
                                 ButtonState(

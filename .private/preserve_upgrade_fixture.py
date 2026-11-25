@@ -1,11 +1,16 @@
 """Preserve the signed release's executed seedless app/instrumentation pair; run inside the resource guard."""
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import zipfile
+
+from published_history import require_recorded_public_release
+
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = 'Codely-Solutions/zec-private'
@@ -63,25 +68,48 @@ def write_seedless_pair(fixture, payloads, source):
             archive.writestr(zipfile.ZipInfo(name), data, compress_type=zipfile.ZIP_STORED)
 
 
-def preserve(tag):
+def original_pair(core):
+    from hosted_fixture import MAX_ARCHIVE
+
+    path = 'actions/artifacts/' + str(core['artifact_id'])
+    live = api(path)
+    if not artifact_matches_pair(live, core) or not 0 < live['size_in_bytes'] <= MAX_ARCHIVE:
+        raise ValueError('Executed artifact producer or size mismatch')
+    raw = gh('api', 'repos/' + REPO + '/' + path + '/zip')
+    if len(raw) != live['size_in_bytes'] or 'sha256:' + hashlib.sha256(raw).hexdigest() != live['digest']:
+        raise ValueError('Artifact archive mismatch')
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        if sum(entry.file_size for entry in archive.infolist()) > 300 * 1024**2:
+            raise ValueError('Artifact expansion exceeds budget')
+        return fixture_apks(archive, core)
+
+
+def retained_hosted_pair(tag, core, archive, root=ROOT):
+    from hosted_fixture import MAX_ARCHIVE, REGISTRY, verify_pair
+
+    selected = json.loads((root / '.private/hosted-fixture.json').read_bytes())
+    if (selected['release'] != tag or selected['source_sha'] != core['build_source_sha']
+            or selected['version_code'] != core['candidate_version_code']
+            or any(selected[key] != core[key] for key in ('candidate_apk_sha256', 'instrumentation_apk_sha256'))
+            or not re.fullmatch(re.escape(REGISTRY) + r'@sha256:[0-9a-f]{64}', selected['reference'])
+            or not 0 < archive.stat().st_size == selected['size_in_bytes'] <= MAX_ARCHIVE
+            or digest(archive) != selected['digest']):
+        raise ValueError('Expected the verified hosted archive for the exact recorded pair')
+    return verify_pair(archive, core, prepared=True), selected['reference']
+
+
+def preserve(tag, hosted_archive=None):
     from hosted_fixture import recorded_pair
 
     out = Path(os.environ['CODEX_GUARD_OUTPUT']).resolve()
     evidence, core = recorded_pair(tag, ROOT)
-    release = json.loads(gh('release', 'view', tag, '--repo', REPO, '--json', 'isDraft,body,assets'))
-    if release['isDraft'] or 'Android versionCode: ' + str(core['candidate_version_code']) not in release['body']:
-        raise ValueError('Published matching wallet release required')
-    live = api('actions/artifacts/' + str(core['artifact_id']))
-    if not artifact_matches_pair(live, core):
-        raise ValueError('Executed artifact producer mismatch')
-    raw = gh('api', 'repos/' + REPO + '/actions/artifacts/' + str(core['artifact_id']) + '/zip')
-    if len(raw) != live['size_in_bytes'] or 'sha256:' + hashlib.sha256(raw).hexdigest() != live['digest']:
-        raise ValueError('Artifact archive mismatch')
-    import io
-    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        if sum(x.file_size for x in archive.infolist()) > 300 * 1024**2:
-            raise ValueError('Artifact expansion exceeds budget')
-        payloads=fixture_apks(archive,core)
+    release = api('releases/tags/' + tag)
+    require_recorded_public_release(release, evidence, api, ROOT)
+    registry_reference = None
+    if hosted_archive is None:
+        payloads = original_pair(core)
+    else:
+        payloads, registry_reference = retained_hosted_pair(tag, core, hosted_archive, ROOT)
     fixture = out / (tag + '-TESTNET_UPGRADE_FIXTURE.zip')
     with zipfile.ZipFile(fixture, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         for name,data in payloads.items():
@@ -91,10 +119,12 @@ def preserve(tag):
                                            for name,data in payloads.items()))
     provenance = dict(release=tag, production_source=evidence['source_sha'], build_source=core['build_source_sha'],
         version_code=core['candidate_version_code'], package='com.personal.zecprivate.testnet.foss.debug',
-        original_artifact_id=core['artifact_id'], workflow_run_id=live['workflow_run']['id'],
+        original_artifact_id=core['artifact_id'], workflow_run_id=core.get('artifact_run_id', core['workflow_run_id']),
         original_apk_sha256=core['candidate_apk_sha256'],
         original_instrumentation_apk_sha256=core['instrumentation_apk_sha256'], fixture_digest=digest(fixture), fixture_bytes=fixture.stat().st_size,
         purpose='Next installed-update baseline; version-matched original app and instrumentation APKs, no wallet data or keys')
+    if registry_reference:
+        provenance['recovered_from_registry'] = registry_reference
     metadata = out / (tag + '-TESTNET_UPGRADE_FIXTURE.json')
     metadata.write_text(json.dumps(provenance, indent=2) + '\n')
     policy = json.loads((ROOT / '.private/maintenance-assets.json').read_text())
@@ -124,4 +154,6 @@ def preserve(tag):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tag', required=True)
-    preserve(parser.parse_args().tag)
+    parser.add_argument('--hosted-archive', type=Path, help='Exact ZIP pulled from the recorded private OCI fixture')
+    args = parser.parse_args()
+    preserve(args.tag, args.hosted_archive)

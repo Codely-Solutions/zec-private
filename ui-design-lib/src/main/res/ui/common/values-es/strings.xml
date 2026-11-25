@@ -288,8 +288,8 @@
     <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
         caché de la aplicación, además de desconectar todas las billeteras de hardware conectadas.</string>
     <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
-    <string name="deleteWallet_metadataWarn1">Conserva la copia de seguridad cifrada de los metadatos, que incluye contactos, notas, marcadores y detalles de intercambios/pagos.</string>
-    <string name="deleteWallet_metadataWarn2">Estos datos no se podrán recuperar durante la restauración.</string>
+    <string name="deleteWallet_metadataWarn1">Conserva en este dispositivo los contactos, notas, marcadores y detalles de intercambios y pagos cifrados.</string>
+    <string name="deleteWallet_metadataWarn2">Desactivar esta opción elimina las copias de seguridad locales de todas las billeteras. El restablecimiento no afecta las copias guardadas por Android.</string>
     <string name="deleteWallet_sheet_msg">Restablecer la app no se puede deshacer. Necesitarás restaurar tu billetera usando tu frase secreta de recuperación.</string>
     <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
     <string name="delete_wallet_failed">Error al eliminar la billetera. Inténtalo nuevamente, por favor.</string>
@@ -1163,7 +1163,7 @@
     <string name="migrationComplete_transfersLabel">Transferencias</string>
     <string name="migrationComplete_durationLabel">Duración</string>
     <string name="migrationComplete_orchardBalanceRemainingTitle">Saldo restante en Orchard</string>
-    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
+    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
     <string name="migrationComplete_migrateAnyway">Migrar de todas formas</string>
     <string name="migrationComplete_migrating">Migrando…</string>
     <string name="migrationComplete_lockBalance">Bloquear saldo</string>
@@ -1179,7 +1179,7 @@
     <string name="migrationComplete_residueSubtitle">Un pequeño saldo todavía permanece en Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">En Ironwood</string>
     <string name="migrationComplete_leftInOrchardLabel">Restante en Orchard</string>
-    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
+    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
 
     <string name="migrationNotifPermission_title">Permitir notificaciones</string>
     <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
@@ -1215,7 +1215,7 @@
     <string name="migrationSetup_immediateSubtitle">Transferencia única · Se envía ahora · Menor privacidad</string>
 
     <string name="migrationLockExplainer_title">¿Qué hace el bloqueo?</string>
-    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca este saldo como </string>
+    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca todos los fondos disponibles de Orchard de esta cuenta como </string>
     <string name="migrationLockExplainer_bullet1Bold">no gastable</string>
     <string name="migrationLockExplainer_bullet1Suffix">, así no podrá comprometer tu privacidad en futuras transacciones.</string>
     <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>

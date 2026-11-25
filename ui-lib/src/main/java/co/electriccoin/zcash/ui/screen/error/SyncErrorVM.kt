@@ -100,7 +100,7 @@ class SyncErrorVM(
         val allowed = reportPermission()
         if (!allowed()) return
         viewModelScope.launch {
-            if (sendEmailUseCase(args.synchronizerError, allowed)) navigationRouter.back()
+            if (sendEmailUseCase(args.synchronizerError, allowed) && allowed()) navigationRouter.back()
         }
     }
 }

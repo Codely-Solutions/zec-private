@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
 import co.electriccoin.zcash.ui.common.model.migration.affectedTransferIndices
 import co.electriccoin.zcash.ui.common.model.migration.toMigrationRangeText
 import co.electriccoin.zcash.ui.common.model.migration.toUiKind
+import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
@@ -108,9 +109,8 @@ class MigrationHomeMessageSourceImpl(
             // ~10-16s Home-banner load delay (2026-08-06/07 investigation). See the
             // repository's own kdoc.
             observeMigrationLiveReadout(accountKeyId),
-            // Observed, not one-shot: after an IMMEDIATE migration (a plain send-max sweep that
-            // never touches the engine) the balance is the only input that can hide the
-            // "Migrate required" banner once the Orchard funds are spent.
+            // Observe the published balance. The live migratable total below prevents a stale
+            // snapshot from inviting another sweep when the SDK already holds the inputs.
             getOrchardBalance.observe(account.sdkAccount.accountUuid),
             // Mirrors HomeVM's isSyncComplete (iOS: SmartBannerStore.isSyncComplete) — the
             // RESIDUE branch below reads a live balance/migratable-total pair that can
@@ -181,6 +181,7 @@ class MigrationHomeMessageSourceImpl(
                 attentionKind = attentionKind,
                 attentionRangeText = attentionRangeText,
                 isUpgradeNoticePending = isUpgradeNoticePending,
+                supportsNewMigration = account !is LedgerAccount,
             )?.copy(accountKeyId = accountKeyId)
         }
 
@@ -435,6 +436,7 @@ internal fun migrationMessageFor(
     attentionKind: MigrationAttentionKind? = null,
     attentionRangeText: String? = null,
     isUpgradeNoticePending: Boolean = false,
+    supportsNewMigration: Boolean = true,
 ): MigrationHomeMessageData? {
     val next = snapshot?.nextPending
     // A RequiresAttention state WITH live run statuses is still a mid-run condition (e.g. the
@@ -538,8 +540,10 @@ internal fun migrationMessageFor(
         // finished, residual needs another round" (engine still reports Complete), and "campaign
         // done but new funds arrived". All three correctly say "Migrate now".
         !midRunAttention &&
+            supportsNewMigration &&
             orchardBalanceZatoshi != null &&
-            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI -> {
+            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI &&
+            migratableOrchardTotalZatoshi > 0L -> {
             MigrationHomeMessageData(isRunActive = false)
         }
 

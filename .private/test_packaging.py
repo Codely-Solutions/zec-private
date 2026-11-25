@@ -1,4 +1,5 @@
 """Packaging boundary regressions use tiny archives, never wallet state."""
+import hashlib
 import json
 import runpy
 import subprocess
@@ -122,10 +123,28 @@ class PackagingTests(unittest.TestCase):
         artifact = dict(id=58, name='validated-unsigned-apk', size_in_bytes=128, digest='sha256:'+'f'*64,
                         workflow_run=dict(id=42, head_sha=source), created_at='2026-11-23T08:08:00Z')
         with tempfile.TemporaryDirectory() as temp:
-            output = Path(temp)/'output'
+            root = Path(temp)
+            output = root / 'output'
+            private = root / '.private'
+            private.mkdir()
+            receipts = {'core-acceptance.json': b'core', 'quote-acceptance.json': b'quote'}
+            for name, data in receipts.items():
+                (private / name).write_bytes(data)
+            assembly = dict(status='accepted-awaiting-signing', source_sha=source, candidate_run=42,
+                            production_unsigned_artifact={key: artifact[key] for key in (
+                                'id', 'size_in_bytes', 'digest')},
+                            receipt_sha256={name: hashlib.sha256(data).hexdigest()
+                                            for name, data in receipts.items()},
+                            production_unsigned_producer=dict(
+                                workflow='build-release.yml', event='workflow_dispatch', head_branch='main',
+                                head_sha=source, run_id=42, run_attempt=1, status='completed',
+                                conclusion='success', producer_job_id=9, producer_job_name='unsigned',
+                                producer_job_conclusion='success', artifact_name='validated-unsigned-apk'))
+            (private / 'core-validation-summary.json').write_text(json.dumps(assembly))
             environment = dict(CANDIDATE_RUN='42', GITHUB_REPOSITORY='example/wallet', GITHUB_SHA=controller,
                                GITHUB_OUTPUT=str(output))
-            with patch_environment(environment), patch('acceptance_policy.verify_promotion_revision') as verify:
+            with patch_environment(environment), patch('acceptance_policy.ROOT', root), \
+                    patch('acceptance_policy.verify_promotion_revision') as verify:
                 for expired, jobs, error in ((True, [job, copy], 'Artifact digest/run/source binding missing'),
                                              (False, [copy], 'Expected one successful unsigned producer'),
                                              (False, [job, copy], None)):
@@ -140,6 +159,13 @@ class PackagingTests(unittest.TestCase):
                             runpy.run_module('promotion')
                             verify.assert_called_once_with(source, controller)
                             self.assertEqual(output.read_text(), f'source_sha={source}\n')
+                output.unlink()
+                (private / 'quote-acceptance.json').write_bytes(b'changed')
+                retained = [run, run, [{'artifacts': [dict(artifact, expired=False)]}], [{'jobs': [job, copy]}], first]
+                with patch('release_metadata.Metadata.api', side_effect=retained):
+                    with self.assertRaisesRegex(ValueError, 'Receipts differ|receipts differ'):
+                        runpy.run_module('promotion')
+                self.assertFalse(output.exists())
 
     def test_early_bridge_has_no_release_authority_and_quotes_receive_explicit_ids(self):
         root = Path(__file__).resolve().parents[1]

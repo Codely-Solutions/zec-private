@@ -68,6 +68,7 @@ class MigrationCompleteVM(
 
     private data class Summary(
         val accountUuid: AccountUuid,
+        val canMigrateResidue: Boolean,
         val canShowCompletion: Boolean,
         val totalTransferred: Long?,
         val totalCount: Int?,
@@ -96,6 +97,7 @@ class MigrationCompleteVM(
             val summary = if (args.isResidueOnly) {
                 Summary(
                     accountUuid = uuid,
+                    canMigrateResidue = owner.isSpendable && owner !is LedgerAccount,
                     canShowCompletion = true,
                     totalTransferred = getIronwoodBalance(uuid).value,
                     totalCount = null,
@@ -112,6 +114,7 @@ class MigrationCompleteVM(
                 val minedAt = transfers?.let { rows -> rows.mapNotNull { it.minedAt }.takeIf { it.size == rows.size } }
                 Summary(
                     accountUuid = uuid,
+                    canMigrateResidue = owner.isSpendable && owner !is LedgerAccount,
                     canShowCompletion = canShowCompletion,
                     totalTransferred = transfers?.takeIf { it.all { row -> row.amountZatoshi > 0L } }
                         ?.sumOf { it.amountZatoshi },
@@ -166,6 +169,7 @@ class MigrationCompleteVM(
     ): MigrationCompleteState =
         MigrationCompleteState(
             canShowCompletion = summary.canShowCompletion,
+            canMigrateResidue = summary.canMigrateResidue,
             totalTransferred = summary.totalTransferred?.let { stringRes(Zatoshi(it)) },
             remainingDust = if (summary.dustZatoshi > 0L) stringRes(Zatoshi(summary.dustZatoshi)) else null,
             lockNotice = lockNotice,

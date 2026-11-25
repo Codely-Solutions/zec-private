@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.error
 
 import android.content.Intent
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -73,7 +74,7 @@ class ErrorReportHandoffTest {
     fun walletlessRestoreOffersABlankSupportDraftWithoutCollectingDiagnostics() {
         val application = RuntimeEnvironment.getApplication()
         val diagnostics = mockk<GetSupportUseCase>()
-        val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk())
+        val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk(), mockk())
         val mapper = ErrorMapperUseCase(SendEmailUseCase(application, diagnostics, mockk()), mockk(), access)
         val failure = LceContent.Error(IllegalStateException("synthetic private detail"), {}, {})
         requireNotNull(mapper.mapToState(failure, supportWithoutDiagnostics = true).state.secondaryAction).onClick()
@@ -90,7 +91,9 @@ class ErrorReportHandoffTest {
         val writeAccess = WalletWriteAccess()
         val selected = MutableStateFlow<WalletAccount?>(null)
         val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selected }
-        val permission = WalletReportAccess(session, writeAccess, ObserveSelectedWalletAccountUseCase(accounts))
+        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("error", null))
+        val router = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
+        val permission = WalletReportAccess(session, writeAccess, ObserveSelectedWalletAccountUseCase(accounts), router)
         val release = CompletableDeferred<Unit>()
         val collecting = CompletableDeferred<Unit>()
         val diagnostics = mockk<GetSupportUseCase> {
@@ -100,7 +103,6 @@ class ErrorReportHandoffTest {
                 mockk<SupportInfo> { every { toSupportString(any()) } returns "Synthetic diagnostics" }
             }
         }
-        val router = mockk<NavigationRouter>(relaxed = true)
         val owner = NavigateToErrorUseCase(router)
         val send = SendEmailUseCase(application, diagnostics, mockk())
         val failure = IllegalStateException("synthetic failure")
@@ -139,6 +141,7 @@ class ErrorReportHandoffTest {
                 }
                 Change.ACCOUNT -> selected.value = EditAccountFixtures.keystone()
                 Change.RESET -> writeAccess.beginReset()
+                Change.COVERED -> active.value = ActiveNavigationEntry("new-screen", null)
                 Change.NONE -> Unit
             }
             runCurrent()
@@ -156,6 +159,6 @@ class ErrorReportHandoffTest {
         }
     }
 
-    private enum class Change { LOCK, ACCOUNT, RESET, NONE }
+    private enum class Change { LOCK, ACCOUNT, RESET, COVERED, NONE }
     private enum class Route { GENERAL, SYNC, PARTIAL, MAPPER }
 }

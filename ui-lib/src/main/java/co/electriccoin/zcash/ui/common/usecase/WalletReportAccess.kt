@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CoroutineScope
@@ -14,11 +15,17 @@ class WalletReportAccess(
     private val appAccessSession: AppAccessSession,
     private val walletWriteAccess: WalletWriteAccess,
     private val observeAccount: ObserveSelectedWalletAccountUseCase,
+    private val navigationRouter: NavigationRouter,
 ) {
     internal fun captureWallet(): () -> Boolean {
         val token = walletWriteAccess.token()
         val grant = appAccessSession.grant.value
         return { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
+    }
+
+    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean {
+        val source = navigationRouter.activeEntry.value?.id
+        return { source != null && navigationRouter.activeEntry.value?.id == source && allowed() }
     }
 
     internal fun bind(scope: CoroutineScope): () -> (() -> Boolean) {
@@ -32,7 +39,7 @@ class WalletReportAccess(
             .stateIn(scope, SharingStarted.Eagerly, null)
         return {
             val grant = appAccessSession.grant.value
-            {
+            bindToCurrentEntry {
                 scope.isActive && owner != null && selections.value === owner &&
                     appAccessSession.permits(grant) && walletWriteAccess.permits(token)
             }

@@ -166,72 +166,41 @@ class MigrationBannerStateTest {
         assertNull(result)
     }
 
-    // ─── §2 In-flight IMMEDIATE staleness ─────────────────────────────────────
-
-    /**
-     * CHARACTERIZATION (known bug — stale "Migrate required" banner during in-flight IMMEDIATE).
-     *
-     * An IMMEDIATE migration is a plain send-max sweep using [OrchardMigrationSdk.proposeImmediateMigration]
-     * + the existing SubmitProposalUseCase pipeline. It bypasses the migration engine entirely:
-     *   - No MigrationState row is written → sdkState stays at whatever it was before (null / NotStarted).
-     *   - No MigrationPlan is persisted → plan stays null.
-     *
-     * While the sweep is in-flight (broadcast but not yet confirmed):
-     *   - orchardBalanceZatoshi is still the PRE-broadcast value (≥ MIGRATION_RESIDUAL_MIN_ZATOSHI).
-     *   - sdkState == null (or NotStarted), no-run.
-     *   - → [migrationMessageFor] fires the "orchardBalance >= min && no-run" branch: "Migrate required".
-     *
-     * The reactive [getOrchardBalance.observe()] fix (see observeMigrationMessage()) eliminated the
-     * one-shot stale problem where the balance was read once and never updated. But it does NOT
-     * eliminate this gap: for the entire duration between broadcast and first confirmation, the balance
-     * is non-zero (unconfirmed funds are still counted as part of orchardBalance until the tx mines),
-     * so the banner keeps firing. This is the "0.000 + Migrate required while IMMEDIATE in flight" bug
-     * described in project_migration_banner_stale_immediate.md.
-     *
-     * This test PINS the current (buggy) behavior. A fix must make [migrationMessageFor]
-     * (or its callers) aware that an IMMEDIATE is in flight — e.g. via a dedicated flag or
-     * by routing IMMEDIATE through the plan/MigrationState machinery — and return null in that window.
-     */
     @Test
-    fun inFlightImmediateWithNonZeroBalanceShowsRequiredBanner_CHARACTERIZATION_BUG() {
-        // Simulates: IMMEDIATE broadcast, not yet confirmed; balance still shows the full amount.
-        // sdkState is null (IMMEDIATE never writes to the migration engine).
-        // plan is null (IMMEDIATE never persists an app-side plan).
-        val inFlightOrchardBalance = MIGRATION_RESIDUAL_MIN_ZATOSHI + 5_000_000L // 0.06 ZEC, still reported
-
-        val result =
-            migrationMessageFor(
-                sdkState = null,
-                snapshot = null,
-                hasSeenComplete = false,
-                orchardBalanceZatoshi = inFlightOrchardBalance,
-            )
-
-        // BUG: Banner fires "Migrate required" even though the sweep is already broadcast.
-        // Expected (once fixed): null — no banner should show while IMMEDIATE is in flight.
-        assertEquals(
-            MigrationHomeMessageData(isRunActive = false),
-            result,
-            "BUG: 'Migrate required' banner fires for in-flight IMMEDIATE. " +
-                "Expected null (no banner) — fix must track in-flight IMMEDIATE state.",
+    fun unsupportedSignerCanStillSeeResidueForLocalLockButDoesNotGetAnUnavailableMigration() {
+        val insufficientForAutomatic = 500_000L
+        val large = migrationMessageFor(
+            sdkState = null, snapshot = null, hasSeenComplete = false,
+            orchardBalanceZatoshi = MIGRATION_RESIDUAL_MIN_ZATOSHI, supportsNewMigration = false,
         )
+        val residue = migrationMessageFor(
+            sdkState = null, snapshot = null, hasSeenComplete = false,
+            orchardBalanceZatoshi = insufficientForAutomatic, supportsNewMigration = false,
+        )
+        assertNull(large)
+        assertEquals(true, residue?.isResidueOnly)
     }
 
-    /**
-     * CHARACTERIZATION: IMMEDIATE in-flight with exactly the migratable minimum balance — same bug.
-     * Pins the boundary condition.
-     */
     @Test
-    fun inFlightImmediateAtExactMinimumBalanceShowsRequiredBanner_CHARACTERIZATION_BUG() {
-        val result =
-            migrationMessageFor(
+    fun stalePublishedBalanceCannotOfferMigrationWhenTheLiveReadHasNoEligibleFunds() {
+        for (balance in listOf(MIGRATION_RESIDUAL_MIN_ZATOSHI, MIGRATION_RESIDUAL_MIN_ZATOSHI + 5_000_000L)) {
+            val pending = migrationMessageFor(
                 sdkState = null,
                 snapshot = null,
                 hasSeenComplete = false,
-                orchardBalanceZatoshi = MIGRATION_RESIDUAL_MIN_ZATOSHI,
+                orchardBalanceZatoshi = balance,
+                migratableOrchardTotalZatoshi = 0L,
             )
-        // BUG — same as above, boundary case.
-        assertEquals(MigrationHomeMessageData(isRunActive = false), result)
+            assertNull(pending)
+            val available = migrationMessageFor(
+                sdkState = null,
+                snapshot = null,
+                hasSeenComplete = false,
+                orchardBalanceZatoshi = balance,
+                migratableOrchardTotalZatoshi = balance,
+            )
+            assertEquals(MigrationHomeMessageData(isRunActive = false), available)
+        }
     }
 
     /**

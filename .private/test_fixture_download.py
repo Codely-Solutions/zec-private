@@ -95,6 +95,52 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.subTest(options=options),contents(**options) as archive,self.assertRaises(ValueError):
                 fixture_apks(archive,core)
 
+    def test_local_preservation_verifies_the_public_record_before_reading_or_publishing_a_fixture(self):
+        from preserve_upgrade_fixture import preserve
+        from test_support import patch_environment, public_baseline_metadata
+
+        tag = 'v3.19.0-private.30'
+        selected = dict(release=tag, source_sha='a' * 40, version_code=330)
+        proof = dict(release_tag=tag, apk_sha256='b' * 64, source_sha=selected['source_sha'], versionCode=330)
+        public = public_baseline_metadata(selected, proof['apk_sha256'])
+        release = public['/releases/latest']
+        release['assets'][1]['digest'] = 'sha256:' + '0' * 64
+        with tempfile.TemporaryDirectory() as root, patch_environment({'CODEX_GUARD_OUTPUT': root}), \
+                patch('hosted_fixture.recorded_pair', return_value=(proof, {})), \
+                patch('preserve_upgrade_fixture.api', return_value=release), \
+                patch('preserve_upgrade_fixture.gh') as gh:
+            with self.assertRaisesRegex(ValueError, 'release assets differ'):
+                preserve(tag)
+            self.assertEqual([], list(Path(root).iterdir()))
+            gh.assert_not_called()
+
+    def test_local_preservation_can_read_the_exact_immutable_registry_pair(self):
+        from hosted_fixture import REGISTRY
+        from preserve_upgrade_fixture import digest, retained_hosted_pair, write_seedless_pair
+
+        tag, source = 'v3.19.0-private.30', 'a' * 40
+        payloads = {'wallet.apk': b'app', 'wallet-androidTest.apk': b'test'}
+        core = dict(build_source_sha=source, candidate_version_code=330,
+                    candidate_apk_sha256=hashlib.sha256(payloads['wallet.apk']).hexdigest(),
+                    instrumentation_apk_sha256=hashlib.sha256(payloads['wallet-androidTest.apk']).hexdigest())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            archive = root / 'fixture.zip'
+            write_seedless_pair(archive, payloads, source)
+            reference = REGISTRY + '@sha256:' + 'b' * 64
+            manifest = dict(release=tag, source_sha=source, version_code=330, reference=reference,
+                            size_in_bytes=archive.stat().st_size, digest=digest(archive),
+                            candidate_apk_sha256=core['candidate_apk_sha256'],
+                            instrumentation_apk_sha256=core['instrumentation_apk_sha256'])
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(manifest))
+            self.assertEqual((payloads, reference), retained_hosted_pair(tag, core, archive, root))
+            with self.assertRaisesRegex(ValueError, 'exact recorded pair'):
+                retained_hosted_pair(tag, dict(core, candidate_version_code=331), archive, root)
+            archive.write_bytes(bytes([0]) + archive.read_bytes()[1:])
+            with self.assertRaisesRegex(ValueError, 'exact recorded pair'):
+                retained_hosted_pair(tag, core, archive, root)
+
     def test_hosted_pair_is_deterministic_and_rejects_unexpected_contents(self):
         from hosted_fixture import verify_pair
         from preserve_upgrade_fixture import write_seedless_pair

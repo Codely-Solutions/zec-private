@@ -5120,24 +5120,25 @@ index c2045aa9b..eb3451c3b 100644
 +        sdk.lockRemainingOrchardBalance()
 +        return true
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
-index b76ce6c65..d3b44b019 100644
+index b76ce6c65..503f8c313 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 @@ -16,0 +17 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
 +import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
-@@ -20,0 +22 @@ import co.electriccoin.zcash.ui.common.model.migration.toUiKind
+@@ -20,0 +22,2 @@ import co.electriccoin.zcash.ui.common.model.migration.toUiKind
++import co.electriccoin.zcash.ui.common.model.LedgerAccount
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -26,0 +29,2 @@ import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
+@@ -26,0 +30,2 @@ import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
-@@ -34,0 +39,3 @@ import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
+@@ -34,0 +40,3 @@ import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 +import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignArgs
 +import co.electriccoin.zcash.ui.screen.migration.restart.MigrationRestartArgs
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
-@@ -71,0 +79,2 @@ class MigrationHomeMessageSourceImpl(
+@@ -71,0 +80,2 @@ class MigrationHomeMessageSourceImpl(
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
 +    private val pendingSchedule: PendingMigrationScheduleRepository,
-@@ -78,32 +87,5 @@ class MigrationHomeMessageSourceImpl(
+@@ -78,32 +88,5 @@ class MigrationHomeMessageSourceImpl(
 -            combine(
 -                hasSeenMigrationCompleteStorageProvider.observe(),
 -                // Published by MigrationLiveDriverImpl's own loop (2026-08-07) instead of this
@@ -5175,7 +5176,7 @@ index b76ce6c65..d3b44b019 100644
 +                    flowOf(
 +                        MigrationHomeMessageData(
 +                            isRunActive = true, accountKeyId = accountKeyId, isAwaitingFinalization = true,
-@@ -111,13 +93,40 @@ class MigrationHomeMessageSourceImpl(
+@@ -111,13 +94,39 @@ class MigrationHomeMessageSourceImpl(
 -                    }
 -                // UNPROVABLE ANCHOR → immediate, deterministic "Update migration plan" attention
 -                // banner (decision 2026-07-30: user-driven — the user must SEE the bad state as
@@ -5207,9 +5208,8 @@ index b76ce6c65..d3b44b019 100644
 +            // ~10-16s Home-banner load delay (2026-08-06/07 investigation). See the
 +            // repository's own kdoc.
 +            observeMigrationLiveReadout(accountKeyId),
-+            // Observed, not one-shot: after an IMMEDIATE migration (a plain send-max sweep that
-+            // never touches the engine) the balance is the only input that can hide the
-+            // "Migrate required" banner once the Orchard funds are spent.
++            // Observe the published balance. The live migratable total below prevents a stale
++            // snapshot from inviting another sweep when the SDK already holds the inputs.
 +            getOrchardBalance.observe(account.sdkAccount.accountUuid),
 +            // Mirrors HomeVM's isSyncComplete (iOS: SmartBannerStore.isSyncComplete) — the
 +            // RESIDUE branch below reads a live balance/migratable-total pair that can
@@ -5277,7 +5277,7 @@ index b76ce6c65..d3b44b019 100644
 +                    totalCount = snapshot.totalCount,
 +                    attentionKind = MigrationAttentionKind.PLAN_UPDATE,
 +                    accountKeyId = accountKeyId,
-@@ -161,0 +150,35 @@ class MigrationHomeMessageSourceImpl(
+@@ -161,0 +150,36 @@ class MigrationHomeMessageSourceImpl(
 +            // Only computed when actually needed (RequiresAttention) — an extra snapshot
 +            // read on every other state would be wasted work.
 +            val (attentionKind, attentionRangeText) =
@@ -5312,8 +5312,9 @@ index b76ce6c65..d3b44b019 100644
 +                attentionKind = attentionKind,
 +                attentionRangeText = attentionRangeText,
 +                isUpgradeNoticePending = isUpgradeNoticePending,
++                supportsNewMigration = account !is LedgerAccount,
 +            )?.copy(accountKeyId = accountKeyId)
-@@ -165,0 +189,8 @@ class MigrationHomeMessageSourceImpl(
+@@ -165,0 +190,8 @@ class MigrationHomeMessageSourceImpl(
 +        return when {
 +            data.isAwaitingFinalization -> finalizationMessage(checkNotNull(data.accountKeyId))
 +            data.isAwaitingSignatures -> signingRecoveryMessage(checkNotNull(data.accountKeyId))
@@ -5322,20 +5323,20 @@ index b76ce6c65..d3b44b019 100644
 +    }
 +
 +    private fun standardMessage(data: MigrationHomeMessageData): HomeMessageState {
-@@ -216,2 +247 @@ class MigrationHomeMessageSourceImpl(
+@@ -216,2 +248 @@ class MigrationHomeMessageSourceImpl(
 -                        // Spec §6.4: numbered per the due transfer, matching the convention used
 -                        // elsewhere (e.g. Progress's "Transfer ${completedCount + 1}").
 +                        // The due transfer's index is independent of the number already mined.
-@@ -218,0 +249 @@ class MigrationHomeMessageSourceImpl(
+@@ -218,0 +250 @@ class MigrationHomeMessageSourceImpl(
 +                            val nextNumber = (data.nextTransferIndex ?: data.completedCount) + 1
-@@ -222 +253 @@ class MigrationHomeMessageSourceImpl(
+@@ -222 +254 @@ class MigrationHomeMessageSourceImpl(
 -                                subtitle = "Transfer ${data.completedCount + 1} is ready to send",
 +                                subtitle = "Transfer $nextNumber is ready to send",
-@@ -257,0 +289 @@ class MigrationHomeMessageSourceImpl(
+@@ -257,0 +290 @@ class MigrationHomeMessageSourceImpl(
 +                    accountKeyId = data.accountKeyId,
-@@ -266,0 +299 @@ class MigrationHomeMessageSourceImpl(
+@@ -266,0 +300 @@ class MigrationHomeMessageSourceImpl(
 +                    accountKeyId = data.accountKeyId,
-@@ -271,0 +305,31 @@ class MigrationHomeMessageSourceImpl(
+@@ -271,0 +306,31 @@ class MigrationHomeMessageSourceImpl(
 +    private fun finalizationMessage(accountKeyId: String): HomeMessageState {
 +        val resume = { navigationRouter.forward(MigrationScheduledArgs(accountKeyId)) }
 +        return MigrationMessageState(
@@ -5367,21 +5368,23 @@ index b76ce6c65..d3b44b019 100644
 +        )
 +    }
 +
-@@ -277,0 +342 @@ class MigrationHomeMessageSourceImpl(
+@@ -277,0 +343 @@ class MigrationHomeMessageSourceImpl(
 +        accountKeyId: String? = null,
-@@ -282 +347 @@ class MigrationHomeMessageSourceImpl(
+@@ -282 +348 @@ class MigrationHomeMessageSourceImpl(
 -            hasAttention -> navigationRouter.forward(MigrationTransferInvalidArgs)
 +            hasAttention -> accountKeyId?.let { navigationRouter.forward(MigrationTransferInvalidArgs(it)) }
-@@ -287 +352 @@ class MigrationHomeMessageSourceImpl(
+@@ -287 +353 @@ class MigrationHomeMessageSourceImpl(
 -            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly = isResidueOnly))
 +            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly, accountKeyId))
-@@ -292 +357 @@ class MigrationHomeMessageSourceImpl(
+@@ -292 +358 @@ class MigrationHomeMessageSourceImpl(
 -            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs)
 +            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
-@@ -294 +359 @@ class MigrationHomeMessageSourceImpl(
+@@ -294 +360 @@ class MigrationHomeMessageSourceImpl(
 -            isRunActive -> navigationRouter.forward(MigrationProgressArgs)
 +            isRunActive -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
-@@ -380,12 +445,2 @@ internal fun migrationMessageFor(
+@@ -372,0 +439 @@ internal fun migrationMessageFor(
++    supportsNewMigration: Boolean = true,
+@@ -380,12 +447,2 @@ internal fun migrationMessageFor(
 -    // A committed schedule that never received its external (Keystone) signature can NEVER
 -    // self-resolve — unlike SCHEDULE/ANCHOR_BOUNDARY/DEPENDENCIES, which clear as blocks mine,
 -    // SIGNATURE only clears when a human hands the device a QR to sign. There is no "wait longer"
@@ -5396,23 +5399,29 @@ index b76ce6c65..d3b44b019 100644
 -    // leaving a schedule permanently stuck exactly like this.
 +    // An unsigned committed step needs user action. The banner uses the retained reviewed
 +    // plan when available and offers explicit recovery if this process no longer has it.
-@@ -410 +465 @@ internal fun migrationMessageFor(
+@@ -410 +467 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot.completedCount,
 +                completedCount = snapshot.minedCount,
-@@ -425 +480 @@ internal fun migrationMessageFor(
+@@ -425 +482 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot.completedCount,
 +                completedCount = snapshot.minedCount,
-@@ -427,0 +483 @@ internal fun migrationMessageFor(
+@@ -427,0 +485 @@ internal fun migrationMessageFor(
 +                nextTransferIndex = next.index,
-@@ -433,2 +489,3 @@ internal fun migrationMessageFor(
+@@ -433,2 +491,3 @@ internal fun migrationMessageFor(
 -                isRunActive = !hasSignatureBlock,
 -                completedCount = snapshot?.completedCount ?: 0,
 +                isRunActive = true,
 +                isAwaitingSignatures = hasSignatureBlock,
 +                completedCount = snapshot?.minedCount ?: 0,
-@@ -448 +505 @@ internal fun migrationMessageFor(
+@@ -448 +507 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot?.completedCount ?: 0,
 +                completedCount = snapshot?.minedCount ?: 0,
+@@ -483,0 +543 @@ internal fun migrationMessageFor(
++            supportsNewMigration &&
+@@ -485 +545,2 @@ internal fun migrationMessageFor(
+-            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI -> {
++            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI &&
++            migratableOrchardTotalZatoshi > 0L -> {
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
 index 7c9893c8a..ebeb5198b 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
@@ -5536,7 +5545,7 @@ index 3c54b5657..ec4662494 100644
 +
 +    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
-index 8d9ded4e7..5b1937c18 100644
+index 8d9ded4e7..d7453d7d3 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 @@ -32,0 +33 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -5553,20 +5562,21 @@ index 8d9ded4e7..5b1937c18 100644
 +    val lockNotice: StringResource? = null,
 +    val transfersProgress: StringResource?,
 +    val duration: StringResource?,
-@@ -70,0 +71 @@ data class MigrationCompleteState(
+@@ -70,0 +71,2 @@ data class MigrationCompleteState(
 +    val canShowCompletion: Boolean = true,
-@@ -73 +73,0 @@ data class MigrationCompleteState(
++    val canMigrateResidue: Boolean = true,
+@@ -73 +74,0 @@ data class MigrationCompleteState(
 -    val failureSheet: co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState? = null,
-@@ -82 +82,2 @@ data class MigrationCompleteArgs(
+@@ -82 +83,2 @@ data class MigrationCompleteArgs(
 -    val isResidueOnly: Boolean = false
 +    val isResidueOnly: Boolean = false,
 +    val accountKeyId: String? = null
-@@ -86,2 +87,2 @@ data class MigrationCompleteArgs(
+@@ -86,2 +88,2 @@ data class MigrationCompleteArgs(
 -fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
 -    val vm = koinViewModel<MigrationCompleteVM> { parametersOf(args) }
 +fun MigrationCompleteScreen(args: MigrationCompleteArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<MigrationCompleteVM> { parametersOf(args, sourceEntryId) }
-@@ -92 +93,12 @@ fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
+@@ -92 +94,12 @@ fun MigrationCompleteScreen(args: MigrationCompleteArgs) {
 -    ) { MigrationCompleteView(it) }
 +    ) { content ->
 +        if (content.canShowCompletion) {
@@ -5580,24 +5590,24 @@ index 8d9ded4e7..5b1937c18 100644
 +            )
 +        }
 +    }
-@@ -110,3 +122 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -110,3 +123 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                // The "?" opens the lock explainer as pure information. It's only meaningful while
 -                // there's an unlocked residue that can still be locked, so it's hidden once the
 -                // balance is locked or when there's no residual dust at all.
 +                // Explain the account-wide lock when the wallet reports spendable Orchard funds.
-@@ -114 +124 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -114 +125 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                    if (state.remainingDust != null && !state.isDustLocked) {
 +                    if (state.remainingDust != null) {
-@@ -118,0 +129 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -118,0 +130 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 +                                    contentDescription = stringRes(DesignR.string.migrationLockExplainer_title),
-@@ -178 +188,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -178 +189,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                Spacer(Modifier.height(24.dp))
-@@ -180,0 +191,4 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -180,0 +192,4 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 +                state.lockNotice?.let { notice ->
 +                    LockedDisclaimer(notice)
 +                    Spacer(Modifier.height(16.dp))
 +                }
-@@ -193,14 +206,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -193,14 +207,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                    state.isDustLocked -> {
 -                        Spacer(Modifier.height(20.dp))
 -                        LockedDisclaimer(dustAmount = state.remainingDust.getValue())
@@ -5612,12 +5622,61 @@ index 8d9ded4e7..5b1937c18 100644
 -                        )
 -                    }
 -
-@@ -267 +266,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -222,23 +223,25 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+-                        ZashiButton(
+-                            state =
+-                                ButtonState(
+-                                    text =
+-                                        stringRes(
+-                                            if (state.isMigrating) {
+-                                                DesignR.string.migrationComplete_migrating
+-                                            } else {
+-                                                DesignR.string.migrationComplete_migrateAnyway
+-                                            }
+-                                        ),
+-                                    onClick = state.onMigrateAnyway,
+-                                    isEnabled = !state.isMigrating && !state.isLocking,
+-                                    isLoading = state.isMigrating,
+-                                ),
+-                            modifier = Modifier.fillMaxWidth(),
+-                            defaultPrimaryColors =
+-                                ZashiButtonDefaults.secondaryColors(
+-                                    contentColor = ZashiColors.Utility.WarningYellow.utilityOrange700,
+-                                    borderColor = ZashiColors.Utility.WarningYellow.utilityOrange300,
+-                                ),
+-                        )
+-                        Spacer(Modifier.height(8.dp))
++                        if (state.canMigrateResidue) {
++                            ZashiButton(
++                                state =
++                                    ButtonState(
++                                        text =
++                                            stringRes(
++                                                if (state.isMigrating) {
++                                                    DesignR.string.migrationComplete_migrating
++                                                } else {
++                                                    DesignR.string.migrationComplete_migrateAnyway
++                                                }
++                                            ),
++                                        onClick = state.onMigrateAnyway,
++                                        isEnabled = !state.isMigrating && !state.isLocking,
++                                        isLoading = state.isMigrating,
++                                    ),
++                                modifier = Modifier.fillMaxWidth(),
++                                defaultPrimaryColors =
++                                    ZashiButtonDefaults.secondaryColors(
++                                        contentColor = ZashiColors.Utility.WarningYellow.utilityOrange700,
++                                        borderColor = ZashiColors.Utility.WarningYellow.utilityOrange300,
++                                    ),
++                            )
++                            Spacer(Modifier.height(8.dp))
++                        }
+@@ -267 +269,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -    MigrationFailureBottomSheet(state.failureSheet)
-@@ -271,0 +271,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -271,0 +274,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +    if (state.totalTransferred == null && state.remainingDust == null && state.transfersProgress == null) return
 +    Spacer(Modifier.height(24.dp))
-@@ -281,13 +282,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -281,13 +285,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        if (state.isResidueOnly) {
 -            // MOB-1750: reduced summary — no Transfers/Duration rows, since a residue not tied
 -            // to an unseen in-app celebration has no round-trip campaign to report on (whether
@@ -5636,7 +5695,7 @@ index 8d9ded4e7..5b1937c18 100644
 +                DesignR.string.migrationComplete_inIronwoodLabel
 +            } else {
 +                DesignR.string.migrationComplete_totalTransferredLabel
-@@ -295,10 +288,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -295,10 +291,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        } else {
 -            SummaryRow(
 -                label = stringRes(DesignR.string.migrationComplete_totalTransferredLabel).getValue(),
@@ -5654,23 +5713,23 @@ index 8d9ded4e7..5b1937c18 100644
 +                DesignR.string.migrationComplete_leftInOrchardLabel
 +            } else {
 +                DesignR.string.migrationComplete_remainingDustLabel
-@@ -305,0 +296,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -305,0 +299,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +            SummaryRow(label = stringRes(label).getValue(), value = dust.getValue())
 +        }
 +        state.transfersProgress?.let {
-@@ -308 +301 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -308 +304 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.transfersProgress.getValue(),
 +                value = it.getValue(),
-@@ -309,0 +303,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -309,0 +306,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +        }
 +        state.duration?.let {
-@@ -312 +307 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -312 +310 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.duration.getValue(),
 +                value = it.getValue(),
-@@ -340 +335 @@ private fun SummaryRow(label: String, value: String) {
+@@ -340 +338 @@ private fun SummaryRow(label: String, value: String) {
 -private fun LockedDisclaimer(dustAmount: String) {
 +private fun LockedDisclaimer(notice: StringResource) {
-@@ -349,14 +344,6 @@ private fun LockedDisclaimer(dustAmount: String) {
+@@ -349,14 +347,6 @@ private fun LockedDisclaimer(dustAmount: String) {
 -        Column(modifier = Modifier.weight(1f)) {
 -            Text(
 -                text = stringRes(DesignR.string.migrationComplete_orchardBalanceLockedTitle).getValue(),
@@ -5691,17 +5750,17 @@ index 8d9ded4e7..5b1937c18 100644
 +            style = ZashiTypography.textSm,
 +            color = ZashiColors.Text.textPrimary,
 +        )
-@@ -382 +368,0 @@ private fun PreviewWithDust() =
+@@ -382 +371,0 @@ private fun PreviewWithDust() =
 -                    isDustLocked = false,
-@@ -402 +388 @@ private fun PreviewWithLockedDust() =
+@@ -402 +391 @@ private fun PreviewWithLockedDust() =
 -                    isDustLocked = true,
 +                    lockNotice = stringRes(DesignR.string.migrationComplete_lockRequestCompleted),
-@@ -422 +407,0 @@ private fun PreviewNoDust() =
+@@ -422 +410,0 @@ private fun PreviewNoDust() =
 -                    isDustLocked = false,
-@@ -442 +426,0 @@ private fun PreviewResidueOnly() =
+@@ -442 +429,0 @@ private fun PreviewResidueOnly() =
 -                    isDustLocked = false,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
-index ca5f70e55..5f305cbeb 100644
+index ca5f70e55..82e179801 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
 @@ -5 +5,2 @@ import androidx.lifecycle.viewModelScope
@@ -5768,17 +5827,18 @@ index ca5f70e55..5f305cbeb 100644
 +        super.onCleared()
 +    }
 +
-@@ -73,4 +70,5 @@ class MigrationCompleteVM(
+@@ -73,4 +70,6 @@ class MigrationCompleteVM(
 -        val totalTransferred: Long,
 -        val totalCount: Int,
 -        val firstAt: Long,
 -        val lastAt: Long,
 +        val accountUuid: AccountUuid,
++        val canMigrateResidue: Boolean,
 +        val canShowCompletion: Boolean,
 +        val totalTransferred: Long?,
 +        val totalCount: Int?,
 +        val durationSeconds: Long?,
-@@ -80,11 +77,0 @@ class MigrationCompleteVM(
+@@ -80,11 +78,0 @@ class MigrationCompleteVM(
 -    // Cached across a failed-then-retried "Migrate anyway" attempt so a GrpcFailure retry (see
 -    // immediateSubmitFailureMessage's kdoc in MigrationReviewVM, the reference implementation this
 -    // mirrors) resubmits the exact same already-built/signed Proposal instead of re-proposing (which
@@ -5790,7 +5850,7 @@ index ca5f70e55..5f305cbeb 100644
 -
 -    private var pendingMigrateAnywayProposal: MigrateAnywayProposal? = null
 -
-@@ -98,2 +85,5 @@ class MigrationCompleteVM(
+@@ -98,2 +86,5 @@ class MigrationCompleteVM(
 -    private val lockLce = mutableLce<Unit>()
 -    private val migrateAnywayFailure = MutableStateFlow<SubmitResult?>(null)
 +    private val lockLce = mutableLce<Boolean>()
@@ -5798,7 +5858,7 @@ index ca5f70e55..5f305cbeb 100644
 +    private val completionOwnerKey = viewModelScope.async(start = CoroutineStart.LAZY) {
 +        args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +    }
-@@ -103,11 +93,4 @@ class MigrationCompleteVM(
+@@ -103,11 +94,4 @@ class MigrationCompleteVM(
 -            // MOB-1750: the residue variant's "In Ironwood" row is the live Ironwood pool
 -            // balance (GetIronwoodBalanceUseCase, same source GetBalancePoolsUseCase's Balance
 -            // Breakdown sheet already uses) rather than the migration engine's own campaign-
@@ -5814,19 +5874,20 @@ index ca5f70e55..5f305cbeb 100644
 +            val uuid = owner.sdkAccount.accountUuid
 +            val key = uuid.toStorageKeyId()
 +            val summary = if (args.isResidueOnly) {
-@@ -115,5 +98,6 @@ class MigrationCompleteVM(
+@@ -115,5 +99,7 @@ class MigrationCompleteVM(
 -                    totalTransferred = getIronwoodBalance().value,
 -                    totalCount = 0,
 -                    firstAt = 0L,
 -                    lastAt = 0L,
 -                    dustZatoshi = getOrchardBalance().value,
 +                    accountUuid = uuid,
++                    canMigrateResidue = owner.isSpendable && owner !is LedgerAccount,
 +                    canShowCompletion = true,
 +                    totalTransferred = getIronwoodBalance(uuid).value,
 +                    totalCount = null,
 +                    durationSeconds = null,
 +                    dustZatoshi = getOrchardBalance(uuid).value,
-@@ -122,8 +106,7 @@ class MigrationCompleteVM(
+@@ -122,8 +108,7 @@ class MigrationCompleteVM(
 -                // Read the REAL migration summary (amount migrated, transfer count, duration)
 -                // from the ENGINE's persisted migration data — the single source of truth that
 -                // survives completion. The app-side plan is cleared once migration finishes, so
@@ -5842,13 +5903,14 @@ index ca5f70e55..5f305cbeb 100644
 +                val canShowCompletion = transfers != null || (snapshot == null &&
 +                    getOrchardMigrationSdk(key)?.getMigrationStateUnreconciled() == MigrationState.Complete)
 +                val minedAt = transfers?.let { rows -> rows.mapNotNull { it.minedAt }.takeIf { it.size == rows.size } }
-@@ -131,5 +114,8 @@ class MigrationCompleteVM(
+@@ -131,5 +116,9 @@ class MigrationCompleteVM(
 -                    totalTransferred = summary?.totalMigratedZatoshi ?: 0L,
 -                    totalCount = summary?.transferCount ?: 0,
 -                    firstAt = summary?.firstMinedEpochSeconds ?: 0L,
 -                    lastAt = summary?.lastMinedEpochSeconds ?: 0L,
 -                    dustZatoshi = getOrchardBalance().value,
 +                    accountUuid = uuid,
++                    canMigrateResidue = owner.isSpendable && owner !is LedgerAccount,
 +                    canShowCompletion = canShowCompletion,
 +                    totalTransferred = transfers?.takeIf { it.all { row -> row.amountZatoshi > 0L } }
 +                        ?.sumOf { it.amountZatoshi },
@@ -5856,10 +5918,10 @@ index ca5f70e55..5f305cbeb 100644
 +                    durationSeconds = minedAt?.takeIf { it.isNotEmpty() }
 +                        ?.let { (it.max() - it.min()).inWholeSeconds },
 +                    dustZatoshi = getOrchardBalance(uuid).value,
-@@ -137,0 +124,2 @@ class MigrationCompleteVM(
+@@ -137,0 +127,2 @@ class MigrationCompleteVM(
 +            activeCompletionOwner()
 +            summary
-@@ -139,16 +127,7 @@ class MigrationCompleteVM(
+@@ -139,16 +130,7 @@ class MigrationCompleteVM(
 -        // Cancel the background chain and clear any leftover notification as soon as THIS screen
 -        // is shown, not deferred until the user taps "Got it" (the previous behavior — onDone()
 -        // still cancels the scheduler too, harmlessly idempotent, but the notifier calls only ever
@@ -5883,16 +5945,16 @@ index ca5f70e55..5f305cbeb 100644
 +        val owner = getSelectedWalletAccount()
 +        check(owner.sdkAccount.accountUuid.toStorageKeyId() == key) {
 +            "The migration belongs to a different account"
-@@ -155,0 +135 @@ class MigrationCompleteVM(
+@@ -155,0 +138 @@ class MigrationCompleteVM(
 +        return owner
-@@ -157,0 +138 @@ class MigrationCompleteVM(
+@@ -157,0 +141 @@ class MigrationCompleteVM(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -161 +142,3 @@ class MigrationCompleteVM(
+@@ -161 +145,3 @@ class MigrationCompleteVM(
 -            hasLockedOrchardDustStorageProvider.observe(),
 +            loadLce.state.flatMapLatest { state ->
 +                state.success?.accountUuid?.let(getOrchardBalance::observe) ?: flowOf(null)
 +            },
-@@ -164,2 +147,6 @@ class MigrationCompleteVM(
+@@ -164,2 +150,6 @@ class MigrationCompleteVM(
 -            migrateAnywayFailure,
 -        ) { lce, isLocked, migrateAnywayState, lockState, failure ->
 +        ) { lce, available, migrateAnywayState, lockState ->
@@ -5901,22 +5963,23 @@ index ca5f70e55..5f305cbeb 100644
 +                lockState.error != null -> stringRes(DesignR.string.migrationComplete_lockRequestFailed)
 +                else -> null
 +            }
-@@ -167 +154,4 @@ class MigrationCompleteVM(
+@@ -167 +157,4 @@ class MigrationCompleteVM(
 -                createState(summary, isLocked, migrateAnywayState.loading, lockState.loading, failure)
 +                createState(
 +                    summary.copy(dustZatoshi = available?.value ?: summary.dustZatoshi),
 +                    lockNotice, migrateAnywayState.loading, lockState.loading,
 +                )
-@@ -173 +163 @@ class MigrationCompleteVM(
+@@ -173 +166 @@ class MigrationCompleteVM(
 -        isLocked: Boolean,
 +        lockNotice: StringResource?,
-@@ -176 +165,0 @@ class MigrationCompleteVM(
+@@ -176 +168,0 @@ class MigrationCompleteVM(
 -        failure: SubmitResult?,
-@@ -179 +168,2 @@ class MigrationCompleteVM(
+@@ -179 +171,3 @@ class MigrationCompleteVM(
 -            totalTransferred = stringRes(Zatoshi(summary.totalTransferred)),
 +            canShowCompletion = summary.canShowCompletion,
++            canMigrateResidue = summary.canMigrateResidue,
 +            totalTransferred = summary.totalTransferred?.let { stringRes(Zatoshi(it)) },
-@@ -181,15 +171,7 @@ class MigrationCompleteVM(
+@@ -181,15 +175,7 @@ class MigrationCompleteVM(
 -            isDustLocked = isLocked,
 -            transfersProgress =
 -                stringRes(
@@ -5939,12 +6002,12 @@ index ca5f70e55..5f305cbeb 100644
 +            duration = summary.durationSeconds?.let {
 +                stringRes(formatMigrationDuration(it, applyPrivacyFloor = false))
 +            },
-@@ -200,2 +182,2 @@ class MigrationCompleteVM(
+@@ -200,2 +186,2 @@ class MigrationCompleteVM(
 -            onMigrateAnyway = { migrateAnywayLce.guardLoading(::onMigrateAnyway) },
 -            onLockBalance = { lockLce.guardLoading(::onLockBalance) },
 +            onMigrateAnyway = { migrateAnywayLce.guardLoading { onMigrateAnyway(summary.dustZatoshi) } },
 +            onLockBalance = { lockLce.guardLoading { onLockBalance(summary.dustZatoshi) } },
-@@ -203,18 +184,0 @@ class MigrationCompleteVM(
+@@ -203,18 +188,0 @@ class MigrationCompleteVM(
 -            failureSheet =
 -                failure?.let {
 -                    MigrationTransferFailureState(
@@ -5963,7 +6026,7 @@ index ca5f70e55..5f305cbeb 100644
 -                        onDismiss = { migrateAnywayFailure.value = null },
 -                    )
 -                },
-@@ -223,9 +187 @@ class MigrationCompleteVM(
+@@ -223,9 +191 @@ class MigrationCompleteVM(
 -    private fun migrateAnywaySubmitFailureMessage(result: SubmitResult): StringResource =
 -        when (result) {
 -            is SubmitResult.GrpcFailure -> stringRes(DesignR.string.migrationComplete_migrateAnywayFailureNetworkError)
@@ -5974,7 +6037,7 @@ index ca5f70e55..5f305cbeb 100644
 -        }
 -
 +    @Suppress("TooGenericExceptionCaught") // Leave acknowledgment available after a storage or account error.
-@@ -235,36 +191,7 @@ class MigrationCompleteVM(
+@@ -235,36 +195,7 @@ class MigrationCompleteVM(
 -                // Keystone-only auto-continuation (hot-wallet multi-run is deferred): if residual
 -                // Orchard balance is still at or above the engine's real migratable minimum (not
 -                // just non-zero — a multi-round campaign's per-round MigrationState.Complete doesn't
@@ -6018,7 +6081,7 @@ index ca5f70e55..5f305cbeb 100644
 +                    getOrchardBalance(uuid).value >= MIGRATION_RESIDUAL_MIN_ZATOSHI
 +                if (!moreRoundsNeeded && (args.isResidueOnly || hasCompletionEvidence(uuid.toStorageKeyId()))) {
 +                    hasSeenMigrationCompleteStorageProvider.store(uuid.toStorageKeyId(), true)
-@@ -272,4 +199,4 @@ class MigrationCompleteVM(
+@@ -272,4 +203,4 @@ class MigrationCompleteVM(
 -            } finally {
 -                // Guaranteed regardless of the above outcome (or an exception partway through it) —
 -                // navigation away from this screen must never be silently skipped.
@@ -6027,30 +6090,30 @@ index ca5f70e55..5f305cbeb 100644
 +                throw e
 +            } catch (e: Exception) {
 +                migrationLog("Migration acknowledgment unavailable (${e.javaClass.simpleName}).")
-@@ -276,0 +204 @@ class MigrationCompleteVM(
+@@ -276,0 +208 @@ class MigrationCompleteVM(
 +            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-@@ -280,5 +208 @@ class MigrationCompleteVM(
+@@ -280,5 +212 @@ class MigrationCompleteVM(
 -    // "Lock balance" locks the residual Orchard balance directly (real lock in Rust —
 -    // MigrationSdk.lockRemainingOrchardBalance → lockRemainingOrchardBalanceNative), then flips the
 -    // persisted flag that re-renders this screen into its "Orchard balance locked" state. No
 -    // navigation: the user stays on this screen and confirms the result inline.
 -    private fun onLockBalance() =
 +    private fun onLockBalance(reviewedDust: Long) =
-@@ -286,2 +210,4 @@ class MigrationCompleteVM(
+@@ -286,2 +214,4 @@ class MigrationCompleteVM(
 -            lockOrchardBalance()
 -            hasLockedOrchardDustStorageProvider.store(true)
 +            val key = activeCompletionOwner().sdkAccount.accountUuid.toStorageKeyId()
 +            ownsCompletionEntry && lockOrchardBalance(key) {
 +                matchesReviewedResidue(reviewedDust)
 +            }
-@@ -293,5 +219 @@ class MigrationCompleteVM(
+@@ -293,5 +223 @@ class MigrationCompleteVM(
 -    // Mirrors MigrationReviewVM.confirmImmediate() — the canonical reference implementation for
 -    // sweeping a residual balance via the IMMEDIATE-mode send-max Proposal. Unlike Review, there's
 -    // no separate propose-then-confirm split here: propose and submit both happen in this single
 -    // user-triggered action, since this screen never shows a review step of its own for it.
 -    private fun onMigrateAnyway() =
 +    private fun onMigrateAnyway(reviewedDust: Long) =
-@@ -299,15 +221,12 @@ class MigrationCompleteVM(
+@@ -299,15 +225,12 @@ class MigrationCompleteVM(
 -            try {
 -                biometricRepository.requestBiometrics(
 -                    request =
@@ -6078,13 +6141,13 @@ index ca5f70e55..5f305cbeb 100644
 +            activeCompletionOwner()
 +            navigationRouter.stageResultFrom(sourceEntryId, { ownsCompletionEntry }) {
 +                NavigationCommand.Forward(listOf(MigrationReviewArgs(MigrationMode.IMMEDIATE, key)))
-@@ -315,5 +233,0 @@ class MigrationCompleteVM(
+@@ -315,5 +237,0 @@ class MigrationCompleteVM(
 -            val sdk = getOrchardMigrationSdk()
 -            val amount = getOrchardBalance()
 -            val proposal = sdk.proposeImmediateMigration()
 -            pendingMigrateAnywayProposal = MigrateAnywayProposal(proposal, amount)
 -            submitMigrateAnyway(proposal, amount)
-@@ -322,3 +236,5 @@ class MigrationCompleteVM(
+@@ -322,3 +240,5 @@ class MigrationCompleteVM(
 -    private suspend fun retryMigrateAnyway() {
 -        val cached = pendingMigrateAnywayProposal ?: return
 -        submitMigrateAnyway(cached.proposal, cached.amountZatoshi)
@@ -6093,7 +6156,7 @@ index ca5f70e55..5f305cbeb 100644
 +        val balance = getOrchardBalance(account).value
 +        activeCompletionOwner()
 +        return ownsCompletionEntry && balance == reviewed && reviewed > 0
-@@ -327,27 +243,8 @@ class MigrationCompleteVM(
+@@ -327,27 +247,8 @@ class MigrationCompleteVM(
 -    private suspend fun submitMigrateAnyway(proposal: Proposal, amountZatoshi: Zatoshi) {
 -        if (getSelectedWalletAccount() is LedgerAccount) {
 -            throw AccountOperationUnsupportedException.ledger()
@@ -6129,7 +6192,7 @@ index ca5f70e55..5f305cbeb 100644
 +        return snapshot?.areAllMined ?: (
 +            getOrchardMigrationSdk(key)?.getMigrationStateUnreconciled() == MigrationState.Complete
 +        )
-@@ -354,0 +252 @@ class MigrationCompleteVM(
+@@ -354,0 +256 @@ class MigrationCompleteVM(
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/component/MigrationUnavailable.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/component/MigrationUnavailable.kt
 new file mode 100644
@@ -9814,10 +9877,98 @@ index 000000000..a64312e99
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
-index 85531a7b8..ce68f7683 100644
+index 85531a7b8..bc5936fe7 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationBannerStateTest.kt
-@@ -323,12 +323 @@ class MigrationBannerStateTest {
+@@ -169,26 +168,0 @@ class MigrationBannerStateTest {
+-    // ─── §2 In-flight IMMEDIATE staleness ─────────────────────────────────────
+-
+-    /**
+-     * CHARACTERIZATION (known bug — stale "Migrate required" banner during in-flight IMMEDIATE).
+-     *
+-     * An IMMEDIATE migration is a plain send-max sweep using [OrchardMigrationSdk.proposeImmediateMigration]
+-     * + the existing SubmitProposalUseCase pipeline. It bypasses the migration engine entirely:
+-     *   - No MigrationState row is written → sdkState stays at whatever it was before (null / NotStarted).
+-     *   - No MigrationPlan is persisted → plan stays null.
+-     *
+-     * While the sweep is in-flight (broadcast but not yet confirmed):
+-     *   - orchardBalanceZatoshi is still the PRE-broadcast value (≥ MIGRATION_RESIDUAL_MIN_ZATOSHI).
+-     *   - sdkState == null (or NotStarted), no-run.
+-     *   - → [migrationMessageFor] fires the "orchardBalance >= min && no-run" branch: "Migrate required".
+-     *
+-     * The reactive [getOrchardBalance.observe()] fix (see observeMigrationMessage()) eliminated the
+-     * one-shot stale problem where the balance was read once and never updated. But it does NOT
+-     * eliminate this gap: for the entire duration between broadcast and first confirmation, the balance
+-     * is non-zero (unconfirmed funds are still counted as part of orchardBalance until the tx mines),
+-     * so the banner keeps firing. This is the "0.000 + Migrate required while IMMEDIATE in flight" bug
+-     * described in project_migration_banner_stale_immediate.md.
+-     *
+-     * This test PINS the current (buggy) behavior. A fix must make [migrationMessageFor]
+-     * (or its callers) aware that an IMMEDIATE is in flight — e.g. via a dedicated flag or
+-     * by routing IMMEDIATE through the plan/MigrationState machinery — and return null in that window.
+-     */
+@@ -196,5 +170,13 @@ class MigrationBannerStateTest {
+-    fun inFlightImmediateWithNonZeroBalanceShowsRequiredBanner_CHARACTERIZATION_BUG() {
+-        // Simulates: IMMEDIATE broadcast, not yet confirmed; balance still shows the full amount.
+-        // sdkState is null (IMMEDIATE never writes to the migration engine).
+-        // plan is null (IMMEDIATE never persists an app-side plan).
+-        val inFlightOrchardBalance = MIGRATION_RESIDUAL_MIN_ZATOSHI + 5_000_000L // 0.06 ZEC, still reported
++    fun unsupportedSignerCanStillSeeResidueForLocalLockButDoesNotGetAnUnavailableMigration() {
++        val insufficientForAutomatic = 500_000L
++        val large = migrationMessageFor(
++            sdkState = null, snapshot = null, hasSeenComplete = false,
++            orchardBalanceZatoshi = MIGRATION_RESIDUAL_MIN_ZATOSHI, supportsNewMigration = false,
++        )
++        val residue = migrationMessageFor(
++            sdkState = null, snapshot = null, hasSeenComplete = false,
++            orchardBalanceZatoshi = insufficientForAutomatic, supportsNewMigration = false,
++        )
++        assertNull(large)
++        assertEquals(true, residue?.isResidueOnly)
++    }
+@@ -202,2 +184,4 @@ class MigrationBannerStateTest {
+-        val result =
+-            migrationMessageFor(
++    @Test
++    fun stalePublishedBalanceCannotOfferMigrationWhenTheLiveReadHasNoEligibleFunds() {
++        for (balance in listOf(MIGRATION_RESIDUAL_MIN_ZATOSHI, MIGRATION_RESIDUAL_MIN_ZATOSHI + 5_000_000L)) {
++            val pending = migrationMessageFor(
+@@ -207 +191,2 @@ class MigrationBannerStateTest {
+-                orchardBalanceZatoshi = inFlightOrchardBalance,
++                orchardBalanceZatoshi = balance,
++                migratableOrchardTotalZatoshi = 0L,
+@@ -209,19 +194,2 @@ class MigrationBannerStateTest {
+-
+-        // BUG: Banner fires "Migrate required" even though the sweep is already broadcast.
+-        // Expected (once fixed): null — no banner should show while IMMEDIATE is in flight.
+-        assertEquals(
+-            MigrationHomeMessageData(isRunActive = false),
+-            result,
+-            "BUG: 'Migrate required' banner fires for in-flight IMMEDIATE. " +
+-                "Expected null (no banner) — fix must track in-flight IMMEDIATE state.",
+-        )
+-    }
+-
+-    /**
+-     * CHARACTERIZATION: IMMEDIATE in-flight with exactly the migratable minimum balance — same bug.
+-     * Pins the boundary condition.
+-     */
+-    @Test
+-    fun inFlightImmediateAtExactMinimumBalanceShowsRequiredBanner_CHARACTERIZATION_BUG() {
+-        val result =
+-            migrationMessageFor(
++            assertNull(pending)
++            val available = migrationMessageFor(
+@@ -231 +199,2 @@ class MigrationBannerStateTest {
+-                orchardBalanceZatoshi = MIGRATION_RESIDUAL_MIN_ZATOSHI,
++                orchardBalanceZatoshi = balance,
++                migratableOrchardTotalZatoshi = balance,
+@@ -233,2 +202,2 @@ class MigrationBannerStateTest {
+-        // BUG — same as above, boundary case.
+-        assertEquals(MigrationHomeMessageData(isRunActive = false), result)
++            assertEquals(MigrationHomeMessageData(isRunActive = false), available)
++        }
+@@ -323,12 +292 @@ class MigrationBannerStateTest {
 -    // ─── §4 SIGNATURE-blocked committed schedule routes through "Migration required" ──
 -
 -    /**
@@ -9831,10 +9982,10 @@ index 85531a7b8..ce68f7683 100644
 -     * safely re-enters (it returns the SAME already-committed PCZTs rather than re-committing).
 -     */
 +    // An unsigned committed schedule remains active and exposes signing recovery for its owner.
-@@ -336 +325 @@ class MigrationBannerStateTest {
+@@ -336 +294 @@ class MigrationBannerStateTest {
 -    fun inProgressWithSignatureBlockedTransferShowsMigrationRequired() {
 +    fun inProgressWithSignatureBlockedTransferOffersRecovery() {
-@@ -352,4 +341,6 @@ class MigrationBannerStateTest {
+@@ -352,4 +310,6 @@ class MigrationBannerStateTest {
 -        // Still the InProgress branch (isRunActive flips false, but completedCount/totalCount are
 -        // still populated from the snapshot) — NOT the bare "Migrate now" no-run branches further
 -        // down, which never fire because `when` returns on the first match.
@@ -9845,7 +9996,7 @@ index 85531a7b8..ce68f7683 100644
 +            ),
 +            result,
 +        )
-@@ -392 +383,6 @@ class MigrationBannerStateTest {
+@@ -392 +352,6 @@ class MigrationBannerStateTest {
 -        assertEquals(MigrationHomeMessageData(isRunActive = false, completedCount = 1, totalCount = 2), result)
 +        assertEquals(
 +            MigrationHomeMessageData(
@@ -9995,7 +10146,7 @@ index f030dbba0..ae650f0e1 100644
 +
 +            busy = false
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
-index 14369fe4c..1e34f397a 100644
+index 14369fe4c..d335c664e 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.MigrationState
@@ -10010,17 +10161,19 @@ index 14369fe4c..1e34f397a 100644
 @@ -13,2 +12,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
 -import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 -import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
-@@ -18 +15,0 @@ import co.electriccoin.zcash.ui.common.model.MutableLce
+@@ -16,0 +15 @@ import co.electriccoin.zcash.ui.common.model.KeystoneAccount
++import co.electriccoin.zcash.ui.common.model.LedgerAccount
+@@ -18 +16,0 @@ import co.electriccoin.zcash.ui.common.model.MutableLce
 -import co.electriccoin.zcash.ui.common.model.SubmitResult
-@@ -20,0 +18 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -20,0 +19 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
-@@ -25 +22,0 @@ import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
+@@ -25 +23,0 @@ import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
 -import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
-@@ -27,3 +23,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
+@@ -27,3 +24,0 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageP
 -import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 -import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 -import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
-@@ -31,0 +26,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
+@@ -31,0 +27,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 +import kotlin.test.assertFalse
 +import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
@@ -10028,43 +10181,43 @@ index 14369fe4c..1e34f397a 100644
 +import kotlin.time.Instant
 +import kotlin.test.assertNull
 +import co.electriccoin.zcash.ui.design.R as DesignR
-@@ -34,0 +36 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+@@ -34,0 +37 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
-@@ -37,3 +39,2 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -37,3 +40,2 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 -import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 -import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 +import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
-@@ -43,0 +45 @@ import io.mockk.mockk
+@@ -43,0 +46 @@ import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
-@@ -46,0 +49,2 @@ import kotlinx.coroutines.flow.Flow
+@@ -46,0 +50,2 @@ import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.map
-@@ -48 +51,0 @@ import kotlinx.coroutines.flow.emptyFlow
+@@ -48 +52,0 @@ import kotlinx.coroutines.flow.emptyFlow
 -import kotlinx.coroutines.flow.flowOf
-@@ -96 +99 @@ class MigrationCompleteVMTest {
+@@ -96 +100 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { seen.store(true) }
 +            coVerify(exactly = 0) { seen.store(any(), true) }
-@@ -118 +121 @@ class MigrationCompleteVMTest {
+@@ -118 +122 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { seen.store(true) }
 +            coVerify(exactly = 0) { seen.store(any(), true) }
-@@ -139 +142 @@ class MigrationCompleteVMTest {
+@@ -139 +143 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -162 +165 @@ class MigrationCompleteVMTest {
+@@ -162 +166 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -186 +189 @@ class MigrationCompleteVMTest {
+@@ -186 +190 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -208 +211 @@ class MigrationCompleteVMTest {
+@@ -208 +212 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -244 +247 @@ class MigrationCompleteVMTest {
+@@ -244 +248 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 1) { seen.store(true) }
 +            coVerify(exactly = 1) { seen.store(any(), true) }
-@@ -257,2 +260,7 @@ class MigrationCompleteVMTest {
+@@ -257,2 +261,7 @@ class MigrationCompleteVMTest {
 -    fun migrateAnywayForZashiAccountSignsAndSubmitsProposalDirectly() =
 -        runTest {
 +    fun migrateAnywayOpensASeparateReviewForBothSpendableAccountKinds() = runTest {
@@ -10074,7 +10227,7 @@ index 14369fe4c..1e34f397a 100644
 +        )
 +        for (account in accounts) {
 +            val owner = account.sdkAccount.accountUuid.toStorageKeyId()
-@@ -260,20 +268,8 @@ class MigrationCompleteVMTest {
+@@ -260,20 +269,8 @@ class MigrationCompleteVMTest {
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
 -            val proposal = mockk<Proposal>(relaxed = true)
 -            val usk = mockk<UnifiedSpendingKey>(relaxed = true)
@@ -10103,15 +10256,15 @@ index 14369fe4c..1e34f397a 100644
 +                getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
 +                args = MigrationCompleteArgs(isResidueOnly = true),
 +            )
-@@ -283,3 +279,2 @@ class MigrationCompleteVMTest {
+@@ -283,3 +280,2 @@ class MigrationCompleteVMTest {
 -
 -            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proposal, usk) }
 -            assertEquals(listOf<Any>(MigrationSuccessArgs("txid")), router.forwardedRoutes)
 +            assertEquals(listOf<Any>(MigrationReviewArgs(MigrationMode.IMMEDIATE, owner)), router.forwardedRoutes)
 +            coVerify(exactly = 0) { sdk.proposeImmediateMigration() }
-@@ -286,0 +282 @@ class MigrationCompleteVMTest {
+@@ -286,0 +283 @@ class MigrationCompleteVMTest {
 +    }
-@@ -289,8 +285,11 @@ class MigrationCompleteVMTest {
+@@ -289,8 +286,11 @@ class MigrationCompleteVMTest {
 -    fun migrateAnywayForKeystoneAccountBuildsPcztAndNavigatesToSign() =
 -        runTest {
 -            val router = FakeNavigationRouter()
@@ -10131,7 +10284,7 @@ index 14369fe4c..1e34f397a 100644
 +                if (pending) {
 +                    requested.complete(Unit)
 +                    held.await()
-@@ -298,21 +297,2 @@ class MigrationCompleteVMTest {
+@@ -298,21 +298,2 @@ class MigrationCompleteVMTest {
 -            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
 -
@@ -10155,7 +10308,7 @@ index 14369fe4c..1e34f397a 100644
 -            assertEquals(1, router.forwardedRoutes.count { it == SignKeystoneTransactionArgs })
 +                MigrationState.Complete
 +            }
-@@ -319,0 +300,16 @@ class MigrationCompleteVMTest {
+@@ -319,0 +301,16 @@ class MigrationCompleteVMTest {
 +        val vm = vm(
 +            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
 +            orchardBalanceZatoshi = 500_000L,
@@ -10172,7 +10325,7 @@ index 14369fe4c..1e34f397a 100644
 +        advanceUntilIdle()
 +        assertEquals(emptyList(), router.forwardedRoutes)
 +    }
-@@ -322,29 +318,8 @@ class MigrationCompleteVMTest {
+@@ -322,29 +319,8 @@ class MigrationCompleteVMTest {
 -    fun summaryIsReadFromEngineSdkNotTheAppSidePlan() =
 -        runTest {
 -            // The Migration Complete summary (amount migrated / transfer count / duration) must come
@@ -10210,7 +10363,7 @@ index 14369fe4c..1e34f397a 100644
 +        val heldLookup = CompletableDeferred<OrchardMigrationSdk>()
 +        val resolveSdk = mockk<GetOrchardMigrationSdkUseCase> {
 +            coEvery { this@mockk(any<String>()) } coAnswers { heldLookup.await() }
-@@ -351,0 +327,29 @@ class MigrationCompleteVMTest {
+@@ -351,0 +328,29 @@ class MigrationCompleteVMTest {
 +        val vm = vm(
 +            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
 +            orchardBalanceZatoshi = orchardBalance.value,
@@ -10240,7 +10393,7 @@ index 14369fe4c..1e34f397a 100644
 +        advanceUntilIdle()
 +        coVerify(exactly = 1) { sdk.lockRemainingOrchardBalance() }
 +    }
-@@ -354,27 +358,37 @@ class MigrationCompleteVMTest {
+@@ -354,27 +359,37 @@ class MigrationCompleteVMTest {
 -    fun residueVariantReadsTotalTransferredFromLiveIronwoodBalanceNotEngineSummary() =
 -        runTest {
 -            // MOB-1750: for isResidueOnly, "In Ironwood" must be the live Ironwood pool balance
@@ -10305,7 +10458,7 @@ index 14369fe4c..1e34f397a 100644
 +        advanceUntilIdle()
 +        coVerify(exactly = 2) { sdk.lockRemainingOrchardBalance() }
 +    }
-@@ -382,2 +396,27 @@ class MigrationCompleteVMTest {
+@@ -382,2 +397,27 @@ class MigrationCompleteVMTest {
 -            val collectJob = launch { vm.state.collect {} }
 -            advanceUntilIdle()
 +    @Test
@@ -10335,7 +10488,7 @@ index 14369fe4c..1e34f397a 100644
 +        coVerify(exactly = 1) { snapshot(owner) }
 +        collectJob.cancel()
 +    }
-@@ -385,4 +424,5 @@ class MigrationCompleteVMTest {
+@@ -385,4 +425,5 @@ class MigrationCompleteVMTest {
 -            assertEquals(
 -                stringRes(Zatoshi(12_450_000L)),
 -                vm.state.value.content
@@ -10345,10 +10498,10 @@ index 14369fe4c..1e34f397a 100644
 +        val snapshot = mockk<GetMigrationSnapshotUseCase> {
 +            coEvery { this@mockk(any()) } returns LiveMigrationSnapshot(
 +                listOf(crossing(1L, 200_000L, null)), emptyList(), 300L,
-@@ -390,2 +429,0 @@ class MigrationCompleteVMTest {
+@@ -390,2 +430,0 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { sdk.getMigrationSummary() }
 -            collectJob.cancel()
-@@ -392,0 +431,16 @@ class MigrationCompleteVMTest {
+@@ -392,0 +432,16 @@ class MigrationCompleteVMTest {
 +        val vm = vm(
 +            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
 +            orchardBalanceZatoshi = 0L,
@@ -10365,7 +10518,7 @@ index 14369fe4c..1e34f397a 100644
 +        assertNull(state.duration)
 +        collectJob.cancel()
 +    }
-@@ -395,30 +449,17 @@ class MigrationCompleteVMTest {
+@@ -395,30 +450,17 @@ class MigrationCompleteVMTest {
 -    fun durationDoesNotApplyThePrivacyFloorSinceBothTimestampsAreAlreadyMined() =
 -        runTest {
 -            // The displayed duration spans the campaign's first to last MINED transfer -- both
@@ -10413,7 +10566,7 @@ index 14369fe4c..1e34f397a 100644
 +        coVerify(exactly = 0) { snapshot(any()) }
 +        collectJob.cancel()
 +    }
-@@ -426,8 +467,14 @@ class MigrationCompleteVMTest {
+@@ -426,8 +468,14 @@ class MigrationCompleteVMTest {
 -            val expected = stringRes(formatMigrationDuration(spanSeconds, applyPrivacyFloor = false))
 -            assertEquals(
 -                expected,
@@ -10436,25 +10589,45 @@ index 14369fe4c..1e34f397a 100644
 +        minedHeight = minedAt?.let { 11L },
 +        minedAt = minedAt?.let { Instant.fromEpochSeconds(it) },
 +    )
-@@ -488 +534,0 @@ class MigrationCompleteVMTest {
+@@ -480,0 +529,19 @@ class MigrationCompleteVMTest {
++    @Test
++    fun ledgerCompletionKeepsLocalLockWithoutOfferingAnUnsupportedSweep() = runTest {
++        val lock = mockk<LockOrchardBalanceUseCase> { coEvery { this@mockk(any(), any()) } returns true }
++        val vm = vm(
++            account = mockk<LedgerAccount>(relaxed = true) { every { isSpendable } returns true },
++            orchardBalanceZatoshi = 500_000L,
++            router = FakeNavigationRouter(),
++            args = MigrationCompleteArgs(isResidueOnly = true),
++            lockOrchardBalance = lock,
++        )
++        backgroundScope.launch { vm.state.collect {} }
++        advanceUntilIdle()
++        val state = assertNotNull(vm.state.value.content)
++        assertFalse(state.canMigrateResidue)
++        state.onLockBalance()
++        advanceUntilIdle()
++        coVerify(exactly = 1) { lock(any(), any()) }
++    }
++
+@@ -488 +554,0 @@ class MigrationCompleteVMTest {
 -                    coEvery { getMigrationSummary() } returns null
-@@ -490,3 +535,0 @@ class MigrationCompleteVMTest {
+@@ -490,3 +555,0 @@ class MigrationCompleteVMTest {
 -            val zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true)
 -            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
 -            val proposalDataSource = mockk<ProposalDataSource>(relaxed = true)
-@@ -498,4 +541,2 @@ class MigrationCompleteVMTest {
+@@ -498,4 +561,2 @@ class MigrationCompleteVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 -                    zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
 -                    keystoneProposalRepository = keystoneProposalRepository,
 -                    proposalDataSource = proposalDataSource,
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
 +                    args = MigrationCompleteArgs(isResidueOnly = true),
-@@ -518,4 +558,0 @@ class MigrationCompleteVMTest {
+@@ -518,4 +578,0 @@ class MigrationCompleteVMTest {
 -            coVerify(exactly = 0) { zashiSpendingKeyDataSource.getZashiSpendingKey() }
 -            coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
-@@ -524,0 +562,23 @@ class MigrationCompleteVMTest {
+@@ -524,0 +582,23 @@ class MigrationCompleteVMTest {
 +    @Test
 +    fun completionForAStaleOwnerLeavesTheSelectedAccountsScheduleAndPreferencesAlone() = runTest {
 +        val reviewed = AccountUuid.new(ByteArray(16))
@@ -10478,20 +10651,20 @@ index 14369fe4c..1e34f397a 100644
 +        coVerify(exactly = 0) { seen.store(any(), any()) }
 +    }
 +
-@@ -532 +592 @@ class MigrationCompleteVMTest {
+@@ -532 +612 @@ class MigrationCompleteVMTest {
 -        val onMigrateAnyway = MigrationCompleteVM::class.java.getDeclaredMethod("onMigrateAnyway")
 +        val onMigrateAnyway = MigrationCompleteVM::class.java.getDeclaredMethod("onMigrateAnyway", Long::class.java)
-@@ -534 +594 @@ class MigrationCompleteVMTest {
+@@ -534 +614 @@ class MigrationCompleteVMTest {
 -        onMigrateAnyway.invoke(vm)
 +        onMigrateAnyway.invoke(vm, 500_000L)
-@@ -544,0 +605 @@ class MigrationCompleteVMTest {
+@@ -544,0 +625 @@ class MigrationCompleteVMTest {
 +        getMigrationSnapshot: GetMigrationSnapshotUseCase = mockk { coEvery { this@mockk(any()) } returns null },
-@@ -547 +608,3 @@ class MigrationCompleteVMTest {
+@@ -547 +628,3 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns mockk(relaxed = true)
 +                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true) {
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.Complete
 +                }
-@@ -549,6 +612,3 @@ class MigrationCompleteVMTest {
+@@ -549,6 +632,3 @@ class MigrationCompleteVMTest {
 -        zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource = mockk(relaxed = true),
 -        biometricRepository: BiometricRepository = mockk(relaxed = true),
 -        proposalDataSource: ProposalDataSource = mockk(relaxed = true),
@@ -10501,14 +10674,14 @@ index 14369fe4c..1e34f397a 100644
 +        sourceEntryId: String? = null,
 +        orchardBalance: MutableStateFlow<Long> = MutableStateFlow(orchardBalanceZatoshi),
 +        lockOrchardBalance: LockOrchardBalanceUseCase = mockk(relaxed = true),
-@@ -559 +619,2 @@ class MigrationCompleteVMTest {
+@@ -559 +639,2 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(orchardBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } coAnswers { Zatoshi(orchardBalance.value) }
 +                every { observe(any<AccountUuid>()) } returns orchardBalance.map { Zatoshi(it) }
-@@ -563 +624 @@ class MigrationCompleteVMTest {
+@@ -563 +644 @@ class MigrationCompleteVMTest {
 -                coEvery { this@mockk() } returns Zatoshi(ironwoodBalanceZatoshi)
 +                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(ironwoodBalanceZatoshi)
-@@ -566,7 +626,0 @@ class MigrationCompleteVMTest {
+@@ -566,7 +646,0 @@ class MigrationCompleteVMTest {
 -        hasLockedOrchardDustStorageProvider =
 -            mockk<HasLockedOrchardDustStorageProvider>(relaxed = true) {
 -                // A relaxed mock's default Flow return is empty (never emits), which would starve
@@ -10516,7 +10689,7 @@ index 14369fe4c..1e34f397a 100644
 -                // once. Tests that read vm.state.value.content need this to actually fire.
 -                every { observe() } returns flowOf(false)
 -            },
-@@ -580,7 +634,3 @@ class MigrationCompleteVMTest {
+@@ -580,7 +654,3 @@ class MigrationCompleteVMTest {
 -        lockOrchardBalance = mockk(relaxed = true),
 -        zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
 -        biometricRepository = biometricRepository,
@@ -10527,7 +10700,7 @@ index 14369fe4c..1e34f397a 100644
 +        getMigrationSnapshot = getMigrationSnapshot,
 +        lockOrchardBalance = lockOrchardBalance,
 +        sourceEntryId = sourceEntryId,
-@@ -589 +639,2 @@ class MigrationCompleteVMTest {
+@@ -589 +659,2 @@ class MigrationCompleteVMTest {
 -    private class FakeNavigationRouter : NavigationRouter {
 +    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
 +        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
@@ -31967,7 +32140,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..7fb45a587 100644
+index 7b9af8bf7..5875e2065 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -32052,9 +32225,13 @@ index 7b9af8bf7..7fb45a587 100644
 @@ -284 +288 @@
 -    <string name="delete_wallet_text_2">Restablecer la aplicación Zodl eliminará la base de datos y los datos en
 +    <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
-@@ -286 +290 @@
+@@ -286,3 +290,3 @@
 -    <string name="deleteWallet_message4">Una vez que restablezcas Zodl, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de Zodl y la Altura de Cumpleaños de la Billetera.</string>
+-    <string name="deleteWallet_metadataWarn1">Conserva la copia de seguridad cifrada de los metadatos, que incluye contactos, notas, marcadores y detalles de intercambios/pagos.</string>
+-    <string name="deleteWallet_metadataWarn2">Estos datos no se podrán recuperar durante la restauración.</string>
 +    <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
++    <string name="deleteWallet_metadataWarn1">Conserva en este dispositivo los contactos, notas, marcadores y detalles de intercambios y pagos cifrados.</string>
++    <string name="deleteWallet_metadataWarn2">Desactivar esta opción elimina las copias de seguridad locales de todas las billeteras. El restablecimiento no afecta las copias guardadas por Android.</string>
 @@ -290 +294 @@
 -    <string name="deleteWallet_actionButtonTitle">Restablecer Zodl</string>
 +    <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
@@ -32317,7 +32494,7 @@ index 7b9af8bf7..7fb45a587 100644
 +    <string name="migrationSuccess_subtitle">Migración enviada. Consulta Actividad para ver la confirmación.</string>
 @@ -1160 +1166 @@
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Un monto tan específico puede identificarte en la red. Para proteger tu privacidad, te recomendamos bloquear este saldo en lugar de migrarlo.</string>
-+    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
++    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
 @@ -1165,2 +1171,2 @@
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Saldo de Orchard bloqueado</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s ahora está bloqueado en Orchard. El bloqueo hace que este monto no se pueda gastar para proteger tu privacidad.</string>
@@ -32325,13 +32502,16 @@ index 7b9af8bf7..7fb45a587 100644
 +    <string name="migrationComplete_lockRequestCompleted">Solicitud de bloqueo completada.</string>
 @@ -1176 +1182 @@
 -    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
-+    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
++    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
 @@ -1179 +1185 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
 @@ -1186 +1192 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
+@@ -1212 +1218 @@
+-    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca este saldo como </string>
++    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca todos los fondos disponibles de Orchard de esta cuenta como </string>
 @@ -1215 +1221 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
@@ -32407,7 +32587,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..8091aebb6 100644
+index f41234151..20c291a0b 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -32970,7 +33150,7 @@ index f41234151..8091aebb6 100644
 +    <string name="migrationSuccess_subtitle">Migration submitted. Check Activity for confirmation.</string>
 @@ -1453 +1303 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. An amount this specific can identify you on the network. To protect your privacy, we recommend locking this balance rather than migrating it.</string>
-+    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all Orchard funds in this account.</string>
++    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
 @@ -1458,2 +1308,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Orchard balance locked</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
@@ -32985,7 +33165,7 @@ index f41234151..8091aebb6 100644
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
 @@ -1469 +1319 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving an amount this specific would link your Ironwood funds back to your Orchard history. We recommend locking it instead.</string>
-+    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all Orchard funds in this account.</string>
++    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
 @@ -1472 +1322 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
@@ -32997,6 +33177,9 @@ index f41234151..8091aebb6 100644
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
+@@ -1511 +1361 @@ Your vote can no longer be submitted.</string>
+-    <string name="migrationLockExplainer_bullet1Prefix">Locking marks this balance as </string>
++    <string name="migrationLockExplainer_bullet1Prefix">Locking marks all available Orchard funds in this account as </string>
 @@ -1514 +1364 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
@@ -44584,7 +44767,7 @@ index 9f6c40008..a20fc3aae 100644
 @@ -54,0 +39 @@ class DisconnectUseCase(
 +            logger("Hardware account removed")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
-index 565cd3bea..59eb3f925 100644
+index 565cd3bea..d9b421f57 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ErrorMapperUseCase.kt
 @@ -17 +17,3 @@ import co.electriccoin.zcash.ui.design.util.stringRes
@@ -44599,27 +44782,37 @@ index 565cd3bea..59eb3f925 100644
 +
 @@ -54,0 +60 @@ class ErrorMapperUseCase(
 +        supportWithoutDiagnostics: Boolean = false,
-@@ -101,0 +108,13 @@ class ErrorMapperUseCase(
+@@ -101,0 +108,8 @@ class ErrorMapperUseCase(
 +            onReport = if (supportWithoutDiagnostics) {
-+                { sendEmail.sendBlankSupport() }
-+            } else {
-+                val allowed = reportAccess.captureWallet()
-+                val onClick: () -> Unit = {
-+                    if (allowed()) {
-+                        scope.launch {
-+                            sendEmail(error.cause as? Exception ?: Exception(error.cause.message, error.cause), allowed)
-+                        }
-+                    }
++                { dismiss ->
++                    dismiss()
++                    sendEmail.sendBlankSupport()
 +                }
-+                onClick
++            } else {
++                diagnosticReport(error.cause)
 +            },
-@@ -112,0 +132 @@ class ErrorMapperUseCase(
-+        onReport: () -> Unit,
-@@ -125,3 +145 @@ class ErrorMapperUseCase(
+@@ -104,0 +119,11 @@ class ErrorMapperUseCase(
++    private fun diagnosticReport(cause: Throwable): (() -> Unit) -> Unit {
++        val walletAllowed = reportAccess.captureWallet()
++        return { dismiss ->
++            val allowed = reportAccess.bindToCurrentEntry(walletAllowed)
++            dismiss()
++            if (allowed()) {
++                scope.launch { sendEmail(cause as? Exception ?: Exception(cause.message, cause), allowed) }
++            }
++        }
++    }
++
+@@ -112,0 +138 @@ class ErrorMapperUseCase(
++        onReport: (() -> Unit) -> Unit,
+@@ -123,6 +149 @@ class ErrorMapperUseCase(
+-            onSecondary = {
+-                error.dismiss()
 -                scope.launch {
 -                    sendEmail(error.cause as? Exception ?: Exception(error.cause.message, error.cause))
 -                }
-+                onReport()
+-            },
++            onSecondary = { onReport(error.dismiss) },
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt
 new file mode 100644
 index 000000000..c04445729
@@ -49435,12 +49628,13 @@ index 9ef0dd1bf..dea6e60fa 100644
 +        navigationRouter.replaceAll(route)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt
 new file mode 100644
-index 000000000..8d8d96cde
+index 000000000..ef0f46366
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,48 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
++import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import kotlinx.coroutines.CoroutineScope
@@ -49455,11 +49649,17 @@ index 000000000..8d8d96cde
 +    private val appAccessSession: AppAccessSession,
 +    private val walletWriteAccess: WalletWriteAccess,
 +    private val observeAccount: ObserveSelectedWalletAccountUseCase,
++    private val navigationRouter: NavigationRouter,
 +) {
 +    internal fun captureWallet(): () -> Boolean {
 +        val token = walletWriteAccess.token()
 +        val grant = appAccessSession.grant.value
 +        return { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
++    }
++
++    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean {
++        val source = navigationRouter.activeEntry.value?.id
++        return { source != null && navigationRouter.activeEntry.value?.id == source && allowed() }
 +    }
 +
 +    internal fun bind(scope: CoroutineScope): () -> (() -> Boolean) {
@@ -49473,7 +49673,7 @@ index 000000000..8d8d96cde
 +            .stateIn(scope, SharingStarted.Eagerly, null)
 +        return {
 +            val grant = appAccessSession.grant.value
-+            {
++            bindToCurrentEntry {
 +                scope.isActive && owner != null && selections.value === owner &&
 +                    appAccessSession.permits(grant) && walletWriteAccess.permits(token)
 +            }
@@ -52517,7 +52717,7 @@ index b7dee6ea7..7f5097f39 100644
 -    val negative: ButtonState,
 +    val negative: ButtonState?,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/ErrorVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/ErrorVM.kt
-index ecf0a7dc2..ccc52cb50 100644
+index ecf0a7dc2..96d62a543 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/ErrorVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/ErrorVM.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -52603,7 +52803,7 @@ index ecf0a7dc2..ccc52cb50 100644
 -                navigationRouter.back()
 -                sendEmailUseCase(exception)
 -            }
-+            if (send(allowed)) navigationRouter.back()
++            if (send(allowed) && allowed()) navigationRouter.back()
 @@ -249,0 +245 @@ class ErrorVM(
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/NavigateToErrorUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/NavigateToErrorUseCase.kt
@@ -52709,7 +52909,7 @@ index 59f9821db..b668e532f 100644
 -data object SyncErrorArgs
 +data class SyncErrorArgs(val id: String) : ErrorRoute
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/SyncErrorVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/SyncErrorVM.kt
-index c7058657a..81cd10120 100644
+index c7058657a..9cd531737 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/SyncErrorVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/error/SyncErrorVM.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
@@ -52736,7 +52936,7 @@ index c7058657a..81cd10120 100644
 @@ -90,2 +103 @@ class SyncErrorVM(
 -            navigationRouter.back()
 -            sendEmailUseCase(args.synchronizerError)
-+            if (sendEmailUseCase(args.synchronizerError, allowed)) navigationRouter.back()
++            if (sendEmailUseCase(args.synchronizerError, allowed) && allowed()) navigationRouter.back()
 @@ -92,0 +105 @@ class SyncErrorVM(
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/optin/ExchangeRateOptInScreen.kt
@@ -89248,14 +89448,15 @@ index 000000000..12197a153
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..9835571ab
+index 000000000..f107f2a63
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,334 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
 +import android.content.Intent
++import android.content.res.Configuration
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.CloseableSynchronizer
 +import cash.z.ecc.android.sdk.WalletCoordinator
@@ -89278,6 +89479,7 @@ index 000000000..9835571ab
 +import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 +import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
++import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import io.mockk.coEvery
 +import io.mockk.coVerify
@@ -89305,6 +89507,7 @@ index 000000000..9835571ab
 +import org.robolectric.Shadows.shadowOf
 +import org.robolectric.annotation.Config
 +import java.io.File
++import java.util.Locale
 +import kotlin.test.AfterTest
 +import kotlin.test.BeforeTest
 +import kotlin.test.Test
@@ -89341,6 +89544,22 @@ index 000000000..9835571ab
 +    fun tearDown() = runBlocking {
 +        if (::vm.isInitialized) vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
 +        Dispatchers.resetMain()
++    }
++
++    @Test
++    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
++        createViewModel()
++        val checkbox = assertNotNull(vm.state.value.content).checkboxState
++        val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
++        val context = RuntimeEnvironment.getApplication()
++
++        for ((language, allWallets) in listOf("en" to "all wallets", "es" to "todas las billeteras")) {
++            val configuration = Configuration(context.resources.configuration).apply {
++                setLocale(Locale.forLanguageTag(language))
++            }
++            val text = context.createConfigurationContext(configuration).getString(warning.resource)
++            assertTrue(text.contains(allWallets) && text.contains("Android"))
++        }
 +    }
 +
 +    @Test
@@ -89532,7 +89751,7 @@ index 000000000..9835571ab
 +        }
 +        progress = ResetProgressStore(context, DirectorySync {})
 +        val writeAccess = WalletWriteAccess(progress)
-+        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk())
++        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk(), mockk())
 +        assertTrue(reportAccess.captureWallet()())
 +        val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
 +        val reset = ResetZashiUseCase(
@@ -90339,14 +90558,15 @@ index dec0b8db0..1f2fb5248 100644
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt
 new file mode 100644
-index 000000000..7bd7cde99
+index 000000000..2734aa2e6
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/ErrorReportHandoffTest.kt
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,164 @@
 +package co.electriccoin.zcash.ui.screen.error
 +
 +import android.content.Intent
 +import androidx.lifecycle.viewModelScope
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -90418,7 +90638,7 @@ index 000000000..7bd7cde99
 +    fun walletlessRestoreOffersABlankSupportDraftWithoutCollectingDiagnostics() {
 +        val application = RuntimeEnvironment.getApplication()
 +        val diagnostics = mockk<GetSupportUseCase>()
-+        val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk())
++        val access = WalletReportAccess(AppAccessSession(), WalletWriteAccess(), mockk(), mockk())
 +        val mapper = ErrorMapperUseCase(SendEmailUseCase(application, diagnostics, mockk()), mockk(), access)
 +        val failure = LceContent.Error(IllegalStateException("synthetic private detail"), {}, {})
 +        requireNotNull(mapper.mapToState(failure, supportWithoutDiagnostics = true).state.secondaryAction).onClick()
@@ -90435,7 +90655,9 @@ index 000000000..7bd7cde99
 +        val writeAccess = WalletWriteAccess()
 +        val selected = MutableStateFlow<WalletAccount?>(null)
 +        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selected }
-+        val permission = WalletReportAccess(session, writeAccess, ObserveSelectedWalletAccountUseCase(accounts))
++        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("error", null))
++        val router = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
++        val permission = WalletReportAccess(session, writeAccess, ObserveSelectedWalletAccountUseCase(accounts), router)
 +        val release = CompletableDeferred<Unit>()
 +        val collecting = CompletableDeferred<Unit>()
 +        val diagnostics = mockk<GetSupportUseCase> {
@@ -90445,7 +90667,6 @@ index 000000000..7bd7cde99
 +                mockk<SupportInfo> { every { toSupportString(any()) } returns "Synthetic diagnostics" }
 +            }
 +        }
-+        val router = mockk<NavigationRouter>(relaxed = true)
 +        val owner = NavigateToErrorUseCase(router)
 +        val send = SendEmailUseCase(application, diagnostics, mockk())
 +        val failure = IllegalStateException("synthetic failure")
@@ -90484,6 +90705,7 @@ index 000000000..7bd7cde99
 +                }
 +                Change.ACCOUNT -> selected.value = EditAccountFixtures.keystone()
 +                Change.RESET -> writeAccess.beginReset()
++                Change.COVERED -> active.value = ActiveNavigationEntry("new-screen", null)
 +                Change.NONE -> Unit
 +            }
 +            runCurrent()
@@ -90501,7 +90723,7 @@ index 000000000..7bd7cde99
 +        }
 +    }
 +
-+    private enum class Change { LOCK, ACCOUNT, RESET, NONE }
++    private enum class Change { LOCK, ACCOUNT, RESET, COVERED, NONE }
 +    private enum class Route { GENERAL, SYNC, PARTIAL, MAPPER }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/LedgerErrorCopyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/LedgerErrorCopyTest.kt

@@ -1300,7 +1300,7 @@
     <string name="migrationComplete_transfersLabel">Transfers</string>
     <string name="migrationComplete_durationLabel">Duration</string>
     <string name="migrationComplete_orchardBalanceRemainingTitle">Orchard balance remaining</string>
-    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all Orchard funds in this account.</string>
+    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
     <string name="migrationComplete_migrateAnyway">Migrate anyway</string>
     <string name="migrationComplete_migrating">Migrating…</string>
     <string name="migrationComplete_lockBalance">Lock balance</string>
@@ -1316,7 +1316,7 @@
     <string name="migrationComplete_residueSubtitle">A small balance is still sitting in Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">In Ironwood</string>
     <string name="migrationComplete_leftInOrchardLabel">Left in Orchard</string>
-    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all Orchard funds in this account.</string>
+    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
 
     <string name="migrationNotifPermission_title">Allow Notifications</string>
     <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
@@ -1358,7 +1358,7 @@
     <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 
     <string name="migrationLockExplainer_title">What does locking do?</string>
-    <string name="migrationLockExplainer_bullet1Prefix">Locking marks this balance as </string>
+    <string name="migrationLockExplainer_bullet1Prefix">Locking marks all available Orchard funds in this account as </string>
     <string name="migrationLockExplainer_bullet1Bold">unspendable</string>
     <string name="migrationLockExplainer_bullet1Suffix">, so it can\'t compromise your privacy in future transactions.</string>
     <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>

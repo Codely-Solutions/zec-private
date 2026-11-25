@@ -23,8 +23,11 @@ with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
 
 class DirectUpgradeBaselineTest(unittest.TestCase):
     def test_pending_publication_uses_attested_installed_upgrade_when_present(self):
-        fixture = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330)
+        fixture = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330,
+                       candidate_apk_sha256='d' * 64, instrumentation_apk_sha256='e' * 64)
         current = dict(baseline_source_sha=fixture['source_sha'], baseline_version_code=330,
+                       baseline_apk_sha256=fixture['candidate_apk_sha256'],
+                       baseline_instrumentation_apk_sha256=fixture['instrumentation_apk_sha256'],
                        hosted_fixture=fixture)
         old = dict(baseline_source_sha='b' * 40, baseline_version_code=329)
         metadata = MagicMock()
@@ -34,10 +37,12 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
             publish.require_publication_baseline({'core': current}, root, metadata)
             publish.require_publication_baseline(
                 {'core': old, 'installed_upgrade': current, 'funded_reuse': {}}, root, metadata)
-            for proof in ({'core': old}, {'core': current, 'installed_upgrade': old, 'funded_reuse': {}}):
+            for proof in ({'core': old}, {'core': current, 'installed_upgrade': old, 'funded_reuse': {}},
+                          {'core': dict(current, baseline_apk_sha256='0' * 64)},
+                          {'core': dict(current, baseline_instrumentation_apk_sha256='0' * 64)}):
                 with self.assertRaisesRegex(ValueError, 'attested upgrade baseline'):
                     publish.require_publication_baseline(proof, root, metadata)
-            self.assertEqual(verify_latest.call_count, 4)
+            self.assertEqual(verify_latest.call_count, 6)
             verify_latest.assert_called_with(root, metadata)
 
     def test_direct_receipt_must_name_the_same_candidate_source_and_version(self):

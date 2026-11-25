@@ -240,7 +240,7 @@ class ErrorVM(
         val allowed = reportPermission()
         if (!allowed()) return
         viewModelScope.launch {
-            if (send(allowed)) navigationRouter.back()
+            if (send(allowed) && allowed()) navigationRouter.back()
         }
     }
 }

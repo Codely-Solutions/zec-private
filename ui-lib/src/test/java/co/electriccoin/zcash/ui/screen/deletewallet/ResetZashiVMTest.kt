@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
@@ -24,6 +25,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -51,6 +53,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -87,6 +90,22 @@ class ResetZashiVMTest {
     fun tearDown() = runBlocking {
         if (::vm.isInitialized) vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
+        createViewModel()
+        val checkbox = assertNotNull(vm.state.value.content).checkboxState
+        val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
+        val context = RuntimeEnvironment.getApplication()
+
+        for ((language, allWallets) in listOf("en" to "all wallets", "es" to "todas las billeteras")) {
+            val configuration = Configuration(context.resources.configuration).apply {
+                setLocale(Locale.forLanguageTag(language))
+            }
+            val text = context.createConfigurationContext(configuration).getString(warning.resource)
+            assertTrue(text.contains(allWallets) && text.contains("Android"))
+        }
     }
 
     @Test
@@ -278,7 +297,7 @@ class ResetZashiVMTest {
         }
         progress = ResetProgressStore(context, DirectorySync {})
         val writeAccess = WalletWriteAccess(progress)
-        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk())
+        reportAccess = WalletReportAccess(AppAccessSession().apply { unlock() }, writeAccess, mockk(), mockk())
         assertTrue(reportAccess.captureWallet()())
         val preferences = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val reset = ResetZashiUseCase(

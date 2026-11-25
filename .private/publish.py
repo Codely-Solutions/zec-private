@@ -39,7 +39,7 @@ def require_current_local_upgrade(root=ROOT, metadata=None):
             'Direct publication requires the paired fixture for the latest wallet release')
     from hosted_release import require_current_hosted_upgrade
 
-    require_current_hosted_upgrade(root, metadata or Metadata(REPO))
+    return require_current_hosted_upgrade(root, metadata or Metadata(REPO))
 
 
 def read_attestation(path, expected_digest):
@@ -266,10 +266,11 @@ def main():
 
         if run('git', 'ls-tree', '--name-only', expected, '--', CUSTOM_MARKER):
             raise RuntimeError('Custom releases require hosted acceptance and explicit dispatch')
-        require_current_local_upgrade()
+        baseline = require_current_local_upgrade()
         core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
         core=json.loads(core_bytes)
         validate_direct_core_candidate(core, expected, proof['versionCode'])
+        require_attested_upgrade(core, baseline)
         acceptance_revision=controller if late_attestation else expected
         core_inputs=validate_core_sources(core,expected,acceptance_revision)
         core_artifact=artifact/'core-acceptance.json'
@@ -453,8 +454,14 @@ def require_publication_baseline(proof, root=None, metadata=None):
 
     fixture = require_current_hosted_upgrade(root or ROOT, metadata or Metadata(repo=REPO))
     upgrade = proof['installed_upgrade'] if 'funded_reuse' in proof else proof['core']
+    require_attested_upgrade(upgrade, fixture)
+
+
+def require_attested_upgrade(upgrade, fixture):
     require(upgrade.get('baseline_source_sha') == fixture['source_sha']
             and upgrade.get('baseline_version_code') == fixture['version_code']
+            and upgrade.get('baseline_apk_sha256') == fixture['candidate_apk_sha256']
+            and upgrade.get('baseline_instrumentation_apk_sha256') == fixture['instrumentation_apk_sha256']
             and upgrade.get('hosted_fixture', fixture) == fixture,
             'The attested upgrade baseline differs from the latest public release fixture')
 

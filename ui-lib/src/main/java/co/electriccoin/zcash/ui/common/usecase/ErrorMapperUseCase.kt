@@ -106,19 +106,25 @@ class ErrorMapperUseCase(
             isSupportFirst = isSupportFirst,
             icon = icon,
             onReport = if (supportWithoutDiagnostics) {
-                { sendEmail.sendBlankSupport() }
-            } else {
-                val allowed = reportAccess.captureWallet()
-                val onClick: () -> Unit = {
-                    if (allowed()) {
-                        scope.launch {
-                            sendEmail(error.cause as? Exception ?: Exception(error.cause.message, error.cause), allowed)
-                        }
-                    }
+                { dismiss ->
+                    dismiss()
+                    sendEmail.sendBlankSupport()
                 }
-                onClick
+            } else {
+                diagnosticReport(error.cause)
             },
         )
+    }
+
+    private fun diagnosticReport(cause: Throwable): (() -> Unit) -> Unit {
+        val walletAllowed = reportAccess.captureWallet()
+        return { dismiss ->
+            val allowed = reportAccess.bindToCurrentEntry(walletAllowed)
+            dismiss()
+            if (allowed()) {
+                scope.launch { sendEmail(cause as? Exception ?: Exception(cause.message, cause), allowed) }
+            }
+        }
     }
 
     private fun mapToBottomSheet(
@@ -129,7 +135,7 @@ class ErrorMapperUseCase(
         secondaryStyle: ButtonStyle?,
         isSupportFirst: Boolean,
         @DrawableRes icon: Int?,
-        onReport: () -> Unit,
+        onReport: (() -> Unit) -> Unit,
     ) = LceError.BottomSheet(
         ZashiConfirmationState.error(
             title = title,
@@ -140,10 +146,7 @@ class ErrorMapperUseCase(
             icon = icon ?: R.drawable.ic_reset_zashi_warning,
             onPrimary = error.restart,
             onBack = error.dismiss,
-            onSecondary = {
-                error.dismiss()
-                onReport()
-            },
+            onSecondary = { onReport(error.dismiss) },
         )
     )
 }

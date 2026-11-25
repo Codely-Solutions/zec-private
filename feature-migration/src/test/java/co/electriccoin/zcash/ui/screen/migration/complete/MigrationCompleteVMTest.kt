@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
+import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.MutableLce
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -524,6 +525,25 @@ class MigrationCompleteVMTest {
             )
             collectJob.cancel()
         }
+
+    @Test
+    fun ledgerCompletionKeepsLocalLockWithoutOfferingAnUnsupportedSweep() = runTest {
+        val lock = mockk<LockOrchardBalanceUseCase> { coEvery { this@mockk(any(), any()) } returns true }
+        val vm = vm(
+            account = mockk<LedgerAccount>(relaxed = true) { every { isSpendable } returns true },
+            orchardBalanceZatoshi = 500_000L,
+            router = FakeNavigationRouter(),
+            args = MigrationCompleteArgs(isResidueOnly = true),
+            lockOrchardBalance = lock,
+        )
+        backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+        val state = assertNotNull(vm.state.value.content)
+        assertFalse(state.canMigrateResidue)
+        state.onLockBalance()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { lock(any(), any()) }
+    }
 
     @Test
     fun migrateAnywayOnAViewOnlyAccountIsRefusedWithoutSigning() =
