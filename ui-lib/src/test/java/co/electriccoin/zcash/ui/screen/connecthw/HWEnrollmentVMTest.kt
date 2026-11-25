@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.connecthw
 
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -422,19 +423,24 @@ class HWEnrollmentVMTest {
         runTest {
             val created = mockk<Account>()
             val accountsDataSource = mockk<AccountDataSource> {
-                coEvery { importKeystoneAccount(any(), any(), any(), null) } returns created
+                coEvery { importKeystoneAccount(any(), any(), any(), any(), null) } returns created
                 coEvery { selectAccount(created) } throws IOException() andThen Unit
             }
             val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
             val router = mockk<NavigationRouter>(relaxed = true)
-            val session = KeystoneEnrollmentSession()
+            val walletEnrollment = EditAccountFixtures.enrollmentAccess()
+            val session = KeystoneEnrollmentSession(walletEnrollment)
             val accounts = mockk<ZcashAccounts>(relaxed = true) {
                 every { accounts } returns listOf(mockk(relaxed = true))
             }
-            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
+            val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
             val createAccount = CreateHWWalletAccountUseCase(
                 keystoneSession = session,
-                createKeystoneAccount = CreateKeystoneAccountUseCase(accountsDataSource, synchronizer),
+                createKeystoneAccount = CreateKeystoneAccountUseCase(
+                    accountsDataSource,
+                    synchronizer,
+                    walletEnrollment,
+                ),
                 ledgerAccountImporter = mockk(relaxed = true),
                 viewOnlyAccountImporter = mockk(relaxed = true),
                 navigationRouter = router,
@@ -472,8 +478,8 @@ class HWEnrollmentVMTest {
             finalization.finish.onClick()
             runCurrent()
 
-            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any()) }
-            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), null) }
+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) }
+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any(), null) }
             coVerify(exactly = 2) { accountsDataSource.selectAccount(created) }
             verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, KeystoneConnectedArgs) }
         }

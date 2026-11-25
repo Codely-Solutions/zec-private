@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
@@ -45,8 +46,8 @@ class CreateHWWalletAccountUseCaseTest {
         runTest {
             val account = mockk<ZcashAccount>()
             val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
-            val session = KeystoneEnrollmentSession()
-            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
+            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
+            val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
             val createKeystoneAccount = mockk<CreateKeystoneAccountUseCase>(relaxed = true)
             val ledgerAccountImporter = mockk<LedgerAccountImporter>(relaxed = true)
             val navigationRouter = mockk<NavigationRouter>(relaxed = true)
@@ -59,16 +60,35 @@ class CreateHWWalletAccountUseCaseTest {
                 )
 
             val pending = checkNotNull(session.enrollment(enrollment.sessionId))
-            coEvery { createKeystoneAccount(pending, account, birthday) } returns birthday
+            coEvery { createKeystoneAccount(pending, account, birthday, any()) } returns
+                KeystoneEnrollmentSession.Imported(mockk(), birthday)
             useCase(enrollment, birthday)
 
-            coVerify(exactly = 1) { createKeystoneAccount.invoke(pending, account, birthday) }
+            coVerify(exactly = 1) { createKeystoneAccount.invoke(pending, account, birthday, any()) }
             coVerify(exactly = 0) { ledgerAccountImporter.importAccount(any()) }
             assertFalse(useCase.isReady(enrollment))
             verify(exactly = 1) {
                 navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, KeepOpenArgs(KeepOpenFlow.KEYSTONE))
             }
         }
+
+    @Test
+    fun keystoneSessionFromBeforeResetCannotEnrollInTheReplacementWallet() = runTest {
+        val fixture = KeystoneFixture()
+        fixture.wallet.beginReset()
+        fixture.wallet.finishReset()
+        fixture.wallet.replaceWallet {}
+
+        assertFalse(fixture.useCase.isReady(fixture.enrollment))
+        fixture.useCase(fixture.enrollment, birthday)
+
+        coVerify(exactly = 0) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { fixture.accountDataSource.selectAccount(any<Account>()) }
+        verify(exactly = 0) { fixture.synchronizer.resetSynchronizer() }
+        verify(exactly = 1) {
+            fixture.router.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
+        }
+    }
 
     @Test
     fun keystoneRetriesTheSelectionOfTheSameImportedAccountAndKeepsItsBirthday() = runTest {
@@ -87,7 +107,7 @@ class CreateHWWalletAccountUseCaseTest {
 
         fixture.useCase(fixture.enrollment, birthday)
 
-        coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), birthday) }
+        coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), birthday) }
         coVerify(exactly = 2) { fixture.accountDataSource.selectAccount(fixture.created) }
         verify(exactly = 1) { fixture.synchronizer.resetSynchronizer() }
         verify(exactly = 1) {
@@ -99,7 +119,7 @@ class CreateHWWalletAccountUseCaseTest {
     @Test
     fun keystonePropagatesAnUnrelatedCollisionWithoutSelectingIt() = runTest {
         val fixture = KeystoneFixture()
-        coEvery { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any()) } throws
+        coEvery { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) } throws
             InitializeException.ImportAccountCollisionException(null)
 
         assertFailsWith<InitializeException.ImportAccountCollisionException> {
@@ -213,11 +233,13 @@ class CreateHWWalletAccountUseCaseTest {
     fun readinessFollowsWhatEachVendorNeeds() {
         val withAccounts = mockk<ZcashAccounts> { every { accounts } returns listOf(mockk()) }
         val withoutAccounts = mockk<ZcashAccounts> { every { accounts } returns emptyList() }
-        val session = KeystoneEnrollmentSession()
+        val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
         val useCase = useCase(keystoneSession = session)
 
-        assertTrue(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withAccounts))))
-        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withoutAccounts))))
+        val ready = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, withAccounts))
+        assertTrue(useCase.isReady(ready))
+        val empty = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, withoutAccounts))
+        assertFalse(useCase.isReady(empty))
         assertFalse(useCase.isReady(HWWalletEnrollment.Keystone("expired")))
 
         assertTrue(useCase(hasPendingPairing = true).isReady(HWWalletEnrollment.Ledger))
@@ -228,7 +250,7 @@ class CreateHWWalletAccountUseCaseTest {
     }
 
     private fun useCase(
-        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(),
+        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess()),
         hasPendingPairing: Boolean = true,
         hasPendingViewOnlyImport: Boolean = true,
         createKeystoneAccount: CreateKeystoneAccountUseCase = mockk(relaxed = true),
@@ -254,18 +276,20 @@ class CreateHWWalletAccountUseCaseTest {
     private inner class KeystoneFixture {
         val created = mockk<Account>()
         val accountDataSource = mockk<AccountDataSource>(relaxed = true) {
-            coEvery { importKeystoneAccount(any(), any(), any(), any()) } returns created
+            coEvery { importKeystoneAccount(any(), any(), any(), any(), any()) } returns created
         }
         val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
         val router = mockk<NavigationRouter>(relaxed = true)
-        private val session = KeystoneEnrollmentSession()
+        val wallet = WalletWriteAccess()
+        private val walletEnrollment = EditAccountFixtures.enrollmentAccess(wallet)
+        private val session = KeystoneEnrollmentSession(walletEnrollment)
         private val accounts = mockk<ZcashAccounts>(relaxed = true) {
             every { accounts } returns listOf(mockk(relaxed = true))
         }
-        val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
+        val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
         val useCase = useCase(
             keystoneSession = session,
-            createKeystoneAccount = CreateKeystoneAccountUseCase(accountDataSource, synchronizer),
+            createKeystoneAccount = CreateKeystoneAccountUseCase(accountDataSource, synchronizer, walletEnrollment),
             navigationRouter = router,
         )
     }

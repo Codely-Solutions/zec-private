@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import android.content.res.Configuration
+import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
@@ -12,8 +14,12 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
+import com.keystone.module.ZcashAccounts
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +33,14 @@ import co.electriccoin.zcash.ui.R as UiR
  * behave as in the app.
  */
 internal object EditAccountFixtures {
+    fun enrollmentAccess(wallet: WalletWriteAccess = WalletWriteAccess()): WalletEnrollmentAccess {
+        val sdk = MutableStateFlow<Synchronizer?>(mockk())
+        return WalletEnrollmentAccess(wallet, mockk<WalletCoordinator> { every { synchronizer } returns sdk })
+    }
+
+    fun startKeystone(session: KeystoneEnrollmentSession, accounts: ZcashAccounts): String =
+        checkNotNull(session.start(accounts, checkNotNull(session.captureWallet())))
+
     val viewOnlyUuid: AccountUuid = AccountUuid.new(ByteArray(16) { (it + 1).toByte() })
 
     val zodlUuid: AccountUuid = AccountUuid.new(ByteArray(16) { it.toByte() })

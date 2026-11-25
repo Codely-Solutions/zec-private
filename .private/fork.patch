@@ -9715,12 +9715,14 @@ index 000000000..bae21724a
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-index 0f4dd1930..0183ec971 100644
+index 0f4dd1930..5d2ef3622 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-@@ -213,0 +214 @@ private class FakeAccountDataSource(
+@@ -206,0 +207 @@ private class FakeAccountDataSource(
 +        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
-@@ -224 +225,2 @@ private class FakeAccountDataSource(
+@@ -213,0 +215 @@ private class FakeAccountDataSource(
++        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
+@@ -224 +226,2 @@ private class FakeAccountDataSource(
 -    override suspend fun requestNextShieldedAddress(): String = error("unsupported")
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String =
 +        error("unsupported")
@@ -14581,7 +14583,7 @@ index 000000000..99de90350
 +    }
 +}
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
-index 5faf35c95..3f79421eb 100644
+index 5faf35c95..bd9d61aa1 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.viewingkey
@@ -14826,7 +14828,7 @@ index 5faf35c95..3f79421eb 100644
 +        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
 +
 +        val shared = CreateHWWalletAccountUseCase(
-+            keystoneSession = KeystoneEnrollmentSession(),
++            keystoneSession = KeystoneEnrollmentSession(walletEnrollment),
 +            createKeystoneAccount = mockk(),
 +            ledgerAccountImporter = mockk(),
 +            viewOnlyAccountImporter = ViewOnlyAccountImporterImpl(repository, navigationRouter, importer),
@@ -37554,7 +37556,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..2b9ced242 100644
+index 4d388e80f..a2189af89 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -37574,28 +37576,30 @@ index 4d388e80f..2b9ced242 100644
 +    val accountSelectionReadState: Flow<AccountSelectionAvailability>
 +        get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 +
-@@ -113,0 +122 @@ interface AccountDataSource {
+@@ -83,0 +92 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -119 +128,5 @@ interface AccountDataSource {
+@@ -113,0 +123 @@ interface AccountDataSource {
++        synchronizer: Synchronizer,
+@@ -119 +129,5 @@ interface AccountDataSource {
 -    suspend fun requestNextShieldedAddress(): String
 +    /**
 +     * A best-effort request uses the selected account if it is ready, or returns null while it
 +     * loads. A strict request throws when it cannot obtain a fresh address from the requested account.
 +     */
 +    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String?
-@@ -135,0 +149,4 @@ interface AccountDataSource {
+@@ -135,0 +150,4 @@ interface AccountDataSource {
 +data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
 +
 +enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
 +
-@@ -143,0 +161,4 @@ class AccountDataSourceImpl(
+@@ -143,0 +162,4 @@ class AccountDataSourceImpl(
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
 +        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
-@@ -146 +166,0 @@ class AccountDataSourceImpl(
+@@ -146 +167,0 @@ class AccountDataSourceImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-@@ -149,0 +170,24 @@ class AccountDataSourceImpl(
+@@ -149,0 +171,24 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    private val selectedAccountRead = combine(accountWalletAvailability, accountPreferenceReads, ::Pair)
 +        .flatMapLatest { (wallet, generation) ->
@@ -37620,22 +37624,53 @@ index 4d388e80f..2b9ced242 100644
 +        AccountSelectionAvailability(read?.generation ?: accountPreferenceReads.value, state)
 +    }.distinctUntilChanged()
 +
-@@ -160,0 +205 @@ class AccountDataSourceImpl(
+@@ -160,0 +206 @@ class AccountDataSourceImpl(
 +                val generation = accountPreferenceReads.value
-@@ -173 +217,0 @@ class AccountDataSourceImpl(
+@@ -173 +218,0 @@ class AccountDataSourceImpl(
 -                                        observeIsSelected(sdkAccount, allSdkAccounts),
-@@ -179 +222,0 @@ class AccountDataSourceImpl(
+@@ -179 +223,0 @@ class AccountDataSourceImpl(
 -                                        isSelected,
-@@ -186 +228,0 @@ class AccountDataSourceImpl(
+@@ -186 +229,0 @@ class AccountDataSourceImpl(
 -                                            isSelected = isSelected,
-@@ -193 +235 @@ class AccountDataSourceImpl(
+@@ -193 +236 @@ class AccountDataSourceImpl(
 -                            }.combineToFlow()
 +                            }.combineToFlow().map { AccountRows(generation, it) }
-@@ -196,2 +238,2 @@ class AccountDataSourceImpl(
+@@ -196,2 +239,2 @@ class AccountDataSourceImpl(
 -            }.map { it?.sortedDescending() }
 -            .retainWhileWalletExists(persistableWalletProvider)
 +            }.retainWhileWalletExists(persistableWalletProvider)
 +            .combine(currentSelection) { snapshot, read -> applyAccountSelection(snapshot, read) }
+@@ -230,0 +274 @@ class AccountDataSourceImpl(
++        synchronizer: Synchronizer,
+@@ -237,15 +281,13 @@ class AccountDataSourceImpl(
+-            synchronizerProvider
+-                .getSynchronizer()
+-                .importAccountByUfvk(
+-                    AccountImportSetup(
+-                        accountName = context.getString(R.string.accounts_keystone),
+-                        keySource = KEYSTONE_KEYSOURCE,
+-                        ufvk = UnifiedFullViewingKey(ufvk),
+-                        purpose =
+-                            AccountPurpose.Spending(
+-                                seedFingerprint = seedFingerprint.hexToByteArray(),
+-                                zip32AccountIndex = Zip32AccountIndex.new(index)
+-                            ),
+-                        birthday = birthday,
+-                    ),
+-                )
++            synchronizer.importAccountByUfvk(
++                AccountImportSetup(
++                    accountName = context.getString(R.string.accounts_keystone),
++                    keySource = KEYSTONE_KEYSOURCE,
++                    ufvk = UnifiedFullViewingKey(ufvk),
++                    purpose =
++                        AccountPurpose.Spending(
++                            seedFingerprint = seedFingerprint.hexToByteArray(),
++                            zip32AccountIndex = Zip32AccountIndex.new(index)
++                        ),
++                    birthday = birthday,
++                ),
++            )
 @@ -284 +326 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
@@ -43357,10 +43392,10 @@ index 5ca17bee4..0444601bc 100644
 +            Twig.error { "Wallet synchronizer setup failed" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt
 new file mode 100644
-index 000000000..b591bdde5
+index 000000000..7271a9cfe
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletEnrollmentAccess.kt
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,44 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -43370,6 +43405,7 @@ index 000000000..b591bdde5
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.withContext
 +
++@ConsistentCopyVisibility
 +data class WalletEnrollmentToken internal constructor(internal val wallet: Long, internal val sdkErasure: Long)
 +
 +class WalletEnrollmentAccess(
@@ -47544,7 +47580,7 @@ index 572bbb6b4..000000000
 -        is SubmitResult.Error -> null
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
-index a2a749ea9..13b113a3a 100644
+index a2a749ea9..e23c05683 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -47555,37 +47591,35 @@ index a2a749ea9..13b113a3a 100644
 +import co.electriccoin.zcash.ui.stageResultFrom
 @@ -9,0 +11 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 +import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
-@@ -10,0 +13,13 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
+@@ -10,0 +13,11 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
-+import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.sync.withLock
-+import kotlinx.coroutines.withContext
-@@ -17 +32 @@ class CreateHWWalletAccountUseCase(
+@@ -17 +30 @@ class CreateHWWalletAccountUseCase(
 -    private val parseKeystoneUrToZashiAccounts: ParseKeystoneUrToZashiAccountsUseCase,
 +    private val keystoneSession: KeystoneEnrollmentSession,
-@@ -24,4 +39 @@ class CreateHWWalletAccountUseCase(
+@@ -24,4 +37 @@ class CreateHWWalletAccountUseCase(
 -     * Whether [enrollment] still carries what the import needs. A Ledger pairing and a pending
 -     * view-only key live in memory only and are gone after process death; a Keystone UR travels in
 -     * the route but can be unusable. Either way the screens have nothing to offer, and send the user back to the root
 -     * instead of a form that cannot be submitted.
 +     * Pending account data is held in memory and expires when the process ends.
-@@ -32,5 +44 @@ class CreateHWWalletAccountUseCase(
+@@ -32,5 +42 @@ class CreateHWWalletAccountUseCase(
 -                try {
 -                    parseKeystoneUrToZashiAccounts(enrollment.ur).accounts.isNotEmpty()
 -                } catch (_: InvalidKeystoneSignInQRException) {
 -                    false
 -                }
 +                keystoneSession.resolve(enrollment.sessionId)?.accounts?.isNotEmpty() == true
-@@ -47,0 +56,32 @@ class CreateHWWalletAccountUseCase(
+@@ -47,0 +54,32 @@ class CreateHWWalletAccountUseCase(
 +    fun committedBirthday(enrollment: HWWalletEnrollment): CommittedEnrollmentBirthday? =
 +        when (enrollment) {
 +            is HWWalletEnrollment.Keystone ->
@@ -47618,27 +47652,27 @@ index a2a749ea9..13b113a3a 100644
 +        }
 +    }
 +
-@@ -57 +97,2 @@ class CreateHWWalletAccountUseCase(
+@@ -57 +95,2 @@ class CreateHWWalletAccountUseCase(
 -        birthday: BlockHeight?
 +        birthday: BlockHeight?,
 +        sourceEntryId: String? = null,
-@@ -58,0 +100 @@ class CreateHWWalletAccountUseCase(
+@@ -58,0 +98 @@ class CreateHWWalletAccountUseCase(
 +        if (committedBirthday(enrollment)?.let { it.height != birthday } == true) return
-@@ -61,3 +103 @@ class CreateHWWalletAccountUseCase(
+@@ -61,3 +101 @@ class CreateHWWalletAccountUseCase(
 -                val accounts = parseKeystoneUrToZashiAccounts(enrollment.ur)
 -                val account = accounts.accounts.firstOrNull() ?: throw InitializeException.NoAccountLoaded
 -                createKeystoneAccount(accounts, account, birthday)
 +                importKeystone(enrollment.sessionId, birthday, sourceEntryId)
-@@ -68 +108 @@ class CreateHWWalletAccountUseCase(
+@@ -68 +106 @@ class CreateHWWalletAccountUseCase(
 -                    ledgerAccountImporter.importAccount(birthday)
 +                    ledgerAccountImporter.importAccount(birthday, sourceEntryId)
-@@ -70 +110 @@ class CreateHWWalletAccountUseCase(
+@@ -70 +108 @@ class CreateHWWalletAccountUseCase(
 -                    navigationRouter.backToRoot()
 +                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
-@@ -76 +116 @@ class CreateHWWalletAccountUseCase(
+@@ -76 +114 @@ class CreateHWWalletAccountUseCase(
 -                    viewOnlyAccountImporter.continueWithBirthday(birthday)
 +                    viewOnlyAccountImporter.continueWithBirthday(birthday, sourceEntryId)
-@@ -78 +118,28 @@ class CreateHWWalletAccountUseCase(
+@@ -78 +116,28 @@ class CreateHWWalletAccountUseCase(
 -                    navigationRouter.backToRoot()
 +                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 +                }
@@ -47659,59 +47693,69 @@ index a2a749ea9..13b113a3a 100644
 +            val imported = pending.imported.value
 +            val birthdayChanged = imported != null && imported.birthday != birthday
 +            if (birthdayChanged || keystoneSession.enrollment(sessionId) !== pending) return@withLock
-+            val approvedBirthday = withContext(NonCancellable) {
-+                createKeystoneAccount(pending, account, birthday)
-+            }
++            val finished = createKeystoneAccount(pending, account, birthday) {
++                keystoneSession.enrollment(sessionId) === pending
++            } ?: return@withLock
 +            if (keystoneSession.enrollment(sessionId) === pending) {
 +                currentCoroutineContext().ensureActive()
-+                val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
++                val next = if (finished.birthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
 +                navigationRouter.stageResultFrom(sourceEntryId, { keystoneSession.enrollment(sessionId) === pending }) {
 +                    keystoneSession.clear(sessionId)
 +                    NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(next))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
-index 27977ac75..2158aade8 100644
+index 27977ac75..642f77efe 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.model.BlockHeight
 -import co.electriccoin.zcash.ui.NavigationRouter
-@@ -8,3 +7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -8,3 +7,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 -import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
 -import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 -import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
-@@ -12 +8,0 @@ import com.keystone.module.ZcashAccount
+@@ -12 +9,0 @@ import com.keystone.module.ZcashAccount
 -import com.keystone.module.ZcashAccounts
-@@ -17 +12,0 @@ class CreateKeystoneAccountUseCase(
+@@ -17 +14 @@ class CreateKeystoneAccountUseCase(
 -    private val navigationRouter: NavigationRouter,
-@@ -28,2 +23,2 @@ class CreateKeystoneAccountUseCase(
++    private val walletEnrollment: WalletEnrollmentAccess,
+@@ -28,2 +25,2 @@ class CreateKeystoneAccountUseCase(
 -    suspend operator fun invoke(
 -        accounts: ZcashAccounts,
 +    internal suspend operator fun invoke(
 +        pending: KeystoneEnrollmentSession.Pending,
-@@ -32,3 +27,3 @@ class CreateKeystoneAccountUseCase(
+@@ -32,3 +29,6 @@ class CreateKeystoneAccountUseCase(
 -    ) {
 -        val createdAccount =
 -            accountDataSource.importKeystoneAccount(
-+    ): BlockHeight? {
++        isCurrent: () -> Boolean,
++    ): KeystoneEnrollmentSession.Imported? = walletEnrollment.complete(pending.owner) { synchronizer ->
++        if (!isCurrent()) return@complete null
 +        val imported = pending.imported.value ?: KeystoneEnrollmentSession.Imported(
 +            account = accountDataSource.importKeystoneAccount(
-@@ -36 +31 @@ class CreateKeystoneAccountUseCase(
++                synchronizer = synchronizer,
+@@ -36 +36 @@ class CreateKeystoneAccountUseCase(
 -                seedFingerprint = accounts.seedFingerprint,
 +                seedFingerprint = pending.accounts.seedFingerprint,
-@@ -39,2 +34,4 @@ class CreateKeystoneAccountUseCase(
+@@ -39,8 +39,10 @@ class CreateKeystoneAccountUseCase(
 -            )
 -        accountDataSource.selectAccount(createdAccount)
-+            ),
-+            birthday = birthday,
-+        ).also { pending.imported.value = it }
-+        accountDataSource.selectAccount(imported.account)
-@@ -42,5 +39 @@ class CreateKeystoneAccountUseCase(
+-        synchronizerProvider.resetSynchronizer()
 -        if (birthday != null) {
 -            navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.KEYSTONE))
 -        } else {
 -            navigationRouter.forward(KeystoneConnectedArgs)
 -        }
-+        return imported.birthday
++            ),
++            birthday = birthday,
++        ).also { pending.imported.value = it }
++        val selected = walletEnrollment.write(pending.owner) {
++            if (!isCurrent()) return@write false
++            accountDataSource.selectAccount(imported.account)
++            true
++        } == true
++        if (walletEnrollment.permits(pending.owner)) synchronizerProvider.resetSynchronizer()
++        imported.takeIf { selected }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateOrUpdateTransactionNoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateOrUpdateTransactionNoteUseCase.kt
 index c9908dc7c..7de65e02e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateOrUpdateTransactionNoteUseCase.kt
@@ -50566,7 +50610,7 @@ index 6600cf554..0cb458b0d 100644
 -    abstract suspend fun onSuccess(ur: UR)
 +    protected abstract suspend fun onSuccess(ur: UR, scanSessionId: String?)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneSignInRequestUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneSignInRequestUseCase.kt
-index 69ad472f1..e162d434e 100644
+index 69ad472f1..b5127e3b9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneSignInRequestUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneSignInRequestUseCase.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -50574,38 +50618,40 @@ index 69ad472f1..e162d434e 100644
 +import co.electriccoin.zcash.ui.NavigationCommand
 @@ -3,0 +6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.provider.KeystoneSDKException
-@@ -4,0 +8,2 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
+@@ -4,0 +8,3 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
-@@ -8,0 +14 @@ import kotlinx.coroutines.withContext
+@@ -8,0 +15 @@ import kotlinx.coroutines.withContext
 +import java.util.UUID
-@@ -12,0 +19 @@ class ParseKeystoneSignInRequestUseCase(
+@@ -12,0 +20 @@ class ParseKeystoneSignInRequestUseCase(
 +    private val session: KeystoneEnrollmentSession,
-@@ -14,3 +21,10 @@ class ParseKeystoneSignInRequestUseCase(
+@@ -14,3 +22,11 @@ class ParseKeystoneSignInRequestUseCase(
 -    override suspend fun onSuccess(ur: UR) {
 -        parseOrThrow(ur)
 -        navigationRouter.replace(SelectKeystoneAccount(ur.toString()))
 +    private var sessionId: String? = null
-+    private var presentationId: String? = null
++    private var presentation: Presentation? = null
 +    private var isClosed = false
 +
-+    internal fun beginPresentation(): String = UUID.randomUUID().toString().also { presentationId = it }
++    internal fun beginPresentation(): String =
++        UUID.randomUUID().toString().also { presentation = Presentation(it, session.captureWallet()) }
 +
-+    internal fun isCurrentPresentation(id: String): Boolean = !isClosed && presentationId == id
++    internal fun isCurrentPresentation(id: String): Boolean = !isClosed && presentation?.id == id
 +
 +    internal fun endPresentation(id: String) {
-+        if (presentationId == id) presentationId = null
-@@ -19,4 +33,2 @@ class ParseKeystoneSignInRequestUseCase(
++        if (presentation?.id == id) presentation = null
+@@ -19,4 +35,2 @@ class ParseKeystoneSignInRequestUseCase(
 -    @Suppress("TooGenericExceptionCaught")
 -    @Throws(InvalidKeystoneSignInQRException::class)
 -    private suspend fun parseOrThrow(ur: UR) =
 -        withContext(Dispatchers.Default) {
 +    override suspend fun onSuccess(ur: UR, scanSessionId: String?) {
 +        val accounts =
-@@ -25 +37 @@ class ParseKeystoneSignInRequestUseCase(
+@@ -25 +39 @@ class ParseKeystoneSignInRequestUseCase(
 -            } catch (e: Exception) {
 +            } catch (e: KeystoneSDKException) {
-@@ -27,0 +40,15 @@ class ParseKeystoneSignInRequestUseCase(
+@@ -27,0 +42,16 @@ class ParseKeystoneSignInRequestUseCase(
 +        if (accounts.accounts.isEmpty()) {
 +            throw InvalidKeystoneSignInQRException(IllegalArgumentException("No Keystone accounts in export"))
 +        }
@@ -50616,20 +50662,23 @@ index 69ad472f1..e162d434e 100644
 +                ) {
 +                    null
 +                } else {
-+                    val id = session.start(accounts)
++                    val owner = presentation?.owner ?: return@custom null
++                    val id = session.start(accounts, owner) ?: return@custom null
 +                    sessionId = id
 +                    NavigationCommand.Forward(listOf(SelectKeystoneAccount(id)))
 +                }
 +            }
-@@ -28,0 +56,8 @@ class ParseKeystoneSignInRequestUseCase(
+@@ -28,0 +59,10 @@ class ParseKeystoneSignInRequestUseCase(
 +    }
 +
 +    internal fun close() {
 +        isClosed = true
-+        presentationId = null
++        presentation = null
 +        sessionId?.let(session::clear)
 +        sessionId = null
 +    }
++
++    private data class Presentation(val id: String, val owner: WalletEnrollmentToken?)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneUrToZashiAccountsUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ParseKeystoneUrToZashiAccountsUseCase.kt
 deleted file mode 100644
 index 0fb36e850..000000000
@@ -54893,36 +54942,52 @@ index 263cf2572..d0afabca8 100644
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
 new file mode 100644
-index 000000000..f32ec232c
+index 000000000..191316551
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,47 @@
 +package co.electriccoin.zcash.ui.screen.connecthw
 +
 +import cash.z.ecc.android.sdk.model.Account
 +import cash.z.ecc.android.sdk.model.BlockHeight
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 +import com.keystone.module.ZcashAccounts
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import java.util.UUID
 +
 +/** Pending Keystone accounts owned by the scanner back-stack entry in this process. */
-+class KeystoneEnrollmentSession {
++class KeystoneEnrollmentSession(private val walletEnrollment: WalletEnrollmentAccess) {
 +    private var pending: Pending? = null
 +    internal val importMutex = Mutex()
 +
-+    internal fun start(accounts: ZcashAccounts): String =
-+        UUID.randomUUID().toString().also { pending = Pending(it, accounts) }
++    internal fun captureWallet() = walletEnrollment.capture()
++
++    @Synchronized
++    internal fun start(accounts: ZcashAccounts, owner: WalletEnrollmentToken): String? =
++        if (!walletEnrollment.permits(owner)) {
++            null
++        } else {
++            UUID.randomUUID().toString().also { pending = Pending(it, accounts, owner) }
++        }
 +
 +    internal fun resolve(id: String): ZcashAccounts? = enrollment(id)?.accounts
 +
-+    internal fun enrollment(id: String): Pending? = pending?.takeIf { it.id == id }
++    @Synchronized
++    internal fun enrollment(id: String): Pending? {
++        val current = pending?.takeIf { it.id == id } ?: return null
++        if (walletEnrollment.permits(current.owner)) return current
++        pending = null
++        return null
++    }
 +
++    @Synchronized
 +    internal fun clear(id: String) {
 +        if (pending?.id == id) pending = null
 +    }
 +
-+    internal class Pending(val id: String, val accounts: ZcashAccounts) {
++    internal class Pending(val id: String, val accounts: ZcashAccounts, val owner: WalletEnrollmentToken) {
 +        val imported = MutableStateFlow<Imported?>(null)
 +    }
 +
@@ -74271,12 +74336,13 @@ index 000000000..1ad70871d
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt
 new file mode 100644
-index 000000000..2ae836acd
+index 000000000..798a507f6
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,264 @@
 +package co.electriccoin.zcash.ui
 +
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import android.os.Bundle
 +import android.os.Parcel
 +import androidx.navigation.NavHostController
@@ -74341,7 +74407,7 @@ index 000000000..2ae836acd
 +            val first = newController().also { it.installGraph() }
 +            first.navigate(ScanKeystoneSignInRequest)
 +            val routing = NavigationRouterImpl()
-+            val session = KeystoneEnrollmentSession()
++            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
 +            val account = mockk<ZcashAccount> { every { ufvk } returns SYNTHETIC_UFVK }
 +            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
 +            val sdk = mockk<KeystoneSDKProvider> {
@@ -74373,7 +74439,7 @@ index 000000000..2ae836acd
 +            assertEquals(height, restored.currentBackStackEntry?.toRoute<HWHeightArgs>())
 +            assertSame(accounts, session.resolve(selection.sessionId))
 +
-+            val recreatedProcess = KeystoneEnrollmentSession()
++            val recreatedProcess = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
 +            assertNull(recreatedProcess.resolve(selection.sessionId))
 +            restored.returnToKeystoneScanner()
 +
@@ -74397,7 +74463,7 @@ index 000000000..2ae836acd
 +            val controller = newController().also { it.installGraph() }
 +            controller.navigate(ScanKeystoneSignInRequest)
 +            val routing = NavigationRouterImpl()
-+            val session = KeystoneEnrollmentSession()
++            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
 +            val account = mockk<ZcashAccount>()
 +            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
 +            val sdk = mockk<KeystoneSDKProvider> {
@@ -88533,49 +88599,69 @@ index 0a57ab991..000000000
 -    }
 -}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
-index 1a8bb1b8b..8c4505d3c 100644
+index 1a8bb1b8b..e8fd6dda0 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.exception.InitializeException
 +import cash.z.ecc.android.sdk.model.Account
 @@ -5,0 +7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -8,0 +11 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingExcepti
+@@ -8,0 +11,2 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingExcepti
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-@@ -10,0 +14,4 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -10,0 +15,4 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
-@@ -18,0 +26 @@ import kotlinx.coroutines.test.runTest
+@@ -18,0 +27 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -25 +33 @@ import kotlin.test.assertTrue
+@@ -25 +34 @@ import kotlin.test.assertTrue
 - * The single vendor branch of the shared enrollment flow: a Keystone enrollment parses its UR and
 + * The single vendor branch of the shared enrollment flow: a Keystone enrollment resolves its session and
-@@ -39,0 +48,2 @@ class CreateHWWalletAccountUseCaseTest {
-+            val session = KeystoneEnrollmentSession()
-+            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
-@@ -41,0 +52 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -39,0 +49,2 @@ class CreateHWWalletAccountUseCaseTest {
++            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
++            val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
+@@ -41,0 +53 @@ class CreateHWWalletAccountUseCaseTest {
 +            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-@@ -44 +55 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -44 +56 @@ class CreateHWWalletAccountUseCaseTest {
 -                    accountsForUr = accounts,
 +                    keystoneSession = session,
-@@ -46,0 +58 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -46,0 +59 @@ class CreateHWWalletAccountUseCaseTest {
 +                    navigationRouter = navigationRouter,
-@@ -49 +61,3 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -49 +62,4 @@ class CreateHWWalletAccountUseCaseTest {
 -            useCase(HWWalletEnrollment.Keystone(UR), birthday)
 +            val pending = checkNotNull(session.enrollment(enrollment.sessionId))
-+            coEvery { createKeystoneAccount(pending, account, birthday) } returns birthday
++            coEvery { createKeystoneAccount(pending, account, birthday, any()) } returns
++                KeystoneEnrollmentSession.Imported(mockk(), birthday)
 +            useCase(enrollment, birthday)
-@@ -51 +65 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -51 +67 @@ class CreateHWWalletAccountUseCaseTest {
 -            coVerify(exactly = 1) { createKeystoneAccount.invoke(accounts, account, birthday) }
-+            coVerify(exactly = 1) { createKeystoneAccount.invoke(pending, account, birthday) }
-@@ -52,0 +67,40 @@ class CreateHWWalletAccountUseCaseTest {
++            coVerify(exactly = 1) { createKeystoneAccount.invoke(pending, account, birthday, any()) }
+@@ -52,0 +69,58 @@ class CreateHWWalletAccountUseCaseTest {
 +            assertFalse(useCase.isReady(enrollment))
 +            verify(exactly = 1) {
 +                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, KeepOpenArgs(KeepOpenFlow.KEYSTONE))
 +            }
 +        }
++
++    @Test
++    fun keystoneSessionFromBeforeResetCannotEnrollInTheReplacementWallet() = runTest {
++        val fixture = KeystoneFixture()
++        fixture.wallet.beginReset()
++        fixture.wallet.finishReset()
++        fixture.wallet.replaceWallet {}
++
++        assertFalse(fixture.useCase.isReady(fixture.enrollment))
++        fixture.useCase(fixture.enrollment, birthday)
++
++        coVerify(exactly = 0) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) }
++        coVerify(exactly = 0) { fixture.accountDataSource.selectAccount(any<Account>()) }
++        verify(exactly = 0) { fixture.synchronizer.resetSynchronizer() }
++        verify(exactly = 1) {
++            fixture.router.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
++        }
++    }
 +
 +    @Test
 +    fun keystoneRetriesTheSelectionOfTheSameImportedAccountAndKeepsItsBirthday() = runTest {
@@ -88594,7 +88680,7 @@ index 1a8bb1b8b..8c4505d3c 100644
 +
 +        fixture.useCase(fixture.enrollment, birthday)
 +
-+        coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), birthday) }
++        coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), birthday) }
 +        coVerify(exactly = 2) { fixture.accountDataSource.selectAccount(fixture.created) }
 +        verify(exactly = 1) { fixture.synchronizer.resetSynchronizer() }
 +        verify(exactly = 1) {
@@ -88606,53 +88692,55 @@ index 1a8bb1b8b..8c4505d3c 100644
 +    @Test
 +    fun keystonePropagatesAnUnrelatedCollisionWithoutSelectingIt() = runTest {
 +        val fixture = KeystoneFixture()
-+        coEvery { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any()) } throws
++        coEvery { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) } throws
 +            InitializeException.ImportAccountCollisionException(null)
 +
 +        assertFailsWith<InitializeException.ImportAccountCollisionException> {
 +            fixture.useCase(fixture.enrollment, birthday)
-@@ -54,0 +109,6 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -54,0 +129,6 @@ class CreateHWWalletAccountUseCaseTest {
 +        assertTrue(fixture.useCase.isReady(fixture.enrollment))
 +        coVerify(exactly = 0) { fixture.accountDataSource.selectAccount(any<Account>()) }
 +        verify(exactly = 0) { fixture.synchronizer.resetSynchronizer() }
 +        verify(exactly = 0) { fixture.router.replaceFrom(any(), any()) }
 +    }
 +
-@@ -137 +197 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -137 +217 @@ class CreateHWWalletAccountUseCaseTest {
 -    fun aKeystoneUrWithNoAccountsFailsInsteadOfImportingNothing() =
 +    fun aLostKeystoneSessionRestartsScanningWithoutImporting() =
-@@ -139,2 +199,6 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -139,2 +219,4 @@ class CreateHWWalletAccountUseCaseTest {
 -            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns emptyList() }
 -            val useCase = useCase(accountsForUr = accounts)
 +            val createKeystoneAccount = mockk<CreateKeystoneAccountUseCase>(relaxed = true)
 +            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 +            val useCase =
 +                useCase(createKeystoneAccount = createKeystoneAccount, navigationRouter = navigationRouter)
-+
-+            useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
-@@ -142,2 +206,3 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -142,2 +224,5 @@ class CreateHWWalletAccountUseCaseTest {
 -            assertFailsWith<InitializeException.NoAccountLoaded> {
 -                useCase(HWWalletEnrollment.Keystone(UR), birthday = null)
++            useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
++
 +            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
 +            verify(exactly = 1) {
 +                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
-@@ -150,0 +216,2 @@ class CreateHWWalletAccountUseCaseTest {
-+        val session = KeystoneEnrollmentSession()
+@@ -150,0 +236,2 @@ class CreateHWWalletAccountUseCaseTest {
++        val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
 +        val useCase = useCase(keystoneSession = session)
-@@ -152,5 +219,3 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -152,5 +239,5 @@ class CreateHWWalletAccountUseCaseTest {
 -        assertTrue(useCase(accountsForUr = withAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
 -        assertFalse(useCase(accountsForUr = withoutAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
 -        assertFalse(
 -            useCase(parseThrows = true).isReady(HWWalletEnrollment.Keystone(UR))
 -        )
-+        assertTrue(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withAccounts))))
-+        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withoutAccounts))))
++        val ready = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, withAccounts))
++        assertTrue(useCase.isReady(ready))
++        val empty = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, withoutAccounts))
++        assertFalse(useCase.isReady(empty))
 +        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone("expired")))
-@@ -166,2 +231 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -166,2 +253 @@ class CreateHWWalletAccountUseCaseTest {
 -        accountsForUr: ZcashAccounts = mockk { every { accounts } returns listOf(mockk()) },
 -        parseThrows: Boolean = false,
-+        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(),
-@@ -175,9 +239 @@ class CreateHWWalletAccountUseCaseTest {
++        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess()),
+@@ -175,9 +261 @@ class CreateHWWalletAccountUseCaseTest {
 -        parseKeystoneUrToZashiAccounts =
 -            mockk {
 -                if (parseThrows) {
@@ -88663,29 +88751,31 @@ index 1a8bb1b8b..8c4505d3c 100644
 -                }
 -            },
 +        keystoneSession = keystoneSession,
-@@ -187,0 +244 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -187,0 +266 @@ class CreateHWWalletAccountUseCaseTest {
 +                every { it.committedBirthday() } returns null
-@@ -191,0 +249 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -191,0 +271 @@ class CreateHWWalletAccountUseCaseTest {
 +                every { it.committedBirthday() } returns null
-@@ -195 +252,0 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -195 +274,0 @@ class CreateHWWalletAccountUseCaseTest {
 -}
-@@ -197 +254,19 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -197 +276,21 @@ class CreateHWWalletAccountUseCaseTest {
 -private const val UR = "ur:zcash-accounts/fixture"
 +    private inner class KeystoneFixture {
 +        val created = mockk<Account>()
 +        val accountDataSource = mockk<AccountDataSource>(relaxed = true) {
-+            coEvery { importKeystoneAccount(any(), any(), any(), any()) } returns created
++            coEvery { importKeystoneAccount(any(), any(), any(), any(), any()) } returns created
 +        }
 +        val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
 +        val router = mockk<NavigationRouter>(relaxed = true)
-+        private val session = KeystoneEnrollmentSession()
++        val wallet = WalletWriteAccess()
++        private val walletEnrollment = EditAccountFixtures.enrollmentAccess(wallet)
++        private val session = KeystoneEnrollmentSession(walletEnrollment)
 +        private val accounts = mockk<ZcashAccounts>(relaxed = true) {
 +            every { accounts } returns listOf(mockk(relaxed = true))
 +        }
-+        val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
++        val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
 +        val useCase = useCase(
 +            keystoneSession = session,
-+            createKeystoneAccount = CreateKeystoneAccountUseCase(accountDataSource, synchronizer),
++            createKeystoneAccount = CreateKeystoneAccountUseCase(accountDataSource, synchronizer, walletEnrollment),
 +            navigationRouter = router,
 +        )
 +    }
@@ -88734,6 +88824,28 @@ index 000000000..ef29cc3a1
 +        assertEquals("Diagnostic report", shared.getStringExtra(Intent.EXTRA_SUBJECT))
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt
+index 518ccc2f8..42e60602c 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt
+@@ -4,0 +5,2 @@ import android.content.res.Configuration
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletCoordinator
+@@ -14,0 +17,2 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
++import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -16,0 +21,2 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
++import com.keystone.module.ZcashAccounts
+@@ -29,0 +36,8 @@ internal object EditAccountFixtures {
++    fun enrollmentAccess(wallet: WalletWriteAccess = WalletWriteAccess()): WalletEnrollmentAccess {
++        val sdk = MutableStateFlow<Synchronizer?>(mockk())
++        return WalletEnrollmentAccess(wallet, mockk<WalletCoordinator> { every { synchronizer } returns sdk })
++    }
++
++    fun startKeystone(session: KeystoneEnrollmentSession, accounts: ZcashAccounts): String =
++        checkNotNull(session.start(accounts, checkNotNull(session.captureWallet())))
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCaseTest.kt
 new file mode 100644
 index 000000000..639906519
@@ -96362,61 +96474,67 @@ index b110e1944..ec8456617 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
-index 34f86a64f..fd846b314 100644
+index 34f86a64f..8fa1070e6 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
-@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.connecthw
+@@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.screen.connecthw
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import cash.z.ecc.android.sdk.model.Account
-@@ -5,0 +7,3 @@ import co.electriccoin.zcash.ui.R
+@@ -5,0 +8,3 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.LceError
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-@@ -6,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
+@@ -6,0 +12 @@ import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
-@@ -20,0 +26 @@ import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveVM
+@@ -20,0 +27 @@ import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveVM
 +import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
-@@ -21,0 +28,2 @@ import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
+@@ -21,0 +29,2 @@ import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 +import com.keystone.module.ZcashAccounts
-@@ -30,0 +39 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -30,0 +40 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.flowOf
-@@ -38,0 +48 @@ import kotlinx.serialization.json.Json
+@@ -38,0 +49 @@ import kotlinx.serialization.json.Json
 +import java.io.IOException
-@@ -60 +70 @@ class HWEnrollmentVMTest {
+@@ -60 +71 @@ class HWEnrollmentVMTest {
 -            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
 +            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
-@@ -67 +77 @@ class HWEnrollmentVMTest {
+@@ -67 +78 @@ class HWEnrollmentVMTest {
 -            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
 +            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
-@@ -99 +109 @@ class HWEnrollmentVMTest {
+@@ -99 +110 @@ class HWEnrollmentVMTest {
 -        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
 +        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
-@@ -124 +134 @@ class HWEnrollmentVMTest {
+@@ -124 +135 @@ class HWEnrollmentVMTest {
 -        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
 +        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
-@@ -200,0 +211 @@ class HWEnrollmentVMTest {
+@@ -200,0 +212 @@ class HWEnrollmentVMTest {
 +                        every { observeCommittedBirthday(any()) } returns flowOf(null)
-@@ -211,0 +223 @@ class HWEnrollmentVMTest {
+@@ -211,0 +224 @@ class HWEnrollmentVMTest {
 +                        every { observeCommittedBirthday(any()) } returns flowOf(null)
-@@ -407,0 +420,61 @@ class HWEnrollmentVMTest {
+@@ -407,0 +421,66 @@ class HWEnrollmentVMTest {
 +    @Test
 +    fun retryingKeystoneFromTheTipKeepsTheCommittedBirthdayAcrossBackAndOlderCallbacks() =
 +        runTest {
 +            val created = mockk<Account>()
 +            val accountsDataSource = mockk<AccountDataSource> {
-+                coEvery { importKeystoneAccount(any(), any(), any(), null) } returns created
++                coEvery { importKeystoneAccount(any(), any(), any(), any(), null) } returns created
 +                coEvery { selectAccount(created) } throws IOException() andThen Unit
 +            }
 +            val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
 +            val router = mockk<NavigationRouter>(relaxed = true)
-+            val session = KeystoneEnrollmentSession()
++            val walletEnrollment = EditAccountFixtures.enrollmentAccess()
++            val session = KeystoneEnrollmentSession(walletEnrollment)
 +            val accounts = mockk<ZcashAccounts>(relaxed = true) {
 +                every { accounts } returns listOf(mockk(relaxed = true))
 +            }
-+            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
++            val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
 +            val createAccount = CreateHWWalletAccountUseCase(
 +                keystoneSession = session,
-+                createKeystoneAccount = CreateKeystoneAccountUseCase(accountsDataSource, synchronizer),
++                createKeystoneAccount = CreateKeystoneAccountUseCase(
++                    accountsDataSource,
++                    synchronizer,
++                    walletEnrollment,
++                ),
 +                ledgerAccountImporter = mockk(relaxed = true),
 +                viewOnlyAccountImporter = mockk(relaxed = true),
 +                navigationRouter = router,
@@ -96454,19 +96572,19 @@ index 34f86a64f..fd846b314 100644
 +            finalization.finish.onClick()
 +            runCurrent()
 +
-+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any()) }
-+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), null) }
++            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any(), any()) }
++            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any(), null) }
 +            coVerify(exactly = 2) { accountsDataSource.selectAccount(created) }
 +            verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, KeystoneConnectedArgs) }
 +        }
 +
-@@ -410,0 +484,2 @@ class HWEnrollmentVMTest {
+@@ -410,0 +490,2 @@ class HWEnrollmentVMTest {
 +            every { committedBirthday(any()) } returns null
 +            every { observeCommittedBirthday(any()) } returns flowOf(null)
-@@ -419,0 +495,2 @@ class HWEnrollmentVMTest {
+@@ -419,0 +501,2 @@ class HWEnrollmentVMTest {
 +            every { committedBirthday(any()) } returns null
 +            every { observeCommittedBirthday(any()) } returns flowOf(null)
-@@ -473,0 +551 @@ class HWEnrollmentVMTest {
+@@ -473,0 +557 @@ class HWEnrollmentVMTest {
 +            reportAccess = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt
 index 514e2b2bc..23da3fe6b 100644
@@ -103022,12 +103140,13 @@ index 8a8f44aa3..a9696976f 100644
 +        return vm
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
 new file mode 100644
-index 000000000..205d34c14
+index 000000000..a65474863
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
-@@ -0,0 +1,292 @@
+@@ -0,0 +1,294 @@
 +package co.electriccoin.zcash.ui.screen.restore.height
 +
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import android.app.Application
 +import androidx.lifecycle.ViewModel
 +import androidx.lifecycle.viewModelScope
@@ -103271,10 +103390,11 @@ index 000000000..205d34c14
 +        private val keystoneAccounts = mockk<ZcashAccounts>(relaxed = true) {
 +            every { accounts } returns listOf(mockk(relaxed = true))
 +        }
-+        private val session = KeystoneEnrollmentSession()
++        private val walletEnrollment = EditAccountFixtures.enrollmentAccess()
++        private val session = KeystoneEnrollmentSession(walletEnrollment)
 +        private val account = mockk<Account>()
 +        private val accounts = mockk<AccountDataSource>(relaxed = true) {
-+            coEvery { importKeystoneAccount(any(), any(), any(), any()) } returns account
++            coEvery { importKeystoneAccount(any(), any(), any(), any(), any()) } returns account
 +        }
 +        private val ledger = mockk<LedgerAccountImporter>(relaxed = true) {
 +            every { hasPendingPairing() } returns true
@@ -103288,13 +103408,13 @@ index 000000000..205d34c14
 +        }
 +
 +        val enrollments = listOf(
-+            HWWalletEnrollment.Keystone(session.start(keystoneAccounts)),
++            HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, keystoneAccounts)),
 +            HWWalletEnrollment.Ledger,
 +            HWWalletEnrollment.ViewOnly,
 +        )
 +        val createAccount = CreateHWWalletAccountUseCase(
 +            keystoneSession = session,
-+            createKeystoneAccount = CreateKeystoneAccountUseCase(accounts, mockk(relaxed = true)),
++            createKeystoneAccount = CreateKeystoneAccountUseCase(accounts, mockk(relaxed = true), walletEnrollment),
 +            ledgerAccountImporter = ledger,
 +            viewOnlyAccountImporter = viewOnly,
 +            navigationRouter = router,
@@ -103303,8 +103423,8 @@ index 000000000..205d34c14
 +        fun verifyCalls(enrollment: HWWalletEnrollment, height: BlockHeight, count: Int) {
 +            when (enrollment) {
 +                is HWWalletEnrollment.Keystone -> {
-+                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any()) }
-+                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), height) }
++                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any(), any()) }
++                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any(), height) }
 +                }
 +                HWWalletEnrollment.Ledger -> {
 +                    coVerify(exactly = count) { ledger.importAccount(any()) }

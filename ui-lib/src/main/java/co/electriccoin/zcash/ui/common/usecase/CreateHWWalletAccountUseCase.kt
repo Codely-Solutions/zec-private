@@ -15,14 +15,12 @@ import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnect
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /**
  * The one place the shared enrollment screens dispatch on vendor: everything else about them —
@@ -134,12 +132,12 @@ class CreateHWWalletAccountUseCase(
             val imported = pending.imported.value
             val birthdayChanged = imported != null && imported.birthday != birthday
             if (birthdayChanged || keystoneSession.enrollment(sessionId) !== pending) return@withLock
-            val approvedBirthday = withContext(NonCancellable) {
-                createKeystoneAccount(pending, account, birthday)
-            }
+            val finished = createKeystoneAccount(pending, account, birthday) {
+                keystoneSession.enrollment(sessionId) === pending
+            } ?: return@withLock
             if (keystoneSession.enrollment(sessionId) === pending) {
                 currentCoroutineContext().ensureActive()
-                val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
+                val next = if (finished.birthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
                 navigationRouter.stageResultFrom(sourceEntryId, { keystoneSession.enrollment(sessionId) === pending }) {
                     keystoneSession.clear(sessionId)
                     NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(next))

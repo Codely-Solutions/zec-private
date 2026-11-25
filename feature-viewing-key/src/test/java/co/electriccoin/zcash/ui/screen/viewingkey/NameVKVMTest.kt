@@ -575,7 +575,7 @@ internal class NameVKImportVMTest : NameVKVMFixture() {
         coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
 
         val shared = CreateHWWalletAccountUseCase(
-            keystoneSession = KeystoneEnrollmentSession(),
+            keystoneSession = KeystoneEnrollmentSession(walletEnrollment),
             createKeystoneAccount = mockk(),
             ledgerAccountImporter = mockk(),
             viewOnlyAccountImporter = ViewOnlyAccountImporterImpl(repository, navigationRouter, importer),

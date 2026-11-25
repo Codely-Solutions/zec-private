@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKException
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccount
@@ -19,15 +20,16 @@ class ParseKeystoneSignInRequestUseCase(
     private val session: KeystoneEnrollmentSession,
 ) : BaseKeystoneScanner(keystoneSDKProvider) {
     private var sessionId: String? = null
-    private var presentationId: String? = null
+    private var presentation: Presentation? = null
     private var isClosed = false
 
-    internal fun beginPresentation(): String = UUID.randomUUID().toString().also { presentationId = it }
+    internal fun beginPresentation(): String =
+        UUID.randomUUID().toString().also { presentation = Presentation(it, session.captureWallet()) }
 
-    internal fun isCurrentPresentation(id: String): Boolean = !isClosed && presentationId == id
+    internal fun isCurrentPresentation(id: String): Boolean = !isClosed && presentation?.id == id
 
     internal fun endPresentation(id: String) {
-        if (presentationId == id) presentationId = null
+        if (presentation?.id == id) presentation = null
     }
 
     override suspend fun onSuccess(ur: UR, scanSessionId: String?) {
@@ -47,7 +49,8 @@ class ParseKeystoneSignInRequestUseCase(
                 ) {
                     null
                 } else {
-                    val id = session.start(accounts)
+                    val owner = presentation?.owner ?: return@custom null
+                    val id = session.start(accounts, owner) ?: return@custom null
                     sessionId = id
                     NavigationCommand.Forward(listOf(SelectKeystoneAccount(id)))
                 }
@@ -57,10 +60,12 @@ class ParseKeystoneSignInRequestUseCase(
 
     internal fun close() {
         isClosed = true
-        presentationId = null
+        presentation = null
         sessionId?.let(session::clear)
         sessionId = null
     }
+
+    private data class Presentation(val id: String, val owner: WalletEnrollmentToken?)
 }
 
 class InvalidKeystoneSignInQRException(

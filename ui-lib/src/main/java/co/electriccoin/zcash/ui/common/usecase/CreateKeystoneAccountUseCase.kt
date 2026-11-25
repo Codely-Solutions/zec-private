@@ -4,12 +4,14 @@ import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import com.keystone.module.ZcashAccount
 
 class CreateKeystoneAccountUseCase(
     private val accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
+    private val walletEnrollment: WalletEnrollmentAccess,
 ) {
     /**
      * @throws InitializeException.ImportAccountCollisionException if the wallet already holds an
@@ -24,9 +26,12 @@ class CreateKeystoneAccountUseCase(
         pending: KeystoneEnrollmentSession.Pending,
         account: ZcashAccount,
         birthday: BlockHeight? = null,
-    ): BlockHeight? {
+        isCurrent: () -> Boolean,
+    ): KeystoneEnrollmentSession.Imported? = walletEnrollment.complete(pending.owner) { synchronizer ->
+        if (!isCurrent()) return@complete null
         val imported = pending.imported.value ?: KeystoneEnrollmentSession.Imported(
             account = accountDataSource.importKeystoneAccount(
+                synchronizer = synchronizer,
                 ufvk = account.ufvk,
                 seedFingerprint = pending.accounts.seedFingerprint,
                 index = account.index.toLong(),
@@ -34,8 +39,12 @@ class CreateKeystoneAccountUseCase(
             ),
             birthday = birthday,
         ).also { pending.imported.value = it }
-        accountDataSource.selectAccount(imported.account)
-        synchronizerProvider.resetSynchronizer()
-        return imported.birthday
+        val selected = walletEnrollment.write(pending.owner) {
+            if (!isCurrent()) return@write false
+            accountDataSource.selectAccount(imported.account)
+            true
+        } == true
+        if (walletEnrollment.permits(pending.owner)) synchronizerProvider.resetSynchronizer()
+        imported.takeIf { selected }
     }
 }

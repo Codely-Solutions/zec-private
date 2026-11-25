@@ -89,6 +89,7 @@ interface AccountDataSource {
     suspend fun selectAccount(account: WalletAccount)
 
     suspend fun importKeystoneAccount(
+        synchronizer: Synchronizer,
         ufvk: String,
         seedFingerprint: String,
         index: Long,
@@ -270,27 +271,26 @@ class AccountDataSourceImpl(
 
     @OptIn(ExperimentalStdlibApi::class)
     override suspend fun importKeystoneAccount(
+        synchronizer: Synchronizer,
         ufvk: String,
         seedFingerprint: String,
         index: Long,
         birthday: BlockHeight?
     ): Account =
         withContext(Dispatchers.IO) {
-            synchronizerProvider
-                .getSynchronizer()
-                .importAccountByUfvk(
-                    AccountImportSetup(
-                        accountName = context.getString(R.string.accounts_keystone),
-                        keySource = KEYSTONE_KEYSOURCE,
-                        ufvk = UnifiedFullViewingKey(ufvk),
-                        purpose =
-                            AccountPurpose.Spending(
-                                seedFingerprint = seedFingerprint.hexToByteArray(),
-                                zip32AccountIndex = Zip32AccountIndex.new(index)
-                            ),
-                        birthday = birthday,
-                    ),
-                )
+            synchronizer.importAccountByUfvk(
+                AccountImportSetup(
+                    accountName = context.getString(R.string.accounts_keystone),
+                    keySource = KEYSTONE_KEYSOURCE,
+                    ufvk = UnifiedFullViewingKey(ufvk),
+                    purpose =
+                        AccountPurpose.Spending(
+                            seedFingerprint = seedFingerprint.hexToByteArray(),
+                            zip32AccountIndex = Zip32AccountIndex.new(index)
+                        ),
+                    birthday = birthday,
+                ),
+            )
         }
 
     /**

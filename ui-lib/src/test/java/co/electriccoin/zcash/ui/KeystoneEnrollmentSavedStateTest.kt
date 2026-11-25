@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui
 
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import android.os.Bundle
 import android.os.Parcel
 import androidx.navigation.NavHostController
@@ -64,7 +65,7 @@ class KeystoneEnrollmentSavedStateTest {
             val first = newController().also { it.installGraph() }
             first.navigate(ScanKeystoneSignInRequest)
             val routing = NavigationRouterImpl()
-            val session = KeystoneEnrollmentSession()
+            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
             val account = mockk<ZcashAccount> { every { ufvk } returns SYNTHETIC_UFVK }
             val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
             val sdk = mockk<KeystoneSDKProvider> {
@@ -96,7 +97,7 @@ class KeystoneEnrollmentSavedStateTest {
             assertEquals(height, restored.currentBackStackEntry?.toRoute<HWHeightArgs>())
             assertSame(accounts, session.resolve(selection.sessionId))
 
-            val recreatedProcess = KeystoneEnrollmentSession()
+            val recreatedProcess = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
             assertNull(recreatedProcess.resolve(selection.sessionId))
             restored.returnToKeystoneScanner()
 
@@ -120,7 +121,7 @@ class KeystoneEnrollmentSavedStateTest {
             val controller = newController().also { it.installGraph() }
             controller.navigate(ScanKeystoneSignInRequest)
             val routing = NavigationRouterImpl()
-            val session = KeystoneEnrollmentSession()
+            val session = KeystoneEnrollmentSession(EditAccountFixtures.enrollmentAccess())
             val account = mockk<ZcashAccount>()
             val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
             val sdk = mockk<KeystoneSDKProvider> {

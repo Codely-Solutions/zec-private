@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.restore.height
 
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -243,10 +244,11 @@ class RestoreHeightBoundaryReviewTest {
         private val keystoneAccounts = mockk<ZcashAccounts>(relaxed = true) {
             every { accounts } returns listOf(mockk(relaxed = true))
         }
-        private val session = KeystoneEnrollmentSession()
+        private val walletEnrollment = EditAccountFixtures.enrollmentAccess()
+        private val session = KeystoneEnrollmentSession(walletEnrollment)
         private val account = mockk<Account>()
         private val accounts = mockk<AccountDataSource>(relaxed = true) {
-            coEvery { importKeystoneAccount(any(), any(), any(), any()) } returns account
+            coEvery { importKeystoneAccount(any(), any(), any(), any(), any()) } returns account
         }
         private val ledger = mockk<LedgerAccountImporter>(relaxed = true) {
             every { hasPendingPairing() } returns true
@@ -260,13 +262,13 @@ class RestoreHeightBoundaryReviewTest {
         }
 
         val enrollments = listOf(
-            HWWalletEnrollment.Keystone(session.start(keystoneAccounts)),
+            HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, keystoneAccounts)),
             HWWalletEnrollment.Ledger,
             HWWalletEnrollment.ViewOnly,
         )
         val createAccount = CreateHWWalletAccountUseCase(
             keystoneSession = session,
-            createKeystoneAccount = CreateKeystoneAccountUseCase(accounts, mockk(relaxed = true)),
+            createKeystoneAccount = CreateKeystoneAccountUseCase(accounts, mockk(relaxed = true), walletEnrollment),
             ledgerAccountImporter = ledger,
             viewOnlyAccountImporter = viewOnly,
             navigationRouter = router,
@@ -275,8 +277,8 @@ class RestoreHeightBoundaryReviewTest {
         fun verifyCalls(enrollment: HWWalletEnrollment, height: BlockHeight, count: Int) {
             when (enrollment) {
                 is HWWalletEnrollment.Keystone -> {
-                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any()) }
-                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), height) }
+                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any(), any()) }
+                    coVerify(exactly = count) { accounts.importKeystoneAccount(any(), any(), any(), any(), height) }
                 }
                 HWWalletEnrollment.Ledger -> {
                     coVerify(exactly = count) { ledger.importAccount(any()) }

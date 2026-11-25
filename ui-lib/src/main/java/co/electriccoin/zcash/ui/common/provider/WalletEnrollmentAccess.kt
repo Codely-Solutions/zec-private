@@ -7,6 +7,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
+@ConsistentCopyVisibility
 data class WalletEnrollmentToken internal constructor(internal val wallet: Long, internal val sdkErasure: Long)
 
 class WalletEnrollmentAccess(

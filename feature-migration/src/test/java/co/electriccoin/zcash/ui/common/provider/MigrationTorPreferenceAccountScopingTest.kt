@@ -204,6 +204,7 @@ private class FakeAccountDataSource(
     override suspend fun selectAccount(account: WalletAccount) = error("unsupported")
 
     override suspend fun importKeystoneAccount(
+        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
         ufvk: String,
         seedFingerprint: String,
         index: Long,
