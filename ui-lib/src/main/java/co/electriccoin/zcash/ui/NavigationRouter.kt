@@ -227,12 +227,18 @@ internal fun NavigationRouter.isAtEntry(sourceEntryId: String?) =
 internal fun NavigationRouter.isForegroundAtEntry(sourceEntryId: String?): Boolean =
     sourceEntryId == null || activeEntry.value?.let { it.id == sourceEntryId && it.hostResumed } == true
 
-internal suspend fun <T> NavigationRouter.whileAtEntry(sourceEntryId: String?, block: suspend () -> T): T? {
+internal suspend fun <T> NavigationRouter.whileAtEntry(
+    sourceEntryId: String?,
+    requireForeground: Boolean = false,
+    block: suspend () -> T,
+): T? {
     if (sourceEntryId == null) return block()
-    return if (!isAtEntry(sourceEntryId)) null else coroutineScope {
+    fun isOwner(entry: ActiveNavigationEntry?) =
+        entry?.id == sourceEntryId && (!requireForeground || entry.hostResumed)
+    return if (!isOwner(activeEntry.value)) null else coroutineScope {
         val operation = async { block() }
         val monitor = launch {
-            activeEntry.first { it?.id != sourceEntryId }
+            activeEntry.first { !isOwner(it) }
             operation.cancel()
         }
         try {

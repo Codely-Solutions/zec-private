@@ -8,7 +8,7 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-import co.electriccoin.zcash.ui.common.provider.recoverableReads
+import co.electriccoin.zcash.ui.common.provider.retryConversionPreferenceRead
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.RefreshLock
@@ -53,9 +53,8 @@ class ExchangeRateRepositoryImpl(
     preferredFiatProvider: PreferredFiatProvider,
     private val exchangeRateDataSource: ExchangeRateDataSource,
     private val synchronizerProvider: SynchronizerProvider,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 ) : ExchangeRateRepository {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
     private val refreshPipeline = MutableSharedFlow<Unit>()
 
     private val isExchangeRateOptedIn =
@@ -70,9 +69,8 @@ class ExchangeRateRepositoryImpl(
     private val preferredFiat =
         preferredFiatProvider
             .observe()
-            .map { it ?: FiatCurrency.USD }
-            .recoverableReads()
-            .map { it.getOrNull() }
+            .map<FiatCurrency?, FiatCurrency?> { it ?: FiatCurrency.USD }
+            .retryConversionPreferenceRead(null)
             .distinctUntilChanged()
             .stateIn(
                 scope = scope,

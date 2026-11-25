@@ -19,7 +19,6 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByFiatDisplayName
 import co.electriccoin.zcash.ui.screen.exchangerate.settings.CurrencyFieldState
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,8 +36,7 @@ class ExchangeRateOptInVM(
 
     val state =
         selectedCurrency
-            .filterNotNull()
-            .map { createState(it) }
+            .map { currency -> currency?.let(::createState) }
             .withLce(preference) { error ->
                 errorMapper.mapToState(error, message = stringRes(R.string.currencyConversion_preferenceUnavailable))
             }.stateIn(this)
@@ -62,7 +60,7 @@ class ExchangeRateOptInVM(
                 } else {
                     null
                 },
-            onBack = ::dismissOptInExchangeRateUsd,
+            onBack = ::onBack,
             onEnableClick = ::optInExchangeRateUsd,
             onSkipClick = ::onSkipClick
         )
@@ -76,7 +74,7 @@ class ExchangeRateOptInVM(
         preference.execute { optInExchangeRate(optIn, currency, sourceEntryId = sourceEntryId) }
     }
 
-    private fun dismissOptInExchangeRateUsd() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 
     private fun onSelectCurrencyClick() =
         viewModelScope.launch {

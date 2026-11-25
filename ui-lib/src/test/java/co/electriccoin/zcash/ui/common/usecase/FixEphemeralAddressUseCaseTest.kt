@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -93,6 +94,52 @@ class FixEphemeralAddressUseCaseTest {
             verify(exactly = statusRequests) { status.observeForAccount("synthetic-address", account, any()) }
             verify(exactly = 0) { navigation.back() }
         }
+    }
+
+    @Test
+    fun backgroundingTheSameDialogCancelsItsSuspendedStatusLookup() = runTest {
+        val owner = mockk<WalletAccount> {
+            every { isSelected } returns true
+            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16)))
+        }
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+        }
+        val entry = ActiveNavigationEntry("discover", "Discover")
+        val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
+        val navigation = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
+        val statusStarted = CompletableDeferred<Unit>()
+        val statusCancelled = CompletableDeferred<Unit>()
+        val status = mockk<GetSwapStatusUseCase> {
+            every { observeForAccount("synthetic-reference", owner, any()) } returns flow {
+                assertNotNull(currentCoroutineContext()[TorOnlyRequest.Key])
+                statusStarted.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    statusCancelled.complete(Unit)
+                }
+            }
+        }
+        val sdk = mockk<Synchronizer> {
+            coEvery { validateAddress("synthetic-reference") } returns mockk<AddressType.Invalid>()
+        }
+        val synchronizerProvider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } returns sdk
+        }
+        val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
+        val recover = FixEphemeralAddressUseCase(
+            synchronizerProvider, navigation, accounts, status, mockk(),
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(), tor,
+        )
+        val lookup = async { recover("synthetic-reference", entry.id) }
+        statusStarted.await()
+
+        active.value = entry.copy(hostResumed = false)
+
+        assertFailsWith<CancellationException> { lookup.await() }
+        statusCancelled.await()
+        coVerify(exactly = 0) { sdk.fetchUtxosByAddress(any(), any()) }
     }
 
     @Test

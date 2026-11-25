@@ -13,8 +13,8 @@ import org.koin.core.parameter.parametersOf
 fun ExchangeRateOptInScreen(sourceEntryId: String) {
     val vm = koinViewModel<ExchangeRateOptInVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
+    BackHandler { vm.onBack() }
     LceRenderer(state = state) { content ->
-        BackHandler { content.onBack() }
         ExchangeRateOptInView(state = content)
     }
 }

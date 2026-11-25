@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.FiatCurrency
+import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateUnavailable
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
@@ -14,21 +15,25 @@ import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import io.mockk.coVerify
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -37,24 +42,43 @@ import kotlin.test.assertTrue
  * [ExchangeRateRepositoryImpl] when the CMC exchange-rate lookup fails or is unavailable (MOB-1124).
  */
 class ExchangeRateRepositoryTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun unreadablePreferredFiatLeavesHomeUsableWithoutRequestingAnotherCurrency() = runBlocking {
+    fun unreadablePreferredFiatLeavesHomeUsableAndRecoversWithTheSameCollector() = runTest {
         val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
             every { observe() } returns flowOf(true)
         }
+        var attempts = 0
+        val euro = FiatCurrency("EUR")
         val preferred = mockk<PreferredFiatProvider> {
-            every { observe() } returns flow { throw IOException("Synthetic stored currency read failure") }
+            every { observe() } returns flow {
+                if (++attempts == 1) throw IOException("Synthetic stored currency read failure")
+                emit(euro)
+                awaitCancellation()
+            }
         }
-        val rates = mockk<ExchangeRateDataSource>()
-        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk())
+        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, euro)
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(euro) } returns quote
+        }
+        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk(), backgroundScope)
 
-        val unloaded = withTimeout(5_000L) {
-            repository.state.filterIsInstance<ExchangeRateState.Data>().first { !it.isLoading }
-        }
+        backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        val unloaded = assertIs<ExchangeRateState.Data>(repository.state.value)
 
         assertNull(unloaded.currencyConversion)
         assertFalse(unloaded.isRefreshEnabled)
         coVerify(exactly = 0) { rates.getExchangeRate(any()) }
+
+        advanceTimeBy(5_001L)
+
+        assertEquals(2, attempts)
+        val recovered = assertIs<ExchangeRateState.Data>(repository.state.value)
+        assertEquals(euro, recovered.expectedCurrency)
+        assertEquals(quote, recovered.currencyConversion)
+        coVerify(exactly = 1) { rates.getExchangeRate(euro) }
+        coVerify(exactly = 0) { rates.getExchangeRate(FiatCurrency.USD) }
     }
 
     @Test

@@ -24,7 +24,8 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByFiatDisplayName
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -46,14 +47,15 @@ internal class ExchangeRateSettingsVM(
 
     private val selectedCurrency = MutableStateFlow<FiatCurrency?>(null)
     private val preference = mutableLce<Unit>()
+    private val torReads: Flow<Result<Boolean?>?> = isTorEnabledStorageProvider.observe().recoverableReads()
 
     val state =
         combine(
             isOptedIn,
-            selectedCurrency.filterNotNull(),
-            isTorEnabledStorageProvider.observe().recoverableReads()
+            selectedCurrency,
+            torReads.onStart { emit(null) },
         ) { isOptedIn, selectedCurrency, torPreference ->
-            createState(isOptedIn, selectedCurrency, torPreference)
+            selectedCurrency?.let { createState(isOptedIn, it, torPreference) }
         }.withLce(preference) { error ->
             errorMapper.mapToState(error, message = stringRes(R.string.currencyConversion_preferenceUnavailable))
         }.stateIn(this)
@@ -73,7 +75,7 @@ internal class ExchangeRateSettingsVM(
     private fun createState(
         isOptedIn: Boolean,
         selectedCurrency: FiatCurrency,
-        torPreference: Result<Boolean?>
+        torPreference: Result<Boolean?>?
     ) = ExchangeRateSettingsState(
         isOptedIn = SimpleCheckboxState(isOptedIn, ::onOptInClick),
         isOptedOut = SimpleCheckboxState(!isOptedIn, ::onOptOutClick),
@@ -97,13 +99,13 @@ internal class ExchangeRateSettingsVM(
         onBack = ::onBack,
         info =
             when {
-                !VersionInfo.IS_CMC_AVAILABLE || torPreference.isFailure -> null
+                !VersionInfo.IS_CMC_AVAILABLE || torPreference == null || torPreference.isFailure -> null
                 torPreference.getOrNull() == true -> stringRes(R.string.currencyConversion_torOnInfo)
                 else -> stringRes(R.string.currencyConversion_torOffInfo)
             }
     )
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 
     private fun onOptInClick() = isOptedIn.update { true }
 

@@ -53,7 +53,7 @@ class FixEphemeralAddressUseCase(
         canRecover: () -> Boolean,
     ): Boolean {
         val atRecoveryEntry = { canRecover() && navigationRouter.isForegroundAtEntry(sourceEntryId) }
-        val scan = navigationRouter.whileAtEntry(sourceEntryId) {
+        val scan = navigationRouter.whileAtEntry(sourceEntryId, requireForeground = true) {
             withTimeoutOrNull(PRE_SCAN_TIMEOUT) {
                 if (!atRecoveryEntry() || isTorEnabled.get() != true) {
                     return@withTimeoutOrNull null

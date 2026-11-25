@@ -3,9 +3,13 @@ package co.electriccoin.zcash.ui.common.provider
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
 
 interface IsExchangeRateEnabledStorageProvider : NullableBooleanStorageProvider {
     override suspend fun store(amount: Boolean) = store(amount, null)
@@ -35,7 +39,7 @@ class IsExchangeRateEnabledStorageProviderImpl(
     override fun observe(): Flow<Boolean?> =
         channelFlow {
             launch {
-                newProvider.observe().recoverableReads().collect { read -> send(read.getOrElse { false }) }
+                newProvider.observe().retryConversionPreferenceRead(false).collect { send(it) }
             }
             launch { cleanUpLegacyPreference() }
         }
@@ -62,3 +66,15 @@ private class NewIsExchangeRateEnabledStorageProvider(
     override val preferenceHolder: StandardPreferenceProvider,
     key: PreferenceKey,
 ) : BaseNullableBooleanStorageProvider(key = key)
+
+/** Leaves conversion off while a read is unavailable, then reopens the listener for live subscribers. */
+internal fun <T> Flow<T>.retryConversionPreferenceRead(fallback: T): Flow<T> = retryWhen { failure, attempt ->
+    if (failure !is Exception || failure is CancellationException) return@retryWhen false
+    emit(fallback)
+    val multiplier = minOf(attempt, MAX_CONVERSION_READ_BACKOFF_STEPS - 1L).toInt() + 1
+    delay(CONVERSION_READ_BACKOFF_STEP * multiplier)
+    true
+}
+
+private val CONVERSION_READ_BACKOFF_STEP = 5.seconds
+private const val MAX_CONVERSION_READ_BACKOFF_STEPS = 6

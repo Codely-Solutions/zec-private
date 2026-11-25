@@ -12,13 +12,42 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.flow
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExchangeRatePreferenceRecoveryTest {
+    @Test
+    fun failedOptInObservationLeavesConversionOffUntilTheSameCollectorReadsTheChoice() = runTest {
+        val legacy = PreferenceKey("EXCHANGE_RATE_OPTED_IN")
+        val enabled = PreferenceKey("EXCHANGE_RATE_OPTED_IN_2")
+        var reads = 0
+        val preferences = mockk<PreferenceProvider> {
+            coEvery { hasKey(legacy) } returns false
+            coEvery { getString(enabled) } returns "true"
+            every { observe(enabled) } returns flow {
+                if (++reads == 1) throw IOException("Synthetic temporary preference observation failure")
+                emit("true")
+            }
+        }
+        val holder = mockk<StandardPreferenceProvider> {
+            coEvery { this@mockk() } returns preferences
+        }
+        val observed = mutableListOf<Boolean?>()
+        backgroundScope.launch { IsExchangeRateEnabledStorageProviderImpl(holder).observe().collect { observed += it } }
+
+        runCurrent()
+        assertEquals(listOf<Boolean?>(false), observed)
+        advanceTimeBy(5_001L)
+
+        assertEquals(listOf<Boolean?>(false, true), observed)
+        assertEquals(2, reads)
+    }
+
     @Test
     fun pairedConversionChoiceUsesOneCommitAndKeepsTheExistingPreferenceKeys() = runTest {
         val legacy = PreferenceKey("EXCHANGE_RATE_OPTED_IN")

@@ -48,7 +48,7 @@ val repositoryModule =
         single { AppUpdateRepository(get(), get()) }
         singleOf(::WalletRepositoryImpl) bind WalletRepository::class
         singleOf(::ConfigurationRepositoryImpl) bind ConfigurationRepository::class
-        singleOf(::ExchangeRateRepositoryImpl) bind ExchangeRateRepository::class
+        single { ExchangeRateRepositoryImpl(get(), get(), get(), get()) } bind ExchangeRateRepository::class
         singleOf(::FiatCurrencyRepositoryImpl) bind FiatCurrencyRepository::class
         singleOf(::BiometricRepositoryImpl) bind BiometricRepository::class
         singleOf(::KeystoneProposalRepositoryImpl) bind KeystoneProposalRepository::class
