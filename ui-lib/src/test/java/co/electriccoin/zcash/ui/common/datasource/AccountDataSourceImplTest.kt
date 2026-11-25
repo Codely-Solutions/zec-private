@@ -37,6 +37,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.filterNotNull
@@ -88,7 +89,7 @@ class AccountDataSourceImplTest {
         ledgerBinding: LedgerAccountBindingData? = null,
         scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
         storedSelection: Flow<AccountUuid?> = flowOf(null),
-        accountPreferenceReads: Flow<Long> = flowOf(0L),
+        accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
         synchronizerFlow: MutableStateFlow<Synchronizer?>? = null,
         deriveAddress: suspend () -> String = { "unified-address" },
     ): AccountDataSourceImpl {
@@ -131,14 +132,16 @@ class AccountDataSourceImplTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun failedSelectionReadWithholdsAccountUntilVerifiedRetry() = runTest {
+    fun retryWithholdsPreviousSelectionWhileTheCurrentReadIsPendingOrFails() = runTest {
         val readGeneration = MutableStateFlow(0L)
         val liveSynchronizer = MutableStateFlow<Synchronizer?>(null)
+        var mayRead: CompletableDeferred<Unit>? = null
         var isReadable = true
         val source = dataSource(
             MutableStateFlow(null),
             scope = backgroundScope,
             storedSelection = flow {
+                mayRead?.await()
                 check(isReadable) { "Synthetic selection read failure" }
                 emit(accountUuid)
             },
@@ -148,23 +151,28 @@ class AccountDataSourceImplTest {
         runCurrent()
         assertTrue(assertNotNull(source.allAccounts.value).single().isSelected)
 
-        isReadable = false
-        readGeneration.value++
-        runCurrent()
-        assertTrue(source.isAccountSelectionUnavailable.first())
-        assertFalse(assertNotNull(source.allAccounts.value).single().isSelected)
-        assertNull(source.selectedAccount.first())
-
+        val pending = CompletableDeferred<Unit>()
+        mayRead = pending
         val synchronizer = assertNotNull(liveSynchronizer.value)
         liveSynchronizer.value = null
         readGeneration.value++
         runCurrent()
-        assertTrue(source.isAccountSelectionUnavailable.first())
+        assertEquals(AccountSelectionReadState.CHECKING, source.accountSelectionReadState.first().state)
+        assertFalse(assertNotNull(source.allAccounts.value).single().isSelected)
+        assertNull(source.selectedAccount.first())
+
+        isReadable = false
+        pending.complete(Unit)
+        runCurrent()
+        assertEquals(AccountSelectionReadState.UNAVAILABLE, source.accountSelectionReadState.first().state)
+        assertNull(source.selectedAccount.first())
 
         isReadable = true
+        mayRead = null
+        readGeneration.value++
         liveSynchronizer.value = synchronizer
         runCurrent()
-        assertFalse(source.isAccountSelectionUnavailable.first())
+        assertEquals(AccountSelectionReadState.VERIFIED, source.accountSelectionReadState.first().state)
         assertEquals(accountUuid, assertNotNull(source.selectedAccount.first()).sdkAccount.accountUuid)
     }
 

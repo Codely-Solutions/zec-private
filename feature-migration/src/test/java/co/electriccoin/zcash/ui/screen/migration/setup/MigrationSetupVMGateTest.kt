@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
+import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksArgs
 import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksVM
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import io.mockk.coEvery
@@ -147,6 +148,32 @@ class MigrationSetupVMGateTest {
         assertNull(automatic.state.value.error)
         verify(exactly = 1) { immediateNavigation.forward(any<MigrationReviewArgs>()) }
         verify(exactly = 1) { automaticNavigation.forward(any<MigrationBatteryArgs>()) }
+    }
+
+    @Test
+    fun delayedImmediateConfirmationHoldsModeAndNextUntilItsResult() = runTest(UnconfinedTestDispatcher(scheduler)) {
+        val result = CompletableDeferred<MigrationReviewArgs>()
+        val destination = mockk<GetMigrationPrivacyOrReviewDestinationUseCase> {
+            coEvery { this@mockk(MigrationMode.IMMEDIATE) } coAnswers { result.await() }
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val setup = vm(router, destination) { open }
+        backgroundScope.launch { setup.state.collect { } }
+
+        val visible = assertNotNull(setup.state.value.content)
+        visible.onModeChange(MigrationMode.IMMEDIATE)
+        visible.onConfirm()
+        val confirming = assertNotNull(setup.state.value.content)
+        assertTrue(confirming.isConfirming)
+        confirming.onModeChange(MigrationMode.AUTOMATIC)
+        confirming.onConfirm()
+        assertEquals(MigrationMode.IMMEDIATE, setup.state.value.content?.mode)
+        verify(exactly = 0) { router.forward(MigrationHowItWorksArgs) }
+
+        val accepted = MigrationReviewArgs(MigrationMode.IMMEDIATE, "synthetic-owner")
+        result.complete(accepted)
+        verify(exactly = 1) { router.forward(accepted) }
+        assertEquals(false, setup.state.value.content?.isConfirming)
     }
 
     @Test

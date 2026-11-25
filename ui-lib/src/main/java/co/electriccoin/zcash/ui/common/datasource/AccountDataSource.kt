@@ -27,6 +27,8 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
@@ -46,7 +48,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.channelFlow
@@ -59,7 +60,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -73,7 +73,8 @@ interface AccountDataSource {
 
     val selectedAccount: Flow<WalletAccount?>
 
-    val isAccountSelectionUnavailable: Flow<Boolean> get() = flowOf(false)
+    val accountSelectionReadState: Flow<AccountSelectionAvailability>
+        get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 
     val zashiAccount: Flow<ZodlAccount?>
 
@@ -144,6 +145,10 @@ interface AccountDataSource {
     )
 }
 
+data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
+
+enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
+
 @Suppress("TooManyFunctions")
 class AccountDataSourceImpl(
     private val synchronizerProvider: SynchronizerProvider,
@@ -153,25 +158,37 @@ class AccountDataSourceImpl(
     private val viewOnlyContent: ViewOnlyContent,
     private val context: Context,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-    private val accountPreferenceReads: Flow<Long> = flowOf(0L),
+    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
+    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
+        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
 ) : AccountDataSource {
     private val log = loggableNot("AccountDataSource")
 
     private val requestNextShieldedAddressChannel = MutableSharedFlow<AddressRequest>()
 
-    private val selectionUnavailable = MutableStateFlow(false)
-    override val isAccountSelectionUnavailable = selectionUnavailable.asStateFlow()
-
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val selectedAccountRead = synchronizerProvider.synchronizer.flatMapLatest { synchronizer ->
-        if (synchronizer == null) {
-            flowOf(null)
-        } else {
-            accountPreferenceReads.flatMapLatest { selectedAccountUUIDProvider.uuid.recoverableReads() }
+    private val selectedAccountRead = combine(accountWalletAvailability, accountPreferenceReads, ::Pair)
+        .flatMapLatest { (wallet, generation) ->
+            val currentWallet = wallet.generation == null || wallet.generation == generation
+            if (currentWallet && wallet.availability == StoredWalletAvailability.PRESENT) {
+                selectedAccountUUIDProvider.uuid.recoverableReads().map { SelectedAccountRead(generation, it) }
+            } else {
+                flowOf(null)
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    private val currentSelection = combine(accountPreferenceReads, selectedAccountRead) { _, read ->
+        read?.takeIf { it.generation == accountPreferenceReads.value }
+    }
+
+    override val accountSelectionReadState = currentSelection.map { read ->
+        val state = when {
+            read == null -> AccountSelectionReadState.CHECKING
+            read.result.isFailure -> AccountSelectionReadState.UNAVAILABLE
+            else -> AccountSelectionReadState.VERIFIED
         }
-    }.onEach { result ->
-        if (result != null) selectionUnavailable.value = result.isFailure
-    }.stateIn(scope, SharingStarted.Eagerly, null)
+        AccountSelectionAvailability(read?.generation ?: accountPreferenceReads.value, state)
+    }.distinctUntilChanged()
 
     /**
      * A null balances snapshot from the synchronizer propagates as null all the way through each
@@ -184,6 +201,7 @@ class AccountDataSourceImpl(
         synchronizerProvider
             .synchronizer
             .flatMapLatest { synchronizer ->
+                val generation = accountPreferenceReads.value
                 synchronizer
                     ?.accountsFlow
                     ?.filterNotNull()
@@ -196,31 +214,28 @@ class AccountDataSourceImpl(
                                         observeUnifiedAddress(synchronizer, sdkAccount),
                                         observeTransparentAddress(synchronizer, sdkAccount),
                                         observeSaplingAddress(synchronizer, sdkAccount),
-                                        observeIsSelected(sdkAccount, allSdkAccounts),
                                     ) {
                                         balance,
                                         unifiedAddress,
                                         transparentAddress,
                                         saplingAddress,
-                                        isSelected,
                                         ->
                                         AccountSnapshot(
                                             balance = balance,
                                             unifiedAddress = unifiedAddress,
                                             transparentAddress = transparentAddress,
                                             saplingAddress = saplingAddress,
-                                            isSelected = isSelected,
                                         )
                                     },
                                     observeLedgerBinding(sdkAccount),
                                 ) { snapshot, ledgerBinding ->
                                     createWalletAccount(sdkAccount, snapshot, ledgerBinding)
                                 }
-                            }.combineToFlow()
+                            }.combineToFlow().map { AccountRows(generation, it) }
                     }
                     ?: flowOf(null)
-            }.map { it?.sortedDescending() }
-            .retainWhileWalletExists(persistableWalletProvider)
+            }.retainWhileWalletExists(persistableWalletProvider)
+            .combine(currentSelection) { snapshot, read -> applyAccountSelection(snapshot, read) }
             .stateIn(
                 scope = scope,
                 started = SharingStarted.Eagerly,
@@ -509,7 +524,7 @@ class AccountDataSourceImpl(
                     orchardBalance = snapshot.balance?.orchard,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
-                    isSelected = snapshot.isSelected,
+                    isSelected = false,
                     deviceIdentity = ledgerBinding?.deviceIdentityEncoding,
                     zip32AccountIndex = ledgerBinding?.zip32AccountIndex,
                 )
@@ -523,7 +538,7 @@ class AccountDataSourceImpl(
                     orchardBalance = snapshot.balance?.orchard,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
-                    isSelected = snapshot.isSelected,
+                    isSelected = false,
                 )
             }
 
@@ -537,7 +552,7 @@ class AccountDataSourceImpl(
                     saplingBalance = snapshot.balance?.sapling,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
-                    isSelected = snapshot.isSelected,
+                    isSelected = false,
                     name = customName?.let { stringRes(it) } ?: viewOnlyContent.defaultAccountName,
                     customName = customName,
                     icon = viewOnlyContent.accountIcon,
@@ -554,7 +569,7 @@ class AccountDataSourceImpl(
                     saplingBalance = snapshot.balance?.sapling,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
-                    isSelected = snapshot.isSelected,
+                    isSelected = false,
                 )
             }
         }
@@ -574,16 +589,23 @@ class AccountDataSourceImpl(
      * is selected. That heals a selection [deleteAccount] could not clear, for example when the
      * process died between the SDK deletion and the clear.
      */
-    private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
-        selectedAccountRead.filterNotNull().map { selection ->
-            if (selection.isFailure) return@map false
-            val uuid = selection.getOrThrow()?.takeIf { stored -> allAccounts.any { it.accountUuid == stored } }
-            if (isOrchardOnlyAccount(sdkAccount)) {
-                sdkAccount.accountUuid == uuid || allAccounts.size == 1
-            } else {
-                uuid == null || sdkAccount.accountUuid == uuid || allAccounts.size == 1
-            }
+    private fun applyAccountSelection(
+        snapshot: AccountRows?,
+        read: SelectedAccountRead?,
+    ): List<WalletAccount>? = snapshot?.let { (generation, rows) ->
+        val verified = read?.takeIf { it.generation == accountPreferenceReads.value }?.result
+        val storedUuid = verified?.getOrNull()
+        val currentAccountList = generation == accountPreferenceReads.value
+        val uuid = storedUuid?.takeIf { stored ->
+            !currentAccountList || rows.any { it.sdkAccount.accountUuid == stored }
         }
+        rows.map { account ->
+            val matches = account.sdkAccount.accountUuid == uuid
+            val isDefault = uuid == null && !isOrchardOnlyAccount(account.sdkAccount)
+            val useFallback = currentAccountList && (rows.size == 1 || isDefault)
+            account.withSelection(verified?.isSuccess == true && (matches || useFallback))
+        }.sortedDescending()
+    }
 
     @Suppress("TooGenericExceptionCaught")
     private fun observeUnifiedAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> {
@@ -685,12 +707,23 @@ private data class AddressRequest(
  * Everything one account's per-field flows contribute, bundled so the Ledger binding can be combined
  * in as a further source (kotlinx's typed [combine] tops out at five).
  */
+private data class SelectedAccountRead(val generation: Long, val result: Result<AccountUuid?>)
+
+private data class AccountRows(val generation: Long, val accounts: List<WalletAccount>)
+
+private fun WalletAccount.withSelection(selected: Boolean): WalletAccount =
+    if (isSelected == selected) this else when (this) {
+        is ZodlAccount -> copy(isSelected = selected)
+        is KeystoneAccount -> copy(isSelected = selected)
+        is LedgerAccount -> copy(isSelected = selected)
+        is ViewOnlyAccount -> copy(isSelected = selected)
+    }
+
 private data class AccountSnapshot(
     val balance: AccountBalance?,
     val unifiedAddress: String,
     val transparentAddress: String?,
     val saplingAddress: String?,
-    val isSelected: Boolean,
 )
 
 private const val RETRY_DELAY = 3L

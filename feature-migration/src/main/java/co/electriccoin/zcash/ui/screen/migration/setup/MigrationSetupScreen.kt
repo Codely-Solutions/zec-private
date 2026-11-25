@@ -154,6 +154,7 @@ fun MigrationSetupView(state: MigrationSetupState) {
                     selected = state.mode,
                     onSelect = state.onModeChange,
                     gate = state.gate,
+                    isEnabled = !state.isConfirming,
                 )
                 Spacer(Modifier.height(20.dp))
                 Spacer(Modifier.weight(1f))
@@ -178,6 +179,8 @@ fun MigrationSetupView(state: MigrationSetupState) {
                         ButtonState(
                             text = stringRes(DesignR.string.general_next),
                             onClick = state.onConfirm,
+                            isEnabled = !state.isConfirming,
+                            isLoading = state.isConfirming,
                         ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -240,6 +243,7 @@ private fun MigrationModeSelector(
     selected: MigrationMode,
     onSelect: (MigrationMode) -> Unit,
     gate: MigrationSetupGate,
+    isEnabled: Boolean,
 ) {
     Column(
         modifier = Modifier.selectableGroup(),
@@ -259,7 +263,7 @@ private fun MigrationModeSelector(
                     }
                 },
             isWarning = false,
-            isEnabled = gate == MigrationSetupGate.Open,
+            isEnabled = isEnabled && gate == MigrationSetupGate.Open,
             selected = selected,
             onSelect = onSelect,
         )
@@ -268,7 +272,7 @@ private fun MigrationModeSelector(
             title = stringRes(DesignR.string.migrationSetup_immediateTitle).getValue(),
             subtitle = stringRes(DesignR.string.migrationSetup_immediateSubtitle).getValue(),
             isWarning = true,
-            isEnabled = true,
+            isEnabled = isEnabled,
             selected = selected,
             onSelect = onSelect,
         )

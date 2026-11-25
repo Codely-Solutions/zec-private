@@ -13,6 +13,7 @@ data class MigrationSetupState(
     val onConfirm: () -> Unit,
     val onBack: () -> Unit,
     val gate: MigrationSetupGate = MigrationSetupGate.Open,
+    val isConfirming: Boolean = false,
 )
 
 /**

@@ -95,7 +95,7 @@ class MigrationSetupVM(
     val state: StateFlow<LceState<MigrationSetupState>> =
         combine(content, accountLce.state, confirmLce.state, gate) { setup, account, confirmation, currentGate ->
             LceState(
-                content = setup,
+                content = setup?.copy(isConfirming = confirmation.loading),
                 isLoading = account.loading || confirmation.loading || currentGate == null,
                 error = (confirmation.error ?: account.error)?.let(errorStateMapper::mapToState),
             )
@@ -121,7 +121,7 @@ class MigrationSetupVM(
         fiatBalance = fiatAmount(balance, exchangeRateState),
         isKeystone = isKeystone,
         mode = mode,
-        onModeChange = { selectedMode.value = it },
+        onModeChange = ::onModeChange,
         onFindOutMore = ::onFindOutMore,
         onConfirm = ::onConfirm,
         onBack = ::onBack,
@@ -148,13 +148,18 @@ class MigrationSetupVM(
             )
         )
 
-    private fun onConfirm() {
-        val currentGate = gate.value ?: return
-        when (effectiveMigrationMode(selectedMode.value, currentGate)) {
-            MigrationMode.IMMEDIATE -> confirmLce.guardLoading {
-                confirmLce.execute {
-                    val destination = getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
-                    navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
+    private fun onModeChange(mode: MigrationMode) = confirmLce.guardLoading {
+        selectedMode.value = mode
+    }
+
+    private fun onConfirm() = confirmLce.guardLoading {
+        val currentGate = gate.value ?: return@guardLoading
+        val selected = selectedMode.value
+        when (effectiveMigrationMode(selected, currentGate)) {
+            MigrationMode.IMMEDIATE -> confirmLce.execute {
+                val destination = getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
+                navigationRouter.stageResultFrom(sourceEntryId, isStillAllowed = { selectedMode.value == selected }) {
+                    NavigationCommand.Forward(listOf(destination))
                 }
             }
 

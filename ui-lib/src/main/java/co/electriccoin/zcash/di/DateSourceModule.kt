@@ -26,14 +26,16 @@ import org.koin.dsl.module
 val dataSourceModule =
     module {
         single<AccountDataSource> {
+            val wallet = get<PersistableWalletProvider>()
             AccountDataSourceImpl(
                 synchronizerProvider = get(),
                 selectedAccountUUIDProvider = get(),
-                persistableWalletProvider = get(),
+                persistableWalletProvider = wallet,
                 ledgerAccountBindingProvider = get(),
                 viewOnlyContent = get(),
                 context = get(),
-                accountPreferenceReads = get<PersistableWalletProvider>().readGeneration,
+                accountPreferenceReads = wallet.readGeneration,
+                accountWalletAvailability = wallet.availabilityRead,
             )
         }
         singleOf(::ZashiSpendingKeyDataSourceImpl) bind ZashiSpendingKeyDataSource::class

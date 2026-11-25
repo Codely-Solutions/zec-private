@@ -16,6 +16,8 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.AccountSelectionAvailability
+import co.electriccoin.zcash.ui.common.datasource.AccountSelectionReadState
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.FastestServersState
 import co.electriccoin.zcash.ui.common.model.OnboardingState
@@ -112,7 +114,7 @@ class WalletRepositoryImpl(
     private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val resetProgressStore: ResetProgressStore,
-    transportGate: WalletSdkTransportGate? = null,
+    private val transportGate: WalletSdkTransportGate? = null,
     accountDataSource: AccountDataSource? = null,
 ) : WalletRepository {
     /**
@@ -162,29 +164,35 @@ class WalletRepositoryImpl(
                 onboardingStateBeforeCommit.value ?: state
             }
 
-    private val transportRead =
-        transportGate?.let { gate ->
-            combine(gate.unavailable, gate.isTransportVerified(persistableWalletProvider.readGeneration)) {
-                unavailable, verified ->
-                when {
-                    unavailable -> StoredWalletAvailability.UNAVAILABLE
-                    verified -> StoredWalletAvailability.PRESENT
-                    else -> StoredWalletAvailability.CHECKING
-                }
-            }
-        } ?: flowOf(StoredWalletAvailability.PRESENT)
+    private val transportChanges = transportGate?.let { gate ->
+        combine(gate.unavailable, gate.verifiedGeneration, ::Pair)
+    } ?: flowOf(Unit)
+
+    private val accountAvailability = accountDataSource?.accountSelectionReadState
+        ?: flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 
     private val onboardingWithWallet =
         combine(
             onboardingState,
-            persistableWalletProvider.availability,
-            transportRead,
-            accountDataSource?.isAccountSelectionUnavailable ?: flowOf(false),
-        ) { state, availability, transport, accountUnavailable ->
+            persistableWalletProvider.availabilityRead,
+            transportChanges,
+            accountAvailability,
+        ) { state, wallet, _, account ->
+            val generation = if (wallet.generation != null || account.generation != null || transportGate != null) {
+                persistableWalletProvider.readGeneration.value
+            } else {
+                null
+            }
             val walletAvailability = when {
-                availability != StoredWalletAvailability.PRESENT -> availability
-                accountUnavailable -> StoredWalletAvailability.UNAVAILABLE
-                else -> transport
+                wallet.generation != null && wallet.generation != generation -> StoredWalletAvailability.CHECKING
+                wallet.availability != StoredWalletAvailability.PRESENT -> wallet.availability
+                transportGate?.unavailable?.value == true -> StoredWalletAvailability.UNAVAILABLE
+                transportGate != null && transportGate.verifiedGeneration.value != generation ->
+                    StoredWalletAvailability.CHECKING
+                account.generation != null && account.generation != generation -> StoredWalletAvailability.CHECKING
+                account.state == AccountSelectionReadState.UNAVAILABLE -> StoredWalletAvailability.UNAVAILABLE
+                account.state == AccountSelectionReadState.CHECKING -> StoredWalletAvailability.CHECKING
+                else -> StoredWalletAvailability.PRESENT
             }
             state to walletAvailability
         }

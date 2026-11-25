@@ -13,6 +13,9 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 interface HttpClientProvider {
     suspend fun create(): HttpClient
@@ -26,14 +29,22 @@ interface HttpClientProvider {
     suspend fun supportsKtorTimeouts(): Boolean = true
 }
 
+/** Carries a Tor-only requirement through suspending callers that use the shared HTTP factory. */
+internal object TorOnlyRequest : AbstractCoroutineContextElement(Key) {
+    object Key : CoroutineContext.Key<TorOnlyRequest>
+}
+
 class HttpClientProviderImpl(
     private val synchronizerProvider: SynchronizerProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider
 ) : HttpClientProvider {
     override suspend fun create(): HttpClient =
-        if (isTorEnabledStorageProvider.get() == true) createTor() else createDirect()
+        if (requiresTor()) createTor() else createDirect()
 
-    override suspend fun supportsKtorTimeouts(): Boolean = isTorEnabledStorageProvider.get() != true
+    override suspend fun supportsKtorTimeouts(): Boolean = !requiresTor()
+
+    private suspend fun requiresTor() =
+        currentCoroutineContext()[TorOnlyRequest.Key] != null || isTorEnabledStorageProvider.get() == true
 
     override suspend fun createTor() =
         synchronizerProvider

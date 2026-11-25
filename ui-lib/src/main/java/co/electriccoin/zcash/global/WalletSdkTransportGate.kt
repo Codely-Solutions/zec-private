@@ -19,11 +19,9 @@ import kotlinx.coroutines.flow.transform
 class WalletSdkTransportGate {
     private val deliveredGeneration = MutableStateFlow<Long?>(null)
     private val withdrawnGeneration = MutableStateFlow<Long?>(null)
+    val verifiedGeneration = deliveredGeneration.asStateFlow()
     private val failed = MutableStateFlow(false)
     val unavailable = failed.asStateFlow()
-
-    internal fun isTransportVerified(generation: StateFlow<Long>): Flow<Boolean> =
-        combine(generation, deliveredGeneration) { _, _ -> generation.value == deliveredGeneration.value }
 
     internal fun walletDecisions(wallets: Flow<WalletSdkRead?>, generation: StateFlow<Long>): Flow<WalletSdkRead> =
         combine(wallets, generation, deliveredGeneration) { read, _, _ ->

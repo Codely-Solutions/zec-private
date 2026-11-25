@@ -15,6 +15,7 @@ import io.mockk.verify
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -78,6 +79,30 @@ class HttpClientProviderTorFailureTest {
         stored = null
         assertNull(preference.get())
         assertEquals(false, display.observe().first())
+    }
+
+    @Test
+    fun aTorOnlyRecoveryStatusRequestCannotFollowTheWalletToTheDirectRoute() = runTest {
+        val preference = mockk<IsTorEnabledStorageProvider> {
+            coEvery { get() } returns false
+        }
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { getTorHttpClient(any()) } throws IOException("Synthetic Tor route unavailable")
+        }
+        val provider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } returns synchronizer
+        }
+        val api = KtorNearApiProvider(HttpClientProviderImpl(provider, preference))
+        mockkObject(OkHttp)
+        try {
+            every { OkHttp.create(any()) } throws AssertionError("A recovery status request must stay over Tor")
+            withContext(TorOnlyRequest) {
+                assertFailsWith<IOException> { api.checkSwapStatus("isolated-unfunded-reference") }
+            }
+            verify(exactly = 0) { OkHttp.create(any()) }
+        } finally {
+            unmockkObject(OkHttp)
+        }
     }
 
     private suspend fun assertTorFailure(

@@ -21,6 +21,8 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.spackle.AndroidApiVersion
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.AccountSelectionAvailability
+import co.electriccoin.zcash.ui.common.datasource.AccountSelectionReadState
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.OnboardingState
@@ -34,6 +36,7 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
@@ -159,9 +162,9 @@ class WalletRepositoryImplTest {
             val loaded = CompletableDeferred<PersistableWallet?>()
             val neverEmittingWalletProvider =
                 mockk<PersistableWalletProvider> {
-                    every { availability } returns flow {
+                    every { availabilityRead } returns flow {
                         loaded.await()
-                        emit(StoredWalletAvailability.PRESENT)
+                        emit(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT))
                     }
                 }
 
@@ -243,9 +246,9 @@ class WalletRepositoryImplTest {
         runTest {
             val walletLoaded = CompletableDeferred<PersistableWallet?>()
             val provider = mockk<PersistableWalletProvider> {
-                every { availability } returns flow {
+                every { availabilityRead } returns flow {
                     walletLoaded.await()
-                    emit(StoredWalletAvailability.PRESENT)
+                    emit(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT))
                 }
             }
             val (repository, _) = newRepository(OnboardingState.NONE, null, provider)
@@ -943,7 +946,8 @@ class WalletRepositoryImplTest {
         runTest {
             val failingWalletProvider =
                 mockk<PersistableWalletProvider> {
-                    every { availability } returns flowOf(StoredWalletAvailability.UNAVAILABLE)
+                    every { availabilityRead } returns
+                        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.UNAVAILABLE))
                     every { writeVersion } returns 0L
                 }
             coEvery { failingWalletProvider.getPersistableWallet() } throws
@@ -986,9 +990,9 @@ class WalletRepositoryImplTest {
 
     @Test
     fun unreadableAccountSelectionUsesAuthenticatedWalletRecovery() = runTest {
-        val selectionUnavailable = MutableStateFlow(true)
+        val read = MutableStateFlow(AccountSelectionAvailability(null, AccountSelectionReadState.UNAVAILABLE))
         val accounts = mockk<AccountDataSource> {
-            every { isAccountSelectionUnavailable } returns selectionUnavailable
+            every { accountSelectionReadState } returns read
         }
         val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet(), accountDataSource = accounts)
 
@@ -996,7 +1000,10 @@ class WalletRepositoryImplTest {
         assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
         assertTrue(harness.events.isEmpty())
 
-        selectionUnavailable.value = false
+        read.value = AccountSelectionAvailability(null, AccountSelectionReadState.CHECKING)
+        assertEquals(SecretState.LOADING, repository.secretState.first { it == SecretState.LOADING })
+
+        read.value = AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED)
         assertEquals(SecretState.READY, repository.secretState.first { it == SecretState.READY })
     }
 
@@ -1004,7 +1011,9 @@ class WalletRepositoryImplTest {
     fun retryFromUnreadableToAbsentRunsStartupRecoveryBeforeSetup() = runTest {
         val walletAvailability = MutableStateFlow(StoredWalletAvailability.UNAVAILABLE)
         val walletProvider = mockk<PersistableWalletProvider> {
-            every { availability } returns walletAvailability
+            every { availabilityRead } returns walletAvailability.map {
+                StoredWalletAvailabilityRead(null, it)
+            }
             every { writeVersion } returns 0L
             every { retryRead() } answers { walletAvailability.value = StoredWalletAvailability.ABSENT }
             coEvery { getPersistableWallet() } coAnswers {

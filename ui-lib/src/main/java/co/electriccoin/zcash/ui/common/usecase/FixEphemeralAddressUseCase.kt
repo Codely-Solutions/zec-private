@@ -8,11 +8,12 @@ import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
-import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.TorOnlyRequest
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,7 @@ class FixEphemeralAddressUseCase(
 
     @Suppress("TooGenericExceptionCaught")
     operator fun invoke(address: String, sourceEntryId: String?, onFailure: () -> Unit = {}) {
-        if (job?.isActive == true || !navigationRouter.isAtEntry(sourceEntryId)) return
+        if (job?.isActive == true || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
         val account = selectedAccount() ?: return
         val grant = appAccessSession.grant.value
         val token = walletWriteAccess.token()
@@ -57,7 +58,7 @@ class FixEphemeralAddressUseCase(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                if (canRecover() && navigationRouter.isAtEntry(sourceEntryId)) onFailure()
+                if (canRecover() && navigationRouter.isForegroundAtEntry(sourceEntryId)) onFailure()
             } finally {
                 isLoading.update { false }
             }
@@ -70,14 +71,17 @@ class FixEphemeralAddressUseCase(
         account: AccountUuid,
         canRecover: () -> Boolean,
     ) {
-        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isAtEntry(sourceEntryId)) return
+        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
 
         val synchronizer = synchronizerProvider.getSynchronizer()
         val ephemeral = resolveEphemeralAddress(synchronizer, address)
-        if (ephemeral != null && isTorEnabled.get() == true) {
-            val committed = navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back }
-            if (committed && canRecover()) fetchUtxosByAddress(synchronizer, account, ephemeral)
-        }
+            ?: error("A transparent address could not be established")
+        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
+
+        val confirmed = synchronizer.fetchUtxosByAddress(accountUuid = account, address = ephemeral)
+        check(confirmed) { "The lookup did not confirm funds" }
+        val committed = navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back }
+        if (committed && canRecover()) showDiscoveredFunds()
     }
 
     fun observeIsLoading() = isLoading.asStateFlow()
@@ -89,17 +93,12 @@ class FixEphemeralAddressUseCase(
         when (synchronizer.validateAddress(address)) {
             AddressType.Shielded, AddressType.Tex, AddressType.Unified -> null
             AddressType.Transparent -> address
-            is AddressType.Invalid -> getSwapStatus(depositAddress = address).status?.destinationAddress?.address
-        }
-
-    private suspend fun fetchUtxosByAddress(synchronizer: Synchronizer, account: AccountUuid, address: String) {
-        val fundsDiscovered = synchronizer.fetchUtxosByAddress(accountUuid = account, address = address)
-        withContext(Dispatchers.Main.immediate) {
-            if (fundsDiscovered) {
-                Toast.makeText(context, "Funds were successfully discovered", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "No funds were discovered", Toast.LENGTH_LONG).show()
+            is AddressType.Invalid -> withContext(TorOnlyRequest) {
+                getSwapStatus(depositAddress = address).status?.destinationAddress?.address
             }
         }
+
+    private suspend fun showDiscoveredFunds() = withContext(Dispatchers.Main.immediate) {
+        Toast.makeText(context, "Funds were successfully discovered", Toast.LENGTH_LONG).show()
     }
 }
