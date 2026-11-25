@@ -1,18 +1,29 @@
 package co.electriccoin.zcash.ui.screen.migration.setup
 
 import cash.z.ecc.android.sdk.MigrationAvailability
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationGateInfo
+import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationGateInfoUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetMigrationPrivacyOrReviewDestinationUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
+import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksVM
+import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,6 +51,7 @@ class MigrationSetupVMGateTest {
     private val spendable =
         mockk<WalletAccount>(relaxed = true) {
             every { isSpendable } returns true
+            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16)))
         }
     private val open = MigrationGateInfo.OPEN
     private val unsynced =
@@ -61,7 +73,17 @@ class MigrationSetupVMGateTest {
 
     private fun MigrationSetupVM.currentGate() = state.value.content?.gate
 
-    private fun vm(gateInfo: suspend () -> MigrationGateInfo) =
+    private fun errors() = ErrorMapperUseCase(
+        reportAccess = mockk(relaxed = true),
+        sendEmail = mockk(relaxed = true),
+        viewOnlyContent = mockk(relaxed = true),
+    )
+
+    private fun vm(
+        navigation: NavigationRouter = mockk(relaxed = true),
+        destination: GetMigrationPrivacyOrReviewDestinationUseCase = mockk(relaxed = true),
+        gateInfo: suspend () -> MigrationGateInfo,
+    ) =
         MigrationSetupVM(
             getSelectedWalletAccount =
                 mockk<GetSelectedWalletAccountUseCase> {
@@ -76,20 +98,56 @@ class MigrationSetupVMGateTest {
                 mockk<ExchangeRateRepository>(relaxed = true) {
                     every { state } returns MutableStateFlow(ExchangeRateState.OptIn)
                 },
-            navigationRouter = mockk(relaxed = true),
-            errorStateMapper =
-                ErrorMapperUseCase(
-                    reportAccess = mockk(relaxed = true),
-                    sendEmail = mockk(relaxed = true),
-                    viewOnlyContent = mockk(relaxed = true),
-                ),
-            getMigrationPrivacyOrReviewDestination = mockk(relaxed = true),
+            navigationRouter = navigation,
+            errorStateMapper = errors(),
+            getMigrationPrivacyOrReviewDestination = destination,
             getMigrationGateInfo =
                 mockk<GetMigrationGateInfoUseCase> {
                     coEvery { this@mockk() } coAnswers { gateInfo() }
                 },
             migrationUpgradeNotice = mockk(relaxed = true),
         )
+
+    @Test
+    fun bothModesKeepTheirScreenAndRetryAfterUnavailableTor() = runTest(UnconfinedTestDispatcher(scheduler)) {
+        var torAvailable = false
+        val tor = mockk<IsTorEnabledStorageProvider> {
+            coEvery { get() } coAnswers {
+                check(torAvailable) { "Synthetic unavailable Tor setting" }
+                true
+            }
+        }
+        val selected = mockk<GetSelectedWalletAccountUseCase> {
+            coEvery { this@mockk() } returns spendable
+        }
+        val servers = mockk<AutomaticServerRepository> {
+            coEvery { isServerCustom() } returns false
+        }
+        val destination = GetMigrationPrivacyOrReviewDestinationUseCase(selected, tor, servers)
+
+        val immediateNavigation = mockk<NavigationRouter>(relaxed = true)
+        val setup = vm(immediateNavigation, destination) { open }
+        backgroundScope.launch { setup.state.collect { } }
+        assertNotNull(setup.state.value.content).onModeChange(MigrationMode.IMMEDIATE)
+        assertNotNull(setup.state.value.content).onConfirm()
+        assertNotNull(setup.state.value.error)
+        verify(exactly = 0) { immediateNavigation.forward(any<MigrationReviewArgs>()) }
+
+        val automaticNavigation = mockk<NavigationRouter>(relaxed = true)
+        val automatic = MigrationHowItWorksVM(automaticNavigation, errors(), destination)
+        backgroundScope.launch { automatic.state.collect { } }
+        assertNotNull(automatic.state.value.content).onContinue()
+        assertNotNull(automatic.state.value.error)
+        verify(exactly = 0) { automaticNavigation.forward(any<MigrationBatteryArgs>()) }
+
+        torAvailable = true
+        assertNotNull(setup.state.value.content).onConfirm()
+        assertNotNull(automatic.state.value.content).onContinue()
+        assertNull(setup.state.value.error)
+        assertNull(automatic.state.value.error)
+        verify(exactly = 1) { immediateNavigation.forward(any<MigrationReviewArgs>()) }
+        verify(exactly = 1) { automaticNavigation.forward(any<MigrationBatteryArgs>()) }
+    }
 
     @Test
     fun theScreenIsLoadingUntilTheGateHasAnswered() =

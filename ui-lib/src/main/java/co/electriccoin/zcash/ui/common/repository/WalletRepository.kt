@@ -112,7 +112,7 @@ class WalletRepositoryImpl(
     private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val resetProgressStore: ResetProgressStore,
-    transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
+    transportGate: WalletSdkTransportGate? = null,
     accountDataSource: AccountDataSource? = null,
 ) : WalletRepository {
     /**
@@ -162,19 +162,29 @@ class WalletRepositoryImpl(
                 onboardingStateBeforeCommit.value ?: state
             }
 
+    private val transportRead =
+        transportGate?.let { gate ->
+            combine(gate.unavailable, gate.isTransportVerified(persistableWalletProvider.readGeneration)) {
+                unavailable, verified ->
+                when {
+                    unavailable -> StoredWalletAvailability.UNAVAILABLE
+                    verified -> StoredWalletAvailability.PRESENT
+                    else -> StoredWalletAvailability.CHECKING
+                }
+            }
+        } ?: flowOf(StoredWalletAvailability.PRESENT)
+
     private val onboardingWithWallet =
         combine(
             onboardingState,
             persistableWalletProvider.availability,
-            transportGate.unavailable,
+            transportRead,
             accountDataSource?.isAccountSelectionUnavailable ?: flowOf(false),
-        ) { state, availability, transportUnavailable, accountUnavailable ->
-            val walletAvailability = if (availability == StoredWalletAvailability.PRESENT &&
-                (transportUnavailable || accountUnavailable)
-            ) {
-                StoredWalletAvailability.UNAVAILABLE
-            } else {
-                availability
+        ) { state, availability, transport, accountUnavailable ->
+            val walletAvailability = when {
+                availability != StoredWalletAvailability.PRESENT -> availability
+                accountUnavailable -> StoredWalletAvailability.UNAVAILABLE
+                else -> transport
             }
             state to walletAvailability
         }
@@ -187,7 +197,8 @@ class WalletRepositoryImpl(
         ) { operation, recovery, (state, availability) ->
             when {
                 operation != WalletInitializationState.IDLE -> operation
-                availability == StoredWalletAvailability.UNAVAILABLE -> WalletInitializationState.CHECKING
+                availability == StoredWalletAvailability.CHECKING ||
+                    availability == StoredWalletAvailability.UNAVAILABLE -> WalletInitializationState.CHECKING
                 availability == StoredWalletAvailability.ABSENT && state.requiresWalletlessRecovery() ->
                     recovery.takeUnless { it == WalletInitializationState.IDLE } ?: WalletInitializationState.CHECKING
                 availability == StoredWalletAvailability.PRESENT && state != OnboardingState.READY ->
@@ -208,10 +219,10 @@ class WalletRepositoryImpl(
             onboardingWithWallet,
             storedByCurrentSetup
         ) { config, (onboardingState, availability), _ ->
-            if (availability == StoredWalletAvailability.UNAVAILABLE) {
-                SecretState.UNAVAILABLE
-            } else {
-                resolveSecretState(
+            when (availability) {
+                StoredWalletAvailability.CHECKING -> SecretState.LOADING
+                StoredWalletAvailability.UNAVAILABLE -> SecretState.UNAVAILABLE
+                else -> resolveSecretState(
                     isConfigurationLoaded = config != null,
                     onboardingState = onboardingState,
                     hasWallet = availability == StoredWalletAvailability.PRESENT,

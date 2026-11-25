@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,7 +41,8 @@ class FixEphemeralAddressUseCase(
 
     private var job: Job? = null
 
-    operator fun invoke(address: String, sourceEntryId: String?) {
+    @Suppress("TooGenericExceptionCaught")
+    operator fun invoke(address: String, sourceEntryId: String?, onFailure: () -> Unit = {}) {
         if (job?.isActive == true || !navigationRouter.isAtEntry(sourceEntryId)) return
         val account = selectedAccount() ?: return
         val grant = appAccessSession.grant.value
@@ -51,20 +53,30 @@ class FixEphemeralAddressUseCase(
         job = scope.launch {
             try {
                 isLoading.update { true }
-                if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isAtEntry(sourceEntryId)) {
-                    return@launch
-                }
-                val synchronizer = synchronizerProvider.getSynchronizer()
-                val ephemeral = resolveEphemeralAddress(synchronizer, address) ?: return@launch
-                if (isTorEnabled.get() == true && navigationRouter.commitFrom(sourceEntryId, canRecover) {
-                        NavigationCommand.Back
-                    } && canRecover()
-                ) {
-                    fetchUtxosByAddress(synchronizer, account, ephemeral)
-                }
+                recover(address, sourceEntryId, account, canRecover)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (canRecover() && navigationRouter.isAtEntry(sourceEntryId)) onFailure()
             } finally {
                 isLoading.update { false }
             }
+        }
+    }
+
+    private suspend fun recover(
+        address: String,
+        sourceEntryId: String?,
+        account: AccountUuid,
+        canRecover: () -> Boolean,
+    ) {
+        if (isTorEnabled.get() != true || !canRecover() || !navigationRouter.isAtEntry(sourceEntryId)) return
+
+        val synchronizer = synchronizerProvider.getSynchronizer()
+        val ephemeral = resolveEphemeralAddress(synchronizer, address)
+        if (ephemeral != null && isTorEnabled.get() == true) {
+            val committed = navigationRouter.commitFrom(sourceEntryId, canRecover) { NavigationCommand.Back }
+            if (committed && canRecover()) fetchUtxosByAddress(synchronizer, account, ephemeral)
         }
     }
 

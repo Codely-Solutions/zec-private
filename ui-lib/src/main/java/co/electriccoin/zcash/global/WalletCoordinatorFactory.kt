@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 internal operator fun WalletCoordinator.Companion.invoke(
     context: Context,
@@ -25,18 +26,23 @@ internal operator fun WalletCoordinator.Companion.invoke(
     transportGate: WalletSdkTransportGate,
 ): WalletCoordinator {
     val generation = persistableWalletProvider.readGeneration
-    val sdkWallet = transportGate.walletInput(
+    val walletDecisions = transportGate.walletDecisions(
         persistableWalletProvider.sdkWalletReads.hideResetWallet(resetProgressStore),
         generation,
     )
     return WalletCoordinator(
         context = context,
-        persistableWallet = sdkWallet,
+        persistableWallet = transportGate.walletInput(walletDecisions),
         accountName = context.getString(R.string.accounts_zashi),
         keySource = "zashi",
         isTorEnabled = transportGate.transportInput(isTorEnabledStorageProvider.observe(), generation),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
-        isSyncBlocked = isSyncBlocked(context, sdkWallet, resetProgressStore, migrationSyncGate),
+        isSyncBlocked = isSyncBlocked(
+            context,
+            walletDecisions.map { it.wallet },
+            resetProgressStore,
+            migrationSyncGate,
+        ),
     )
 }
 

@@ -774,9 +774,9 @@
     <string name="send_pendingTimeoutInfo">Se agotó el tiempo de espera de la respuesta del servidor. Es posible que tu transacción aún se haya transmitido.</string>
     <string name="send_pendingSdkStateInfo">Es posible que se haya enviado tu transacción. Comprueba su estado antes de volver a intentarlo.</string>
     <string name="swapAndPay_pendingSwapTitle">Swap Pendiente</string>
-    <string name="swapAndPay_pendingSwapInfo">Tu swap se está procesando. Siga el estado en la pantalla de transacción.</string>
+    <string name="swapAndPay_pendingSwapInfo">El envío del intercambio sigue sin confirmar. Consulta su estado en Actividad.</string>
     <string name="swapAndPay_pendingPayTitle">Pago Pendiente</string>
-    <string name="swapAndPay_pendingPayInfo">Tu cross-chain pago se está procesando. Siga el estado en la pantalla de transacción.</string>
+    <string name="swapAndPay_pendingPayInfo">El envío del pago sigue sin confirmar. Consulta su estado en Actividad.</string>
     <string name="send_pendingShieldingTitle">Fondos Protegidos Pendiente</string>
     <string name="send_pendingShieldingInfo">Tus Fondos Protegidos se están procesando.</string>
     <string name="swapAndPay_successPayInfo">Has iniciado un pago entre cadenas exitosamente. Sigue su estado en la pantalla de transacciones.</string>

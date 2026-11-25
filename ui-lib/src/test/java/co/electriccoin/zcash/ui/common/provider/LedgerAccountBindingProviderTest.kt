@@ -7,9 +7,13 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import io.mockk.coEvery
 import io.mockk.mockk
+import co.electriccoin.zcash.ui.common.model.LedgerAccountBindingData
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,6 +89,24 @@ class LedgerAccountBindingProviderTest {
             assertEquals("tpk0-deadbeef|4", store.getString(PreferenceKey(bindingKey)))
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun successfulRepairReopensTheSameBindingObserverAfterAReadFailure() = runTest {
+        val store = FakePreferenceProvider()
+        val provider = provider(store)
+        val observed = mutableListOf<LedgerAccountBindingData?>()
+        store.isReadable = false
+        backgroundScope.launch { provider.observe(accountUuid).collect { observed += it } }
+        runCurrent()
+        assertEquals(listOf<LedgerAccountBindingData?>(null), observed)
+
+        store.isReadable = true
+        provider.save(accountUuid, deviceIdentityEncoding = "tpk0-deadbeef", zip32AccountIndex = 7L)
+        runCurrent()
+        assertEquals("tpk0-deadbeef", observed.last()?.deviceIdentityEncoding)
+        assertEquals(Zip32AccountIndex.new(7L), observed.last()?.zip32AccountIndex)
+    }
+
     private val bindingKey get() = "ledger_account_binding_${accountUuid.hex()}"
 
     @OptIn(ExperimentalStdlibApi::class)
@@ -107,6 +129,7 @@ class LedgerAccountBindingProviderTest {
  */
 private class FakePreferenceProvider : PreferenceProvider {
     private val values = mutableMapOf<String, MutableStateFlow<String?>>()
+    var isReadable = true
 
     private fun flowFor(key: PreferenceKey) = values.getOrPut(key.key) { MutableStateFlow(null) }
 
@@ -135,7 +158,10 @@ private class FakePreferenceProvider : PreferenceProvider {
 
     override suspend fun getLong(key: PreferenceKey): Long? = flowFor(key).value?.toLongOrNull()
 
-    override suspend fun getString(key: PreferenceKey): String? = flowFor(key).value
+    override suspend fun getString(key: PreferenceKey): String? {
+        check(isReadable) { "Synthetic binding read failure" }
+        return flowFor(key).value
+    }
 
     override suspend fun getStringSet(key: PreferenceKey): Set<String>? = null
 

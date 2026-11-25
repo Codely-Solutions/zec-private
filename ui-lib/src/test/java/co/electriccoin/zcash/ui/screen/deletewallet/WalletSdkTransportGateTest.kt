@@ -20,6 +20,36 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletSdkTransportGateTest {
     @Test
+    fun retryWithdrawsTheOldWalletBeforeEmittingTheNewTorChoice() = runTest {
+        val gate = WalletSdkTransportGate()
+        val oldWallet = mockk<PersistableWallet>()
+        val newWallet = mockk<PersistableWallet>()
+        val wallets = MutableStateFlow(WalletSdkRead(0, oldWallet))
+        val generation = MutableStateFlow(0L)
+        var useTor = false
+        val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
+        backgroundScope.launch {
+            combine(
+                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.transportInput(flow { emit(useTor) }, generation),
+            ) { wallet, tor -> wallet to tor }.collect { sdkInputs += it }
+        }
+        runCurrent()
+        assertEquals(oldWallet to false, sdkInputs.last())
+
+        useTor = true
+        generation.value++
+        runCurrent()
+        assertEquals(null to true, sdkInputs.last())
+        wallets.value = WalletSdkRead(generation.value, newWallet)
+        runCurrent()
+
+        assertEquals(newWallet to true, sdkInputs.last())
+        assertFalse(sdkInputs.contains(oldWallet to true))
+        assertFalse(sdkInputs.contains(newWallet to false))
+    }
+
+    @Test
     fun unreadableTransportWithholdsWalletAndRetryDeliversOnlyVerifiedChoice() = runTest {
         val gate = WalletSdkTransportGate()
         val wallet = mockk<PersistableWallet>()
@@ -30,7 +60,10 @@ class WalletSdkTransportGateTest {
         val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 
         backgroundScope.launch {
-            combine(gate.walletInput(wallets, generation), gate.transportInput(transportReads, generation)) {
+            combine(
+                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.transportInput(transportReads, generation),
+            ) {
                 sdkWallet, tor -> sdkWallet to tor
             }.collect { sdkInputs += it }
         }

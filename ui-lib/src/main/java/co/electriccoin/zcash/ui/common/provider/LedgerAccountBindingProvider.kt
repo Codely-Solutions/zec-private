@@ -7,9 +7,14 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.common.model.LedgerAccountBindingData
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 
 /**
  * Persists the Ledger binding of an imported account — the paired device's identity encoding and
@@ -38,25 +43,35 @@ interface LedgerAccountBindingProvider {
 class LedgerAccountBindingProviderImpl(
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider
 ) : LedgerAccountBindingProvider {
+    private val bindingWrites = MutableStateFlow(0L)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observe(accountUuid: AccountUuid): Flow<LedgerAccountBindingData?> =
-        flow {
-            emitAll(bindingDefault(accountUuid).observe(encryptedPreferenceProvider()))
+        bindingWrites.flatMapLatest {
+            flow {
+                emitAll(bindingDefault(accountUuid).observe(encryptedPreferenceProvider()))
+            }.recoverableReads().map { it.getOrNull() }
         }
 
     override suspend fun save(
         accountUuid: AccountUuid,
         deviceIdentityEncoding: String,
         zip32AccountIndex: Long
-    ) = bindingDefault(accountUuid).putValue(
-        encryptedPreferenceProvider(),
-        LedgerAccountBindingData(
-            deviceIdentityEncoding = deviceIdentityEncoding,
-            zip32AccountIndex = Zip32AccountIndex.new(zip32AccountIndex),
+    ) {
+        bindingDefault(accountUuid).putValue(
+            encryptedPreferenceProvider(),
+            LedgerAccountBindingData(
+                deviceIdentityEncoding = deviceIdentityEncoding,
+                zip32AccountIndex = Zip32AccountIndex.new(zip32AccountIndex),
+            ),
         )
-    )
+        bindingWrites.update { it + 1 }
+    }
 
-    override suspend fun clear(accountUuid: AccountUuid) =
+    override suspend fun clear(accountUuid: AccountUuid) {
         bindingDefault(accountUuid).putValue(encryptedPreferenceProvider(), null)
+        bindingWrites.update { it + 1 }
+    }
 }
 
 private fun bindingDefault(accountUuid: AccountUuid) =

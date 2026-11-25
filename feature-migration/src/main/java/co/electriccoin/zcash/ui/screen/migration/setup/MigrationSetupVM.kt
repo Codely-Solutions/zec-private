@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LceState
+import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.migration.MigrationGateInfo
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -60,6 +61,7 @@ class MigrationSetupVM(
         super.onCleared()
     }
     private val accountLce = mutableLce<Zatoshi>()
+    private val confirmLce = mutableLce<Unit>()
     private val selectedMode = MutableStateFlow(MigrationMode.AUTOMATIC)
 
     /** Null until the SDK has answered. The screen is loading then, so the scheduled option never flashes enabled. */
@@ -91,11 +93,11 @@ class MigrationSetupVM(
         }
 
     val state: StateFlow<LceState<MigrationSetupState>> =
-        combine(content, accountLce.loading, accountLce.error, gate) { setup, isLoading, error, currentGate ->
+        combine(content, accountLce.state, confirmLce.state, gate) { setup, account, confirmation, currentGate ->
             LceState(
                 content = setup,
-                isLoading = isLoading || currentGate == null,
-                error = error?.let(errorStateMapper::mapToState),
+                isLoading = account.loading || confirmation.loading || currentGate == null,
+                error = (confirmation.error ?: account.error)?.let(errorStateMapper::mapToState),
             )
         }.stateIn(this)
 
@@ -141,16 +143,16 @@ class MigrationSetupVM(
     private fun onFindOutMore() =
         navigationRouter.forward(
             ExternalUrl(
-                "https://github.com/Sammy-Lastre/zec-private/blob/main/" +
-                    "docs/WALLET-GUIDE.md#ironwood-migration"
+                "https://github.com/Codely-Solutions/zec-private/blob/main/" +
+                    "docs/WALLET-GUIDE.md#recovery-and-migration"
             )
         )
 
     private fun onConfirm() {
         val currentGate = gate.value ?: return
         when (effectiveMigrationMode(selectedMode.value, currentGate)) {
-            MigrationMode.IMMEDIATE -> {
-                viewModelScope.launch {
+            MigrationMode.IMMEDIATE -> confirmLce.guardLoading {
+                confirmLce.execute {
                     val destination = getMigrationPrivacyOrReviewDestination(mode = MigrationMode.IMMEDIATE)
                     navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
                 }

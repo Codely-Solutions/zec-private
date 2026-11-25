@@ -1134,7 +1134,7 @@ class WalletRepositoryImplTest {
         persistableWalletProviderOverride: PersistableWalletProvider? = null,
         torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
         resetPending: Boolean = false,
-        transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
+        transportGate: WalletSdkTransportGate? = null,
         accountDataSource: AccountDataSource? = null,
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()

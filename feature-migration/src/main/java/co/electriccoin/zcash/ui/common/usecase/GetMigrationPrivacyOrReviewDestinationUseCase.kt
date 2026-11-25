@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
 import co.electriccoin.zcash.ui.screen.migration.customservertor.MigrationCustomServerTorArgs
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyArgs
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
+import kotlinx.coroutines.CancellationException
 
 /**
  * A custom (non-bundled) server can't broadcast the migration transaction over Tor at all — unlike
@@ -29,7 +30,7 @@ class GetMigrationPrivacyOrReviewDestinationUseCase(
     private val automaticServerRepository: AutomaticServerRepository,
 ) {
     suspend operator fun invoke(mode: MigrationMode): Any {
-        val walletUsesTor = isTorEnabledStorageProvider.get() == true
+        val walletUsesTor = readWalletTorChoice()
         val owner = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
         return when {
             mode == MigrationMode.IMMEDIATE && walletUsesTor -> MigrationReviewArgs(mode, owner)
@@ -38,5 +39,14 @@ class GetMigrationPrivacyOrReviewDestinationUseCase(
             walletUsesTor -> MigrationBatteryArgs(owner, useTor = true)
             else -> MigrationPrivacyArgs(mode, owner)
         }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun readWalletTorChoice() = try {
+        isTorEnabledStorageProvider.get() == true
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        error("Could not read the Tor protection setting")
     }
 }

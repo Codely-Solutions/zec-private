@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 
 class EphemeralHotfixVM(
     args: EphemeralHotfixArgs,
@@ -42,9 +42,12 @@ class EphemeralHotfixVM(
                 address =
                     TextFieldState(
                         value = stringRes(text.orEmpty()),
-                        onValueChange = { new -> this.text.update { new } },
+                        onValueChange = { new ->
+                            this.text.value = new
+                            this.isError.value = false
+                        },
                         isEnabled = !isLoading && isTorEnabled == true,
-                        error = stringRes("").takeIf { isError }
+                        error = stringRes(R.string.ephemeral_recovery_try_again).takeIf { isError }
                     ),
                 button =
                     ButtonState(
@@ -74,5 +77,8 @@ class EphemeralHotfixVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onRecoverFundsClick() = fixEphemeralAddressUseCase(text.value.orEmpty(), sourceEntryId)
+    private fun onRecoverFundsClick() {
+        isError.value = false
+        fixEphemeralAddressUseCase(text.value.orEmpty(), sourceEntryId) { isError.value = true }
+    }
 }

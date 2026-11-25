@@ -54,6 +54,7 @@ private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
 data class WalletSdkRead(val generation: Long, val wallet: PersistableWallet?)
 
 enum class StoredWalletAvailability {
+    CHECKING,
     PRESENT,
     ABSENT,
     UNAVAILABLE,
@@ -102,8 +103,9 @@ class PersistableWalletProviderImpl(
             }
         }
 
-    override val availability = records.map { (_, result) ->
+    override val availability = combine(records, readRequests) { (generation, result), _ ->
         when {
+            generation != readRequests.value -> StoredWalletAvailability.CHECKING
             result.isFailure -> StoredWalletAvailability.UNAVAILABLE
             result.getOrNull() != null -> StoredWalletAvailability.PRESENT
             else -> StoredWalletAvailability.ABSENT

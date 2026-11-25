@@ -89,6 +89,7 @@ class AccountDataSourceImplTest {
         scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
         storedSelection: Flow<AccountUuid?> = flowOf(null),
         accountPreferenceReads: Flow<Long> = flowOf(0L),
+        synchronizerFlow: MutableStateFlow<Synchronizer?>? = null,
         deriveAddress: suspend () -> String = { "unified-address" },
     ): AccountDataSourceImpl {
         val synchronizer =
@@ -99,9 +100,10 @@ class AccountDataSourceImplTest {
                 coEvery { getTransparentAddress(any()) } returns "transparent-address"
                 coEvery { getSaplingAddress(any()) } returns "sapling-address"
             }
+        val activeSynchronizer = synchronizerFlow?.also { it.value = synchronizer } ?: MutableStateFlow(synchronizer)
         val synchronizerProvider =
             mockk<SynchronizerProvider> {
-                every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
+                every { this@mockk.synchronizer } returns activeSynchronizer
             }
         val selectedAccountUUIDProvider =
             mockk<SelectedAccountUUIDProvider> {
@@ -131,6 +133,7 @@ class AccountDataSourceImplTest {
     @Test
     fun failedSelectionReadWithholdsAccountUntilVerifiedRetry() = runTest {
         val readGeneration = MutableStateFlow(0L)
+        val liveSynchronizer = MutableStateFlow<Synchronizer?>(null)
         var isReadable = true
         val source = dataSource(
             MutableStateFlow(null),
@@ -140,6 +143,7 @@ class AccountDataSourceImplTest {
                 emit(accountUuid)
             },
             accountPreferenceReads = readGeneration,
+            synchronizerFlow = liveSynchronizer,
         )
         runCurrent()
         assertTrue(assertNotNull(source.allAccounts.value).single().isSelected)
@@ -151,8 +155,14 @@ class AccountDataSourceImplTest {
         assertFalse(assertNotNull(source.allAccounts.value).single().isSelected)
         assertNull(source.selectedAccount.first())
 
-        isReadable = true
+        val synchronizer = assertNotNull(liveSynchronizer.value)
+        liveSynchronizer.value = null
         readGeneration.value++
+        runCurrent()
+        assertTrue(source.isAccountSelectionUnavailable.first())
+
+        isReadable = true
+        liveSynchronizer.value = synchronizer
         runCurrent()
         assertFalse(source.isAccountSelectionUnavailable.first())
         assertEquals(accountUuid, assertNotNull(source.selectedAccount.first()).sdkAccount.accountUuid)

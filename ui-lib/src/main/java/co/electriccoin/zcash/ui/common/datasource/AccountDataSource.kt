@@ -45,6 +45,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.channelFlow
@@ -57,6 +59,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -156,6 +159,9 @@ class AccountDataSourceImpl(
 
     private val requestNextShieldedAddressChannel = MutableSharedFlow<AddressRequest>()
 
+    private val selectionUnavailable = MutableStateFlow(false)
+    override val isAccountSelectionUnavailable = selectionUnavailable.asStateFlow()
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val selectedAccountRead = synchronizerProvider.synchronizer.flatMapLatest { synchronizer ->
         if (synchronizer == null) {
@@ -163,10 +169,9 @@ class AccountDataSourceImpl(
         } else {
             accountPreferenceReads.flatMapLatest { selectedAccountUUIDProvider.uuid.recoverableReads() }
         }
+    }.onEach { result ->
+        if (result != null) selectionUnavailable.value = result.isFailure
     }.stateIn(scope, SharingStarted.Eagerly, null)
-
-    override val isAccountSelectionUnavailable =
-        selectedAccountRead.map { it?.isFailure == true }.distinctUntilChanged()
 
     /**
      * A null balances snapshot from the synchronizer propagates as null all the way through each

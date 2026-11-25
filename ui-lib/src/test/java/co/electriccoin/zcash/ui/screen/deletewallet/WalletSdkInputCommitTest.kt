@@ -122,7 +122,10 @@ class WalletSdkInputCommitTest {
         walletProvider.retryRead()
         runCurrent()
 
-        assertEquals(listOf(StoredWalletAvailability.UNAVAILABLE, StoredWalletAvailability.PRESENT), availability)
+        assertEquals(
+            listOf(StoredWalletAvailability.UNAVAILABLE, StoredWalletAvailability.PRESENT),
+            availability.filterNot { it == StoredWalletAvailability.CHECKING },
+        )
         assertEquals(listOf(null, candidate.seedPhrase), sdkInputs.map { it?.seedPhrase })
     }
 

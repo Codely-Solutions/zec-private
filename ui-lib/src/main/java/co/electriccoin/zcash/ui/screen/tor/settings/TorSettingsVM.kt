@@ -1,24 +1,28 @@
 package co.electriccoin.zcash.ui.screen.tor.settings
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.common.model.guardLoading
+import co.electriccoin.zcash.ui.common.model.mutableLce
+import co.electriccoin.zcash.ui.common.model.stateIn
+import co.electriccoin.zcash.ui.common.model.withLce
+import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import co.electriccoin.zcash.ui.design.util.stringRes
 
 class TorSettingsVM(
     isTorEnabledUseCase: IsTorEnabledUseCase,
     private val navigationRouter: NavigationRouter,
     private val optInExchangeRateAndTor: OptInExchangeRateAndTorUseCase,
+    private val errorMapper: ErrorMapperUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    private val save = mutableLce<Unit>()
+
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
     }
@@ -34,15 +38,17 @@ class TorSettingsVM(
                         onDismiss = ::onBack,
                     )
                 }
-            }.stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-                initialValue = null
-            )
+            }.withLce(save) { error ->
+                errorMapper.mapToState(
+                    error,
+                    message = stringRes(R.string.tor_protection_save_failed),
+                    supportWithoutDiagnostics = true,
+                )
+            }.stateIn(this)
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onOptInClick(optIn: Boolean) = viewModelScope.launch {
-        optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId)
+    private fun onOptInClick(optIn: Boolean) = save.guardLoading {
+        save.execute { optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId) }
     }
 }

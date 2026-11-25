@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.LocalKeyboardManager
+import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.enterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.exitTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popEnterTransition
@@ -62,13 +63,26 @@ fun RootNavGraph(
 ) {
     val resetProgress = koinInject<ResetProgressStore>()
     val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
-    when {
-        isResetPending -> ResetZashiScreen()
-        secretState == SecretState.UNAVAILABLE ->
-            UnavailableWalletRecovery(walletViewModel, resetProgress, hasAppAccess)
-        else -> WalletNavHost(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
+    when (walletRootSurface(secretState, isResetPending)) {
+        WalletRootSurface.RESET -> ResetZashiScreen()
+        WalletRootSurface.WAITING -> CircularScreenProgressIndicator()
+        WalletRootSurface.RECOVERY -> UnavailableWalletRecovery(walletViewModel, resetProgress, hasAppAccess)
+        WalletRootSurface.NAVIGATION -> WalletNavHost(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
     }
 }
+
+internal enum class WalletRootSurface { RESET, WAITING, RECOVERY, NAVIGATION }
+
+internal fun walletRootSurface(secretState: SecretState, isResetPending: Boolean): WalletRootSurface =
+    if (isResetPending) {
+        WalletRootSurface.RESET
+    } else {
+        when (secretState) {
+            SecretState.LOADING -> WalletRootSurface.WAITING
+            SecretState.UNAVAILABLE -> WalletRootSurface.RECOVERY
+            SecretState.READY, SecretState.NONE, SecretState.INCOMPLETE -> WalletRootSurface.NAVIGATION
+        }
+    }
 
 @Composable
 private fun WalletNavHost(

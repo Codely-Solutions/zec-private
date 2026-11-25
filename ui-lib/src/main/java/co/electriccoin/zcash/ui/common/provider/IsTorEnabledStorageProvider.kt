@@ -25,6 +25,6 @@ private object TorPreference : PreferenceDefault<Boolean?> {
         }
 
     override suspend fun putValue(preferenceProvider: PreferenceProvider, newValue: Boolean?) {
-        preferenceProvider.putString(key, newValue?.toString())
+        preferenceProvider.putStringWithRollback(key, newValue?.toString())
     }
 }
