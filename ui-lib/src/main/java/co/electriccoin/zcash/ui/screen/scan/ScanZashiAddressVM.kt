@@ -68,7 +68,7 @@ internal class ScanZashiAddressVM(
                             }
 
                             zip321ValidationResult is Zip321ParseUriValidation.SingleAddress -> {
-                                onZip321SingleAddressScanned(zip321ValidationResult)
+                                validateAndDispatchAddress(zip321ValidationResult.address)
                             }
 
                             else -> {
@@ -96,10 +96,6 @@ internal class ScanZashiAddressVM(
     ) {
         hasBeenScannedSuccessfully = onAddressScanned(result, addressValidationResult, args, sourceEntryId)
         updateScanState()
-    }
-
-    private suspend fun onZip321SingleAddressScanned(zip321ValidationResult: Zip321ParseUriValidation.SingleAddress) {
-        validateAndDispatchAddress(zip321ValidationResult.address)
     }
 
     private suspend fun validateAndDispatchAddress(address: String) {

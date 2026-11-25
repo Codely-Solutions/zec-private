@@ -102,6 +102,7 @@ internal fun NavigationRouter.forwardFrom(
     }
 }
 
+@Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.
 internal suspend fun NavigationRouter.commitFrom(
     sourceEntryId: String?,
     buildCommand: () -> NavigationCommand,

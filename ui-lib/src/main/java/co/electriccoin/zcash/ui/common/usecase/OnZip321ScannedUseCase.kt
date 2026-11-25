@@ -50,27 +50,26 @@ class OnZip321ScannedUseCase(
         zip321: Zip321ParseUriValidation.Valid,
         scanArgs: ScanArgs,
         sourceEntryId: String? = null,
-    ): Boolean {
-        if (!navigationRouter.isAtEntry(sourceEntryId)) return false
-        if (zip321.payment.payments.size != 1) {
-            showError(sourceEntryId, ErrorArgs.General(UnsupportedZip321PaymentCountException()))
-            return false
-        }
-        return when (scanArgs.flow) {
-            ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
-                val address = zip321.payment.payments.single().recipientAddress.value
-                NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
+    ): Boolean =
+        when {
+            !navigationRouter.isAtEntry(sourceEntryId) -> false
+            zip321.payment.payments.size != 1 -> {
+                showError(sourceEntryId, ErrorArgs.General(UnsupportedZip321PaymentCountException()))
+                false
             }
-
-            SEND -> if (scanArgs.isScanZip321Enabled) {
-                prepareFlow(zip321, sourceEntryId, fromHome = false)
-            } else {
-                sendAddressOnly(zip321, sourceEntryId)
+            else -> when (scanArgs.flow) {
+                ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
+                    val address = zip321.payment.payments.single().recipientAddress.value
+                    NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
+                }
+                SEND -> if (scanArgs.isScanZip321Enabled) {
+                    prepareFlow(zip321, sourceEntryId, fromHome = false)
+                } else {
+                    sendAddressOnly(zip321, sourceEntryId)
+                }
+                HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
             }
-
-            HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
         }
-    }
 
     private suspend fun prepareProposal(uri: String) =
         when (accountDataSource.getSelectedAccount()) {

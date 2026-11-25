@@ -32408,7 +32408,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..af1a38960 100644
+index 67c1e883c..80d901c35 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -32433,7 +32433,7 @@ index 67c1e883c..af1a38960 100644
 +        override fun close() = Unit
 +    }
 +
-@@ -54,0 +72,82 @@ interface NavigationRouter {
+@@ -54,0 +72,83 @@ interface NavigationRouter {
 +data class ActiveNavigationEntry(
 +    val id: String,
 +    val route: String?,
@@ -32467,6 +32467,7 @@ index 67c1e883c..af1a38960 100644
 +    }
 +}
 +
++@Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.
 +internal suspend fun NavigationRouter.commitFrom(
 +    sourceEntryId: String?,
 +    buildCommand: () -> NavigationCommand,
@@ -32516,7 +32517,7 @@ index 67c1e883c..af1a38960 100644
 +}
 +
 +@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
-@@ -62,0 +162,21 @@ class NavigationRouterImpl : NavigationRouter {
+@@ -62,0 +163,21 @@ class NavigationRouterImpl : NavigationRouter {
 +    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
 +    private var entryObserver: ActiveNavigationEntryObserver? = null
 +
@@ -32538,7 +32539,7 @@ index 67c1e883c..af1a38960 100644
 +            entryObserver = it
 +            entryState.value = null
 +        }
-@@ -103,0 +224,7 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -103,0 +225,7 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 +    data class ForEntry(
 +        val sourceEntryId: String,
 +        val isStillAllowed: () -> Boolean,
@@ -32546,7 +32547,7 @@ index 67c1e883c..af1a38960 100644
 +        val acknowledge: (Boolean) -> Unit,
 +    ) : NavigationCommand
 +
-@@ -105 +232,3 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -105 +233,3 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 -        val routes: List<Any>
 +        val routes: List<Any>,
 +        val sourceEntryId: String? = null,
@@ -43192,7 +43193,7 @@ index e9a9371db..abb4df855 100644
 @@ -53,0 +61 @@ class OnAddressScannedUseCase(
 +        return route != null && navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(route)) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
-index eab9cf9da..dd8abef61 100644
+index eab9cf9da..75b4a0e68 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -43210,7 +43211,7 @@ index eab9cf9da..dd8abef61 100644
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -38,4 +48,15 @@ class OnZip321ScannedUseCase(
+@@ -38,4 +48,11 @@ class OnZip321ScannedUseCase(
 -    suspend operator fun invoke(zip321: Zip321ParseUriValidation.Valid, scanArgs: ScanArgs) {
 -        when (scanArgs.flow) {
 -            ADDRESS_BOOK -> {
@@ -43220,33 +43221,47 @@ index eab9cf9da..dd8abef61 100644
 +        zip321: Zip321ParseUriValidation.Valid,
 +        scanArgs: ScanArgs,
 +        sourceEntryId: String? = null,
-+    ): Boolean {
-+        if (!navigationRouter.isAtEntry(sourceEntryId)) return false
-+        if (zip321.payment.payments.size != 1) {
-+            showError(sourceEntryId, ErrorArgs.General(UnsupportedZip321PaymentCountException()))
-+            return false
-+        }
-+        return when (scanArgs.flow) {
-+            ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
-+                val address = zip321.payment.payments.single().recipientAddress.value
-+                NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
-@@ -44,6 +65,4 @@ class OnZip321ScannedUseCase(
++    ): Boolean =
++        when {
++            !navigationRouter.isAtEntry(sourceEntryId) -> false
++            zip321.payment.payments.size != 1 -> {
++                showError(sourceEntryId, ErrorArgs.General(UnsupportedZip321PaymentCountException()))
++                false
+@@ -43,4 +60,7 @@ class OnZip321ScannedUseCase(
+-
 -            SEND -> {
 -                if (scanArgs.isScanZip321Enabled) {
 -                    sendFlow(zip321)
--                } else {
++            else -> when (scanArgs.flow) {
++                ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
++                    val address = zip321.payment.payments.single().recipientAddress.value
++                    NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
++                }
++                SEND -> if (scanArgs.isScanZip321Enabled) {
++                    prepareFlow(zip321, sourceEntryId, fromHome = false)
+@@ -48 +68 @@ class OnZip321ScannedUseCase(
 -                    sendFlowWithDisabledZip321(zip321)
--                }
-+            SEND -> if (scanArgs.isScanZip321Enabled) {
-+                prepareFlow(zip321, sourceEntryId, fromHome = false)
-+            } else {
-+                sendAddressOnly(zip321, sourceEntryId)
-@@ -52,3 +71 @@ class OnZip321ScannedUseCase(
++                    sendAddressOnly(zip321, sourceEntryId)
+@@ -49,0 +70 @@ class OnZip321ScannedUseCase(
++                HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
+@@ -50,0 +72 @@ class OnZip321ScannedUseCase(
++        }
+@@ -52,2 +74,4 @@ class OnZip321ScannedUseCase(
 -            HOMEPAGE -> {
 -                homepageFlow(zip321)
--            }
-+            HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
-@@ -58,8 +75,11 @@ class OnZip321ScannedUseCase(
++    private suspend fun prepareProposal(uri: String) =
++        when (accountDataSource.getSelectedAccount()) {
++            is KeystoneAccount -> keystoneProposalRepository.createZip321Proposal(uri).also {
++                keystoneProposalRepository.createPCZTFromProposal()
+@@ -54,0 +79,5 @@ class OnZip321ScannedUseCase(
++            is LedgerAccount -> ledgerProposalPipeline.createZip321Proposal(uri).also {
++                ledgerProposalPipeline.createPCZTFromProposal()
++            }
++            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
++            is ZodlAccount -> zashiProposalRepository.createZip321Proposal(uri)
+@@ -56,10 +84,0 @@ class OnZip321ScannedUseCase(
+-    }
+-
 -    private fun addressBookFlow(zip321: Zip321ParseUriValidation.Valid) {
 -        navigationRouter.replace(
 -            AddZashiABContactArgs(
@@ -43255,25 +43270,14 @@ index eab9cf9da..dd8abef61 100644
 -            )
 -        )
 -    }
-+    private suspend fun prepareProposal(uri: String) =
-+        when (accountDataSource.getSelectedAccount()) {
-+            is KeystoneAccount -> keystoneProposalRepository.createZip321Proposal(uri).also {
-+                keystoneProposalRepository.createPCZTFromProposal()
-+            }
-+            is LedgerAccount -> ledgerProposalPipeline.createZip321Proposal(uri).also {
-+                ledgerProposalPipeline.createPCZTFromProposal()
-+            }
-+            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
-+            is ZodlAccount -> zashiProposalRepository.createZip321Proposal(uri)
-+        }
-@@ -68 +88,5 @@ class OnZip321ScannedUseCase(
+@@ -68 +87,5 @@ class OnZip321ScannedUseCase(
 -    private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid) {
 +    private suspend fun prepareFlow(
 +        zip321: Zip321ParseUriValidation.Valid,
 +        sourceEntryId: String?,
 +        fromHome: Boolean,
 +    ): Boolean =
-@@ -70,21 +94,12 @@ class OnZip321ScannedUseCase(
+@@ -70,21 +93,12 @@ class OnZip321ScannedUseCase(
 -            val proposal =
 -                when (accountDataSource.getSelectedAccount()) {
 -                    is KeystoneAccount -> {
@@ -43307,7 +43311,7 @@ index eab9cf9da..dd8abef61 100644
 +                            memos = proposal.memo.value.takeIf { it.isNotEmpty() }?.let { listOf(it) },
 +                        )
 +                    )
-@@ -92,13 +107,7 @@ class OnZip321ScannedUseCase(
+@@ -92,13 +106,7 @@ class OnZip321ScannedUseCase(
 -
 -            prefillSend.request(
 -                PrefillSendData.All(
@@ -43328,7 +43332,7 @@ index eab9cf9da..dd8abef61 100644
 +                }
 +                NavigationCommand.Replace(routes)
 +            }
-@@ -107,4 +116,5 @@ class OnZip321ScannedUseCase(
+@@ -107,4 +115,5 @@ class OnZip321ScannedUseCase(
 -            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
@@ -43338,14 +43342,14 @@ index eab9cf9da..dd8abef61 100644
 +                NavigationCommand.Forward(listOf(TEXUnsupportedArgs(isLedger = isLedger)))
 +            }
 +            false
-@@ -112,4 +122,2 @@ class OnZip321ScannedUseCase(
+@@ -112,4 +121,2 @@ class OnZip321ScannedUseCase(
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 -            navigationRouter.replace(InsufficientFundsArgs)
 +            clearIfCurrent(sourceEntryId)
 +            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(InsufficientFundsArgs)) }
-@@ -117,5 +125,4 @@ class OnZip321ScannedUseCase(
+@@ -117,5 +124,4 @@ class OnZip321ScannedUseCase(
 -            prefillSend.requestFromZip321(zip321.payment)
 -            navigationRouter.replace(Send())
 -            zashiProposalRepository.clear()
@@ -43355,16 +43359,16 @@ index eab9cf9da..dd8abef61 100644
 +            editUnpreparedPayment(zip321, sourceEntryId, fromHome)
 +        } catch (error: CancellationException) {
 +            throw error
-@@ -123,4 +130,2 @@ class OnZip321ScannedUseCase(
+@@ -123,4 +129,2 @@ class OnZip321ScannedUseCase(
 -            navigateToErrorUseCase(ErrorArgs.General(e))
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 +            clearIfCurrent(sourceEntryId)
 +            showError(sourceEntryId, ErrorArgs.General(e), replaceScanner = !fromHome) && !fromHome
-@@ -128 +132,0 @@ class OnZip321ScannedUseCase(
+@@ -128 +131,0 @@ class OnZip321ScannedUseCase(
 -    }
-@@ -130,16 +134,11 @@ class OnZip321ScannedUseCase(
+@@ -130,16 +133,11 @@ class OnZip321ScannedUseCase(
 -    @Suppress("TooGenericExceptionCaught")
 -    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid) {
 -        try {
@@ -43392,7 +43396,7 @@ index eab9cf9da..dd8abef61 100644
 +            if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
 +        }
 +    }
-@@ -147,3 +146,8 @@ class OnZip321ScannedUseCase(
+@@ -147,3 +145,8 @@ class OnZip321ScannedUseCase(
 -                    is ViewOnlyAccount -> {
 -                        throw AccountOperationUnsupportedException.viewOnly()
 -                    }
@@ -43404,7 +43408,7 @@ index eab9cf9da..dd8abef61 100644
 +            NavigationCommand.Back
 +        }
 +    }
-@@ -151,4 +155,6 @@ class OnZip321ScannedUseCase(
+@@ -151,4 +154,6 @@ class OnZip321ScannedUseCase(
 -                    is ZodlAccount -> {
 -                        zashiProposalRepository.createZip321Proposal(zip321.zip321Uri)
 -                    }
@@ -43415,7 +43419,7 @@ index eab9cf9da..dd8abef61 100644
 +        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()))
 +        return false
 +    }
-@@ -156,35 +162,6 @@ class OnZip321ScannedUseCase(
+@@ -156,35 +161,6 @@ class OnZip321ScannedUseCase(
 -            prefillSend.request(
 -                PrefillSendData.All(
 -                    amount = proposal.amount,
@@ -43457,7 +43461,7 @@ index eab9cf9da..dd8abef61 100644
 +        zashiProposalRepository.clear()
 +        keystoneProposalRepository.clear()
 +        ledgerProposalPipeline.clear()
-@@ -193,9 +170,12 @@ class OnZip321ScannedUseCase(
+@@ -193,9 +169,12 @@ class OnZip321ScannedUseCase(
 -    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid) {
 -        prefillSend.request(
 -            PrefillSendData.FromAddressScan(
@@ -52248,7 +52252,7 @@ index aaaf70d12..d51d62759 100644
 -            onBack = { navigationRouter.back() },
 +            onBack = onBack,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt
-index 3ce660e34..88c2e6b4a 100644
+index 3ce660e34..e2ce4cba3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt
 @@ -5,0 +6,3 @@ import cash.z.ecc.android.sdk.type.AddressType
@@ -52282,11 +52286,13 @@ index 3ce660e34..88c2e6b4a 100644
 +                        val zip321ValidationResult = navigationRouter.whileAtEntry(sourceEntryId) {
 +                            zip321ParseUriValidationUseCase(result)
 +                        } ?: return@runCatchingRecoverable
-@@ -57,4 +73,0 @@ internal class ScanZashiAddressVM(
--                            addressValidationResult is AddressType.Valid -> {
--                                onAddressScanned(result, addressValidationResult)
+@@ -54,5 +71 @@ internal class ScanZashiAddressVM(
+-                                onZip321SingleAddressScanned(zip321ValidationResult)
 -                            }
 -
+-                            addressValidationResult is AddressType.Valid -> {
+-                                onAddressScanned(result, addressValidationResult)
++                                validateAndDispatchAddress(zip321ValidationResult.address)
 @@ -62 +75 @@ internal class ScanZashiAddressVM(
 -                                onInvalidScan()
 +                                validateAndDispatchAddress(result)
@@ -52304,7 +52310,8 @@ index 3ce660e34..88c2e6b4a 100644
 -        hasBeenScannedSuccessfully = true
 +        hasBeenScannedSuccessfully = onAddressScanned(result, addressValidationResult, args, sourceEntryId)
 +        updateScanState()
-@@ -91,11 +102,8 @@ internal class ScanZashiAddressVM(
+@@ -90,12 +101,5 @@ internal class ScanZashiAddressVM(
+-    private suspend fun onZip321SingleAddressScanned(zip321ValidationResult: Zip321ParseUriValidation.SingleAddress) {
 -        val singleAddressValidation =
 -            synchronizerProvider
 -                .getSynchronizer()
@@ -52316,15 +52323,12 @@ index 3ce660e34..88c2e6b4a 100644
 -            onAddressScanned(zip321ValidationResult.address, singleAddressValidation, args)
 -        }
 -        hasBeenScannedSuccessfully = true
-+        validateAndDispatchAddress(zip321ValidationResult.address)
-+    }
-+
 +    private suspend fun validateAndDispatchAddress(address: String) {
 +        val validation = navigationRouter.whileAtEntry(sourceEntryId) {
 +            synchronizerProvider.getSynchronizer().validateAddress(address)
 +        } ?: return
 +        if (validation is AddressType.Valid) onAddressScanned(address, validation) else onInvalidScan()
-@@ -105,3 +113,12 @@ internal class ScanZashiAddressVM(
+@@ -105,3 +109,12 @@ internal class ScanZashiAddressVM(
 -        state.update { ScanValidationState.VALID }
 -        zip321Scanned(zip321ValidationResult, args)
 -        hasBeenScannedSuccessfully = true
@@ -52340,10 +52344,10 @@ index 3ce660e34..88c2e6b4a 100644
 +        } else {
 +            ScanValidationState.NONE
 +        }
-@@ -113 +130 @@ internal class ScanZashiAddressVM(
+@@ -113 +126 @@ internal class ScanZashiAddressVM(
 -                if (!hasBeenScannedSuccessfully) {
 +                if (acceptsScan) {
-@@ -122 +139 @@ internal class ScanZashiAddressVM(
+@@ -122 +135 @@ internal class ScanZashiAddressVM(
 -                if (!hasBeenScannedSuccessfully) {
 +                if (acceptsScan) {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/thirdparty/AndroidThirdPartyScan.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/thirdparty/AndroidThirdPartyScan.kt
