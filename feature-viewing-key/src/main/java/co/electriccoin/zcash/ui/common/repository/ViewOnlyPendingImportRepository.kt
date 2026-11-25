@@ -3,11 +3,14 @@ package co.electriccoin.zcash.ui.common.repository
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * Holds the full viewing key, the birthday, the name and the icon colour a view-only import collected
@@ -15,7 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * log, and process death drops it, after which the flow has to start again.
  */
 internal interface ViewOnlyPendingImportRepository {
-    val pendingImport: StateFlow<PendingViewOnlyImport?>
+    val pendingImport: Flow<PendingViewOnlyImport?>
 
     fun get(): PendingViewOnlyImport?
 
@@ -26,11 +29,23 @@ internal interface ViewOnlyPendingImportRepository {
     fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean
 }
 
-internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportRepository {
+internal class ViewOnlyPendingImportRepositoryImpl(
+    private val walletEnrollment: WalletEnrollmentAccess? = null,
+) : ViewOnlyPendingImportRepository {
     private val pending = MutableStateFlow<PendingViewOnlyImport?>(null)
-    override val pendingImport = pending.asStateFlow()
+    override val pendingImport = walletEnrollment?.let {
+        combine(pending, it.ownershipChanges) { _, _ -> get() }.distinctUntilChanged()
+    } ?: pending.asStateFlow()
 
-    override fun get(): PendingViewOnlyImport? = pending.value
+    @Synchronized
+    override fun get(): PendingViewOnlyImport? {
+        val value = pending.value ?: return null
+        if (walletEnrollment != null && value.enrollment?.let(walletEnrollment::permits) != true) {
+            pending.value = null
+            return null
+        }
+        return value
+    }
 
     @Synchronized
     override fun set(pendingImport: PendingViewOnlyImport) {
@@ -44,7 +59,8 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 
     @Synchronized
     override fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean {
-        if (pending.value !== expected) return false
+        val actual = if (replacement == null) pending.value else get()
+        if (actual !== expected) return false
         pending.value = replacement
         return true
     }

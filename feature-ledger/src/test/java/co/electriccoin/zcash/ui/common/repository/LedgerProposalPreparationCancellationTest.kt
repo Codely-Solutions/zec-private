@@ -67,7 +67,7 @@ class LedgerProposalPreparationCancellationTest : LedgerProposalRepositoryTestBa
         givenPczt(account)
         val current = repository.getTransactionProposal()
         val gate = CompletableDeferred<Continuation<Pczt>>()
-        coEvery { proposalDataSource.createPcztFromProposal(account, current.proposal) } coAnswers {
+        coEvery { proposalDataSource.createPcztFromProposal(account, current.proposal, any()) } coAnswers {
             suspendCoroutine { gate.complete(it) }
         }
         val old = launch { repository.createPCZTFromProposal() }
@@ -76,7 +76,7 @@ class LedgerProposalPreparationCancellationTest : LedgerProposalRepositoryTestBa
         old.cancel()
 
         val replacement = Pczt(byteArrayOf(2))
-        coEvery { proposalDataSource.createPcztFromProposal(account, current.proposal) } returns replacement
+        coEvery { proposalDataSource.createPcztFromProposal(account, current.proposal, any()) } returns replacement
         try {
             repository.createPCZTFromProposal()
         } finally {

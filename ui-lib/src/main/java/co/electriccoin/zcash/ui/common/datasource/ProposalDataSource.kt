@@ -36,6 +36,8 @@ import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import java.math.BigDecimal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.zecdev.zip321.ZIP321
 import org.zecdev.zip321.parser.ParserContext
@@ -74,7 +76,11 @@ interface ProposalDataSource {
         PcztException.CreatePcztFromProposalException::class,
         PcztException.MultiStepProposalUnsupportedException::class
     )
-    suspend fun createPcztFromProposal(account: WalletAccount, proposal: Proposal): Pczt
+    suspend fun createPcztFromProposal(
+        account: WalletAccount,
+        proposal: Proposal,
+        beforeCreation: () -> Unit = {},
+    ): Pczt
 
     @Throws(PcztException.AddProofsToPcztException::class)
     suspend fun addProofsToPczt(pczt: Pczt): Pczt
@@ -260,11 +266,18 @@ class ProposalDataSourceImpl(
             }
         }
 
-    override suspend fun createPcztFromProposal(account: WalletAccount, proposal: Proposal): Pczt =
+    override suspend fun createPcztFromProposal(
+        account: WalletAccount,
+        proposal: Proposal,
+        beforeCreation: () -> Unit,
+    ): Pczt =
         withContext(Dispatchers.IO) {
             account.requireSpendable()
             walletTransport.whileOperating {
-                requireActiveSynchronizer().createPcztFromProposal(
+                val synchronizer = requireActiveSynchronizer()
+                currentCoroutineContext().ensureActive()
+                beforeCreation()
+                synchronizer.createPcztFromProposal(
                     accountUuid = account.sdkAccount.accountUuid,
                     proposal = proposal,
                 )

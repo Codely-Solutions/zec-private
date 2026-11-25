@@ -79,7 +79,11 @@ class CreateHWWalletAccountUseCase(
             return
         }
         if (enrollment == HWWalletEnrollment.ViewOnly) {
-            viewOnlyAccountImporter.finishImport(sourceEntryId)
+            try {
+                viewOnlyAccountImporter.finishImport(sourceEntryId)
+            } catch (_: ViewOnlyPendingImportMissingException) {
+                recoverUnavailableEnrollment(enrollment, sourceEntryId)
+            }
         } else {
             invoke(enrollment, birthday.height, sourceEntryId)
         }

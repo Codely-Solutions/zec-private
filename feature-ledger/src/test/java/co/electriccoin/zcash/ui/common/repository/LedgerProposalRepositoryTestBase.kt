@@ -86,7 +86,7 @@ abstract class LedgerProposalRepositoryTestBase {
                 memo = Memo(""),
                 proposal = mockk<Proposal>()
             )
-        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns pczt
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns pczt
         coEvery { proposalDataSource.addProofsToPczt(any()) } coAnswers {
             try {
                 proofsGate?.await()

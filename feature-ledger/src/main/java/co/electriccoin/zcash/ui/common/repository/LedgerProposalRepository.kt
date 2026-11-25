@@ -264,7 +264,10 @@ class LedgerProposalRepositoryImpl(
 
     private suspend fun createReviewPczt(proposal: TransactionProposal, owner: WalletAccount): Pczt =
         try {
-            proposalDataSource.createPcztFromProposal(account = owner, proposal = proposal.proposal)
+            proposalDataSource.createPcztFromProposal(account = owner, proposal = proposal.proposal) {
+                check(transactionProposal.value === proposal) { "The transaction changed during preparation." }
+                proposal.requireCurrentShieldingApproval()
+            }
         } catch (e: PcztException.MultiStepProposalUnsupportedException) {
             if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
         }

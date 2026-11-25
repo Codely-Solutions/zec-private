@@ -44,7 +44,7 @@ val featureViewingKeyModule =
         singleOf(::ViewOnlyNavigatorImpl) bind ViewOnlyNavigator::class
         singleOf(::ViewOnlyAccountImporterImpl) bind ViewOnlyAccountImporter::class
 
-        singleOf(::ViewOnlyPendingImportRepositoryImpl) bind ViewOnlyPendingImportRepository::class
+        single<ViewOnlyPendingImportRepository> { ViewOnlyPendingImportRepositoryImpl(get()) }
 
         factoryOf(::SdkUfvkDescriber) bind UfvkDescriber::class
         factoryOf(::ValidateUfvkUseCase)

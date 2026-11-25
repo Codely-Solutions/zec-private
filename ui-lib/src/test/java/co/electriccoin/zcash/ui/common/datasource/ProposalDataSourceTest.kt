@@ -57,6 +57,29 @@ class ProposalDataSourceTest {
     }
 
     @Test
+    fun hardwareShieldDoesNotPrepareAProposalOnAReplacementSynchronizer() = runBlocking {
+        val replacement = mockk<Synchronizer>()
+        var original = true
+        val source = ProposalDataSourceImpl(
+            synchronizerProvider = mockk {
+                coEvery { getSynchronizer() } coAnswers {
+                    original = false
+                    replacement
+                }
+            },
+            lightWalletEndpointProvider = mockk(),
+            walletServerSelectionProvider = mockk(),
+        )
+        val approval = ShieldingApproval(account, hasShieldableBalance = { true }) { original }
+
+        assertFailsWith<IllegalStateException> {
+            source.createPcztFromProposal(account, mockk(), approval::requireCurrent)
+        }
+
+        coVerify(exactly = 0) { replacement.createPcztFromProposal(any(), any()) }
+    }
+
+    @Test
     fun multipleZip321PaymentsAreRejectedBeforeSdkProposal() =
         runBlocking {
             val synchronizer = mockk<Synchronizer>()

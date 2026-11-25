@@ -114,14 +114,18 @@ internal class ViewOnlyAccountImporterImpl(
     override fun continueWithBirthday(birthday: BlockHeight?, sourceEntryId: String?) {
         val pending = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
         if (pending.importedAccount != null) return
-        if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
+        val approved = pending.copy(birthday = birthday)
+        if (!pendingImportRepository.replace(pending, approved)) {
             throw ViewOnlyPendingImportMissingException()
         }
-        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(NameVKArgs)) }
+        navigationRouter.stageResultFrom(sourceEntryId, { pendingImportRepository.get() === approved }) {
+            NavigationCommand.Forward(listOf(NameVKArgs))
+        }
     }
 
     override suspend fun finishImport(sourceEntryId: String?) {
-        if (pendingImportRepository.get()?.importedAccount != null) importViewOnlyAccount(sourceEntryId)
+        val pending = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
+        if (pending.importedAccount != null) importViewOnlyAccount(sourceEntryId)
     }
 }
 

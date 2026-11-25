@@ -143,13 +143,19 @@ internal class NameVKVM(
         importLce.guardLoading {
             if (leaving || continueJob?.isActive == true) return@guardLoading
             val pending = pendingImportRepository.get()
-            if (pending?.committedBirthday != committedBirthday) return@guardLoading
+            if (pending == null) {
+                navigationRouter.stageResultFrom(sourceEntryId, { pendingImportRepository.get() == null }) {
+                    NavigationCommand.BackToRoot
+                }
+                return@guardLoading
+            }
+            if (pending.committedBirthday != committedBirthday) return@guardLoading
             val normalized = AccountNameLimit.normalize(name.value)
             if (normalized.isEmpty()) return@guardLoading
             continueJob =
                 viewModelScope.launch {
                     if (pendingImportRepository.get() !== pending) return@launch
-                    if (pending?.birthday == null) {
+                    if (pending.birthday == null) {
                         navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                         return@launch
                     }

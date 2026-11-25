@@ -103,13 +103,13 @@ class ShieldFundsUseCase(
         when (approval.account) {
             is KeystoneAccount -> {
                 navigationRouter.whileAtEntry(sourceEntryId) {
-                    createKeystoneShieldProposal(approval, sourceEntryId)
+                    createKeystoneShieldProposal(approval, sourceEntryId, canShowResult)
                 }
             }
 
             is LedgerAccount -> {
                 navigationRouter.whileAtEntry(sourceEntryId) {
-                    createLedgerShieldProposal(approval, sourceEntryId)
+                    createLedgerShieldProposal(approval, sourceEntryId, canShowResult)
                 }
             }
 
@@ -169,7 +169,11 @@ class ShieldFundsUseCase(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createKeystoneShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
+    private suspend fun createKeystoneShieldProposal(
+        approval: ShieldingApproval,
+        sourceEntryId: String?,
+        canShowResult: () -> Boolean,
+    ) {
         var created: ShieldTransactionProposal? = null
         try {
             val proposal = keystoneProposalRepository.createShieldProposal(approval).also { created = it }
@@ -190,7 +194,7 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { keystoneProposalRepository.transactionProposal.value }, keystoneProposalRepository::clear
             )
-            showShieldError(ErrorArgs.ShieldingGeneralError(e), sourceEntryId, approval::isCurrent)
+            showShieldError(ErrorArgs.ShieldingGeneralError(e), sourceEntryId, canShowResult)
         }
     }
 
@@ -199,7 +203,11 @@ class ShieldFundsUseCase(
      * and propagates the cancellation instead of reporting it as a shielding error.
      */
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun createLedgerShieldProposal(approval: ShieldingApproval, sourceEntryId: String?) {
+    private suspend fun createLedgerShieldProposal(
+        approval: ShieldingApproval,
+        sourceEntryId: String?,
+        canShowResult: () -> Boolean,
+    ) {
         var created: ShieldTransactionProposal? = null
         try {
             val proposal = ledgerProposalPipeline.createShieldProposal(approval).also { created = it }
@@ -218,7 +226,7 @@ class ShieldFundsUseCase(
             clearOwnedShield(
                 created, { ledgerProposalPipeline.transactionProposal.value }, ledgerProposalPipeline::clear
             )
-            showShieldError(ErrorArgs.ShieldingGeneralError(e), sourceEntryId, approval::isCurrent)
+            showShieldError(ErrorArgs.ShieldingGeneralError(e), sourceEntryId, canShowResult)
         }
     }
     private fun showShieldError(args: ErrorArgs, outcomeEntryId: String?, canShowResult: () -> Boolean) {

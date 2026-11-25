@@ -61,7 +61,7 @@ class ProposalPreparationCancellationTest {
         coEvery { dataSource.createExactInputProposal(account, newSend, quote) } returns currentProposal
         repository.createExactInputSwapProposal(newSend, quote, account)
         val gate = CompletableDeferred<Continuation<Pczt>>()
-        coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal) } coAnswers {
+        coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal, any()) } coAnswers {
             suspendCoroutine { gate.complete(it) }
         }
         val old = launch { repository.createPCZTFromProposal() }
@@ -70,7 +70,7 @@ class ProposalPreparationCancellationTest {
         old.cancel()
 
         val replacement = Pczt(byteArrayOf(2))
-        coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal) } returns replacement
+        coEvery { dataSource.createPcztFromProposal(account, currentProposal.proposal, any()) } returns replacement
         coEvery { dataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(3))
         try {
             repository.createPCZTFromProposal()

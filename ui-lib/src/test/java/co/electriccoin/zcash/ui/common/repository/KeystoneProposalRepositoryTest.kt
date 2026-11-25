@@ -64,7 +64,7 @@ class KeystoneProposalRepositoryTest {
     fun aMultiStepPcztRejectionOfATexPaymentBecomesTexUnsupportedOnKeystone() =
         runBlocking {
             givenCurrentProposalPays(WalletAddress.Tex.new(RECIPIENT))
-            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
+            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
                 PcztException.MultiStepProposalUnsupportedException()
 
             assertFailsWith<TexUnsupportedOnKSException> {
@@ -78,7 +78,7 @@ class KeystoneProposalRepositoryTest {
     fun aMultiStepPcztRejectionOfANonTexPaymentPropagatesUntouched() =
         runBlocking {
             givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
-            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
+            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
                 PcztException.MultiStepProposalUnsupportedException()
 
             assertFailsWith<PcztException.MultiStepProposalUnsupportedException> {
@@ -97,7 +97,7 @@ class KeystoneProposalRepositoryTest {
         runBlocking {
             repository.setMigrationSweepProposal(mockk<Proposal>())
             coEvery { accountDataSource.getSelectedAccount() } returns mockk(relaxed = true)
-            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
+            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
                 PcztException.MultiStepProposalUnsupportedException()
 
             assertFailsWith<PcztException.MultiStepProposalUnsupportedException> {
@@ -111,7 +111,7 @@ class KeystoneProposalRepositoryTest {
     fun replacementDuringRedactionCannotBeHandedToKeystone() = runBlocking {
         givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
         val approved = repository.getTransactionProposal()
-        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
         repository.createPCZTFromProposal()
         repository.approveForSigning(approved)
@@ -142,7 +142,7 @@ class KeystoneProposalRepositoryTest {
         val account = mockk<WalletAccount>(relaxed = true)
         val approval = ShieldingApproval(account) { appAccess.permits(grant) }
         coEvery { proposalDataSource.createShieldProposal(approval) } returns ShieldTransactionProposal(mockk())
-        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
         val proposal = repository.createShieldProposal(approval)
         repository.createPCZTFromProposal(account)
@@ -161,7 +161,7 @@ class KeystoneProposalRepositoryTest {
     fun aRegularPreparationRetainsItsSelectedAccountApproval() = runBlocking {
         givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
         val proposal = repository.getTransactionProposal()
-        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
         coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
         repository.createPCZTFromProposal()
         var permitted = true
