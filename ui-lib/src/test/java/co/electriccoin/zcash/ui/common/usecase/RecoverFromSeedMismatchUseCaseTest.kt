@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -30,9 +31,12 @@ class RecoverFromSeedMismatchUseCaseTest {
         seedPhrase = SeedPhrase.new(WalletFixture.Alice.seedPhrase),
         walletInitMode = WalletInitMode.ExistingWallet,
     )
-    private val walletProvider = RecordingWalletProvider(wallet)
+    private val access = WalletWriteAccess()
+    private val walletProvider = RecordingWalletProvider(wallet, access)
     private val walletCoordinator = mockk<WalletCoordinator>()
-    private val useCase = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator)
+    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access)
+
+    private suspend fun useCase() = recovery(access.token())
 
     @Test
     fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
@@ -82,6 +86,20 @@ class RecoverFromSeedMismatchUseCaseTest {
     }
 
     @Test
+    fun replacementWalletGetsItsOwnRecoveryAttempts() = runTest {
+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        repeat(3) { assertFailsWith<SeedMismatchRecoveryException> { useCase() } }
+        val old = access.token()
+        access.replaceWallet { walletProvider.persistableWallet.value = wallet.copy() }
+
+        recovery(old)
+        val firstFailure = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+
+        assertEquals(1, firstFailure.failedAttempts)
+        verify(exactly = 4) { walletCoordinator.deleteSdkDataFlow() }
+    }
+
+    @Test
     fun successAfterPriorFailuresResetsTheCounter() = runTest {
         every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
@@ -108,9 +126,12 @@ class RecoverFromSeedMismatchUseCaseTest {
         assertTrue(walletProvider.replacements.isEmpty())
     }
 
-    private class RecordingWalletProvider(initial: PersistableWallet) : PersistableWalletProvider {
+    private class RecordingWalletProvider(
+        initial: PersistableWallet,
+        private val access: WalletWriteAccess,
+    ) : PersistableWalletProvider {
         override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
-        override val writeVersion = 42L
+        override val writeVersion get() = access.token()
         val replacements = mutableListOf<PersistableWallet>()
 
         override suspend fun store(persistableWallet: PersistableWallet): Unit =

@@ -202,7 +202,7 @@ def status_readiness(client):
 
 
 @contextmanager
-def ready_session(root, *, post_by=None):
+def ready_session(root, *, post_by=None, before_post=None):
     """Reuse one owned Tor lifetime for pre-wallet status and the later sole claim."""
     root=Path(root)
     began=time.monotonic()
@@ -221,7 +221,7 @@ def ready_session(root, *, post_by=None):
             def fund_ready(address):
                 if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
                     raise ValueError('Only a testnet unified address may be funded')
-                funded=claim(address,root,port,negative,post_by=post_by)
+                funded=claim(address,root,port,negative,post_by=post_by,before_post=before_post)
                 funded.update(metadata)
                 return funded
             yield result,fund_ready
@@ -253,7 +253,7 @@ def record_closed_claim_window(ledger, state):
         staged.unlink(missing_ok=True)
 
 
-def claim(address,root,port,negative,*,post_by=None):
+def claim(address,root,port,negative,*,post_by=None,before_post=None):
     if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
         raise ValueError('Only a testnet unified address may be funded')
     began=time.monotonic()
@@ -299,6 +299,9 @@ def claim(address,root,port,negative,*,post_by=None):
         if not re.fullmatch(r'\d{1,15}',nonce):raise ValueError('Invalid nonce')
         client=TorHTTPS(FAUCET,port);client.connect();pinned=client.sock
         if pinned is None:raise RuntimeError('Missing claim TLS connection; no claim')
+        if before_post is not None:
+            require_funding_window(post_by)
+            before_post()
         now=time.time()
         if now>=expires:raise ValueError('Challenge expired before claim')
         payload=dict(address=address,pow={**{k:challenge[k] for k in ('seed','difficulty','exp','sig')},'nonce':nonce},**{'async':True})

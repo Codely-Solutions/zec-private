@@ -313,6 +313,18 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'sequential admission'):
                 admit_release.main()
 
+    def test_delayed_funded_admission_refuses_a_superseded_pair_without_launching(self):
+        self.prepare()
+        prepared = self.root / 'prepared'
+        argv = ['admit_release.py', '--prepared', str(prepared), '--owner', 'release-test-owner', '--profile', 'core']
+        newer = dict(BASELINE, release='newer', version_code=2, candidate_apk_sha256='e' * 64,
+                     instrumentation_apk_sha256=DIGEST)
+        with patch.object(sys, 'argv', argv), patch('release_inputs.git', self.fake_git), \
+                patch('hosted_release.require_current_hosted_upgrade', return_value=newer), \
+                patch.dict(sys.modules, {'admit_emulator_batch': None}):
+            with self.assertRaisesRegex(ValueError, 'exact paired fixture for the latest wallet release'):
+                admit_release.main()
+
     def test_verified_image_adapter_binds_image_and_owner(self):
         self.prepare()
         image=self.root/'image';image.mkdir()
@@ -325,9 +337,13 @@ class ReleaseTests(unittest.TestCase):
             return 0
         fake.main=launch
         argv=['admit_release.py','--prepared',str(self.root/'prepared'),'--owner','release-test-owner','--profile','core','--image',str(image)]
+        fixture = dict(BASELINE, candidate_apk_sha256=BASELINE['apk_sha256'],
+                       instrumentation_apk_sha256=BASELINE['instrumentation']['apk_sha256'])
         with patch.object(sys,'argv',argv),patch.dict(sys.modules,{'admit_emulator_batch':fake}), \
-             patch('emulator_session.verify_image',return_value=image):
+             patch('emulator_session.verify_image',return_value=image), patch('release_inputs.git', self.fake_git), \
+             patch('hosted_release.require_current_hosted_upgrade', return_value=fixture) as current:
             self.assertEqual(admit_release.main(),0)
+        current.assert_called_once()
         self.assertEqual(recorded[0]['owner'],'release-test-owner')
         self.assertEqual(Path(recorded[0]['argv'][2]).name,'release_cached_batch.py')
         self.assertEqual(recorded[0]['argv'][-1],str(image))

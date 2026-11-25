@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 /** Serializes wallet-owned writes with reset and invalidates work from an earlier wallet session. */
 class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     private val mutex = Mutex()
+    private val sdkRecovery = Mutex()
     private val generation = MutableStateFlow(0L)
     val version = generation.asStateFlow()
     @Volatile private var blocked = false
@@ -17,29 +18,37 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     fun token(): Long = generation.value
 
     internal fun permits(token: Long): Boolean =
-        !blocked && progressStore?.isPending?.value != true && generation.value == token
+        !blocked && !resetting && progressStore?.isPending?.value != true && generation.value == token
 
     suspend fun <T> write(token: Long, block: suspend () -> T): T? = mutex.withLock {
         if (permits(token)) block() else null
     }
 
-    /** Stops admission before draining writes already entered. Remains closed until explicit setup. */
+    internal suspend fun <T> withSdkRecovery(token: Long, block: suspend () -> T): T? = sdkRecovery.withLock {
+        if (permits(token)) block() else null
+    }
+
+    /** Stops admission before draining SDK recovery and writes. Remains closed until explicit setup. */
     suspend fun beginReset() {
         resetting = true
         blocked = true
-        mutex.withLock {
-            blocked = true
-            generation.value += 1
+        sdkRecovery.withLock {
+            mutex.withLock {
+                blocked = true
+                generation.value += 1
+            }
         }
     }
 
     suspend fun finishReset() = mutex.withLock { resetting = false }
 
     /** Only an explicit create/restore operation may open a new wallet session. */
-    suspend fun replaceWallet(block: suspend () -> Unit) = mutex.withLock {
-        check(!resetting && progressStore?.isPending?.value != true) { "Wallet reset is pending" }
-        block()
-        blocked = false
-        generation.value += 1
+    suspend fun replaceWallet(block: suspend () -> Unit) = sdkRecovery.withLock {
+        mutex.withLock {
+            check(!resetting && progressStore?.isPending?.value != true) { "Wallet reset is pending" }
+            block()
+            blocked = false
+            generation.value += 1
+        }
     }
 }

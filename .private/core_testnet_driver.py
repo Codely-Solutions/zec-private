@@ -98,7 +98,7 @@ def claim_after_readiness(check_readiness, submit_claim):
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
         preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False, installed_upgrade=False,
-        candidate_only=False):
+        candidate_only=False, before_faucet_post=None):
     started = time.monotonic()
     if candidate_only and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_only
                            or live_tor_probe or installed_upgrade):
@@ -372,6 +372,12 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             raise
         return private
 
+    def recheck_local_baseline():
+        nonlocal current_stage
+        current_stage = 'funding_upgrade_baseline'
+        before_faucet_post()
+        current_stage = 'funding_setup'
+
     firewall = False
     try:
         adb('root', timeout=20)
@@ -546,7 +552,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         else:
             current_stage='faucet_readiness'
             post_by = started + STAGE_START_SECONDS - FUNDED_RESERVE_SECONDS[use_tor]
-            with faucet_ready_session(root, post_by=post_by) as (readiness, fund_testnet):
+            local_check = {'before_post': recheck_local_baseline} if before_faucet_post is not None else {}
+            with faucet_ready_session(root, post_by=post_by, **local_check) as (readiness, fund_testnet):
                 report['faucet_readiness']=readiness
                 stage('recipient',240)
                 check_denials('recipient')

@@ -34,7 +34,7 @@ class ObserveSeedMismatchUseCase(
         val stillApplies = { walletWriteAccess.permits(token) }
         if (!stillApplies()) return
         try {
-            recoverFromSeedMismatch()
+            recoverFromSeedMismatch(token)
             launchNavigation.updateSeedRecoveryError(null, stillApplies)
         } catch (e: CancellationException) {
             throw e

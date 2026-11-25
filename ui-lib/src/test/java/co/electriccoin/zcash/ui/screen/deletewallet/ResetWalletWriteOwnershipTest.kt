@@ -52,6 +52,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -166,26 +167,62 @@ class ResetWalletWriteOwnershipTest {
     }
 
     @Test
-    fun recoveryStartedBeforeResetCannotOverwriteAnExplicitRestoreOfTheSameWallet() = runBlocking {
+    fun resetDrainsAdmittedSeedRecoveryBeforeErasingAndAllowsAnExplicitRestore() = runBlocking {
         val fixture = Fixture()
         val original = originalWallet()
         fixture.walletProvider.store(original)
-        val erase = PausedRecovery(fixture.walletProvider)
-        val recovery = launch { erase.recover() }
+        val erase = PausedRecovery(fixture.walletProvider, fixture.writeAccess)
+        val recovery = launch { erase.recover(fixture.writeAccess.token()) }
         val replacement = original.copy(endpoint = LightWalletEndpoint("restored.example.invalid", 443, true))
+        val doReset = fixture.reset()
         try {
             withTimeout(10.seconds) { erase.started.await() }
-            fixture.reset()(keepFiles = true)
-            assertNull(fixture.walletProvider.getPersistableWallet())
-            fixture.walletProvider.store(replacement)
-            assertEquals(replacement.endpoint, fixture.walletProvider.requirePersistableWallet().endpoint)
+            val reset = launch(start = CoroutineStart.UNDISPATCHED) { doReset(keepFiles = true) }
+            withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
+            assertFalse(reset.isCompleted)
+            verify(exactly = 0) { fixture.resetCoordinator.deleteSdkDataFlow() }
+            erase.finish.complete(Unit)
+            withTimeout(10.seconds) { reset.join() }
         } finally {
             erase.finish.complete(Unit)
         }
         recovery.join()
 
         assertNull(fixture.progress.getStage())
+        assertNull(fixture.walletProvider.getPersistableWallet())
+        fixture.walletProvider.store(replacement)
         assertEquals(replacement.endpoint, fixture.walletProvider.requirePersistableWallet().endpoint)
+    }
+
+    @Test
+    fun seedRecoveryAwaitingItsWalletSnapshotCannotEraseAfterResetAndRestore() = runBlocking {
+        val fixture = Fixture()
+        fixture.walletProvider.store(originalWallet())
+        val beforeReset = fixture.writeAccess.token()
+        val captured = CompletableDeferred<Unit>()
+        val returnSnapshot = CompletableDeferred<Unit>()
+        val stagedRead = object : PersistableWalletProvider by fixture.walletProvider {
+            override suspend fun getPersistableWallet(): PersistableWallet {
+                val original = fixture.walletProvider.requirePersistableWallet()
+                captured.complete(Unit)
+                returnSnapshot.await()
+                return original
+            }
+        }
+        val coordinator = mockk<WalletCoordinator>()
+        val recover = RecoverFromSeedMismatchUseCase(stagedRead, coordinator, fixture.writeAccess)
+        val recovery = launch { recover(beforeReset) }
+        val replacement = originalWallet().copy(endpoint = LightWalletEndpoint("new.example.invalid", 443, true))
+        try {
+            withTimeout(10.seconds) { captured.await() }
+            fixture.reset()(keepFiles = true)
+            fixture.walletProvider.store(replacement)
+        } finally {
+            returnSnapshot.complete(Unit)
+        }
+        recovery.join()
+        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
+        assertEquals(replacement, fixture.walletProvider.requirePersistableWallet())
     }
 
     @Test
@@ -196,8 +233,8 @@ class ResetWalletWriteOwnershipTest {
         val original = provider.requirePersistableWallet()
         val version = provider.writeVersion
         val replacement = original.copy(endpoint = LightWalletEndpoint("updated.example.invalid", 443, true))
-        val erase = PausedRecovery(provider)
-        val recovery = launch { erase.recover() }
+        val erase = PausedRecovery(provider, fixture.writeAccess)
+        val recovery = launch { erase.recover(version) }
         try {
             withTimeout(10.seconds) { erase.started.await() }
             assertTrue(provider.storeIfCurrent(original, replacement, version))
@@ -224,8 +261,8 @@ class ResetWalletWriteOwnershipTest {
         val recoveryCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
         }
-        val recover = RecoverFromSeedMismatchUseCase(fixture.walletProvider, recoveryCoordinator)
-        val recovery = launch { recover() }
+        val recover = RecoverFromSeedMismatchUseCase(fixture.walletProvider, recoveryCoordinator, fixture.writeAccess)
+        val recovery = launch { recover(fixture.writeAccess.token()) }
         val reset = fixture.reset()
         try {
             withTimeout(10.seconds) { recoveryWriteEntered.await() }
@@ -329,7 +366,7 @@ class ResetWalletWriteOwnershipTest {
         walletInitMode = WalletInitMode.ExistingWallet,
     )
 
-    private class PausedRecovery(provider: PersistableWalletProvider) {
+    private class PausedRecovery(provider: PersistableWalletProvider, access: WalletWriteAccess) {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
         val recover = RecoverFromSeedMismatchUseCase(provider, mockk<WalletCoordinator> {
@@ -338,7 +375,7 @@ class ResetWalletWriteOwnershipTest {
                 finish.await()
                 emit(true)
             }
-        })
+        }, access)
     }
 
     private inner class Fixture {

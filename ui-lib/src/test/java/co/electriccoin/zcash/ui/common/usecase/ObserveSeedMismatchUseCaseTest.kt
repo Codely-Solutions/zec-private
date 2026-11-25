@@ -62,20 +62,20 @@ class ObserveSeedMismatchUseCaseTest {
     @Test
     fun seedMismatchTriggersRecovery() =
         runTest {
-            coEvery { recoverFromSeedMismatch() } returns Unit
+            coEvery { recoverFromSeedMismatch(any()) } returns Unit
             backgroundScope.launch { useCase() }
             runCurrent()
 
             isSeedMismatchState.value = true
             runCurrent()
 
-            coVerify(exactly = 1) { recoverFromSeedMismatch() }
+            coVerify(exactly = 1) { recoverFromSeedMismatch(any()) }
         }
 
     @Test
     fun recoveryFailureIsLoggedAndDoesNotCrashTheCollector() =
         runTest {
-            coEvery { recoverFromSeedMismatch() } throws RuntimeException("erase failed")
+            coEvery { recoverFromSeedMismatch(any()) } throws RuntimeException("erase failed")
             backgroundScope.launch { useCase() }
             runCurrent()
 
@@ -86,13 +86,13 @@ class ObserveSeedMismatchUseCaseTest {
             isSeedMismatchState.value = true
             runCurrent()
 
-            coVerify(exactly = 2) { recoverFromSeedMismatch() }
+            coVerify(exactly = 2) { recoverFromSeedMismatch(any()) }
             assertTrue(launchNavigation.changes.value.isEmpty())
         }
 
     @Test
     fun terminalFailureWaitsForWalletAccessAndSuccessfulNavigation() = runTest {
-        coEvery { recoverFromSeedMismatch() } throws SeedMismatchRecoveryException(3)
+        coEvery { recoverFromSeedMismatch(any()) } throws SeedMismatchRecoveryException(3)
         launchNavigation.beginMigrationProgress("unresolved-owner")
         launchNavigation.requestGiftScan()
         backgroundScope.launch { useCase() }
@@ -131,7 +131,7 @@ class ObserveSeedMismatchUseCaseTest {
 
     @Test
     fun resetInvalidatesARecoveryErrorThatHasNotReachedTheWallet() = runTest {
-        coEvery { recoverFromSeedMismatch() } throws SeedMismatchRecoveryException(3)
+        coEvery { recoverFromSeedMismatch(any()) } throws SeedMismatchRecoveryException(3)
         backgroundScope.launch { useCase() }
         runCurrent()
         isSeedMismatchState.value = true
@@ -152,7 +152,7 @@ class ObserveSeedMismatchUseCaseTest {
     @Test
     fun cancellationExceptionIsNotSwallowedAndStopsTheCollector() =
         runTest {
-            coEvery { recoverFromSeedMismatch() } throws CancellationException("cancelled")
+            coEvery { recoverFromSeedMismatch(any()) } throws CancellationException("cancelled")
             val job = backgroundScope.launch { useCase() }
             runCurrent()
 
@@ -164,7 +164,7 @@ class ObserveSeedMismatchUseCaseTest {
             runCurrent()
 
             assertTrue(job.isCancelled)
-            coVerify(exactly = 1) { recoverFromSeedMismatch() }
+            coVerify(exactly = 1) { recoverFromSeedMismatch(any()) }
             assertTrue(launchNavigation.changes.value.isEmpty())
         }
 
@@ -192,7 +192,7 @@ class ObserveSeedMismatchUseCaseTest {
             walletInitMode = WalletInitMode.ExistingWallet,
         )
         val wallet = RecoveryWallet(initial)
-        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator)
+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess)
         val observe = ObserveSeedMismatchUseCase(
             synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
         )

@@ -121,7 +121,7 @@ class ClaimTest(unittest.TestCase):
                 (202,dict(ok=True,pending=True,id='c'*16)),
                 (200,dict(ok=True,txid='d'*64,amountZat=10000000))]
 
-    def run_claim(self,root,replies,*,clock=None,work=None,post_by=None):
+    def run_claim(self,root,replies,*,clock=None,work=None,post_by=None,before_post=None):
         self.calls=[]
         def request(client,method,path,body=None):
             self.calls.append((method,path,body))
@@ -133,7 +133,21 @@ class ClaimTest(unittest.TestCase):
         with patch_environment({},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',side_effect=work,return_value=dict(nonce='0',seconds=.1,workers=2)) as solve,patch('core_faucet.time.time',side_effect=clock,return_value=100):
             self.solve=solve
             client.return_value.sock=object()
-            return core_faucet.claim(self.address,root,12345,True,post_by=post_by)
+            return core_faucet.claim(self.address,root,12345,True,post_by=post_by,before_post=before_post)
+
+    def test_superseded_pair_after_guest_readiness_stops_before_the_ledger_and_post(self):
+        with tempfile.TemporaryDirectory() as root:
+            ledger = Path(root) / 'funding-claim-ledger.json'
+
+            def recheck():
+                self.assertFalse(ledger.exists())
+                self.solve.assert_called_once()
+                raise ValueError('Latest public release needs its verified hosted baseline')
+
+            with self.assertRaisesRegex(ValueError, 'verified hosted baseline'):
+                self.run_claim(root, self.replies(), before_post=recheck)
+            self.assertEqual([method for method, _, _ in self.calls], ['GET', 'GET'])
+            self.assertFalse(ledger.exists())
 
     def test_deadline_caps_proof_and_stops_before_the_claim_ledger(self):
         with tempfile.TemporaryDirectory() as root, \

@@ -55,6 +55,23 @@ def require_local_upgrade_pair(local, hosted):
             'Direct release requires the exact paired fixture for the latest wallet release')
 
 
+def require_current_local_upgrade(source, manifest, metadata=None):
+    from hosted_release import require_current_hosted_upgrade
+
+    sha = manifest.get('build_source_sha', '')
+    require(re.fullmatch('[0-9a-f]{40}', sha), 'Prepared funded acceptance needs the exact source')
+    baseline = selected_baseline(source, sha)
+    require(manifest.get('baseline_source_sha') == baseline['source_sha']
+            and manifest.get('baseline_version_code') == baseline['version_code']
+            and manifest.get('package') == baseline['package']
+            and all(manifest.get(key) == value for key, value in local_upgrade_artifacts(baseline).items()),
+            'Prepared funded acceptance differs from the selected upgrade pair')
+    candidate_version = manifest.get('candidate_version_code')
+    require(candidate_version == version_code(source, sha) and candidate_version > baseline['version_code'],
+            'Candidate must advance the paired baseline version')
+    require_local_upgrade_pair(baseline, require_current_hosted_upgrade(source, metadata or Metadata()))
+
+
 def version_code(source, sha):
     match = re.search(r'^ZCASH_VERSION_CODE=(\d+)$', git(source, 'show', sha + ':gradle.properties'), re.M)
     require(match is not None, 'Source versionCode required')

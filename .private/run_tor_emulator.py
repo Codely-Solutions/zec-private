@@ -13,12 +13,16 @@ PROJECT=Path(__file__).resolve().parents[1]
 manifest=load_manifest(PROJECT)
 from ui_capture import validate_request
 validate_request(manifest)
+before_faucet_post = None
 if manifest.get('probeKind') == 'core-testnet' and 'stable_candidate_run' in manifest:
-    from release_inputs import available_local_funding_ledger
+    from release_inputs import available_local_funding_ledger, require_current_local_upgrade
 
     ledger = available_local_funding_ledger(PROJECT, manifest['candidate_version_code'])
     ledger.parent.mkdir(parents=True, exist_ok=True)
     os.environ['CORE_FAUCET_LEDGER'] = str(ledger)
+
+    def before_faucet_post():
+        require_current_local_upgrade(PROJECT, manifest)
 guest_memory=3072 if manifest.get('probeKind')=='core-testnet' else 1536
 from prepared_apks import binding, reuse, write_receipt, export_prepared
 local_receipt=os.environ.get('CODEX_EMULATOR_PREPARED_RECEIPT')
@@ -100,7 +104,7 @@ with EmulatorSession(ROOT, guest_memory=guest_memory) as session:
         receipt.update(passed=True, captureOnly=True, evidenceScope='Synthetic rendering only')
     elif manifest.get('probeKind')=='core-testnet':
         from core_testnet_driver import run
-        run(adb,ROOT,apk_paths,manifest)
+        run(adb,ROOT,apk_paths,manifest,before_faucet_post=before_faucet_post)
         receipt.update(passed=True,fundsTransferred=True,realFundsUsed=False,walletAccess='isolated-testnet-only')
     elif manifest.get('probeKind')=='differential':
         from tor_differential_driver import run
