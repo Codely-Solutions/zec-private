@@ -67,6 +67,7 @@ import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlinx.coroutines.CompletableDeferred
 import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
 import kotlin.time.Clock
@@ -89,11 +90,15 @@ class ScannedSendRecipientTest {
         val wallet = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c" +
             "7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf"
         val manual = "synthetic-manual-receiver"
+        val manualValidation = CompletableDeferred<Unit>()
         val synchronizer = mockk<Synchronizer> {
             coEvery { validateAddress(scan) } returns AddressType.Transparent
             coEvery { validateAddress(contact) } returns AddressType.Shielded
             coEvery { validateAddress(wallet) } returns AddressType.Unified
-            coEvery { validateAddress(manual) } returns AddressType.Tex
+            coEvery { validateAddress(manual) } coAnswers {
+                manualValidation.await()
+                AddressType.Tex
+            }
         }
         val synchronizerProvider = mockk<SynchronizerProvider> {
             coEvery { getSynchronizer() } returns synchronizer
@@ -141,12 +146,12 @@ class ScannedSendRecipientTest {
                     navigateToSelectRecipient = mockk(),
                     navigationRouter = mockk(relaxed = true),
                     savedStateHandle = handle,
+                    validateAddress = ValidateAddressUseCase(synchronizerProvider),
                 ).also { send = it }
             }
             viewModel { appBar }
             single { prefill }
             single { ObserveClearSendUseCase() }
-            single { ValidateAddressUseCase(synchronizerProvider) }
         }
 
         // Keep an unrelated global context present, as it can be when this test runs with the full suite.
@@ -174,7 +179,8 @@ class ScannedSendRecipientTest {
             fun assertRecipient(expected: String, type: AddressType) {
                 // The semantics query drains Robolectric's main looper, where the ViewModel collects selection events.
                 compose.waitUntil(conditionDescription = "Send displays $expected", timeoutMillis = 5_000) {
-                    compose.onAllNodesWithText(expected).fetchSemanticsNodes().size == 1
+                    val displayed = compose.onAllNodesWithText(expected).fetchSemanticsNodes().size == 1
+                    displayed && send.recipientAddressState.value.type == type
                 }
                 compose.runOnIdle {
                     assertEquals(expected, send.recipientAddressState.value.address)
@@ -252,7 +258,10 @@ class ScannedSendRecipientTest {
             assertEquals("100", enteredAmount(fiat))
 
             compose.onNodeWithText(wallet).performTextReplacement(manual)
+            review.assertIsNotEnabled()
+            compose.runOnIdle { manualValidation.complete(Unit) }
             assertRecipient(manual, AddressType.Tex)
+            review.assertIsEnabled()
             assertEquals("0.5", enteredAmount(token))
             compose.onNodeWithText(original).assertDoesNotExist()
 

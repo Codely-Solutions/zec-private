@@ -266,7 +266,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute()) }
         composable(NavigationTargets.EXPORT_PRIVATE_DATA) { WrapExportPrivateData() }
         composable<ExportVKArgs> { ExportVKScreen() }
-        dialogComposable<ExportVKConfirmArgs> { ExportVKConfirmScreen() }
+        dialogComposable<ExportVKConfirmArgs> { ExportVKConfirmScreen(it.toRoute()) }
         composable<VKDetailArgs> { VKDetailScreen(it.toRoute()) }
         composable(NavigationTargets.NOT_ENOUGH_SPACE) {
             WrapNotEnoughSpace(

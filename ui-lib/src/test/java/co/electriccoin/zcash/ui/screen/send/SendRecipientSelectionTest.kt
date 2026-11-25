@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectRecipientUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
+import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
@@ -94,6 +95,7 @@ class SendRecipientSelectionTest {
             navigateToSelectRecipient = NavigateToSelectRecipientUseCase(router),
             navigationRouter = router,
             savedStateHandle = SavedStateHandle(),
+            validateAddress = ValidateAddressUseCase(synchronizerProvider),
         )
         val picker = SelectABRecipientVM(
             getAddressBookContacts = GetABContactsUseCase(addressBook),

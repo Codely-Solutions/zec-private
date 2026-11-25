@@ -367,7 +367,7 @@ class MainActivity : FragmentActivity() {
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
         private const val PENDING_MIGRATION_STEP = "pending_migration_step"
-        private const val NAVIGATION_STATE_VERSION = 11
+        private const val NAVIGATION_STATE_VERSION = 12
 
         internal fun stampNavigationState(state: Bundle) {
             state.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)

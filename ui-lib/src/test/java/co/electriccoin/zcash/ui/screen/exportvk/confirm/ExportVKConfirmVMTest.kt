@@ -6,12 +6,16 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.VKType
+import co.electriccoin.zcash.ui.common.usecase.GetVKUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.exportvk.ExportVKArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -110,7 +114,9 @@ class ExportVKConfirmVMTest {
 
             requireNotNull(vm.state.value).exportButton.onClick()
 
-            assertEquals(ExportVKArgs::class to listOf<Any>(VKDetailArgs(VKType.FULL)), router.replacedFrom.single())
+            assertEquals(
+                ExportVKArgs::class to listOf<Any>(VKDetailArgs(VKType.FULL, "review-id")), router.replacedFrom.single()
+            )
             assertTrue(router.replacedRoutes.isEmpty())
             assertTrue(router.forwardedRoutes.isEmpty())
         }
@@ -128,6 +134,22 @@ class ExportVKConfirmVMTest {
             assertTrue(router.replacedFrom.isEmpty())
         }
 
+    @Test
+    fun accountChangeRejectsThePreviouslyEnabledConsentAction() = runTest(dispatcher) {
+        val router = FakeNavigationRouter()
+        val ownerStillCurrent = MutableStateFlow(true)
+        val vm = startedVm(router, ownerStillCurrent)
+        repeat(3) { check(vm, it) }
+        val previous = requireNotNull(vm.state.value).exportButton
+        assertTrue(previous.isEnabled)
+
+        ownerStillCurrent.value = false
+        previous.onClick()
+        advanceUntilIdle()
+        assertFalse(requireNotNull(vm.state.value).exportButton.isEnabled)
+        assertTrue(router.replacedFrom.isEmpty())
+    }
+
     private fun TestScope.check(
         vm: ExportVKConfirmVM,
         index: Int
@@ -136,8 +158,18 @@ class ExportVKConfirmVMTest {
         advanceUntilIdle()
     }
 
-    private fun TestScope.startedVm(router: FakeNavigationRouter = FakeNavigationRouter()): ExportVKConfirmVM {
-        val vm = ExportVKConfirmVM(navigationRouter = router)
+    private fun TestScope.startedVm(
+        router: FakeNavigationRouter = FakeNavigationRouter(),
+        ownerStillCurrent: MutableStateFlow<Boolean> = MutableStateFlow(true),
+    ): ExportVKConfirmVM {
+        val vm = ExportVKConfirmVM(
+            args = ExportVKConfirmArgs("review-id"),
+            navigationRouter = router,
+            getVK = mockk<GetVKUseCase>(relaxed = true) {
+                every { watchReview("review-id", VKType.FULL) } returns ownerStillCurrent
+                every { approveFullKey("review-id") } answers { ownerStillCurrent.value }
+            },
+        )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()
         return vm

@@ -19,5 +19,6 @@ fun VKDetailScreen(args: VKDetailArgs) {
 
 @Serializable
 data class VKDetailArgs(
-    val type: VKType
+    val type: VKType,
+    val reviewId: String,
 )

@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectRecipientUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
+import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
 import co.electriccoin.zcash.ui.screen.contact.AddZashiABContactArgs
 import co.electriccoin.zcash.ui.screen.send.model.AmountField
 import co.electriccoin.zcash.ui.screen.send.model.AmountState
@@ -24,6 +25,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -44,6 +46,7 @@ class SendViewModel(
     private val navigateToSelectRecipient: NavigateToSelectRecipientUseCase,
     private val navigationRouter: NavigationRouter,
     private val savedStateHandle: SavedStateHandle,
+    private val validateAddress: ValidateAddressUseCase,
 ) : ViewModel() {
     private val recipientState = MutableStateFlow(
         savedStateHandle.get<HashMap<String, String>>(RECIPIENT_STATE_KEY)
@@ -52,6 +55,7 @@ class SendViewModel(
     val recipientAddressState = recipientState.asStateFlow()
 
     private var onCreateZecSendClickJob: Job? = null
+    private var recipientValidationJob: Job? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val sendAddressBookState =
@@ -115,6 +119,8 @@ class SendViewModel(
             )
 
     init {
+        val draft = recipientState.value
+        if (draft.type == null && draft.address.isNotEmpty()) validateRecipient(draft.address)
         viewModelScope.launch {
             observeContactPicked().collect {
                 onRecipientAddressChanged(it)
@@ -149,6 +155,22 @@ class SendViewModel(
     }
 
     fun onRecipientAddressChanged(state: RecipientAddressState) {
+        recipientValidationJob?.cancel()
+        saveRecipient(state)
+    }
+
+    internal fun validateRecipient(address: String) {
+        onRecipientAddressChanged(RecipientAddressState.new(address))
+        val draft = recipientState.value
+        if (address.isEmpty()) return
+        recipientValidationJob = viewModelScope.launch {
+            val type = validateAddress(address)
+            ensureActive()
+            if (recipientState.value === draft) saveRecipient(draft.copy(type = type))
+        }
+    }
+
+    private fun saveRecipient(state: RecipientAddressState) {
         savedStateHandle[RECIPIENT_STATE_KEY] = state.toSavedState()
         recipientState.value = state
     }
@@ -157,23 +179,28 @@ class SendViewModel(
     fun onCreateZecSendClick(
         newZecSend: ZecSend,
         amountState: AmountState,
+        renderedRecipient: RecipientAddressState,
         setSendStage: (SendStage) -> Unit
     ) {
+        val canReview = { recipientState.value === renderedRecipient }
+        if (!canReview() || renderedRecipient.type !is AddressType.Valid) return
+        if (newZecSend.destination.address != renderedRecipient.address) return
         if (onCreateZecSendClickJob?.isActive == true) return
         onCreateZecSendClickJob =
             viewModelScope.launch {
                 try {
+                    if (!canReview()) return@launch
                     val enteredInFiat = amountState.lastFieldChangedByUser == AmountField.FIAT
                     if (enteredInFiat) {
                         val current = (amountState as? AmountState.Valid)
                             ?.normalizedFiatAt(exchangeRateRepository.state.value)
                         if (current != newZecSend.amount) return@launch
                     }
-                    createProposal(newZecSend, enteredInFiat)
+                    createProposal(newZecSend, enteredInFiat, canReview)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    setSendStage(SendStage.SendFailure(e.cause?.message ?: e.message ?: ""))
+                    if (canReview()) setSendStage(SendStage.SendFailure(e.cause?.message ?: e.message ?: ""))
                     Twig.error(e) { "Error creating proposal" }
                 }
             }

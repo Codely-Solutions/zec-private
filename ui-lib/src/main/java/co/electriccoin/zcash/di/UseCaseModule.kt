@@ -299,7 +299,7 @@ val useCaseModule =
         factoryOf(::SaveORSwapUseCase)
         factory { GetReloadableSwapQuoteUseCase(get(), get(), get()) }
         factoryOf(::ShareQRUseCase)
-        factoryOf(::GetVKUseCase)
+        singleOf(::GetVKUseCase)
         factoryOf(::GetActivitiesUseCase)
         factoryOf(::GetResyncDataFromHeightUseCase)
         singleOf(::ExportPrivateDataUseCase)

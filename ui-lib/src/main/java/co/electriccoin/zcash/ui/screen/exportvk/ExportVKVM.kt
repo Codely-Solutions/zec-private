@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
 internal class ExportVKVM(
-    getVK: GetVKUseCase,
+    private val getVK: GetVKUseCase,
     observeSelectedWalletAccount: ObserveSelectedWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val observeAccountIcon: ObserveAccountIconUseCase,
@@ -37,11 +37,11 @@ internal class ExportVKVM(
     val state =
         combine(
             selected,
-            getVK.observeAvailability(),
             observeSelectedWalletAccount.require(),
-            observeAccountIcon.observeAll()
-        ) { selected, availability, account, colors ->
-            createState(selected, availability, account, observeAccountIcon.iconOf(colors, account))
+            observeAccountIcon.observeAll(),
+            getVK.walletVersion,
+        ) { selected, account, colors, generation ->
+            createState(selected, account, observeAccountIcon.iconOf(colors, account), generation)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -50,9 +50,9 @@ internal class ExportVKVM(
 
     private fun createState(
         selected: VKType?,
-        availability: Map<VKType, Boolean>,
         account: WalletAccount,
         logo: ImageResource,
+        generation: Long,
     ) = ExportVKState(
         logo = logo,
         description =
@@ -73,19 +73,20 @@ internal class ExportVKVM(
         continueButton =
             ButtonState(
                 text = stringRes(R.string.exportViewingKey_continue),
-                isEnabled = selected != null && availability[selected] == true,
-                onClick = ::onContinueClick
+                isEnabled = selected != null && getVK.availability(account)[selected] == true,
+                onClick = { if (selected != null) onContinueClick(selected, account, generation) }
             ),
         onBack = ::onBack
     )
 
     private fun onOptionClick(type: VKType) = selected.update { type }
 
-    private fun onContinueClick() {
-        when (selected.value) {
-            VKType.INCOMING -> navigationRouter.replace(VKDetailArgs(VKType.INCOMING))
-            VKType.FULL -> navigationRouter.forward(ExportVKConfirmArgs)
-            null -> Unit
+    private fun onContinueClick(type: VKType, account: WalletAccount, generation: Long) {
+        if (selected.value != type) return
+        val id = getVK.startReview(account, generation, type) ?: return
+        when (type) {
+            VKType.INCOMING -> navigationRouter.replace(VKDetailArgs(VKType.INCOMING, id))
+            VKType.FULL -> navigationRouter.forward(ExportVKConfirmArgs(id))
         }
     }
 

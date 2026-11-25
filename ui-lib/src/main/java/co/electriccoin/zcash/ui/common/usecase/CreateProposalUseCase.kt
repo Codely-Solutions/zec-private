@@ -28,10 +28,12 @@ class CreateProposalUseCase(
     private val navigationRouter: NavigationRouter,
 ) {
     @Suppress("TooGenericExceptionCaught")
-    suspend operator fun invoke(zecSend: ZecSend, floor: Boolean) {
+    suspend operator fun invoke(zecSend: ZecSend, floor: Boolean, canReview: () -> Boolean = { true }) {
         try {
             val normalized by lazy { zecSend.normalize(floor) }
-            when (accountDataSource.getSelectedAccount()) {
+            val account = accountDataSource.getSelectedAccount()
+            if (!canReview()) return
+            when (account) {
                 is KeystoneAccount -> {
                     keystoneProposalRepository.createProposal(normalized)
                     keystoneProposalRepository.createPCZTFromProposal()
@@ -50,10 +52,10 @@ class CreateProposalUseCase(
                     zashiProposalRepository.createProposal(normalized)
                 }
             }
-            navigationRouter.forward(ReviewTransactionArgs)
+            if (canReview()) navigationRouter.forward(ReviewTransactionArgs)
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
+            if (canReview()) navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             zashiProposalRepository.clear()
@@ -61,7 +63,7 @@ class CreateProposalUseCase(
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             zashiProposalRepository.clear()
-            navigationRouter.forward(InsufficientFundsArgs)
+            if (canReview()) navigationRouter.forward(InsufficientFundsArgs)
         } catch (e: Exception) {
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()

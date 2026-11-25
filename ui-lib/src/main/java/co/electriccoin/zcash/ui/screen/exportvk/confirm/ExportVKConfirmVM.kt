@@ -6,6 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.VKType
+import co.electriccoin.zcash.ui.common.usecase.GetVKUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.CheckboxState
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -14,25 +15,32 @@ import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
 internal class ExportVKConfirmVM(
+    private val args: ExportVKConfirmArgs,
     private val navigationRouter: NavigationRouter,
+    private val getVK: GetVKUseCase,
 ) : ViewModel() {
     private val checked = MutableStateFlow(setOf<Int>())
 
     val state =
-        checked
-            .map(::createState)
-            .stateIn(
+        combine(
+            checked,
+            getVK.watchReview(args.reviewId, VKType.FULL).onEach { current ->
+                if (!current) getVK.endReview(args.reviewId)
+            },
+            ::createState,
+        ).stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
                 initialValue = null
             )
 
-    private fun createState(checked: Set<Int>) =
+    private fun createState(checked: Set<Int>, current: Boolean) =
         ExportVKConfirmState(
             checkboxes =
                 CONSENT_TITLES.mapIndexed { index, title ->
@@ -50,7 +58,7 @@ internal class ExportVKConfirmVM(
             exportButton =
                 ButtonState(
                     text = stringRes(R.string.exportViewingKey_confirm_export),
-                    isEnabled = checked.size == CONSENT_TITLES.size,
+                    isEnabled = current && checked.size == CONSENT_TITLES.size,
                     onClick = ::onExportClick
                 ),
             onBack = ::onBack
@@ -59,9 +67,16 @@ internal class ExportVKConfirmVM(
     private fun onCheckboxClick(index: Int) =
         checked.update { current -> if (index in current) current - index else current + index }
 
-    private fun onExportClick() = navigationRouter.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.FULL))
+    private fun onExportClick() {
+        if (checked.value.size == CONSENT_TITLES.size && getVK.approveFullKey(args.reviewId)) {
+            navigationRouter.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.FULL, args.reviewId))
+        }
+    }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        getVK.endReview(args.reviewId)
+        navigationRouter.back()
+    }
 }
 
 private val CONSENT_TITLES =

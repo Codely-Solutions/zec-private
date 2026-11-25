@@ -47,12 +47,13 @@ class NavigationRouterImplTest {
         runTest(dispatcher) {
             val router = NavigationRouterImpl()
             val commands = collectedCommands(router)
+            val detail = VKDetailArgs(VKType.FULL, "full-review")
 
-            router.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.FULL))
+            router.replaceFrom(ExportVKArgs::class, detail)
             advanceUntilIdle()
 
             assertEquals(
-                listOf(NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(VKDetailArgs(VKType.FULL)))),
+                listOf(NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(detail))),
                 commands
             )
         }
@@ -62,18 +63,20 @@ class NavigationRouterImplTest {
         runTest(dispatcher) {
             val router = NavigationRouterImpl()
             val commands = collectedCommands(router)
+            val full = VKDetailArgs(VKType.FULL, "full-review")
+            val incoming = VKDetailArgs(VKType.INCOMING, "incoming-review")
 
-            router.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.FULL))
+            router.replaceFrom(ExportVKArgs::class, full)
             runCurrent()
-            router.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.INCOMING))
+            router.replaceFrom(ExportVKArgs::class, incoming)
             runCurrent()
-            router.replaceFrom(ExportVKArgs::class, VKDetailArgs(VKType.INCOMING))
+            router.replaceFrom(ExportVKArgs::class, incoming)
             runCurrent()
 
             assertEquals(
                 listOf(
-                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(VKDetailArgs(VKType.FULL))),
-                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(VKDetailArgs(VKType.INCOMING)))
+                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(full)),
+                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(incoming)),
                 ),
                 commands
             )

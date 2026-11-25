@@ -3,8 +3,11 @@ package co.electriccoin.zcash.ui.screen.exportvk.detail
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.toRoute
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SensitiveReveal
@@ -33,7 +36,7 @@ import java.util.UUID
 @Suppress("TooManyFunctions")
 internal class VKDetailVM(
     private val args: VKDetailArgs,
-    getVK: GetVKUseCase,
+    private val getVK: GetVKUseCase,
     private val shareQR: ShareQRUseCase,
     private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
     private val biometricRepository: BiometricRepository,
@@ -46,7 +49,7 @@ internal class VKDetailVM(
     private val reveal = SensitiveReveal(appAccessSession)
 
     internal val isRevealed: Boolean
-        get() = reveal.isRevealed
+        get() = getVK.isCurrent(args.reviewId, args.type) && reveal.isRevealed
 
     private val tab = MutableStateFlow(Tab.QR)
 
@@ -61,11 +64,23 @@ internal class VKDetailVM(
 
     init {
         viewModelScope.launch {
-            val loaded = getVK.observe(args.type).first()
-            if (loaded == null) {
-                navigationRouter.back()
-            } else {
-                key.update { loaded }
+            getVK.watchReview(args.reviewId, args.type).first { current ->
+                val loaded = if (current) getVK.key(args.reviewId, args.type) else null
+                key.value = loaded
+                if (loaded == null) {
+                    reveal.hide()
+                    getVK.endReview(args.reviewId)
+                    navigationRouter.custom { entry ->
+                        if (entry?.destination?.hasRoute<VKDetailArgs>() == true &&
+                            entry.toRoute<VKDetailArgs>() == args
+                        ) {
+                            NavigationCommand.Back
+                        } else {
+                            null
+                        }
+                    }
+                }
+                loaded == null
             }
         }
     }
@@ -161,6 +176,7 @@ internal class VKDetailVM(
     private fun onRevealClick() =
         viewModelScope.launch {
             val grant = appAccessSession.grant.value ?: return@launch
+            if (key.value == null || !getVK.isCurrent(args.reviewId, args.type)) return@launch
             if (!isRevealed) {
                 try {
                     biometricRepository.requestBiometrics(
@@ -172,7 +188,7 @@ internal class VKDetailVM(
                                 )
                         )
                     )
-                    reveal.reveal(grant)
+                    if (getVK.isCurrent(args.reviewId, args.type)) reveal.reveal(grant)
                 } catch (_: BiometricsFailureException) {
                     // Leave the key hidden.
                 } catch (_: BiometricsCancelledException) {
@@ -186,18 +202,22 @@ internal class VKDetailVM(
     private fun onShareClick(grant: AppAccessSession.Grant?) =
         viewModelScope.launch {
             val key = key.value ?: return@launch
-            if (!reveal.permits(grant)) return@launch
+            if (!canShare(grant)) return@launch
             shareQR(
                 qrData = key,
                 shareText = stringRes(key),
                 sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
                 filenamePrefix = shareFilePrefix,
                 centerIcon = null,
-                isAllowed = { reveal.permits(grant) },
+                isAllowed = { canShare(grant) },
             )
         }
 
+    private fun canShare(grant: AppAccessSession.Grant?) =
+        getVK.isCurrent(args.reviewId, args.type) && reveal.permits(grant)
+
     override fun onCleared() {
+        getVK.endReview(args.reviewId)
         deleteSharedQRImages(shareFilePrefix)
         super.onCleared()
     }

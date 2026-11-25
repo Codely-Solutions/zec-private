@@ -27,8 +27,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -331,6 +331,45 @@ class VKDetailVMTest {
         }
 
     @Test
+    fun lateBiometricApprovalCannotRevealAReviewedKeyAfterAccountChange() = runTest(dispatcher) {
+        val ownerStillCurrent = MutableStateFlow(true)
+        val result = CompletableDeferred<Unit>()
+        val biometrics = mockk<BiometricRepository> {
+            coEvery { requestBiometrics(any()) } coAnswers { result.await() }
+        }
+        val vm = startedVm(biometricRepository = biometrics, ownerStillCurrent = ownerStillCurrent)
+        requireNotNull(vm.state.value).primaryButton.onClick()
+        runCurrent()
+
+        ownerStillCurrent.value = false
+        result.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(vm.isRevealed)
+        assertNull(vm.state.value)
+    }
+
+    @Test
+    fun accountChangeBeforeChooserLaunchRevokesTheStagedKeyHandoff() = runTest(dispatcher) {
+        val ownerStillCurrent = MutableStateFlow(true)
+        val handoff = CompletableDeferred<() -> Boolean>()
+        val share = mockk<ShareQRUseCase> {
+            coEvery { this@mockk.invoke(any(), any(), any(), any(), any(), any()) } answers {
+                handoff.complete(lastArg())
+                true
+            }
+        }
+        val vm = startedVm(shareQR = share, ownerStillCurrent = ownerStillCurrent)
+        reveal(vm)
+        requireNotNull(vm.state.value).secondaryButton.onClick()
+        val isAllowed = handoff.await()
+        assertTrue(isAllowed())
+        ownerStillCurrent.value = false
+        assertFalse(isAllowed())
+        advanceUntilIdle()
+        assertNull(vm.state.value)
+    }
+
+    @Test
     fun leavingTheScreenDeletesTheViewingKeyQrPng() =
         runTest(dispatcher) {
             val deleteSharedQRImages = mockk<DeleteSharedQRImagesUseCase>(relaxed = true)
@@ -370,7 +409,7 @@ class VKDetailVMTest {
             val vm = startedVm(key = null, router = router)
 
             assertNull(vm.state.value)
-            assertEquals(1, router.backCount)
+            assertEquals(1, router.guardedBackCount)
         }
 
     private fun TestScope.reveal(vm: VKDetailVM) {
@@ -400,14 +439,17 @@ class VKDetailVMTest {
         deleteSharedQRImages: DeleteSharedQRImagesUseCase = mockk(relaxed = true),
         router: FakeNavigationRouter = FakeNavigationRouter(),
         appAccessSession: AppAccessSession = AppAccessSession().apply { unlock() },
+        ownerStillCurrent: MutableStateFlow<Boolean> = MutableStateFlow(true),
     ): VKDetailVM {
         val getVK =
-            mockk<GetVKUseCase> {
-                every { observe(type) } returns flowOf(key)
+            mockk<GetVKUseCase>(relaxed = true) {
+                every { watchReview("review-id", type) } returns ownerStillCurrent
+                every { isCurrent("review-id", type) } answers { ownerStillCurrent.value }
+                every { this@mockk.key("review-id", type) } returns key
             }
         val vm =
             VKDetailVM(
-                args = VKDetailArgs(type),
+                args = VKDetailArgs(type, "review-id"),
                 getVK = getVK,
                 shareQR = shareQR,
                 deleteSharedQRImages = deleteSharedQRImages,
@@ -428,6 +470,8 @@ private const val LONGER_KEY_PADDING = 40
 private class FakeNavigationRouter : NavigationRouter {
     var backCount = 0
         private set
+    var guardedBackCount = 0
+        private set
     val forwardedRoutes = mutableListOf<Any>()
 
     override fun forward(vararg routes: Any) {
@@ -446,7 +490,10 @@ private class FakeNavigationRouter : NavigationRouter {
 
     override fun backTo(route: KClass<*>) = Unit
 
-    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
+    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
+        guardedBackCount++
+        assertNull(block(null))
+    }
 
     override fun backToRoot() = Unit
 

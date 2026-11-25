@@ -26,6 +26,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -114,7 +115,7 @@ class ExportVKVMTest {
             advanceUntilIdle()
             requireNotNull(vm.state.value).continueButton.onClick()
 
-            assertEquals(VKDetailArgs(VKType.INCOMING), router.replacedRoutes.single())
+            assertEquals(VKDetailArgs(VKType.INCOMING, "review-id"), router.replacedRoutes.single())
             assertTrue(router.forwardedRoutes.isEmpty())
         }
 
@@ -128,7 +129,7 @@ class ExportVKVMTest {
             advanceUntilIdle()
             requireNotNull(vm.state.value).continueButton.onClick()
 
-            assertEquals(ExportVKConfirmArgs, router.forwardedRoutes.single())
+            assertEquals(ExportVKConfirmArgs("review-id"), router.forwardedRoutes.single())
         }
 
     @Test
@@ -219,7 +220,9 @@ class ExportVKVMTest {
     ): ExportVKVM {
         val getVK =
             mockk<GetVKUseCase> {
-                every { observeAvailability() } returns flowOf(availability)
+                every { walletVersion } returns MutableStateFlow(0L)
+                every { availability(account) } returns availability
+                every { startReview(account, 0L, any()) } returns "review-id"
             }
         val observeSelectedWalletAccount =
             mockk<ObserveSelectedWalletAccountUseCase> {

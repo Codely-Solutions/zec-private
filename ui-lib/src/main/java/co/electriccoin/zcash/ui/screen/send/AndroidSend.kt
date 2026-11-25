@@ -10,13 +10,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.model.toZecString
-import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
@@ -27,7 +25,6 @@ import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.ObserveClearSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendData
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
-import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORMAT_LOCALE
@@ -46,8 +43,6 @@ import co.electriccoin.zcash.ui.screen.send.model.MemoState
 import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
 import co.electriccoin.zcash.ui.screen.send.model.SendStage
 import co.electriccoin.zcash.ui.screen.send.view.Send
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -113,11 +108,8 @@ internal fun WrapSend(
     sendArguments: Send,
     selectedAccount: WalletAccount?,
 ) {
-    val scope = rememberCoroutineScope()
-
     val viewModel = koinViewModel<SendViewModel>()
 
-    val validateAddress = koinInject<ValidateAddressUseCase>()
 
     val sendAddressBookState by viewModel.sendAddressBookState.collectAsStateWithLifecycle()
 
@@ -202,15 +194,9 @@ internal fun WrapSend(
         prefillSend().collect {
             when (it) {
                 is PrefillSendData.All -> {
-                    val type = validateAddress(it.address.orEmpty())
                     setSendStage(SendStage.Form)
                     setZecSend(null)
-                    viewModel.onRecipientAddressChanged(
-                        RecipientAddressState.new(
-                            address = it.address.orEmpty(),
-                            type = type
-                        )
-                    )
+                    viewModel.validateRecipient(it.address.orEmpty())
 
                     val fee = it.fee
                     val value =
@@ -224,7 +210,7 @@ internal fun WrapSend(
                         AmountState.newFromZec(
                             value = stringRes(value, TickerLocation.HIDDEN).getString(context),
                             fiatValue = "",
-                            isTransparentOrTextRecipient = type == AddressType.Transparent || type == AddressType.Tex,
+                            isTransparentOrTextRecipient = true,
                             exchangeRateState = exchangeRateState,
                         )
                     )
@@ -232,15 +218,9 @@ internal fun WrapSend(
                 }
 
                 is PrefillSendData.FromAddressScan -> {
-                    val type = validateAddress(it.address)
                     setSendStage(SendStage.Form)
                     setZecSend(null)
-                    viewModel.onRecipientAddressChanged(
-                        RecipientAddressState.new(
-                            address = it.address,
-                            type = type
-                        )
-                    )
+                    viewModel.validateRecipient(it.address)
                 }
             }
         }
@@ -262,8 +242,6 @@ internal fun WrapSend(
         }
     }
 
-    val recipientValidationJob = remember { mutableStateOf<Job?>(null) }
-
     if (null == selectedAccount) {
         // TODO [#1146]: Consider moving CircularScreenProgressIndicator from Android layer to View layer
         // TODO [#1146]: Improve this by allowing screen composition and updating it after the data is available
@@ -280,6 +258,7 @@ internal fun WrapSend(
                 viewModel.onCreateZecSendClick(
                     newZecSend = newZecSend,
                     amountState = amountState,
+                    renderedRecipient = recipientAddressState,
                     setSendStage = setSendStage
                 )
             },
@@ -287,20 +266,7 @@ internal fun WrapSend(
             onQrScannerOpen = goToQrScanner,
             hasCameraFeature = hasCameraFeature,
             recipientAddressState = recipientAddressState,
-            onRecipientAddressChange = { newAddress ->
-                recipientValidationJob.value?.cancel()
-                recipientValidationJob.value =
-                    scope.launch {
-                        viewModel.onRecipientAddressChanged(
-                            RecipientAddressState.new(
-                                address = newAddress,
-                                // TODO [#342]: Verify Addresses without Synchronizer
-                                // TODO [#342]: https://github.com/zcash/zcash-android-wallet-sdk/issues/342
-                                type = validateAddress(newAddress)
-                            )
-                        )
-                    }
-            },
+            onRecipientAddressChange = viewModel::validateRecipient,
             setAmountState = setAmountState,
             amountState = amountState,
             setMemoState = setMemoState,
