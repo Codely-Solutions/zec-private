@@ -10638,19 +10638,21 @@ index 000000000..bae21724a
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-index 0f4dd1930..97706b0dc 100644
+index 0f4dd1930..c0fe125de 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationTorPreferenceAccountScopingTest.kt
-@@ -199,0 +200,2 @@ private class FakeAccountDataSource(
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.provider
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -199,0 +201,2 @@ private class FakeAccountDataSource(
 +    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = error("Not used")
 +
-@@ -206,0 +209 @@ private class FakeAccountDataSource(
+@@ -206,0 +210 @@ private class FakeAccountDataSource(
 +        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
-@@ -213,0 +217 @@ private class FakeAccountDataSource(
+@@ -213,0 +218 @@ private class FakeAccountDataSource(
 +        synchronizer: cash.z.ecc.android.sdk.Synchronizer,
-@@ -219,0 +224 @@ private class FakeAccountDataSource(
+@@ -219,0 +225 @@ private class FakeAccountDataSource(
 +        synchronizer: Synchronizer,
-@@ -224 +229,2 @@ private class FakeAccountDataSource(
+@@ -224 +230,2 @@ private class FakeAccountDataSource(
 -    override suspend fun requestNextShieldedAddress(): String = error("unsupported")
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String =
 +        error("unsupported")
