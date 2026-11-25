@@ -122,7 +122,7 @@ class MigrationProgressVM(
                 MigrationSendingArgs(
                     accountKeyId = owner,
                     retryTransferId = nextTransfer.id,
-                    retryScheduledHeight = nextTransfer.scheduledHeight ?: MigrationSendingArgs.UNSET,
+                    retryScheduledHeight = nextTransfer.scheduledHeight,
                     retryAnchorBoundaryHeight = nextTransfer.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET,
                 )
             ButtonState(

@@ -6214,7 +6214,7 @@ index b6f483196..ff4ccc074 100644
 @@ -27,0 +29 @@ data class MigrationProgressState(
 +    val recoveryRetry: ButtonState? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
-index f1f185d9b..95847934f 100644
+index f1f185d9b..05690bf95 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVM.kt
 @@ -3,0 +4,2 @@ import androidx.lifecycle.ViewModel
@@ -6264,7 +6264,7 @@ index f1f185d9b..95847934f 100644
 +                MigrationSendingArgs(
 +                    accountKeyId = owner,
 +                    retryTransferId = nextTransfer.id,
-+                    retryScheduledHeight = nextTransfer.scheduledHeight ?: MigrationSendingArgs.UNSET,
++                    retryScheduledHeight = nextTransfer.scheduledHeight,
 +                    retryAnchorBoundaryHeight = nextTransfer.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET,
 +                )
 +            ButtonState(
@@ -7191,7 +7191,7 @@ index 9899c12bd..fed64ad27 100644
 @@ -7,0 +8 @@ data class MigrationSendingState(
 +    val canGoBack: Boolean = false,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
-index f6acbc6ca..78ad0d6c8 100644
+index f6acbc6ca..fe727e2bb 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 @@ -4,0 +5,2 @@ import androidx.lifecycle.viewModelScope
@@ -7338,7 +7338,7 @@ index f6acbc6ca..78ad0d6c8 100644
 +            sdk.getMigrationTransferStates()?.transfers?.any {
 +                it.id == args.retryTransferId && it.isTransfer && !it.isSent &&
 +                    it.action == MigrationNextAction.BROADCAST &&
-+                    (it.scheduledHeight ?: MigrationSendingArgs.UNSET) == args.retryScheduledHeight &&
++                    it.scheduledHeight == args.retryScheduledHeight &&
 +                    (it.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET) == args.retryAnchorBoundaryHeight
 +            } == true
 +        val next = if (ready) sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast else null

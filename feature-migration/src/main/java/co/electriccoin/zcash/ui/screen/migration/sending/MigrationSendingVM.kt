@@ -261,7 +261,7 @@ class MigrationSendingVM(
             sdk.getMigrationTransferStates()?.transfers?.any {
                 it.id == args.retryTransferId && it.isTransfer && !it.isSent &&
                     it.action == MigrationNextAction.BROADCAST &&
-                    (it.scheduledHeight ?: MigrationSendingArgs.UNSET) == args.retryScheduledHeight &&
+                    it.scheduledHeight == args.retryScheduledHeight &&
                     (it.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET) == args.retryAnchorBoundaryHeight
             } == true
         val next = if (ready) sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast else null
