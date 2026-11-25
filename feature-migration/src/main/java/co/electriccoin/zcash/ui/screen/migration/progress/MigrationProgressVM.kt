@@ -115,8 +115,8 @@ class MigrationProgressVM(
 
     private fun recoveryRetry(readout: MigrationLiveReadout): ButtonState? {
         val owner = args.accountKeyId?.takeIf { args.offerRetry }
-        val nextTransfer = readout.states.transfers.filter { it.isTransfer && !it.isSent }
-            .minByOrNull { it.scheduledHeight }
+        val nextTransfer = readout.states?.transfers?.filter { it.isTransfer && !it.isSent }
+            ?.minByOrNull { it.scheduledHeight }
         return if (owner != null && nextTransfer?.action == MigrationNextAction.BROADCAST) {
             val target =
                 MigrationSendingArgs(
@@ -321,11 +321,6 @@ class MigrationProgressVM(
             ticker = data.expectedCurrency.symbol,
         )
     }
-
-
-    // "Reschedule" no longer mutates the plan — a missed-but-unexpired transfer needs NO plan
-    // change by design (ZIP 374: the signature does not cover the anchor, so it proves late
-    // against its committed boundary and broadcasts late; the engine is the single source of
 }
 
 /**
