@@ -109,14 +109,9 @@ class LaunchNavigationRequests {
         navigate: suspend (NavigationCommand, isCurrent: () -> Boolean) -> Boolean,
     ) = delivery.withLock {
         pending.update { requests -> requests.filter { it.stillApplies() } }
-        val requests = pending.value
-        val awaitingMigration = walletReady && requests.any { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
-        // A migration replacement retains Home but removes every screen above it. Deliver it
-        // before queued scanners so their destinations stay available on the same stack.
-        for (request in requests.sortedBy { it.command !is NavigationCommand.ReplaceAll }) {
+        for (request in pending.value.deliveryOrder(walletReady)) {
             if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
-            if (awaitingMigration && request.kind != Kind.SEED_RECOVERY_ERROR) continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
                 val isCurrent = {
                     hasAppAccess() && pending.value.admits(request, walletReady, canPresentRecovery())
@@ -161,6 +156,17 @@ class LaunchNavigationRequests {
         MIGRATION_RECOVERY,
         SEED_RECOVERY_ERROR,
     }
+}
+
+private fun List<LaunchNavigationRequests.Request>.deliveryOrder(walletReady: Boolean):
+    List<LaunchNavigationRequests.Request> {
+    val awaitingMigration = walletReady && any {
+        it.kind == LaunchNavigationRequests.Kind.MIGRATION_PROGRESS && it.command == null
+    }
+    // Account hydration can wait on wallet recovery. Allow its terminal error through during that wait.
+    if (awaitingMigration) return filter { it.kind == LaunchNavigationRequests.Kind.SEED_RECOVERY_ERROR }
+    // Migration replacement retains Home and removes its successors. Deliver it before queued scanners.
+    return sortedBy { it.command !is NavigationCommand.ReplaceAll }
 }
 
 private fun List<LaunchNavigationRequests.Request>.admits(
