@@ -3009,7 +3009,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt": "550c4ae509488257716307841476a5cdb79837a739a23b2961b988b31b880a00",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/NumberTextFieldEditEventsTest.kt": "6c309a214fed9c18cd4fea0e0691d333b70c8cc9c820a6a3b0ca43e8bddfaf53",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt": "8cc18f1d5bf81eba50f8926e03cc23cb4ecd50f152fcb1c5772e100412bf1fdf",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt": "6d4c583ece077de20041ca1090771440529b9e679bc073f89352f9d4845d9ae5",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt": "e3fb333cb0a8dbc2959129964ef72309e9dbde4c3eb0a87e29497636c3dbd117",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt": "7f460c6e52cabbaa6687377aeb2b0e305f34da3f4425dacb2ade70180fdc9ee6",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/qrcode/QrCodeVMTest.kt": "76ad82d7840ab92746009a7fe725c0ae94f1b7e77cb7956fea0ec804269a0a39",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/receive/ReceiveVMTest.kt": "2735729dbe9ed259d0f4a2f2dac1e7e49d11f23ec855efc760bc0d1f82d7feb0",

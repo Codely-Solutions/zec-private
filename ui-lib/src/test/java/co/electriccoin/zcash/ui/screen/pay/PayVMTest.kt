@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.pay
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -29,10 +30,12 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
 import co.electriccoin.zcash.ui.design.component.TextFieldState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.styledStringResource
+import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
 import io.mockk.verify
 import io.mockk.withInstanceFactory
 import kotlinx.coroutines.CancellationException
@@ -57,7 +60,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
 
 /**
  * [PayVM] owns the selected asset + slippage. Selecting an asset atomically recomputes the fiat
@@ -368,25 +370,28 @@ class PayVMTest {
     @Test
     fun requestingQuoteTemporarilyDisablesInfoAndRejectsRetainedClick() =
         runTest {
-            val harness = harness()
-            harness.collectState(this)
-            val gate = harness.makeQuoteHang()
+            mockkObject(FiatCurrency.USD) {
+                every { FiatCurrency.USD.symbol } returns "$"
+                val harness = harness()
+                harness.collectState(this)
+                val gate = harness.makeQuoteHang()
 
-            harness.onAddressChange(BTC_ADDRESS)
-            val retainedInfo = harness.info
-            assertTrue(retainedInfo.isEnabled)
+                harness.onAddressChange(BTC_ADDRESS)
+                val retainedInfo = harness.info
+                assertTrue(retainedInfo.isEnabled)
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-            assertEquals(true, harness.capturedState.isRequestingQuote)
-            assertFalse(harness.info.isEnabled)
-            retainedInfo.onClick()
-            verify(exactly = 0) { harness.navigationRouter.forward(PayInfoArgs) }
+                harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+                assertEquals(true, harness.capturedState.isRequestingQuote)
+                assertFalse(harness.info.isEnabled)
+                retainedInfo.onClick()
+                verify(exactly = 0) { harness.navigationRouter.forward(PayInfoArgs) }
 
-            gate.complete(Unit)
-            assertEquals(false, harness.capturedState.isRequestingQuote)
-            assertTrue(harness.info.isEnabled)
-            harness.info.onClick()
-            verify(exactly = 1) { harness.navigationRouter.forward(PayInfoArgs) }
+                gate.complete(Unit)
+                assertEquals(false, harness.capturedState.isRequestingQuote)
+                assertTrue(harness.info.isEnabled)
+                harness.info.onClick()
+                verify(exactly = 1) { harness.navigationRouter.forward(PayInfoArgs) }
+            }
         }
 
     @Test
