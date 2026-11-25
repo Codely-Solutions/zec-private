@@ -22,11 +22,17 @@ class LaunchNavigationRequests {
     internal fun requestThirdPartyScan() =
         offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
 
-    internal fun requestSeedRecoveryError(route: ErrorRoute, stillApplies: () -> Boolean) =
-        offer(Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies)
-
-    internal fun clearSeedRecoveryError() {
-        pending.update { queue -> queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR } }
+    internal fun updateSeedRecoveryError(route: ErrorRoute?, stillApplies: () -> Boolean) {
+        pending.update { queue ->
+            if (!stillApplies()) queue
+            else {
+                val remaining = queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR }
+                if (route == null) remaining
+                else remaining + Request(
+                    Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies,
+                )
+            }
+        }
     }
 
     internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->

@@ -34628,10 +34628,10 @@ index 000000000..61358bc6b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..5ed8785ff
+index 000000000..6f5401af7
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,180 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
@@ -34656,11 +34656,17 @@ index 000000000..5ed8785ff
 +    internal fun requestThirdPartyScan() =
 +        offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
 +
-+    internal fun requestSeedRecoveryError(route: ErrorRoute, stillApplies: () -> Boolean) =
-+        offer(Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies)
-+
-+    internal fun clearSeedRecoveryError() {
-+        pending.update { queue -> queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR } }
++    internal fun updateSeedRecoveryError(route: ErrorRoute?, stillApplies: () -> Boolean) {
++        pending.update { queue ->
++            if (!stillApplies()) queue
++            else {
++                val remaining = queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR }
++                if (route == null) remaining
++                else remaining + Request(
++                    Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies,
++                )
++            }
++        }
 +    }
 +
 +    internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->
@@ -46655,7 +46661,7 @@ index e9705b8e7..c1f3fdc00 100644
 +
 +    internal fun observeSendReview() = observeNullable().map { it as? SendTransactionProposal }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
-index 546900ef8..598dc8273 100644
+index 546900ef8..c106d0135 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.spackle.Twig
@@ -46679,11 +46685,11 @@ index 546900ef8..598dc8273 100644
 +        val stillApplies = { walletWriteAccess.permits(token) }
 +        if (!stillApplies()) return
 @@ -30,0 +38 @@ class ObserveSeedMismatchUseCase(
-+            if (stillApplies()) launchNavigation.clearSeedRecoveryError()
++            launchNavigation.updateSeedRecoveryError(null, stillApplies)
 @@ -35 +43,3 @@ class ObserveSeedMismatchUseCase(
 -            navigateToError(ErrorArgs.General(e))
 +            if (stillApplies()) {
-+                launchNavigation.requestSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
++                launchNavigation.updateSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
 +            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
 index e9a9371db..abb4df855 100644

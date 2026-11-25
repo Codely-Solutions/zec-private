@@ -35,13 +35,13 @@ class ObserveSeedMismatchUseCase(
         if (!stillApplies()) return
         try {
             recoverFromSeedMismatch()
-            if (stillApplies()) launchNavigation.clearSeedRecoveryError()
+            launchNavigation.updateSeedRecoveryError(null, stillApplies)
         } catch (e: CancellationException) {
             throw e
         } catch (e: SeedMismatchRecoveryException) {
             Twig.error(e) { "Seed-mismatch recovery failed, retries exhausted" }
             if (stillApplies()) {
-                launchNavigation.requestSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
+                launchNavigation.updateSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
             }
         } catch (e: Exception) {
             Twig.error(e) { "Seed-mismatch recovery failed" }
