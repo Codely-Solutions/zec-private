@@ -669,13 +669,15 @@ class AccountDataSourceImplTest {
         val source = dataSource(synchronizer, mockk(relaxed = true), selection)
         val stale = ledgerAccount().copy(isSelected = true)
         val guard = assertNotNull(source.confirmSelection(stale))
-        assertTrue(guard())
+        assertTrue(guard.canOperate())
+        assertTrue(guard.isSameSelection())
 
         selection.setUUID(second.accountUuid)
 
-        assertFalse(guard())
+        assertFalse(guard.canOperate())
+        assertFalse(guard.isSameSelection())
         assertNull(source.confirmSelection(stale))
-        assertTrue(assertNotNull(source.confirmSelection(stale.copy(sdkAccount = second)))())
+        assertTrue(assertNotNull(source.confirmSelection(stale.copy(sdkAccount = second))).canOperate())
     }
 
     private fun ledgerAccount() =

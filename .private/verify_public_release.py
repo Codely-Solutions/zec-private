@@ -17,8 +17,8 @@ from apk_architecture import check_apk
 from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
 from release_metadata import (APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT,
-                              UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, hosted_release_job_names,
-                              require_public_version)
+                              UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, checksum_bytes,
+                              hosted_release_job_names, require_public_version)
 
 
 APK = 'zec-private-latest.apk'
@@ -179,7 +179,7 @@ def main():
     signed = published_asset(tag, assets[APK], PUBLIC_APK_LIMIT)
     sha = digest(signed)
     checksum = published_asset(tag, assets[CHECKSUM], 1024)
-    require(checksum.decode().strip() == f'{sha}  {APK}', 'Public checksum file mismatch')
+    require(checksum == checksum_bytes(sha), 'Public checksum file mismatch')
     attestation_digest = os.environ.get('ATTESTATION_DIGEST')
     if attestation_digest:
         evidence = read_attestation(Path(os.environ['RUNNER_TEMP']) / 'publication/release-attestation.json',

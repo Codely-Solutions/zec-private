@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.ledger.LedgerAccountImporterImpl
 import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -17,8 +18,10 @@ import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+import co.electriccoin.zcash.ui.common.repository.ImportedLedgerAccount
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
@@ -28,8 +31,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
 import java.util.Base64
@@ -47,6 +54,29 @@ import kotlin.test.assertTrue
 class CreateLedgerAccountUseCaseTest {
     private val enrollment = LedgerEnrollmentFixture()
     private val createdAccount = Account.new(AccountUuid.new(ByteArray(16) { it.toByte() }))
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun liveFinishReceiptIsWithdrawnWhenItsWalletIsReplaced() = runTest {
+        val pairing = mockk<LedgerAccountPairing>()
+        val repo = LedgerPairingRepositoryImpl().apply {
+            set(pairing, enrollment.owner)
+            assertTrue(recordImport(pairing, ImportedLedgerAccount(createdAccount, null)))
+        }
+        val importer = LedgerAccountImporterImpl(repo, mockk(), enrollment.access)
+        val displayed = mutableListOf<CommittedEnrollmentBirthday?>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            importer.committedBirthdays.collect { displayed.add(it) }
+        }
+        runCurrent()
+        assertEquals(CommittedEnrollmentBirthday(null, createdAccount), displayed.last())
+
+        enrollment.replaceWallet()
+        runCurrent()
+
+        assertNull(importer.committedBirthday())
+        assertNull(displayed.last())
+    }
 
     @Test
     fun aNewDeviceImportsFromTheTipAndGoesStraightToTheSuccessScreen() =

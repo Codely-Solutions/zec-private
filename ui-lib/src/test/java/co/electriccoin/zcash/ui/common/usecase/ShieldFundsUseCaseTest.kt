@@ -2,8 +2,11 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
@@ -16,6 +19,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -37,6 +41,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 
 /**
  * Shielding outcome routing (MOB-1145): shielding has no pending screen, so every non-success
@@ -169,7 +175,7 @@ class ShieldFundsUseCaseTest {
                 coEvery { confirmSelection(any()) } coAnswers {
                     val uuid = firstArg<WalletAccount>().sdkAccount.accountUuid
                     val matches = { accounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == uuid }
-                    matches
+                    ConfirmedAccountSelection(matches, { true })
                 }
             },
             navigateToError = mockk(),
@@ -304,7 +310,7 @@ class ShieldFundsUseCaseTest {
                 coEvery { confirmSelection(any()) } coAnswers {
                     val uuid = firstArg<WalletAccount>().sdkAccount.accountUuid
                     val matches = { accounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == uuid }
-                    matches
+                    ConfirmedAccountSelection(matches, { true })
                 }
             },
             navigateToError = errors,
@@ -321,6 +327,73 @@ class ShieldFundsUseCaseTest {
 
         verify(exactly = 0) { errors(any(), any()) }
     }
+
+    @Test
+    fun detachedSoftwareShieldPresentsKnownTransactionAfterSameAccountSynchronizerReplacement() =
+        runTest(dispatcher) {
+            val software = shieldableSoftware()
+            val entries = MutableStateFlow<ActiveNavigationEntry?>(
+                ActiveNavigationEntry("shield-dialog", null, contentEntryId = "home")
+            )
+            val pending = PendingNavigation()
+            val navigation = mockk<NavigationRouter> {
+                every { activeEntry } returns entries
+                every { pendingNavigation } returns pending
+            }
+            val error = NavigateToErrorUseCase(navigation)
+            val approved = CompletableDeferred<ShieldingApproval>()
+            val nativeCreationEnded = CompletableDeferred<Unit>()
+            val shield = mockk<ShieldTransactionProposal>()
+            val outcome = SubmitResult.GrpcFailure(
+                txIds = listOf("synthetic-created-transaction"),
+                reason = SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN,
+            )
+            val repository = mockk<ZashiProposalRepository> {
+                coEvery { createShieldProposal(any()) } coAnswers {
+                    approved.complete(firstArg())
+                    shield
+                }
+                coEvery { submit(shield) } coAnswers {
+                    approved.await().requireCurrent()
+                    nativeCreationEnded.await()
+                    assertFalse(approved.await().isCurrent())
+                    outcome
+                }
+            }
+            var originalSynchronizer = true
+            var originalSelection = true
+            val useCase = ShieldFundsUseCase(
+                keystoneProposalRepository = mockk(),
+                ledgerProposalPipeline = mockk(),
+                ledgerNavigator = mockk(),
+                zashiProposalRepository = repository,
+                navigationRouter = navigation,
+                accountDataSource = mockk {
+                    every { allAccounts } returns MutableStateFlow(listOf(software))
+                    coEvery { confirmSelection(software) } returns ConfirmedAccountSelection(
+                        { originalSelection }, { originalSynchronizer }
+                    )
+                },
+                navigateToError = error,
+                messageAvailabilityDataSource = mockk(relaxed = true),
+                walletWriteAccess = WalletWriteAccess(),
+                appAccessSession = AppAccessSession().apply { unlock() },
+            )
+
+            useCase.confirm(software, closeCurrentScreen = true, sourceEntryId = "shield-dialog")()
+            runCurrent()
+            assertEquals(NavigationCommand.Back, pending.commands.value["shield-dialog"]?.buildCommand?.invoke())
+            entries.value = ActiveNavigationEntry("home", null)
+            originalSynchronizer = false
+            nativeCreationEnded.complete(Unit)
+            runCurrent()
+
+            val item = assertNotNull(pending.commands.value["home"])
+            val command = item.buildCommand() as NavigationCommand.Forward
+            assertEquals(ErrorArgs.ShieldingError(outcome), error.argsFor(command.routes.single() as ErrorRoute))
+            originalSelection = false
+            assertFalse(item.isStillAllowed())
+        }
 
     private fun useCase(
         submitResult: SubmitResult,
@@ -375,6 +448,6 @@ class ShieldFundsUseCaseTest {
 
     private fun selectedAccount(account: WalletAccount) = mockk<AccountDataSource> {
         every { allAccounts } returns MutableStateFlow(listOf(account))
-        coEvery { confirmSelection(account) } returns { true }
+        coEvery { confirmSelection(account) } returns ConfirmedAccountSelection({ true }, { true })
     }
 }

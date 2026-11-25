@@ -18,7 +18,6 @@ import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
 
@@ -63,9 +62,9 @@ class CreateHWWalletAccountUseCase(
     fun observeCommittedBirthday(enrollment: HWWalletEnrollment): Flow<CommittedEnrollmentBirthday?> =
         when (enrollment) {
             is HWWalletEnrollment.Keystone ->
-                keystoneSession.enrollment(enrollment.sessionId)?.imported?.map { imported ->
+                keystoneSession.observeImported(enrollment.sessionId).map { imported ->
                     imported?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
-                } ?: flowOf(null)
+                }
             HWWalletEnrollment.Ledger -> ledgerAccountImporter.committedBirthdays
             HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthdays
         }
@@ -75,7 +74,10 @@ class CreateHWWalletAccountUseCase(
         birthday: CommittedEnrollmentBirthday,
         sourceEntryId: String? = null,
     ) {
-        if (committedBirthday(enrollment) != birthday) return
+        if (committedBirthday(enrollment) != birthday) {
+            if (!isReady(enrollment)) recoverUnavailableEnrollment(enrollment, sourceEntryId)
+            return
+        }
         if (enrollment == HWWalletEnrollment.ViewOnly) {
             viewOnlyAccountImporter.finishImport(sourceEntryId)
         } else {
@@ -123,9 +125,7 @@ class CreateHWWalletAccountUseCase(
         val pending = keystoneSession.enrollment(sessionId)
         val account = pending?.accounts?.accounts?.firstOrNull()
         if (pending == null || account == null) {
-            navigationRouter.stageResultFrom(sourceEntryId) {
-                NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(ScanKeystoneSignInRequest))
-            }
+            recoverUnavailableEnrollment(HWWalletEnrollment.Keystone(sessionId), sourceEntryId)
             return
         }
         keystoneSession.importMutex.withLock {
@@ -142,6 +142,16 @@ class CreateHWWalletAccountUseCase(
                     keystoneSession.clear(sessionId)
                     NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(next))
                 }
+            }
+        }
+    }
+
+    private fun recoverUnavailableEnrollment(enrollment: HWWalletEnrollment, sourceEntryId: String?) {
+        navigationRouter.stageResultFrom(sourceEntryId, { !isReady(enrollment) }) {
+            when (enrollment) {
+                is HWWalletEnrollment.Keystone ->
+                    NavigationCommand.ReplaceFrom(ScanKeystoneSignInRequest::class, listOf(ScanKeystoneSignInRequest))
+                HWWalletEnrollment.Ledger, HWWalletEnrollment.ViewOnly -> NavigationCommand.BackToRoot
             }
         }
     }

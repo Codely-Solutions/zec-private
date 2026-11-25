@@ -886,6 +886,35 @@ class PublishMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Public latest release redirect differs'):
                 verify.latest(tag)
 
+    def test_public_verifier_requires_exact_checksum_asset_bytes(self):
+        import verify_public_release as verify
+        from release_metadata import checksum_bytes
+
+        tag = 'v3.19.0-private.31'
+        signed = b'synthetic signed APK'
+        canonical = checksum_bytes(verify.digest(signed))
+
+        def asset(name, data):
+            return dict(name=name, size=len(data), digest='sha256:' + verify.digest(data),
+                        browser_download_url=f'{verify.PUBLIC}/releases/download/{tag}/{name}')
+
+        for checksum in (canonical, canonical[:-1], canonical + b'\n', canonical[:-1] + b'\r\n'):
+            release = dict(draft=False, prerelease=False,
+                           assets=[asset(verify.APK, signed), asset(verify.CHECKSUM, checksum)])
+            with self.subTest(checksum=checksum), \
+                    patch_environment({'VERIFY_RELEASE_TAG': tag}), \
+                    patch.object(verify, 'latest', return_value=(release, 'public-api')), \
+                    patch.object(verify, 'public_read', side_effect=[signed, checksum]), \
+                    patch.object(verify, 'gh', side_effect=RuntimeError('read trusted evidence')) as evidence:
+                if checksum == canonical:
+                    with self.assertRaisesRegex(RuntimeError, 'read trusted evidence'):
+                        verify.main()
+                    evidence.assert_called_once_with(f'contents/.private/release-evidence/{tag}.json?ref=main')
+                else:
+                    with self.assertRaisesRegex(ValueError, 'Public checksum file mismatch'):
+                        verify.main()
+                    evidence.assert_not_called()
+
     def test_public_discovery_propagates_other_forbidden_responses(self):
         import verify_public_release as verify
 

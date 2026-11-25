@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
@@ -115,9 +116,10 @@ class Zip321MemoScanTest {
     private val selectedAccounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
     private val accounts = mockk<AccountDataSource> {
         coEvery { getSelectedAccount() } returns account
-        coEvery { confirmSelection(account) } returns {
-            selectedAccounts.value?.firstOrNull()?.sdkAccount == account.sdkAccount
-        }
+        coEvery { confirmSelection(account) } returns ConfirmedAccountSelection(
+            { selectedAccounts.value?.firstOrNull()?.sdkAccount == account.sdkAccount },
+            { true },
+        )
         every { selectedAccount } returns flowOf(account)
         every { allAccounts } returns selectedAccounts
     }

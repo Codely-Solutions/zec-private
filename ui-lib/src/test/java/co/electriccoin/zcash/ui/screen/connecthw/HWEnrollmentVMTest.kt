@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LceError
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -483,6 +484,46 @@ class HWEnrollmentVMTest {
             coVerify(exactly = 2) { accountsDataSource.selectAccount(created) }
             verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, KeystoneConnectedArgs) }
         }
+
+    @Test
+    fun sdkErasureWithdrawsKeystoneFinishAndAnOldTapRestartsTheScanner() = runTest {
+        val created = mockk<Account>()
+        val accountDataSource = mockk<AccountDataSource> {
+            coEvery { importKeystoneAccount(any(), any(), any(), any(), null) } returns created
+            coEvery { selectAccount(created) } throws IOException()
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val wallet = WalletWriteAccess()
+        val access = EditAccountFixtures.enrollmentAccess(wallet)
+        val session = KeystoneEnrollmentSession(access)
+        val accounts = mockk<ZcashAccounts>(relaxed = true) {
+            every { accounts } returns listOf(mockk(relaxed = true))
+        }
+        val enrollment = HWWalletEnrollment.Keystone(EditAccountFixtures.startKeystone(session, accounts))
+        val createAccount = CreateHWWalletAccountUseCase(
+            session,
+            CreateKeystoneAccountUseCase(accountDataSource, mockk(relaxed = true), access),
+            mockk(),
+            mockk(),
+            router,
+        )
+        val state = newOrActiveVM(enrollment, createAccount, router)
+        collect { state.state.collect { } }
+        collect { state.finalization.collect { } }
+        assertNotNull(state.state.value.content).newDevice.onClick()
+        runCurrent()
+        val finish = assertNotNull(state.finalization.value).finish
+
+        wallet.onSdkErasureStarting()
+        runCurrent()
+        assertNull(state.finalization.value)
+
+        finish.onClick()
+        runCurrent()
+        verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest) }
+        coVerify(exactly = 1) { accountDataSource.importKeystoneAccount(any(), any(), any(), any(), null) }
+        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
+    }
 
     private fun suspendedUseCase(importing: CompletableDeferred<Unit>) =
         mockk<CreateHWWalletAccountUseCase>(relaxed = true) {

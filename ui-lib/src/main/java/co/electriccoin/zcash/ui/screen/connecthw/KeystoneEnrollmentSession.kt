@@ -6,6 +6,8 @@ import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import com.keystone.module.ZcashAccounts
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import java.util.UUID
 
@@ -25,6 +27,13 @@ class KeystoneEnrollmentSession(private val walletEnrollment: WalletEnrollmentAc
         }
 
     internal fun resolve(id: String): ZcashAccounts? = enrollment(id)?.accounts
+
+    internal fun observeImported(id: String) =
+        enrollment(id)?.let { current ->
+            combine(current.imported, walletEnrollment.ownershipChanges) { _, _ ->
+                enrollment(id)?.imported?.value
+            }
+        } ?: flowOf(null)
 
     @Synchronized
     internal fun enrollment(id: String): Pending? {

@@ -14,6 +14,8 @@ class WalletEnrollmentAccess(
     private val walletWriteAccess: WalletWriteAccess,
     private val walletCoordinator: WalletCoordinator,
 ) {
+    val ownershipChanges = walletWriteAccess.enrollmentChanges
+
     fun capture(): WalletEnrollmentToken? = walletWriteAccess.enrollmentToken()
 
     fun permits(token: WalletEnrollmentToken): Boolean = walletWriteAccess.permitsEnrollment(token)

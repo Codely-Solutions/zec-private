@@ -84,8 +84,8 @@ interface AccountDataSource {
 
     suspend fun getSelectedAccount(): WalletAccount
 
-    /** Resolves the expected selected account and returns the guard for the first SDK operation. */
-    suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)?
+    /** Verifies the selected account against the SDK before approving an operation. */
+    suspend fun confirmSelection(account: WalletAccount): ConfirmedAccountSelection?
 
     suspend fun getZashiAccount(): ZodlAccount
 
@@ -156,6 +156,13 @@ interface AccountDataSource {
 data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
 
 enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
+
+class ConfirmedAccountSelection internal constructor(
+    val isSameSelection: () -> Boolean,
+    private val usesCurrentSynchronizer: () -> Boolean,
+) {
+    fun canOperate(): Boolean = isSameSelection() && usesCurrentSynchronizer()
+}
 
 @Suppress("TooManyFunctions")
 class AccountDataSourceImpl(
@@ -267,7 +274,7 @@ class AccountDataSourceImpl(
 
     override suspend fun getSelectedAccount() = withContext(Dispatchers.IO) { selectedAccount.filterNotNull().first() }
 
-    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = withContext(Dispatchers.IO) {
+    override suspend fun confirmSelection(account: WalletAccount) = withContext(Dispatchers.IO) {
         val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
         runCatchingRecoverable {
             val selection = selectedAccountUUIDProvider.captureSelection()
@@ -275,11 +282,12 @@ class AccountDataSourceImpl(
             val expected = accounts.firstOrNull { it.accountUuid == account.sdkAccount.accountUuid }
             val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
             val selected = expected != null && isSelected(expected, uuid, accounts.size, currentAccountList = true)
-            val permits = {
-                selectedAccountUUIDProvider.isCurrent(selection) && !walletTransport.isRetired(sync) &&
-                    synchronizerProvider.synchronizer.value === sync
-            }
-            permits.takeIf { selected && it() }
+            ConfirmedAccountSelection(
+                isSameSelection = { selectedAccountUUIDProvider.isCurrent(selection) },
+                usesCurrentSynchronizer = {
+                    !walletTransport.isRetired(sync) && synchronizerProvider.synchronizer.value === sync
+                },
+            ).takeIf { selected && it.canOperate() }
         }.getOrNull()
     }
 

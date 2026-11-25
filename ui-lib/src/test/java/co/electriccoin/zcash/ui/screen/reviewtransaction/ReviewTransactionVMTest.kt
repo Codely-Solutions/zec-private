@@ -9,6 +9,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -184,7 +185,7 @@ class ReviewTransactionVMTest {
         val accountDataSource = mockk<AccountDataSource> {
             every { selectedAccount } returns MutableStateFlow(zodl)
             coEvery { getSelectedAccount() } returns zodl
-            coEvery { confirmSelection(zodl) } returns { true }
+            coEvery { confirmSelection(zodl) } returns ConfirmedAccountSelection({ true }, { true })
         }
         val authenticationStarted = CompletableDeferred<Unit>()
         val authentication = CompletableDeferred<Unit>()

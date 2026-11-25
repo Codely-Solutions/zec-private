@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -76,7 +77,7 @@ class ViewOnlySpendGuardTest {
     private val accountDataSource =
         mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns viewOnly
-            coEvery { confirmSelection(viewOnly) } returns { true }
+            coEvery { confirmSelection(viewOnly) } returns ConfirmedAccountSelection({ true }, { true })
             every { allAccounts } returns MutableStateFlow(listOf(viewOnly))
             coEvery { requestNextShieldedAddress(requireFresh = true, account = any()) } returns "u"
         }

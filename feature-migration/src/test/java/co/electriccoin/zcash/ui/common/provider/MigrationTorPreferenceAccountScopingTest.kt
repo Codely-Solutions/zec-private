@@ -8,6 +8,7 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
@@ -198,7 +199,7 @@ private class FakeAccountDataSource(
 
     override suspend fun getSelectedAccount(): WalletAccount = selected.value!!
 
-    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = error("Not used")
+    override suspend fun confirmSelection(account: WalletAccount): ConfirmedAccountSelection? = error("Not used")
 
     override suspend fun getZashiAccount(): ZodlAccount = error("unsupported")
 

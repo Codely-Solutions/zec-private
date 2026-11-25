@@ -30,14 +30,17 @@ import co.electriccoin.zcash.ui.screen.connectledger.turnon.LedgerTurnOnArgs
 import co.electriccoin.zcash.ui.screen.connectledger.turnon.LedgerTurnOnScreen
 import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignArgs
 import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignScreen
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 
 class LedgerAccountImporterImpl(
     private val ledgerPairingRepository: LedgerPairingRepository,
     private val createLedgerAccount: CreateLedgerAccountUseCase,
     private val walletEnrollment: WalletEnrollmentAccess,
 ) : LedgerAccountImporter {
-    override val committedBirthdays = ledgerPairingRepository.imported.map { committedBirthday() }
+    override val committedBirthdays =
+        combine(ledgerPairingRepository.imported, walletEnrollment.ownershipChanges) { _, _ ->
+            committedBirthday()
+        }
 
     override fun committedBirthday() = currentPairing()
         ?.let(ledgerPairingRepository::importedAccount)

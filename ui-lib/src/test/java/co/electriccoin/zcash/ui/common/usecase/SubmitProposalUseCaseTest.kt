@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
@@ -344,7 +345,8 @@ class SubmitProposalUseCaseTest {
         val proposal = mockk<TransactionProposal>()
         fx.givenZashi(proposal)
         var current = true
-        coEvery { fx.accountDataSource.confirmSelection(any()) } returns { current }
+        val selection = ConfirmedAccountSelection({ current }, { true })
+        coEvery { fx.accountDataSource.confirmSelection(any()) } returns selection
         val admission = CompletableDeferred<() -> Unit>()
         coEvery { fx.zashiProposalRepository.submit(proposal, null, any()) } coAnswers {
             admission.complete(thirdArg())
@@ -414,7 +416,7 @@ class SubmitProposalUseCaseTest {
         }
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
         val accountDataSource = mockk<AccountDataSource>(relaxed = true) {
-            coEvery { confirmSelection(any()) } returns { true }
+            coEvery { confirmSelection(any()) } returns ConfirmedAccountSelection({ true }, { true })
         }
         val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
         val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
