@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.update
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.time.toKotlinInstant
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 /**
  * Picks the month the enrolled account first transacted in, and estimates the birthday height from
@@ -94,6 +95,7 @@ class HWDateVM(
             dialogButton =
                 IconButtonState(
                     icon = R.drawable.ic_help,
+                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                     onClick = ::onInfoClick,
                 ),
             onBack = ::onBack,

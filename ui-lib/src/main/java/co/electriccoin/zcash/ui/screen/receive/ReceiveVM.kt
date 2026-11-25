@@ -186,6 +186,12 @@ class ReceiveVM(
                         R.drawable.ic_receive_zcash_info
                     }
                 },
+                contentDescription = stringRes(
+                    when (type) {
+                        Sapling, Unified -> co.electriccoin.zcash.ui.design.R.string.receive_help_shielded_title
+                        Transparent -> co.electriccoin.zcash.ui.design.R.string.receive_help_transparent_title
+                    },
+                ),
                 onClick = { if (canAct(type, address)) onAddressInfoClick(type) }
             )
     )

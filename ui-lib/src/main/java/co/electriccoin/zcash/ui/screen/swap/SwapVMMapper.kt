@@ -41,6 +41,7 @@ import io.ktor.client.plugins.ResponseException
 import java.math.BigDecimal
 import java.math.MathContext
 import kotlin.math.absoluteValue
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Suppress("TooManyFunctions")
 internal class SwapVMMapper {
@@ -83,6 +84,7 @@ internal class SwapVMMapper {
             swapInfoButton =
                 IconButtonState(
                     co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                    contentDescription = stringRes(DesignR.string.accessibility_swap_help),
                     onClick = callbacks.onSwapInfoClick,
                     isEnabled = !state.isRequestingQuote,
                 ),
@@ -118,6 +120,7 @@ internal class SwapVMMapper {
             changeModeButton =
                 IconButtonState(
                     icon = R.drawable.ic_swap_change_mode,
+                    contentDescription = stringRes(DesignR.string.accessibility_swap_direction),
                     onClick = callbacks.onChangeButtonClick,
                     isEnabled = !state.isRequestingQuote
                 ).takeIf { state.account?.isSpendable == true },

@@ -9,7 +9,10 @@ from acceptance_policy import (
 )
 from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
-from release_metadata import ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, require, wallet_release_versions
+from release_metadata import (
+    ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
+    wallet_release_versions,
+)
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -34,14 +37,9 @@ def require_current_local_upgrade(root=ROOT, metadata=None):
     hosted = json.loads((root / '.private/hosted-fixture.json').read_text())
     require(all(local[key] == hosted[key] for key in ('release', 'source_sha', 'version_code')),
             'Direct publication requires the paired fixture for the latest wallet release')
-    metadata = metadata or Metadata(REPO)
-    tag = local['release']
-    require(metadata.api('/releases/latest')['tag_name'] == tag,
-            'The direct upgrade fixture no longer matches the latest wallet release')
-    ref = metadata.api('/git/ref/tags/' + tag)
-    require(ref['ref'] == f'refs/tags/{tag}' and ref['object']['type'] == 'commit'
-            and ref['object']['sha'] == local['source_sha'],
-            'The direct upgrade fixture source no longer matches the public release tag')
+    from hosted_release import require_current_hosted_upgrade
+
+    require_current_hosted_upgrade(root, metadata or Metadata(REPO))
 
 
 def read_attestation(path, expected_digest):
@@ -374,7 +372,7 @@ def main():
         output.write(f'attestation_attempt={attestation["publisher"]["attempt"]}\n')
 
 
-APK = 'zec-private-latest.apk'
+APK = WALLET_APK
 CHECKSUM = 'SHA256SUMS'
 NOTES = 'release-notes.md'
 
@@ -398,17 +396,7 @@ def release_for_tag(tag, *, releases=None):
 
 def tag_object(tag, api):
     release_title(tag)
-    exact = 'refs/tags/' + tag
-    refs = [ref for ref in api('git/matching-refs/tags/' + tag) if ref['ref'] == exact]
-    require(len(refs) <= 1, 'Release tag is ambiguous')
-    if not refs:
-        return None
-    obj = refs[0]['object']
-    for _ in range(4):
-        if obj['type'] != 'tag':
-            break
-        obj = api('git/tags/' + obj['sha'])['object']
-    return obj
+    return find_release_tag(tag, api)
 
 
 def verify_tag(tag, source, *, api=release_api, create=False):
@@ -420,11 +408,6 @@ def verify_tag(tag, source, *, api=release_api, create=False):
     if obj is not None:
         require(obj['type'] == 'commit' and obj['sha'] == source, 'Release tag points to a different source')
     return obj
-
-
-def checksum_bytes(digest):
-    require(isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest), 'Invalid attested APK digest')
-    return f'{digest}  {APK}\n'.encode('ascii')
 
 
 def exact_assets(release, proof, *, complete):

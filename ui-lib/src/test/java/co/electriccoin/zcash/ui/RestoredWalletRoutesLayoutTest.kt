@@ -60,6 +60,8 @@ import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.connectkeystone.connect.ConnectKeystoneView
+import co.electriccoin.zcash.ui.screen.connectkeystone.connect.KeystoneConnectState
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
@@ -150,6 +152,27 @@ class RestoredWalletRoutesLayoutTest {
     private val submit = mockk<SubmitProposalUseCase>(relaxed = true)
     private val cancelQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true)
     private val router = mockk<NavigationRouter>(relaxed = true)
+
+    @Test
+    fun keystoneTutorialIconHasAnAccessibleActionName() {
+        val app = RuntimeEnvironment.getApplication()
+        val name = app.getString(co.electriccoin.zcash.ui.design.R.string.keystone_addHWWallet_tutorial)
+        var opens = 0
+        compose.setContent {
+            ZcashTheme {
+                ConnectKeystoneView(
+                    KeystoneConnectState(
+                        onViewKeystoneTutorialClicked = { opens++ },
+                        onBackClick = {},
+                        onContinueClick = {},
+                    ),
+                )
+            }
+        }
+
+        compose.onNodeWithContentDescription(name).assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, opens) }
+    }
 
     @Test
     fun restoredErrorDialogOffersClose() = assertErrorRecovery(ErrorDialog("old-dialog"))

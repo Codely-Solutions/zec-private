@@ -16,6 +16,7 @@ ARCHIVE_LIMITS = {
     'release-attestation': (300 * 1024, 256 * 1024),
 }
 PUBLIC_APK_LIMIT = 96 * MIB
+WALLET_APK = 'zec-private-latest.apk'
 APK_PAYLOAD_LIMIT = 256 * MIB
 UPSTREAM_DISCOVERY_WORKFLOW = '.github/workflows/sync-upstream.yml'
 
@@ -31,6 +32,25 @@ def hosted_release_job_names(workflow, job):
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def checksum_bytes(digest):
+    require(isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest), 'Invalid attested APK digest')
+    return f'{digest}  {WALLET_APK}\n'.encode('ascii')
+
+
+def find_release_tag(tag, api):
+    exact = 'refs/tags/' + tag
+    refs = [ref for ref in api('git/matching-refs/tags/' + tag) if ref['ref'] == exact]
+    require(len(refs) <= 1, 'Release tag is ambiguous')
+    if not refs:
+        return None
+    obj = refs[0]['object']
+    for _ in range(4):
+        if obj['type'] != 'tag':
+            break
+        obj = api('git/tags/' + obj['sha'])['object']
+    return obj
 
 
 def job_timestamp(value):

@@ -11,7 +11,10 @@ import zipfile
 from acceptance_policy import ROOT, input_fingerprint, validate_core_sources, validate_quotes, verify_promotion_revision
 from hosted_claim import binding, verify
 from release_inputs import version_code
-from release_metadata import ARCHIVE_LIMITS, Metadata, require
+from release_metadata import (
+    ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
+    wallet_release_versions,
+)
 
 
 def artifact(metadata, artifact_id, name, run, controller):
@@ -267,9 +270,35 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
 
 
 def require_current_hosted_upgrade(root, metadata):
+    from hosted_fixture import recorded_pair
+    from published_history import release_tag_matches
+
     fixture = json.loads((root / '.private/hosted-fixture.json').read_text())
-    live = metadata.api('/releases/latest')['tag_name']
-    require(live == fixture['release'], 'Latest public release needs its verified hosted baseline')
+    tag = fixture['release']
+    live = metadata.api('/releases/latest')
+    require(live['tag_name'] == tag, 'Latest public release needs its verified hosted baseline')
+    record, pair = recorded_pair(tag, root)
+    require(record['source_sha'] == fixture['source_sha'] == pair['build_source_sha']
+            and fixture['version_code'] == record['versionCode']
+            and all(fixture[key] == pair[key] for key in ('candidate_apk_sha256', 'instrumentation_apk_sha256')),
+            'Protected upgrade fixture differs from the integrated release evidence')
+    versions = wallet_release_versions([[live]])
+    require(live['draft'] is False and live['prerelease'] is False
+            and len(versions) == 1 and versions[0][1] == fixture['version_code'],
+            'Latest public release version differs from its upgrade fixture')
+    checksum = checksum_bytes(record['apk_sha256'])
+    expected = {WALLET_APK: (record['apk_sha256'], PUBLIC_APK_LIMIT),
+                'SHA256SUMS': (hashlib.sha256(checksum).hexdigest(), len(checksum))}
+    assets = live['assets']
+    require(len(assets) == len(expected) and {asset['name'] for asset in assets} == expected.keys()
+            and all(asset['state'] == 'uploaded' and 0 < asset['size'] <= expected[asset['name']][1]
+                    and asset['digest'] == 'sha256:' + expected[asset['name']][0] for asset in assets),
+            'Latest public release assets differ from the integrated release evidence')
+    api = lambda endpoint: metadata.api('/' + endpoint)
+    ref = find_release_tag(tag, api)
+    require(ref is not None and release_tag_matches(tag, fixture['source_sha'], record['apk_sha256'],
+                                                    live['id'], ref, api, root),
+            'Latest public release tag differs from the attested upgrade source')
     return fixture
 
 

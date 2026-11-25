@@ -8,8 +8,10 @@ package co.electriccoin.zcash.ui.common.usecase
 class LockOrchardBalanceUseCase(
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
 ) {
-    suspend operator fun invoke(accountKeyId: String) {
+    suspend operator fun invoke(accountKeyId: String, canLock: suspend () -> Boolean): Boolean {
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        if (!canLock()) return false
         sdk.lockRemainingOrchardBalance()
+        return true
     }
 }

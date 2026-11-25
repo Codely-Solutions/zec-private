@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Duration
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class ORSwapConfirmationVM(
     private val swapRepository: SwapRepository,
@@ -127,6 +128,7 @@ class ORSwapConfirmationVM(
                     info =
                         IconButtonState(
                             icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                            contentDescription = stringRes(DesignR.string.accessibility_swap_deposit_help),
                             onClick = ::onInfoClick,
                         ),
                     bigIcon = quote.originAsset.tokenIcon,

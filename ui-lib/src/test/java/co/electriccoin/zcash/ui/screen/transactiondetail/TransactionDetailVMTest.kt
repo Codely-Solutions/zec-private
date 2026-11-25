@@ -598,7 +598,8 @@ class TransactionDetailVMTest {
             sendTransactionAgain = mockk(relaxed = true),
             setTransactionBookmark = mockk(relaxed = true),
             mapper = CommonTransactionDetailMapper(),
-            getSwapMessage = SwapSupportMapper()
+            getSwapMessage = SwapSupportMapper(),
+            sourceEntryId = "transaction-detail",
         )
         store.put("detail", vm)
         return vm

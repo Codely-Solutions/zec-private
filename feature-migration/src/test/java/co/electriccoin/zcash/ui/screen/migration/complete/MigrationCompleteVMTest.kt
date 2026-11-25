@@ -39,6 +39,7 @@ import kotlin.test.assertNull
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.LockOrchardBalanceUseCase
 import co.electriccoin.zcash.ui.common.usecase.migrationMessageFor
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
@@ -325,6 +326,46 @@ class MigrationCompleteVMTest {
     }
 
     @Test
+    fun changedResidueRefreshesTheDisplayedAmountBeforeAnyNativeLockOrSweep() = runTest {
+        val entry = "migration-complete"
+        val router = FakeNavigationRouter(entry)
+        val orchardBalance = MutableStateFlow(500_000L)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val heldLookup = CompletableDeferred<OrchardMigrationSdk>()
+        val resolveSdk = mockk<GetOrchardMigrationSdkUseCase> {
+            coEvery { this@mockk(any<String>()) } coAnswers { heldLookup.await() }
+        }
+        val vm = vm(
+            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
+            orchardBalanceZatoshi = orchardBalance.value,
+            orchardBalance = orchardBalance,
+            router = router,
+            args = MigrationCompleteArgs(isResidueOnly = true),
+            sourceEntryId = entry,
+            getOrchardMigrationSdk = resolveSdk,
+            lockOrchardBalance = LockOrchardBalanceUseCase(resolveSdk),
+        )
+        backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+        val old = assertNotNull(vm.state.value.content)
+        old.onLockBalance()
+        advanceUntilIdle()
+
+        orchardBalance.value = 600_000L
+        heldLookup.complete(sdk)
+        advanceUntilIdle()
+        assertEquals(stringRes(Zatoshi(600_000L)), vm.state.value.content?.remainingDust)
+        old.onMigrateAnyway()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { sdk.lockRemainingOrchardBalance() }
+        coVerify(exactly = 0) { sdk.proposeImmediateMigration() }
+
+        assertNotNull(vm.state.value.content).onLockBalance()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.lockRemainingOrchardBalance() }
+    }
+
+    @Test
     fun migrateAnywayForKeystoneAccountBuildsPcztAndNavigatesToSign() =
         runTest {
             val router = FakeNavigationRouter()
@@ -564,9 +605,9 @@ class MigrationCompleteVMTest {
     }
 
     private fun invokeOnMigrateAnyway(vm: MigrationCompleteVM) {
-        val onMigrateAnyway = MigrationCompleteVM::class.java.getDeclaredMethod("onMigrateAnyway")
+        val onMigrateAnyway = MigrationCompleteVM::class.java.getDeclaredMethod("onMigrateAnyway", Long::class.java)
         onMigrateAnyway.isAccessible = true
-        onMigrateAnyway.invoke(vm)
+        onMigrateAnyway.invoke(vm, 500_000L)
     }
 
     @Suppress("LongParameterList")
@@ -589,11 +630,13 @@ class MigrationCompleteVMTest {
         submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
         keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
         sourceEntryId: String? = null,
+        orchardBalance: MutableStateFlow<Long> = MutableStateFlow(orchardBalanceZatoshi),
+        lockOrchardBalance: LockOrchardBalanceUseCase = mockk(relaxed = true),
     ) = MigrationCompleteVM(
         args = args,
         getOrchardBalance =
             mockk<GetOrchardBalanceUseCase> {
-                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(orchardBalanceZatoshi)
+                coEvery { this@mockk(any<AccountUuid>()) } coAnswers { Zatoshi(orchardBalance.value) }
             },
         getIronwoodBalance =
             mockk<GetIronwoodBalanceUseCase> {
@@ -615,7 +658,7 @@ class MigrationCompleteVMTest {
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         getMigrationSnapshot = getMigrationSnapshot,
-        lockOrchardBalance = mockk(relaxed = true),
+        lockOrchardBalance = lockOrchardBalance,
         biometricRepository = biometricRepository,
         zashiProposalRepository = zashiProposalRepository,
         submitProposal = submitProposal,

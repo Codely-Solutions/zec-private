@@ -192,6 +192,7 @@ class ActivityHistoryVM(
                         },
                     badge = stringRes(filters.size.toString()).takeIf { filters.isNotEmpty() },
                     onClick = ::onTransactionFiltersClicked,
+                    contentDescription = stringRes(co.electriccoin.zcash.ui.design.R.string.filter_title),
                 ),
             filtersId = searchHash
         )
@@ -216,7 +217,7 @@ class ActivityHistoryVM(
                         },
                     badge = stringRes(filtersSize.toString()).takeIf { filtersSize > 0 },
                     onClick = ::onTransactionFiltersClicked,
-                    contentDescription = null
+                    contentDescription = stringRes(co.electriccoin.zcash.ui.design.R.string.filter_title)
                 ),
         )
 
@@ -233,7 +234,7 @@ class ActivityHistoryVM(
                         },
                     badge = stringRes(filtersSize.toString()).takeIf { filtersSize > 0 },
                     onClick = ::onTransactionFiltersClicked,
-                    contentDescription = null
+                    contentDescription = stringRes(co.electriccoin.zcash.ui.design.R.string.filter_title)
                 ),
         )
 

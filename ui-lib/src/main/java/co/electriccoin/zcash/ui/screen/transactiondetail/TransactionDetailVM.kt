@@ -82,6 +82,7 @@ class TransactionDetailVM(
     private val setTransactionBookmark: SetTransactionBookmarkUseCase,
     private val mapper: CommonTransactionDetailMapper,
     private val getSwapMessage: SwapSupportMapper,
+    private val sourceEntryId: String,
 ) : ViewModel() {
     private var bookmarkJob: Job? = null
     private val transaction =
@@ -133,6 +134,13 @@ class TransactionDetailVM(
                                 } else {
                                     R.drawable.ic_transaction_detail_no_bookmark
                                 },
+                            contentDescription = stringRes(
+                                if (transaction.metadata.isBookmarked) {
+                                    co.electriccoin.zcash.ui.design.R.string.accessibility_remove_bookmark
+                                } else {
+                                    co.electriccoin.zcash.ui.design.R.string.accessibility_add_bookmark
+                                },
+                            ),
                             onClick = { onBookmarkClick(transaction) },
                             hapticFeedbackType =
                                 if (transaction.metadata.isBookmarked) {
@@ -527,7 +535,7 @@ class TransactionDetailVM(
     }
 
     private fun onSendAgainClick(transaction: DetailedTransactionData) =
-        viewModelScope.launch { sendTransactionAgain(transaction) }
+        viewModelScope.launch { sendTransactionAgain(transaction, sourceEntryId) }
 
     @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
     private fun createTransactionHeaderState(

@@ -40,6 +40,8 @@ import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.scaffoldPadding
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +62,7 @@ fun ConnectKeystoneView(state: KeystoneConnectState) {
                         state =
                             IconButtonState(
                                 icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                                contentDescription = stringRes(DesignR.string.keystone_addHWWallet_tutorial),
                                 onClick = state.onViewKeystoneTutorialClicked,
                             ),
                         modifier = Modifier.size(40.dp),

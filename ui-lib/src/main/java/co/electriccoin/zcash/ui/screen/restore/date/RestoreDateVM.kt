@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.update
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.time.toKotlinInstant
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class RestoreDateVM(
     private val args: RestoreDateArgs,
@@ -66,6 +67,7 @@ class RestoreDateVM(
             dialogButton =
                 IconButtonState(
                     icon = R.drawable.ic_help,
+                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                     onClick = ::onInfoButtonClick,
                 ),
             onBack = ::onBack,

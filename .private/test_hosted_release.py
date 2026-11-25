@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
-from test_support import patch_environment
+from test_support import patch_environment, public_baseline_metadata
 
 import hosted_claim
 import hosted_core
@@ -21,6 +21,36 @@ VERSION = 3234022
 
 
 class HostedReleaseTests(unittest.TestCase):
+    def test_latest_upgrade_binds_integrated_source_version_and_public_assets(self):
+        fixture = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=3234033,
+                       candidate_apk_sha256='c' * 64, instrumentation_apk_sha256='d' * 64)
+        pair = dict(passed=True, real_funds_used=False, personal_wallet_access=False,
+                    build_source_sha=fixture['source_sha'], candidate_version_code=fixture['version_code'],
+                    candidate_apk_sha256='c' * 64, instrumentation_apk_sha256='d' * 64)
+        record = dict(release_tag=fixture['release'], source_sha=fixture['source_sha'],
+                      versionCode=fixture['version_code'], apk_sha256='e' * 64, core=pair)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            evidence = root / '.private/release-evidence'
+            evidence.mkdir(parents=True)
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(fixture))
+            (evidence / (fixture['release'] + '.json')).write_text(json.dumps(record))
+            for drift in ('none', 'apk', 'checksum', 'tag'):
+                with self.subTest(drift=drift):
+                    endpoints = public_baseline_metadata(fixture, record['apk_sha256'])
+                    if drift == 'tag':
+                        endpoints['/git/matching-refs/tags/' + fixture['release']][0]['object']['sha'] = 'f' * 40
+                    elif drift in ('apk', 'checksum'):
+                        index = int(drift == 'checksum')
+                        endpoints['/releases/latest']['assets'][index]['digest'] = 'sha256:' + 'f' * 64
+                    metadata = Mock()
+                    metadata.api.side_effect = endpoints.__getitem__
+                    if drift == 'none':
+                        self.assertEqual(hosted_release.require_current_hosted_upgrade(root, metadata), fixture)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'release (assets|tag) differ'):
+                            hosted_release.require_current_hosted_upgrade(root, metadata)
+
     def test_core_pair_matches_current_and_previous_producer_manifest_paths(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

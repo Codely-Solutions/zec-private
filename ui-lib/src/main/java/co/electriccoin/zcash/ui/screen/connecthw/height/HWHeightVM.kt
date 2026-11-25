@@ -22,10 +22,12 @@ import co.electriccoin.zcash.ui.screen.common.birthdayHeightOrNull
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
 import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
+import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 /**
  * Takes a birthday height typed by hand and imports the enrolled hardware-wallet account at it; a
@@ -59,6 +61,7 @@ class HWHeightVM(
                 dialogButton =
                     IconButtonState(
                         icon = R.drawable.ic_help,
+                        contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                         onClick = ::onInfoClick,
                     ),
                 primaryButton =

@@ -28,20 +28,17 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
                        hosted_fixture=fixture)
         old = dict(baseline_source_sha='b' * 40, baseline_version_code=329)
         metadata = MagicMock()
-        metadata.api.return_value = {'tag_name': fixture['release']}
-        with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory() as temp, \
+                patch('hosted_release.require_current_hosted_upgrade', return_value=fixture) as verify_latest:
             root = Path(temp)
-            (root / '.private').mkdir()
-            (root / '.private/hosted-fixture.json').write_text(json.dumps(fixture))
             publish.require_publication_baseline({'core': current}, root, metadata)
             publish.require_publication_baseline(
                 {'core': old, 'installed_upgrade': current, 'funded_reuse': {}}, root, metadata)
             for proof in ({'core': old}, {'core': current, 'installed_upgrade': old, 'funded_reuse': {}}):
                 with self.assertRaisesRegex(ValueError, 'attested upgrade baseline'):
                     publish.require_publication_baseline(proof, root, metadata)
-            metadata.api.return_value = {'tag_name': 'v3.19.0-private.31'}
-            with self.assertRaisesRegex(ValueError, 'verified hosted baseline'):
-                publish.require_publication_baseline({'core': current}, root, metadata)
+            self.assertEqual(verify_latest.call_count, 4)
+            verify_latest.assert_called_with(root, metadata)
 
     def test_direct_receipt_must_name_the_same_candidate_source_and_version(self):
         source = 'a' * 40
@@ -67,18 +64,9 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
             metadata.api.assert_not_called()
 
             local.write_text(json.dumps(hosted))
-            metadata.api.return_value = {'tag_name': 'v3.19.0-private.31'}
-            with self.assertRaisesRegex(ValueError, 'no longer matches the latest'):
+            with patch('hosted_release.require_current_hosted_upgrade', return_value=hosted) as verify_latest:
                 publish.require_current_local_upgrade(root, metadata)
-
-            ref = {'ref': 'refs/tags/' + hosted['release'], 'object': {'sha': legacy['source_sha'], 'type': 'commit'}}
-            metadata.api.side_effect = [{'tag_name': hosted['release']}, ref]
-            with self.assertRaisesRegex(ValueError, 'source no longer matches'):
-                publish.require_current_local_upgrade(root, metadata)
-
-            ref['object']['sha'] = hosted['source_sha']
-            metadata.api.side_effect = [{'tag_name': hosted['release']}, ref]
-            publish.require_current_local_upgrade(root, metadata)
+                verify_latest.assert_called_once_with(root, metadata)
 
 
 class UpgradeSimulationControlTest(unittest.TestCase):

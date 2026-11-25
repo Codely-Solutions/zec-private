@@ -11,8 +11,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun TransactionDetailScreen(transactionDetailArgs: TransactionDetailArgs) {
-    val vm: TransactionDetailVM = koinViewModel { parametersOf(transactionDetailArgs) }
+fun TransactionDetailScreen(transactionDetailArgs: TransactionDetailArgs, entryId: String) {
+    val vm: TransactionDetailVM = koinViewModel { parametersOf(transactionDetailArgs, entryId) }
     val mainTopAppBarVM = koinActivityViewModel<ZashiTopAppBarVM>()
     val mainAppBarState by mainTopAppBarVM.state.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()

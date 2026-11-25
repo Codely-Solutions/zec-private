@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class RestoreHeightVM(
     private val restoreHeight: RestoreHeight,
@@ -48,6 +49,7 @@ class RestoreHeightVM(
             dialogButton =
                 IconButtonState(
                     icon = R.drawable.ic_help,
+                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                     onClick = ::onInfoButtonClick,
                 ),
             primaryButton =

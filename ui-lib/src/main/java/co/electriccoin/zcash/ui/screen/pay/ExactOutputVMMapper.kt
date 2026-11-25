@@ -36,6 +36,7 @@ import io.ktor.client.plugins.ResponseException
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Suppress("TooManyFunctions")
 internal class ExactOutputVMMapper {
@@ -49,6 +50,7 @@ internal class ExactOutputVMMapper {
             info =
                 IconButtonState(
                     icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                    contentDescription = stringRes(DesignR.string.accessibility_pay_help),
                     onClick = callbacks.onSwapInfoClick,
                     isEnabled = !state.isRequestingQuote,
                 ),

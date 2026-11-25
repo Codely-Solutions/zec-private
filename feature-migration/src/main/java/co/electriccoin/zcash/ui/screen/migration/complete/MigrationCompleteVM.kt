@@ -96,6 +96,7 @@ class MigrationCompleteVM(
     // spinner on the button, it must never blank the whole success screen behind a full-screen
     // loader, and a lock error simply re-enables the button for a retry.
     private val lockLce = mutableLce<Unit>()
+    private val refreshedDust = MutableStateFlow<Long?>(null)
 
     private val completionOwnerKey = viewModelScope.async(start = CoroutineStart.LAZY) {
         args.accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
@@ -157,9 +158,13 @@ class MigrationCompleteVM(
             },
             migrateAnywayLce.state,
             lockLce.state,
-        ) { lce, isLocked, migrateAnywayState, lockState ->
+            refreshedDust,
+        ) { lce, isLocked, migrateAnywayState, lockState, latestDust ->
             lce.success?.let { summary ->
-                createState(summary, isLocked, migrateAnywayState.loading, lockState.loading)
+                createState(
+                    summary.copy(dustZatoshi = latestDust ?: summary.dustZatoshi),
+                    isLocked, migrateAnywayState.loading, lockState.loading,
+                )
             }
         }.withLce(groupLce(loadLce, migrateAnywayLce), errorStateMapper::mapToState).stateIn(this)
 
@@ -184,8 +189,8 @@ class MigrationCompleteVM(
             isLocking = isLocking,
             isResidueOnly = args.isResidueOnly,
             onDone = ::onDone,
-            onMigrateAnyway = { migrateAnywayLce.guardLoading(::onMigrateAnyway) },
-            onLockBalance = { lockLce.guardLoading(::onLockBalance) },
+            onMigrateAnyway = { migrateAnywayLce.guardLoading { onMigrateAnyway(summary.dustZatoshi) } },
+            onLockBalance = { lockLce.guardLoading { onLockBalance(summary.dustZatoshi) } },
             onHelp = ::onHelp,
         )
 
@@ -210,22 +215,25 @@ class MigrationCompleteVM(
         }
     }
 
-    private fun onLockBalance() =
+    private fun onLockBalance(reviewedDust: Long) =
         lockLce.execute {
             val key = activeCompletionOwner().sdkAccount.accountUuid.toStorageKeyId()
-            lockOrchardBalance(key)
-            hasLockedOrchardDustStorageProvider.store(key, true)
+            val locked = ownsCompletionEntry() && lockOrchardBalance(key) {
+                matchesReviewedResidue(reviewedDust)
+            }
+            if (locked) hasLockedOrchardDustStorageProvider.store(key, true)
         }
 
     // The "?" in the top bar opens the lock explainer purely as information about what locking does.
     private fun onHelp() = navigationRouter.forward(MigrationLockExplainerArgs)
 
-    private fun onMigrateAnyway() =
+    private fun onMigrateAnyway(reviewedDust: Long) =
         migrateAnywayLce.execute {
             val owner = activeCompletionOwner()
             if (!ownsCompletionEntry()) return@execute
             if (owner is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
             owner.requireSpendable()
+            if (!matchesReviewedResidue(reviewedDust)) return@execute
             if (owner is KeystoneAccount && !authenticateMigrateAnyway()) return@execute
             activeCompletionOwner()
 
@@ -235,13 +243,11 @@ class MigrationCompleteVM(
             }
             val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
             val proposal = sdk.proposeImmediateMigration()
-            activeCompletionOwner()
-            if (!ownsCompletionEntry()) return@execute
+            if (!matchesReviewedResidue(reviewedDust)) return@execute
             if (owner is KeystoneAccount) {
                 val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 keystoneProposalRepository.createPCZTFromProposal(owner)
-                activeCompletionOwner()
-                if (!ownsCompletionEntry()) {
+                if (!matchesReviewedResidue(reviewedDust)) {
                     keystoneProposalRepository.clear(reviewed)
                     return@execute
                 }
@@ -258,6 +264,14 @@ class MigrationCompleteVM(
                 submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }
+
+    private suspend fun matchesReviewedResidue(reviewed: Long): Boolean {
+        val account = activeCompletionOwner().sdkAccount.accountUuid
+        val balance = getOrchardBalance(account).value
+        activeCompletionOwner()
+        if (balance != reviewed) refreshedDust.value = balance
+        return ownsCompletionEntry() && balance == reviewed && reviewed > 0
+    }
 
     private fun ownsCompletionEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
 

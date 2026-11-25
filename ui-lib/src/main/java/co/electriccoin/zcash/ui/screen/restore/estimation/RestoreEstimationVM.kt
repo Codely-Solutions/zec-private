@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class RestoreEstimationVM(
     private val args: RestoreEstimationArgs,
@@ -30,6 +31,7 @@ class RestoreEstimationVM(
             dialogButton =
                 IconButtonState(
                     icon = R.drawable.ic_help,
+                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                     onClick = ::onInfoButtonClick,
                 ),
             onBack = ::onBack,

@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 /**
  * Confirms the estimated birthday height and imports the enrolled hardware-wallet account at it; a
@@ -67,6 +68,7 @@ class HWEstimationVM(
         dialogButton =
             IconButtonState(
                 icon = R.drawable.ic_help,
+                contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                 onClick = ::onInfoClick,
             ),
         onBack = ::onBack,

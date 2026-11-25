@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class WalletBackupViewModel(
     walletBackupMessageUseCase: WalletBackupMessageUseCase,
@@ -118,6 +119,7 @@ class WalletBackupViewModel(
                     ),
                 info =
                     IconButtonState(
+                        contentDescription = stringRes(DesignR.string.accessibility_recovery_phrase_help),
                         onClick = ::onInfoClick,
                         icon = R.drawable.ic_help
                     ),

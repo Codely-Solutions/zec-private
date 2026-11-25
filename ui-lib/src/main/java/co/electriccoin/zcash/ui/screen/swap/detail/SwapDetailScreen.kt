@@ -13,11 +13,11 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun SwapDetailScreen(args: SwapDetailArgs) {
+fun SwapDetailScreen(args: SwapDetailArgs, entryId: String) {
     val vm = koinViewModel<SwapDetailVM> { parametersOf(args) }
     val fundingInWallet by vm.fundingInWallet.collectAsStateWithLifecycle(initialValue = false)
     if (fundingInWallet && args.fundingTxId != null) {
-        TransactionDetailScreen(TransactionDetailArgs(args.fundingTxId, args.accountKeyId))
+        TransactionDetailScreen(TransactionDetailArgs(args.fundingTxId, args.accountKeyId), entryId)
     } else {
         TrackedSwapDetailScreen(vm)
     }

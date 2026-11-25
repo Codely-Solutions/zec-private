@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class RestoreSeedVM(
     private val navigationRouter: NavigationRouter,
@@ -148,6 +149,7 @@ class RestoreSeedVM(
         dialogButton =
             IconButtonState(
                 icon = R.drawable.ic_help,
+                contentDescription = stringRes(DesignR.string.accessibility_recovery_phrase_help),
                 onClick = { navigationRouter.forward(SeedInfo) }
             ),
         nextButton =

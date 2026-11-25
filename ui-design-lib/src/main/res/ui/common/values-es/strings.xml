@@ -252,6 +252,14 @@
     <string name="hardwareWalletExplainer_infoBoxDescription">Keystone es una marca popular de hardware wallet que ofrece seguridad air-gapped con firma mediante códigos QR. Es una de las muchas opciones confiables de hardware wallet, junto con Ledger y otros.</string>
     <string name="hardwareWalletExplainer_cta">Entendido</string>
     <string name="restoreWallet_help_title">¿Necesitas más información?</string>
+    <string name="accessibility_recovery_phrase_help">Información sobre las frases de recuperación</string>
+    <string name="accessibility_wallet_birthday_help">Información sobre la fecha de creación de la billetera</string>
+    <string name="accessibility_swap_help">Información sobre los intercambios</string>
+    <string name="accessibility_pay_help">Información sobre los pagos entre redes</string>
+    <string name="accessibility_swap_deposit_help">Información sobre los depósitos de intercambio</string>
+    <string name="accessibility_swap_direction">Cambiar la dirección del intercambio</string>
+    <string name="accessibility_add_bookmark">Añadir marcador</string>
+    <string name="accessibility_remove_bookmark">Quitar marcador</string>
     <string name="keystone_wbh_info_message_bold">La Altura de Cumpleaños de la Billetera</string>
     <string name="keystone_wbh_info_message">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Es importante proporcionar la altura correcta porque determina el rango de bloques que se escanearán para mostrar tu historial de transacciones y saldo. Si recuperaste una semilla de un dispositivo de hardware diferente, asegúrate de ingresar la altura de bloque de tu dispositivo de hardware original.</string>
     <!-- ===== contact ===== -->
@@ -1152,7 +1160,7 @@
     <string name="migrationComplete_transfersLabel">Transferencias</string>
     <string name="migrationComplete_durationLabel">Duración</string>
     <string name="migrationComplete_orchardBalanceRemainingTitle">Saldo restante en Orchard</string>
-    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Un monto tan específico puede identificarte en la red. Para proteger tu privacidad, te recomendamos bloquear este saldo en lugar de migrarlo.</string>
+    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
     <string name="migrationComplete_migrateAnyway">Migrar de todas formas</string>
     <string name="migrationComplete_migrating">Migrando…</string>
     <string name="migrationComplete_lockBalance">Bloquear saldo</string>
@@ -1168,7 +1176,7 @@
     <string name="migrationComplete_residueSubtitle">Un pequeño saldo todavía permanece en Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">En Ironwood</string>
     <string name="migrationComplete_leftInOrchardLabel">Restante en Orchard</string>
-    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
+    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos de Orchard de esta cuenta.</string>
 
     <string name="migrationNotifPermission_title">Permitir notificaciones</string>
     <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>

@@ -128,6 +128,7 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                             state =
                                 IconButtonState(
                                     icon = R.drawable.ic_help,
+                                    contentDescription = stringRes(DesignR.string.migrationLockExplainer_title),
                                     onClick = state.onHelp,
                                 ),
                             modifier = Modifier.size(40.dp),

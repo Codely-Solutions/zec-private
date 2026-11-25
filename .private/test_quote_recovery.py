@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
-from test_support import patch_environment
+from test_support import patch_environment, public_baseline_metadata
 
 from acceptance_policy import POLICY_VERSION
 import hosted_release
@@ -808,8 +808,10 @@ class QuoteRecoveryTests(unittest.TestCase):
     @staticmethod
     def recovery_metadata(*runs, refs=None, reservation=None):
         meta = Mock(gh='gh-offline-fixture', repo='repos/fixture')
-        fixture = json.loads((Path(__file__).with_name('hosted-fixture.json')).read_text())
-        endpoints = {'/releases/latest': {'tag_name': fixture['release']}}
+        here = Path(__file__).parent
+        fixture = json.loads((here / 'hosted-fixture.json').read_text())
+        record = json.loads((here / 'release-evidence' / (fixture['release'] + '.json')).read_text())
+        endpoints = public_baseline_metadata(fixture, record['apk_sha256'])
         pages = {}
         for run, jobs, artifacts in runs:
             path = f'/actions/runs/{run["id"]}'
@@ -817,7 +819,7 @@ class QuoteRecoveryTests(unittest.TestCase):
             endpoints.update({f'/actions/artifacts/{row["id"]}': row for row in artifacts if 'id' in row})
             pages.update({path + f'/attempts/{run["run_attempt"]}/jobs': jobs, path + '/artifacts': artifacts})
         def api(path):
-            if refs is not None and path.startswith('/git/matching-refs/'):
+            if refs is not None and path.startswith('/git/matching-refs/heads/testnet-claims/'):
                 return refs
             if reservation is not None and path.startswith('/git/ref/heads/testnet-claims/'):
                 return {'object': {'sha': reservation}}

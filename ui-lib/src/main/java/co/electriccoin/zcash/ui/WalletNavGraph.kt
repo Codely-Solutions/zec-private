@@ -299,7 +299,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<BoundTransactionProgressArgs> { TransactionProgressScreen(it.toRoute(), it.id) }
         composable<ActivityHistoryArgs> { ActivityHistoryScreen() }
         dialogComposable<TransactionFiltersArgs> { TransactionFiltersScreen() }
-        composable<TransactionDetailArgs> { TransactionDetailScreen(it.toRoute()) }
+        composable<TransactionDetailArgs> { TransactionDetailScreen(it.toRoute(), it.id) }
         dialogComposable<TransactionNote> { AndroidTransactionNote(it.toRoute()) }
         composable<TaxExport> { AndroidTaxExport(it.id) }
         composable<ReceiveArgs> { ReceiveScreen() }
@@ -351,7 +351,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<PayArgs> { PayScreen(it.id) }
         dialogComposable<PayInfoArgs> { PayInfoScreen() }
         composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen(it.id) }
-        composable<SwapDetailArgs> { SwapDetailScreen(it.toRoute()) }
+        composable<SwapDetailArgs> { SwapDetailScreen(it.toRoute(), it.id) }
         dialogComposable<SwapRefundAddressInfoArgs> { SwapRefundAddressInfoScreen(it.toRoute()) }
         dialogComposable<SwapSupportArgs> { SwapSupportScreen(it.toRoute()) }
         dialogComposable<SwapQuoteMismatchArgs> { SwapQuoteMismatchScreen(it.toRoute()) }
