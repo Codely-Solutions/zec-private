@@ -42112,7 +42112,7 @@ index be3f6dfed..2fc93cdc3 100644
 +    suspend operator fun invoke(txId: String, accountUuid: AccountUuid, token: Long): String? =
 +        metadataRepository.readTxNote(txId, accountUuid, token)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
-index 9fc5047bd..e53753a15 100644
+index 9fc5047bd..76daead67 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetVKUseCase.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -42140,21 +42140,21 @@ index 9fc5047bd..e53753a15 100644
 -        observeSelectedWalletAccount.require().map { account -> account.sdkAccount.viewingKey(type) }
 +    private val review = MutableStateFlow<Review?>(null)
 +    val walletVersion = walletAccess.version
-@@ -14,4 +22,45 @@ class GetVKUseCase(
+@@ -14,3 +22,10 @@ class GetVKUseCase(
 -    fun observeAvailability(): Flow<Map<VKType, Boolean>> =
 -        observeSelectedWalletAccount.require().map { account ->
 -            VKType.entries.associateWith { type -> account.sdkAccount.viewingKey(type) != null }
--        }
 +    fun availability(account: WalletAccount) =
 +        VKType.entries.associateWith { account.sdkAccount.viewingKey(it) != null }
 +
 +    fun startReview(account: WalletAccount, generation: Long, type: VKType): String? {
 +        val owner = account.sdkAccount.accountUuid
 +        if (!isSelected(owner, generation)) return null
-+        val key = account.sdkAccount.viewingKey(type) ?: return null
-+        val id = UUID.randomUUID().toString()
-+        review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
-+        return id
++        return account.sdkAccount.viewingKey(type)?.let { key ->
++            UUID.randomUUID().toString().also { id ->
++                review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
++            }
+@@ -17,0 +33,35 @@ class GetVKUseCase(
 +    }
 +
 +    fun isCurrent(id: String, type: VKType) = current(id, type) != null
@@ -51491,7 +51491,7 @@ index fd16f97b7..4666e264a 100644
 @@ -8,0 +10 @@ object SendTag {
 +    const val SEND_FIAT_AMOUNT_FIELD = "SEND_FIAT_AMOUNT_FIELD"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
-index fb69233f2..b0535c205 100644
+index fb69233f2..dfa2eb230 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.send
@@ -51562,10 +51562,12 @@ index fb69233f2..b0535c205 100644
 +        recipientState.value = state
 @@ -137,0 +182 @@ class SendViewModel(
 +        renderedRecipient: RecipientAddressState,
-@@ -139,0 +185,3 @@ class SendViewModel(
+@@ -140 +185,4 @@ class SendViewModel(
+-        if (onCreateZecSendClickJob?.isActive == true) return
 +        val canReview = { recipientState.value === renderedRecipient }
-+        if (!canReview() || renderedRecipient.type !is AddressType.Valid) return
-+        if (newZecSend.destination.address != renderedRecipient.address) return
++        val matchesRecipient = renderedRecipient.type is AddressType.Valid &&
++            newZecSend.destination.address == renderedRecipient.address
++        if (!canReview() || !matchesRecipient || onCreateZecSendClickJob?.isActive == true) return
 @@ -144 +192,10 @@ class SendViewModel(
 -                    createProposal(newZecSend, amountState.lastFieldChangedByUser == AmountField.FIAT)
 +                    if (!canReview()) return@launch

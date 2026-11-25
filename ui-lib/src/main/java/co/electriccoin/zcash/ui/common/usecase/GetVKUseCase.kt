@@ -25,10 +25,11 @@ internal class GetVKUseCase(
     fun startReview(account: WalletAccount, generation: Long, type: VKType): String? {
         val owner = account.sdkAccount.accountUuid
         if (!isSelected(owner, generation)) return null
-        val key = account.sdkAccount.viewingKey(type) ?: return null
-        val id = UUID.randomUUID().toString()
-        review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
-        return id
+        return account.sdkAccount.viewingKey(type)?.let { key ->
+            UUID.randomUUID().toString().also { id ->
+                review.value = Review(id, owner, generation, type, key, approved = type == VKType.INCOMING)
+            }
+        }
     }
 
     fun isCurrent(id: String, type: VKType) = current(id, type) != null

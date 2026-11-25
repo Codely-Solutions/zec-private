@@ -183,9 +183,9 @@ class SendViewModel(
         setSendStage: (SendStage) -> Unit
     ) {
         val canReview = { recipientState.value === renderedRecipient }
-        if (!canReview() || renderedRecipient.type !is AddressType.Valid) return
-        if (newZecSend.destination.address != renderedRecipient.address) return
-        if (onCreateZecSendClickJob?.isActive == true) return
+        val matchesRecipient = renderedRecipient.type is AddressType.Valid &&
+            newZecSend.destination.address == renderedRecipient.address
+        if (!canReview() || !matchesRecipient || onCreateZecSendClickJob?.isActive == true) return
         onCreateZecSendClickJob =
             viewModelScope.launch {
                 try {
