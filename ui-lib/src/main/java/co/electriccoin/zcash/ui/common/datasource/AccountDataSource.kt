@@ -32,6 +32,7 @@ import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.recoverableReads
 import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.util.combineToFlow
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -81,6 +82,9 @@ interface AccountDataSource {
     suspend fun getAllAccounts(): List<WalletAccount>
 
     suspend fun getSelectedAccount(): WalletAccount
+
+    /** Resolves the expected selected account and returns the guard for the first SDK operation. */
+    suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)?
 
     suspend fun getZashiAccount(): ZodlAccount
 
@@ -260,6 +264,21 @@ class AccountDataSourceImpl(
     override suspend fun getAllAccounts() = withContext(Dispatchers.IO) { allAccounts.filterNotNull().first() }
 
     override suspend fun getSelectedAccount() = withContext(Dispatchers.IO) { selectedAccount.filterNotNull().first() }
+
+    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = withContext(Dispatchers.IO) {
+        val sync = synchronizerProvider.synchronizer.value ?: return@withContext null
+        runCatchingRecoverable {
+            val selection = selectedAccountUUIDProvider.captureSelection()
+            val accounts = sync.getAccounts()
+            val expected = accounts.firstOrNull { it.accountUuid == account.sdkAccount.accountUuid }
+            val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
+            val selected = expected != null && isSelected(expected, uuid, accounts.size, currentAccountList = true)
+            val permits = {
+                selectedAccountUUIDProvider.isCurrent(selection) && synchronizerProvider.synchronizer.value === sync
+            }
+            permits.takeIf { selected && it() }
+        }.getOrNull()
+    }
 
     override suspend fun getZashiAccount() = withContext(Dispatchers.IO) { zashiAccount.filterNotNull().first() }
 
@@ -602,12 +621,15 @@ class AccountDataSourceImpl(
             !currentAccountList || rows.any { it.sdkAccount.accountUuid == stored }
         }
         rows.map { account ->
-            val matches = account.sdkAccount.accountUuid == uuid
-            val isDefault = uuid == null && !isOrchardOnlyAccount(account.sdkAccount)
-            val useFallback = currentAccountList && (rows.size == 1 || isDefault)
-            account.withSelection(verified?.isSuccess == true && (matches || useFallback))
+            account.withSelection(
+                verified?.isSuccess == true && isSelected(account.sdkAccount, uuid, rows.size, currentAccountList)
+            )
         }.sortedDescending()
     }
+
+    private fun isSelected(sdkAccount: Account, uuid: AccountUuid?, count: Int, currentAccountList: Boolean) =
+        sdkAccount.accountUuid == uuid ||
+            (currentAccountList && (count == 1 || (uuid == null && !isOrchardOnlyAccount(sdkAccount))))
 
     @Suppress("TooGenericExceptionCaught")
     private fun observeUnifiedAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> {

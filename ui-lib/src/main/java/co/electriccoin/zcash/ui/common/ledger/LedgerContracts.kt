@@ -86,6 +86,7 @@ interface LedgerProposalPipeline {
     fun approveForSigning(
         expectedProposal: TransactionProposal? = null,
         reviewedQuote: SwapQuoteData.Success? = null,
+        canSign: () -> Boolean = { true },
     )
 
     fun clear(expected: TransactionProposal? = null)

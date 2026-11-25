@@ -119,6 +119,7 @@ interface KeystoneProposalRepository {
     fun approveForSigning(
         expectedProposal: TransactionProposal? = null,
         reviewedQuote: SwapQuoteData.Success? = null,
+        canSign: () -> Boolean = { true },
     )
 
     @Throws(IllegalStateException::class)
@@ -293,8 +294,11 @@ class KeystoneProposalRepositoryImpl(
     }
 
 
-    override fun approveForSigning(expectedProposal: TransactionProposal?, reviewedQuote: SwapQuoteData.Success?) =
-        hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote)
+    override fun approveForSigning(
+        expectedProposal: TransactionProposal?,
+        reviewedQuote: SwapQuoteData.Success?,
+        canSign: () -> Boolean,
+    ) = hardwareProposal.approve(transactionProposal.value, expectedProposal, reviewedQuote, canSign)
 
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex

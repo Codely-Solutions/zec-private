@@ -8,6 +8,8 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.WalletBalance
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -17,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.usecase.NavigateToReceiveUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
@@ -642,6 +645,35 @@ class AccountDataSourceImplTest {
             coVerify(exactly = 0) { ledgerAccountBindingProvider.clear(any()) }
         }
 
+    @Test
+    fun aPersistedSelectionOverridesStaleAccountRowsAtApprovalAndRevokesExistingApproval() = runTest {
+        val second = Account.new(AccountUuid.new(ByteArray(16) { 7 }))
+        val synchronizer = mockk<Synchronizer>(relaxed = true) {
+            every { accountsFlow } returns MutableStateFlow(listOf(account))
+            every { walletBalances } returns MutableStateFlow(null)
+            coEvery { getAccounts() } returns listOf(account, second)
+        }
+        var stored: String? = null
+        val preferences = mockk<PreferenceProvider>(relaxed = true) {
+            coEvery { getString(any()) } coAnswers { stored }
+            coEvery { putStringWithRollback(any(), any()) } coAnswers { stored = secondArg<String?>() }
+        }
+        val selection = SelectedAccountUUIDProviderImpl(
+            mockk<EncryptedPreferenceProvider> { coEvery { this@mockk() } returns preferences }
+        )
+        selection.setUUID(accountUuid)
+        val source = dataSource(synchronizer, mockk(relaxed = true), selection)
+        val stale = ledgerAccount().copy(isSelected = true)
+        val guard = assertNotNull(source.confirmSelection(stale))
+        assertTrue(guard())
+
+        selection.setUUID(second.accountUuid)
+
+        assertFalse(guard())
+        assertNull(source.confirmSelection(stale))
+        assertTrue(assertNotNull(source.confirmSelection(stale.copy(sdkAccount = second)))())
+    }
+
     private fun ledgerAccount() =
         LedgerAccount(
             sdkAccount = account,
@@ -658,6 +690,10 @@ class AccountDataSourceImplTest {
     private fun dataSource(
         synchronizer: Synchronizer,
         ledgerAccountBindingProvider: LedgerAccountBindingProvider,
+        selection: SelectedAccountUUIDProvider = mockk {
+            every { uuid } returns MutableStateFlow(null)
+            coEvery { getUUID() } returns null
+        },
     ): AccountDataSourceImpl {
         val synchronizerProvider =
             mockk<SynchronizerProvider> {
@@ -666,11 +702,7 @@ class AccountDataSourceImplTest {
             }
         return AccountDataSourceImpl(
             synchronizerProvider = synchronizerProvider,
-            selectedAccountUUIDProvider =
-                mockk {
-                    every { uuid } returns MutableStateFlow(null)
-                    coEvery { getUUID() } returns null
-                },
+            selectedAccountUUIDProvider = selection,
             persistableWalletProvider =
                 mockk {
                     every { persistableWallet } returns MutableStateFlow(mockk(relaxed = true))

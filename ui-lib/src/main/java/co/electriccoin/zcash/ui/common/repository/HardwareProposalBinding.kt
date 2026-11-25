@@ -53,12 +53,14 @@ class PreparedHardwareProposal(
 /** An approval is invalidated whenever its prepared artifact is replaced or cleared. */
 class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess()) {
     private var prepared: PreparedHardwareProposal? = null
+    private var canSign: (() -> Boolean)? = null
     private val approval = MutableStateFlow<PreparedHardwareProposal?>(null)
     internal val approved = approval.asStateFlow()
 
     @Synchronized
     fun prepare(proposal: TransactionProposal, pczt: Pczt, owner: AccountUuid? = null): PreparedHardwareProposal {
         approval.value = null
+        canSign = null
         val generation = walletWriteAccess.token()
         check(walletWriteAccess.permits(generation)) { "The wallet changed before signing preparation." }
         return PreparedHardwareProposal(proposal, pczt, owner, generation).also { prepared = it }
@@ -69,10 +71,11 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
         current: TransactionProposal?,
         expected: TransactionProposal?,
         reviewedQuote: SwapQuoteData.Success? = null,
+        canSign: () -> Boolean = { true },
     ) {
         val artifact = checkNotNull(prepared) { "The transaction has no prepared PCZT." }
         check(current === artifact.proposal && (expected == null || expected === current)
-            && walletWriteAccess.permits(artifact.walletGeneration)) {
+            && walletWriteAccess.permits(artifact.walletGeneration) && canSign()) {
             "The reviewed transaction changed before signing."
         }
         check(current !is SwapTransactionProposal || current === expected) {
@@ -81,13 +84,14 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
         if (current is SwapTransactionProposal) current.requireFundingApproval(reviewedQuote)
         artifact.proposal.requireCurrentShieldingApproval()
         artifact.reviewedQuote = reviewedQuote
+        this.canSign = canSign
         approval.value = artifact
     }
 
     @Synchronized
     fun getApproved(current: TransactionProposal?): PreparedHardwareProposal? =
         approval.value?.takeIf {
-            it.proposal === current && walletWriteAccess.permits(it.walletGeneration) &&
+            it.proposal === current && walletWriteAccess.permits(it.walletGeneration) && canSign?.invoke() == true &&
                 (current !is ShieldTransactionProposal || current.approval?.isCurrent() == true)
         }
 
@@ -107,6 +111,7 @@ class HardwareProposalBinding(private val walletWriteAccess: WalletWriteAccess =
     @Synchronized
     fun clear() {
         approval.value = null
+        canSign = null
         prepared = null
     }
 }

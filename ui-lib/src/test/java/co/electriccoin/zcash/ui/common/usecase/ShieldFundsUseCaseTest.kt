@@ -164,7 +164,14 @@ class ShieldFundsUseCaseTest {
             ledgerNavigator = mockk(),
             zashiProposalRepository = softwareProposals,
             navigationRouter = mockk(),
-            accountDataSource = mockk { every { allAccounts } returns accounts },
+            accountDataSource = mockk {
+                every { allAccounts } returns accounts
+                coEvery { confirmSelection(any()) } coAnswers {
+                    val uuid = firstArg<WalletAccount>().sdkAccount.accountUuid
+                    val matches = { accounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == uuid }
+                    matches
+                }
+            },
             navigateToError = mockk(),
             messageAvailabilityDataSource = marker,
             walletWriteAccess = wallet,
@@ -292,7 +299,14 @@ class ShieldFundsUseCaseTest {
             ledgerNavigator = mockk(),
             zashiProposalRepository = repository,
             navigationRouter = mockk(),
-            accountDataSource = mockk { every { allAccounts } returns accounts },
+            accountDataSource = mockk {
+                every { allAccounts } returns accounts
+                coEvery { confirmSelection(any()) } coAnswers {
+                    val uuid = firstArg<WalletAccount>().sdkAccount.accountUuid
+                    val matches = { accounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == uuid }
+                    matches
+                }
+            },
             navigateToError = errors,
             messageAvailabilityDataSource = mockk(relaxed = true),
             walletWriteAccess = WalletWriteAccess(),
@@ -361,5 +375,6 @@ class ShieldFundsUseCaseTest {
 
     private fun selectedAccount(account: WalletAccount) = mockk<AccountDataSource> {
         every { allAccounts } returns MutableStateFlow(listOf(account))
+        coEvery { confirmSelection(account) } returns { true }
     }
 }

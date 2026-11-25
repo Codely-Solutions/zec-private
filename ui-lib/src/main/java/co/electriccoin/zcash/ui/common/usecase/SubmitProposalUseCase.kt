@@ -90,8 +90,8 @@ class SubmitProposalUseCase(
             val account = navigationRouter.whileAtEntry(sourceEntryId) {
                 if (sameSession()) authenticate() else null
             } ?: return
-            val owner = account.sdkAccount.accountUuid
-            val canSubmit = { sameSession() && (sourceEntryId == null || selectedAccountId() == owner) }
+            val selection = accountDataSource.confirmSelection(account) ?: return
+            val canSubmit = { sameSession() && selection() }
             if (canSubmit() && navigationRouter.isAtEntry(sourceEntryId)) {
                 approveSubmission(account, reviewedProposal, reviewedQuote, sourceEntryId, reviewedOwner, canSubmit)
             }
@@ -153,14 +153,14 @@ class SubmitProposalUseCase(
         val canSign = { canSubmit() && currentProposal(account) === proposal }
         when (account) {
             is KeystoneAccount -> {
-                keystoneProposalRepository.approveForSigning(proposal, reviewedQuote)
+                keystoneProposalRepository.approveForSigning(proposal, reviewedQuote, canSubmit)
                 navigationRouter.stageResultFrom(sourceEntryId, canSign) {
                     NavigationCommand.Replace(listOf(SignKeystoneTransactionArgs))
                 }
             }
 
             is LedgerAccount -> {
-                ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote)
+                ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote, canSubmit)
                 ledgerNavigator.forwardToSign(sourceEntryId, canSign)
             }
 
@@ -172,9 +172,6 @@ class SubmitProposalUseCase(
             }
         }
     }
-
-    private fun selectedAccountId() =
-        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
 
     private fun currentProposal(account: WalletAccount): TransactionProposal? =
         when (account) {

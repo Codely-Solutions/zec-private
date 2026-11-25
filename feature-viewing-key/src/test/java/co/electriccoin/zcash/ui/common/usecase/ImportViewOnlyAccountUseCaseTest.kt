@@ -54,6 +54,7 @@ import kotlin.test.assertTrue
  * ui-lib's birthday screens call stores that birthday with the pending import and opens the naming
  * step, which imports.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ImportViewOnlyAccountUseCaseTest {
     private val repository = ViewOnlyPendingImportRepositoryImpl()
     private val wallet = WalletWriteAccess()

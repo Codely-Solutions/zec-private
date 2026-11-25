@@ -91,7 +91,7 @@ class SubmitProposalUseCaseTest {
 
             verify(exactly = 1) { fx.navigationRouter.replace(SignKeystoneTransactionArgs) }
             coVerifyOrder {
-                fx.keystoneProposalRepository.approveForSigning(proposal, any())
+                fx.keystoneProposalRepository.approveForSigning(proposal, any(), any())
                 fx.navigationRouter.replace(SignKeystoneTransactionArgs)
             }
             // Keystone defers submission to the PCZT flow — nothing is cleared, submitted, processed,
@@ -240,7 +240,9 @@ class SubmitProposalUseCaseTest {
         fx.useCase(proposal, publication)
         fx.useCase(proposal, publication)
 
-        verify(exactly = 2) { fx.ledgerProposalPipeline.approveForSigning(proposal, refEq(publication)) }
+        verify(exactly = 2) {
+            fx.ledgerProposalPipeline.approveForSigning(proposal, refEq(publication), any())
+        }
         verify(exactly = 2) { fx.ledgerNavigator.forwardToSign(null, any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction.reserveFunding(any(), any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
@@ -336,6 +338,26 @@ class SubmitProposalUseCaseTest {
         assertFailsWith<IllegalStateException> { verifyScope() }
     }
 
+    @Test
+    fun aSelectionRevokedAfterApprovalBlocksTheNativeSendWithStaleRows() = runTest {
+        val fx = useCase()
+        val proposal = mockk<TransactionProposal>()
+        fx.givenZashi(proposal)
+        var current = true
+        coEvery { fx.accountDataSource.confirmSelection(any()) } returns { current }
+        val admission = CompletableDeferred<() -> Unit>()
+        coEvery { fx.zashiProposalRepository.submit(proposal, null, any()) } coAnswers {
+            admission.complete(thirdArg())
+            mockk(relaxed = true)
+        }
+        fx.useCase(proposal)
+
+        val reviewed = admission.await()
+        reviewed()
+        current = false
+        assertFailsWith<IllegalStateException> { reviewed() }
+    }
+
     private suspend fun swapProposal(
         tokenTicker: String,
         chainTicker: String
@@ -391,7 +413,9 @@ class SubmitProposalUseCaseTest {
             every { transactionProposal } returns zashiProposal
         }
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-        val accountDataSource = mockk<AccountDataSource>(relaxed = true)
+        val accountDataSource = mockk<AccountDataSource>(relaxed = true) {
+            coEvery { confirmSelection(any()) } returns { true }
+        }
         val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
         val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
         val ledgerNavigator = mockk<LedgerNavigator>(relaxed = true)

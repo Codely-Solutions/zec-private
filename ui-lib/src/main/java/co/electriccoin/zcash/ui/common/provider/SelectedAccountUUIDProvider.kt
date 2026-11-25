@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -18,6 +19,10 @@ interface SelectedAccountUUIDProvider {
 
     suspend fun getUUID(): AccountUuid?
 
+    suspend fun captureSelection(): SelectedAccountSelection
+
+    fun isCurrent(selection: SelectedAccountSelection): Boolean
+
     suspend fun setUUID(uuid: AccountUuid)
 
     suspend fun clearUUID()
@@ -25,11 +30,14 @@ interface SelectedAccountUUIDProvider {
     suspend fun clearIfSelected(uuid: AccountUuid)
 }
 
+class SelectedAccountSelection internal constructor(val uuid: AccountUuid?, internal val version: Long)
+
 class SelectedAccountUUIDProviderImpl(
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider
 ) : SelectedAccountUUIDProvider {
     private val default = SelectedAccountUUIDPreferenceDefault()
     private val selectionWrites = Mutex()
+    private val selectionVersion = AtomicLong()
 
     override val uuid: Flow<AccountUuid?> =
         flow {
@@ -38,17 +46,27 @@ class SelectedAccountUUIDProviderImpl(
 
     override suspend fun getUUID(): AccountUuid? = default.getValue(encryptedPreferenceProvider())
 
+    override suspend fun captureSelection(): SelectedAccountSelection = selectionWrites.withLock {
+        SelectedAccountSelection(getUUID(), selectionVersion.get())
+    }
+
+    override fun isCurrent(selection: SelectedAccountSelection): Boolean =
+        selectionVersion.get() == selection.version
+
     override suspend fun setUUID(uuid: AccountUuid) = selectionWrites.withLock {
+        selectionVersion.incrementAndGet()
         default.putValue(encryptedPreferenceProvider(), uuid)
     }
 
     override suspend fun clearUUID() = selectionWrites.withLock {
+        selectionVersion.incrementAndGet()
         default.putValue(encryptedPreferenceProvider(), null)
     }
 
     override suspend fun clearIfSelected(uuid: AccountUuid) = selectionWrites.withLock {
         val preferences = encryptedPreferenceProvider()
         if (default.getValue(preferences) == uuid) {
+            selectionVersion.incrementAndGet()
             default.putValue(preferences, null)
         }
     }

@@ -184,6 +184,7 @@ class ReviewTransactionVMTest {
         val accountDataSource = mockk<AccountDataSource> {
             every { selectedAccount } returns MutableStateFlow(zodl)
             coEvery { getSelectedAccount() } returns zodl
+            coEvery { confirmSelection(zodl) } returns { true }
         }
         val authenticationStarted = CompletableDeferred<Unit>()
         val authentication = CompletableDeferred<Unit>()

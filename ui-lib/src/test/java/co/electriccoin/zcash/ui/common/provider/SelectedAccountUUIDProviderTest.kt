@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SelectedAccountUUIDProviderTest {
@@ -54,4 +55,40 @@ class SelectedAccountUUIDProviderTest {
         provider.clearIfSelected(deleted)
         assertEquals(successor, provider.getUUID())
     }
+    @Test
+    fun anApprovalIsRevokedBeforeTheSelectionWriteCanPublishToObservers() = runTest {
+        val old = AccountUuid.new(ByteArray(16))
+        val replacement = AccountUuid.new(ByteArray(16) { 2 })
+        val writing = CompletableDeferred<Unit>()
+        val persisted = CompletableDeferred<Unit>()
+        val key = PreferenceKey("selected_account_uuid")
+        var stored: String? = null
+        val preferences = mockk<PreferenceProvider> {
+            coEvery { putStringWithRollback(key, any()) } coAnswers {
+                if (stored != null) {
+                    writing.complete(Unit)
+                    persisted.await()
+                }
+                stored = secondArg<String?>()
+            }
+            coEvery { getString(key) } coAnswers { stored }
+        }
+        val provider = SelectedAccountUUIDProviderImpl(
+            mockk<EncryptedPreferenceProvider> { coEvery { this@mockk() } returns preferences }
+        )
+        provider.setUUID(old)
+        val prior = provider.captureSelection()
+        assertTrue(provider.isCurrent(prior))
+
+        val change = async { provider.setUUID(replacement) }
+        writing.await()
+        assertFalse(provider.isCurrent(prior))
+        persisted.complete(Unit)
+        change.await()
+
+        val current = provider.captureSelection()
+        assertEquals(replacement, current.uuid)
+        assertTrue(provider.isCurrent(current))
+    }
+
 }

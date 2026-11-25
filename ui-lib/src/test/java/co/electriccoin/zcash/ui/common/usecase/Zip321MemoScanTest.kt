@@ -115,6 +115,9 @@ class Zip321MemoScanTest {
     private val selectedAccounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
     private val accounts = mockk<AccountDataSource> {
         coEvery { getSelectedAccount() } returns account
+        coEvery { confirmSelection(account) } returns {
+            selectedAccounts.value?.firstOrNull()?.sdkAccount == account.sdkAccount
+        }
         every { selectedAccount } returns flowOf(account)
         every { allAccounts } returns selectedAccounts
     }

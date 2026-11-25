@@ -197,6 +197,8 @@ private class FakeAccountDataSource(
 
     override suspend fun getSelectedAccount(): WalletAccount = selected.value!!
 
+    override suspend fun confirmSelection(account: WalletAccount): (() -> Boolean)? = error("Not used")
+
     override suspend fun getZashiAccount(): ZodlAccount = error("unsupported")
 
     override suspend fun selectAccount(account: cash.z.ecc.android.sdk.model.Account) = error("unsupported")

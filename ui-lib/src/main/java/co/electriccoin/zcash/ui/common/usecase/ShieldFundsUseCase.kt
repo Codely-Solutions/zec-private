@@ -51,21 +51,11 @@ class ShieldFundsUseCase(
 
     fun confirm(account: WalletAccount, closeCurrentScreen: Boolean, sourceEntryId: String? = null): () -> Unit {
         val wallet = walletWriteAccess.token()
-        val owner = account.sdkAccount.accountUuid
         return {
             val grant = appAccessSession.grant.value
-            val approval = ShieldingApproval(
-                account = account,
-                hasShieldableBalance = {
-                    accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.let {
-                        it.sdkAccount.accountUuid == owner && it.isShieldingAvailable == true
-                    } == true
-                },
-            ) {
-                appAccessSession.permits(grant) && walletWriteAccess.permits(wallet) &&
-                    accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
+            shield(account, closeCurrentScreen, sourceEntryId) {
+                appAccessSession.permits(grant) && walletWriteAccess.permits(wallet)
             }
-            shield(approval, closeCurrentScreen, sourceEntryId)
         }
     }
 
@@ -73,8 +63,13 @@ class ShieldFundsUseCase(
         navigationRouter.isAtEntry(sourceEntryId) &&
             if (approval.account is ViewOnlyAccount) approval.isCurrent() else approval.isReadyToPropose()
 
-    private fun shield(approval: ShieldingApproval, closeCurrentScreen: Boolean, sourceEntryId: String?) {
-        if (job?.isActive == true || !canStartShield(approval, sourceEntryId)) return
+    private fun shield(
+        account: WalletAccount,
+        closeCurrentScreen: Boolean,
+        sourceEntryId: String?,
+        sameSession: () -> Boolean,
+    ) {
+        if (job?.isActive == true || !sameSession() || !navigationRouter.isAtEntry(sourceEntryId)) return
         val outcomeEntryId =
             if (closeCurrentScreen && sourceEntryId != null) {
                 navigationRouter.activeEntry.value?.contentEntryId ?: sourceEntryId
@@ -83,6 +78,8 @@ class ShieldFundsUseCase(
             }
         job =
             scope.launch {
+                val selection = accountDataSource.confirmSelection(account) ?: return@launch
+                val approval = newApproval(account) { sameSession() && selection() }
                 if (!canStartShield(approval, sourceEntryId)) return@launch
                 messageAvailabilityDataSource.onShieldingInitiated()
 
@@ -117,6 +114,17 @@ class ShieldFundsUseCase(
                 }
             }
     }
+
+    private fun newApproval(account: WalletAccount, isCurrent: () -> Boolean): ShieldingApproval =
+        ShieldingApproval(
+            account = account,
+            hasShieldableBalance = {
+                accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.let {
+                    it.sdkAccount.accountUuid == account.sdkAccount.accountUuid && it.isShieldingAvailable == true
+                } == true
+            },
+            remainsCurrent = isCurrent,
+        )
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun shieldZashiFunds(approval: ShieldingApproval, outcomeEntryId: String?) {

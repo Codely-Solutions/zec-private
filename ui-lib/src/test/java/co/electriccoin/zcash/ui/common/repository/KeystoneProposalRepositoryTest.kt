@@ -157,6 +157,24 @@ class KeystoneProposalRepositoryTest {
         repository.clear()
     }
 
+    @Test
+    fun aRegularPreparationRetainsItsSelectedAccountApproval() = runBlocking {
+        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
+        val proposal = repository.getTransactionProposal()
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        repository.createPCZTFromProposal()
+        var permitted = true
+        repository.approveForSigning(proposal, canSign = { permitted })
+        assertNotNull(repository.signingOwner(proposal))
+
+        permitted = false
+        assertNull(repository.signingOwner(proposal))
+        assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
+        coVerify(exactly = 0) { signer.generatePczt(any()) }
+        repository.clear()
+    }
+
     private suspend fun givenCurrentProposalPays(destination: WalletAddress) {
         coEvery { accountDataSource.getSelectedAccount() } returns mockk(relaxed = true)
         coEvery { proposalDataSource.createProposal(any(), any()) } returns

@@ -76,6 +76,7 @@ class ViewOnlySpendGuardTest {
     private val accountDataSource =
         mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns viewOnly
+            coEvery { confirmSelection(viewOnly) } returns { true }
             every { allAccounts } returns MutableStateFlow(listOf(viewOnly))
             coEvery { requestNextShieldedAddress(requireFresh = true, account = any()) } returns "u"
         }
