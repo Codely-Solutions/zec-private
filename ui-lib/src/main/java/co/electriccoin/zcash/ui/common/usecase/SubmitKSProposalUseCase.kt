@@ -49,6 +49,7 @@ class SubmitKSProposalUseCase(
         preparationId: String,
         progress: SubmissionProgress?,
     ) {
+        val originalPrefill = prefillSend.pendingThrough()
         scope.launch {
             try {
                 val result = keystoneProposalRepository.submit(proposal, preparationId)
@@ -61,7 +62,7 @@ class SubmitKSProposalUseCase(
             } catch (error: Exception) {
                 progress?.recordFailure(error)
             } finally {
-                prefillSend.clear()
+                prefillSend.clearThrough(originalPrefill)
             }
         }
     }

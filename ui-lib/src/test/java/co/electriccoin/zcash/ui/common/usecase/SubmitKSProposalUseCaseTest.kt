@@ -46,7 +46,7 @@ class SubmitKSProposalUseCaseTest {
             coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any(), eq("prepared")) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, submitResult) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             // Swap state is cleared before submitting, and navigation happens after submit is kicked off.
             coVerifyOrder {
                 fx.swapRepository.clear()
@@ -69,7 +69,7 @@ class SubmitKSProposalUseCaseTest {
             coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any(), eq("prepared")) }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
         }
 
     @Test
@@ -85,7 +85,7 @@ class SubmitKSProposalUseCaseTest {
             // The submit failure is swallowed: no swap processing, but the prefill is still cleared
             // (finally) and navigation to progress happens regardless of the async outcome.
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
         }
 

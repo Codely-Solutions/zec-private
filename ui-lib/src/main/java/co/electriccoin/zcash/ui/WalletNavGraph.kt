@@ -248,7 +248,7 @@ fun NavGraphBuilder.walletNavGraph(
         }
         composable<IronwoodAnnouncementArgs> { IronwoodAnnouncementScreen() }
         composable<MoreArgs> { MoreScreen() }
-        composable<AdvancedSettingsArgs> { AdvancedSettingsScreen() }
+        composable<AdvancedSettingsArgs> { AdvancedSettingsScreen(it.id) }
         composable<ChooseServerArgs> { ChooseServerScreen() }
         composable<WalletBackup> { AndroidWalletBackup(it.toRoute(), it.id) }
         composable<ResetZashiArgs> { ResetZashiScreen() }
@@ -265,7 +265,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<WalletOptionsArgs> { WalletOptionsScreen(it.toRoute()) }
         composable<EditAccountArgs> { EditAccountScreen(it.toRoute(), it.id) }
         composable<ScanArgs> { ScanZashiAddressScreen(it.toRoute(), it.id) }
-        composable(NavigationTargets.EXPORT_PRIVATE_DATA) { WrapExportPrivateData() }
+        composable(NavigationTargets.EXPORT_PRIVATE_DATA) { WrapExportPrivateData(it.id) }
         composable<ExportVKArgs> { ExportVKScreen() }
         dialogComposable<ExportVKConfirmArgs> { ExportVKConfirmScreen(it.toRoute()) }
         composable<VKDetailArgs> { VKDetailScreen(it.toRoute(), it.id) }

@@ -128,6 +128,7 @@ class AdvancedSettingsVMTest {
                 navigateToResetWallet = mockk(relaxed = true),
                 migrationGate = mockk<MigrationGate> { coEvery { isRestartAvailable() } returns false },
                 migrationNavigator = mockk(relaxed = true),
+                sourceEntryId = "advanced-settings",
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()

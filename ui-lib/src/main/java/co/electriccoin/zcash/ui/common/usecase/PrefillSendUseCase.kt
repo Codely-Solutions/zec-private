@@ -5,7 +5,9 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -19,47 +21,62 @@ class PrefillSendUseCase {
 
     operator fun invoke() = bus.receiveAsFlow()
 
-    fun clear() {
-        while (bus.tryReceive().isSuccess) {
-            // Drain the channel
+    private val lock = Any()
+    private var lastRequest = 0L
+    private val pending = mutableMapOf<Long, Job>()
+
+    fun pendingThrough(): Long = synchronized(lock) { lastRequest }
+
+    fun clear() = clearThrough(pendingThrough())
+
+    fun clearThrough(lastOwnedRequest: Long) {
+        val discarded = synchronized(lock) {
+            pending.filterKeys { it <= lastOwnedRequest }.values.toList()
         }
+        discarded.forEach { it.cancel() }
     }
 
     fun requestFromTransactionDetail(value: DetailedTransactionData) =
-        scope.launch {
-            bus.send(
-                PrefillSendData.All(
-                    amount = value.transaction.amount,
-                    address = value.recipient?.address,
-                    fee = value.transaction.fee,
-                    memos = value.memos
-                )
+        request(
+            PrefillSendData.All(
+                amount = value.transaction.amount,
+                address = value.recipient?.address,
+                fee = value.transaction.fee,
+                memos = value.memos
             )
-        }
+        )
 
-    fun requestFromZip321(value: PaymentRequest): kotlinx.coroutines.Job {
+    fun requestFromZip321(value: PaymentRequest): Job {
         val memo = value.payments.firstOrNull()?.memo?.data?.let {
             it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException()
         }
-        return scope.launch {
-            val request = value.payments.firstOrNull()
-            bus.send(
-                PrefillSendData.All(
-                    amount =
-                        request
-                            ?.nonNegativeAmount
-                            ?.toZecValueString()
-                            ?.toBigDecimal()
-                            ?.convertZecToZatoshi() ?: Zatoshi(0),
-                    address = request?.recipientAddress?.value,
-                    fee = null,
-                    memos = memo?.let { listOf(it) }
-                )
+        val payment = value.payments.firstOrNull()
+        return request(
+            PrefillSendData.All(
+                amount =
+                    payment
+                        ?.nonNegativeAmount
+                        ?.toZecValueString()
+                        ?.toBigDecimal()
+                        ?.convertZecToZatoshi() ?: Zatoshi(0),
+                address = payment?.recipientAddress?.value,
+                fee = null,
+                memos = memo?.let { listOf(it) }
             )
-        }
+        )
     }
 
-    fun request(value: PrefillSendData) = scope.launch { bus.send(value) }
+    fun request(value: PrefillSendData): Job {
+        val job = synchronized(lock) {
+            val id = ++lastRequest
+            scope.launch(start = CoroutineStart.LAZY) { bus.send(value) }.also { sender ->
+                pending[id] = sender
+                sender.invokeOnCompletion { synchronized(lock) { pending.remove(id) } }
+            }
+        }
+        job.start()
+        return job
+    }
 }
 
 sealed interface PrefillSendData {

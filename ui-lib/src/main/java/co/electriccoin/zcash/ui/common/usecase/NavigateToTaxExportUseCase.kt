@@ -1,6 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -11,9 +15,13 @@ import co.electriccoin.zcash.ui.screen.taxexport.TaxExport
 
 class NavigateToTaxExportUseCase(
     private val navigationRouter: NavigationRouter,
-    private val biometricRepository: BiometricRepository
+    private val biometricRepository: BiometricRepository,
+    private val appAccess: AppAccessSession,
 ) {
-    suspend operator fun invoke() {
+    suspend operator fun invoke(sourceEntryId: String) {
+        val grant = appAccess.grant.value
+        val isAllowed = { appAccess.permits(grant) }
+        if (!navigationRouter.isAtEntry(sourceEntryId) || !isAllowed()) return
         try {
             biometricRepository.requestBiometrics(
                 BiometricRequest(
@@ -24,7 +32,11 @@ class NavigateToTaxExportUseCase(
                         )
                 )
             )
-            navigationRouter.forward(TaxExport)
+            if (navigationRouter.isAtEntry(sourceEntryId)) {
+                navigationRouter.stageResultFrom(sourceEntryId, isAllowed) {
+                    NavigationCommand.Forward(listOf(TaxExport))
+                }
+            }
         } catch (_: BiometricsFailureException) {
             // do nothing
         } catch (_: BiometricsCancelledException) {

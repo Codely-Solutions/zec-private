@@ -2,14 +2,17 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.WalletAddress
 
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
@@ -36,6 +39,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -60,7 +64,7 @@ class SubmitProposalUseCaseTest {
             fx.useCase(null)
 
             coVerify(exactly = 0) { fx.accountDataSource.getSelectedAccount() }
-            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
             verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
         }
 
@@ -93,10 +97,10 @@ class SubmitProposalUseCaseTest {
             // Keystone defers submission to the PCZT flow — nothing is cleared, submitted, processed,
             // or prefill-cleared on this path.
             verify(exactly = 0) { fx.swapRepository.clear() }
-            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
             coVerify(exactly = 0) { fx.keystoneProposalRepository.submit() }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
-            verify(exactly = 0) { fx.prefillSend.clear() }
+            verify(exactly = 0) { fx.prefillSend.clearThrough(any()) }
         }
 
     @Test
@@ -123,7 +127,7 @@ class SubmitProposalUseCaseTest {
 
             verify(exactly = 1) { fx.ledgerNavigator.forwardToSign(null, any()) }
             verify(exactly = 0) { fx.swapRepository.clear() }
-            verify(exactly = 0) { fx.prefillSend.clear() }
+            verify(exactly = 0) { fx.prefillSend.clearThrough(any()) }
             verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
         }
 
@@ -138,14 +142,14 @@ class SubmitProposalUseCaseTest {
             fx.submitReviewed(proposal)
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, submitResult) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             // Swap state is cleared before submitting, and navigation happens after submit is kicked off.
             coVerifyOrder {
                 fx.swapRepository.clear()
-                fx.zashiProposalRepository.submit(proposal, any())
+                fx.zashiProposalRepository.submit(proposal, any(), any())
                 fx.navigationRouter.replace(TransactionProgressArgs)
             }
         }
@@ -160,10 +164,10 @@ class SubmitProposalUseCaseTest {
             fx.submitReviewed(proposal)
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
         }
 
     @Test
@@ -172,14 +176,15 @@ class SubmitProposalUseCaseTest {
             val fx = useCase()
             val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
             fx.givenZashi(proposal)
-            coEvery { fx.zashiProposalRepository.submit(any(), matchNullable { true }) } throws RuntimeException("boom")
+            coEvery { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) } throws
+                RuntimeException("boom")
 
             fx.submitReviewed(proposal)
 
             // The submit failure is swallowed: no swap processing, but the prefill is still cleared
             // (finally) and navigation to progress happens regardless of the async outcome.
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
         }
 
@@ -193,7 +198,7 @@ class SubmitProposalUseCaseTest {
             fx.givenZashi(replacement)
         }
         fx.submitReviewed(reviewed)
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
         verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
     }
 
@@ -216,12 +221,12 @@ class SubmitProposalUseCaseTest {
         completeAuthentication.complete(Unit)
         withTimeout(1.seconds) { approval.join() }
 
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
         verify(exactly = 1) { fx.navigateToError(any()) }
 
         fx.givenZashi(next)
         fx.submitReviewed(next)
-        coVerify(exactly = 1) { fx.zashiProposalRepository.submit(next, any()) }
+        coVerify(exactly = 1) { fx.zashiProposalRepository.submit(next, any(), any()) }
     }
 
     @Test
@@ -246,7 +251,7 @@ class SubmitProposalUseCaseTest {
         val fx = useCase()
         fx.givenZashi(swapProposal("eth", "eth"))
         fx.useCase(null)
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
     }
 
     @Test
@@ -266,7 +271,7 @@ class SubmitProposalUseCaseTest {
             elapsed = 11_000L
         }
         fx.useCase(proposal, publication)
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
     }
 
     @Test
@@ -279,8 +284,56 @@ class SubmitProposalUseCaseTest {
         fx.submitReviewed(proposal)
 
         verify(exactly = 1) { fx.navigateToError(any(), any()) }
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
         verify(exactly = 0) { fx.navigationRouter.replace(TransactionProgressArgs) }
+    }
+
+    @Test
+    fun anAuthenticatedReviewCoveredDuringAccountLookupCannotStartSubmission() = runTest {
+        val fx = useCase()
+        val proposal = mockk<TransactionProposal>()
+        val account = EditAccountFixtures.zodl()
+        val active = MutableStateFlow(ActiveNavigationEntry("review", null))
+        every { fx.navigationRouter.activeEntry } returns active
+        every { fx.accountDataSource.allAccounts } returns MutableStateFlow(listOf(account))
+        fx.givenZashi(proposal)
+        val lookupStarted = CompletableDeferred<Unit>()
+        val finishLookup = CompletableDeferred<Unit>()
+        coEvery { fx.accountDataSource.getSelectedAccount() } coAnswers {
+            lookupStarted.complete(Unit)
+            finishLookup.await()
+            account
+        }
+        val approval = launch { fx.useCase(proposal, sourceEntryId = "review") }
+        lookupStarted.await()
+        active.value = ActiveNavigationEntry("scanner", null)
+        finishLookup.complete(Unit)
+        approval.join()
+
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any(), matchNullable { true }, any()) }
+        verify(exactly = 0) { fx.swapRepository.clear() }
+        active.value = ActiveNavigationEntry("review", null)
+        fx.useCase(proposal, sourceEntryId = "review")
+        coVerify(exactly = 1) { fx.zashiProposalRepository.submit(proposal, null, any()) }
+    }
+
+    @Test
+    fun anAdmittedSubmissionRetainsItsOriginalAppAccessUntilTheFirstSendBoundary() = runTest {
+        val fx = useCase()
+        val proposal = mockk<TransactionProposal>()
+        fx.givenZashi(proposal)
+        val captured = CompletableDeferred<() -> Unit>()
+        coEvery { fx.zashiProposalRepository.submit(proposal, null, any()) } coAnswers {
+            captured.complete(thirdArg())
+            mockk(relaxed = true)
+        }
+
+        fx.useCase(proposal)
+        val verifyScope = captured.await()
+        verifyScope()
+        fx.access.lock()
+        fx.access.unlock()
+        assertFailsWith<IllegalStateException> { verifyScope() }
     }
 
     private suspend fun swapProposal(
@@ -321,7 +374,7 @@ class SubmitProposalUseCaseTest {
         coEvery { accountDataSource.getSelectedAccount() } returns account
         if (proposal is SwapTransactionProposal) every { proposal.fundingAccount } returns account
         zashiProposal.value = proposal
-        coEvery { zashiProposalRepository.submit(proposal, matchNullable { true }) } returns submitResult
+        coEvery { zashiProposalRepository.submit(proposal, matchNullable { true }, any()) } returns submitResult
     }
 
     /** Builds the use case with the off-thread submit scope pinned to the test scheduler. */
@@ -356,6 +409,7 @@ class SubmitProposalUseCaseTest {
         val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
         val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
+        val access = AppAccessSession().apply { unlock() }
         val useCase =
             SubmitProposalUseCase(
                 navigationRouter = navigationRouter,
@@ -369,6 +423,8 @@ class SubmitProposalUseCaseTest {
                 processSwapTransaction = processSwapTransaction,
                 prefillSend = prefillSend,
                 navigateToError = navigateToError,
+                appAccess = access,
+                wallet = WalletWriteAccess(),
             )
     }
 

@@ -12,7 +12,9 @@ import shutil
 HERE=Path(__file__).resolve().parent
 SOURCE=HERE.parent
 sys.path.insert(0,str(SOURCE/'.private'))
-from acceptance_policy import ATTESTATION_PATHS, input_fingerprint, validate_core_sources, validate_core, validate_quotes
+from acceptance_policy import (
+    ATTESTATION_PATHS, input_fingerprint, validate_core_sources, validate_direct_core_candidate, validate_quotes,
+)
 from release_metadata import Metadata, require
 from release_inputs import selected_baseline
 
@@ -197,6 +199,7 @@ def main():
         for key, value in provenance.items():
             require(key not in core or core[key] == value, 'Original execution identity differs: '+key)
             core[key] = value
+    validate_direct_core_candidate(core, args.source_sha, version)
     if args.reuse_quote:
         quotes, reused_bytes['quote-acceptance.json'] = reusable(args.reuse_quote,'production-quotes',head)
     else:

@@ -217,6 +217,17 @@ class QuoteRecoveryTests(unittest.TestCase):
                     same_controller_retry(SOURCE, MAIN, '7', metadata)
 
 
+    def test_superseded_public_baseline_stops_recovery_before_original_artifact_lookup(self):
+        metadata = Mock()
+        metadata.api.return_value = {'tag_name': 'v3.19.0-private.999'}
+        with patch('quote_recovery.require_dispatch'):
+            for signing in (False, True):
+                with self.subTest(signing=signing):
+                    with self.assertRaisesRegex(ValueError, 'verified hosted baseline'):
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata, signing=signing)
+        self.assertEqual(metadata.api.call_count, 2)
+        self.assertTrue(all(item.args == ('/releases/latest',) for item in metadata.api.call_args_list))
+
     def test_same_controller_admission_reuses_exact_original_artifact_ids(self):
         states = dict(BUILD_JOBS, publish='skipped', **{WALLET: 'success', QUOTE: 'failure'})
         metadata = self.recovery_metadata(self.recovery_run(7, MAIN, states, ARTIFACTS.values()))
@@ -797,7 +808,8 @@ class QuoteRecoveryTests(unittest.TestCase):
     @staticmethod
     def recovery_metadata(*runs, refs=None, reservation=None):
         meta = Mock(gh='gh-offline-fixture', repo='repos/fixture')
-        endpoints = {}
+        fixture = json.loads((Path(__file__).with_name('hosted-fixture.json')).read_text())
+        endpoints = {'/releases/latest': {'tag_name': fixture['release']}}
         pages = {}
         for run, jobs, artifacts in runs:
             path = f'/actions/runs/{run["id"]}'

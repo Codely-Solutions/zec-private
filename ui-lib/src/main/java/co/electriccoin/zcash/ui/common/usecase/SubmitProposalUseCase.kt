@@ -5,7 +5,9 @@ import androidx.annotation.VisibleForTesting
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
@@ -13,11 +15,13 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
@@ -55,6 +59,8 @@ class SubmitProposalUseCase(
     private val processSwapTransaction: ProcessSwapTransactionUseCase,
     private val prefillSend: PrefillSendUseCase,
     private val navigateToError: NavigateToErrorUseCase,
+    private val appAccess: AppAccessSession,
+    private val wallet: WalletWriteAccess,
     private val submissionProgress: SubmissionProgressStore? = null,
 ) {
     private val submissionMutex = Mutex()
@@ -76,76 +82,99 @@ class SubmitProposalUseCase(
         sourceEntryId: String? = null,
         reviewedOwner: AccountUuid? = null,
     ) {
-        if (!submissionMutex.tryLock()) return
+        if (!navigationRouter.isAtEntry(sourceEntryId) || !submissionMutex.tryLock()) return
+        val grant = appAccess.grant.value
+        val walletToken = wallet.token()
+        val sameSession = { appAccess.permits(grant) && wallet.permits(walletToken) }
         try {
-            biometricRepository.requestBiometrics(
-                request =
-                    BiometricRequest(
-                        message =
-                            stringRes(
-                                R.string.authentication_system_ui_subtitle,
-                                stringRes(R.string.authentication_use_case_send_funds)
-                            )
-                    )
-            )
-            val account = accountDataSource.getSelectedAccount()
-            check(reviewedOwner == null || account.sdkAccount.accountUuid == reviewedOwner) {
-                "The selected account changed. Review the payment again before sending."
-            }
-            if (!account.isSpendable) {
-                navigateToError.showFrom(
-                    sourceEntryId,
-                    ErrorArgs.General(
-                        AccountOperationUnsupportedException.viewOnly()
-                    )
-                )
-                return
-            }
-            val proposal = checkNotNull(currentProposal(account)) {
-                "The reviewed transaction is unavailable. Review it again before sending."
-            }
-            check(proposal === reviewedProposal) {
-                "The reviewed transaction changed. Review it again before sending."
-            }
-            if (proposal is SwapTransactionProposal) {
-                check(proposal.fundingAccount.sdkAccount.accountUuid == account.sdkAccount.accountUuid) {
-                    "The reviewed swap belongs to a different funding account."
-                }
-                check(swapRepository.quote.value === reviewedQuote) { "The reviewed swap quote changed." }
-                proposal.requireFundingApproval(reviewedQuote)
-            }
-            when (account) {
-                is KeystoneAccount -> {
-                    keystoneProposalRepository.approveForSigning(proposal, reviewedQuote)
-                    navigationRouter.stageResultFrom(sourceEntryId, { currentProposal(account) === proposal }) {
-                        NavigationCommand.Replace(listOf(SignKeystoneTransactionArgs))
-                    }
-                }
-
-                is LedgerAccount -> {
-                    ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote)
-                    ledgerNavigator.forwardToSign(sourceEntryId) { currentProposal(account) === proposal }
-                }
-
-                is ViewOnlyAccount -> {
-                    throw AccountOperationUnsupportedException.viewOnly()
-                }
-
-                is ZodlAccount -> {
-                    val owner = if (sourceEntryId != null) account.sdkAccount.accountUuid else null
-                    submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId, owner)
-                }
+            val account = navigationRouter.whileAtEntry(sourceEntryId) {
+                if (sameSession()) authenticate() else null
+            } ?: return
+            val owner = account.sdkAccount.accountUuid
+            val canSubmit = { sameSession() && (sourceEntryId == null || selectedAccountId() == owner) }
+            if (canSubmit() && navigationRouter.isAtEntry(sourceEntryId)) {
+                approveSubmission(account, reviewedProposal, reviewedQuote, sourceEntryId, reviewedOwner, canSubmit)
             }
         } catch (_: BiometricsFailureException) {
             // do nothing
         } catch (_: BiometricsCancelledException) {
             // do nothing
         } catch (e: IllegalStateException) {
-            navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
+            if (sameSession()) navigateToError.showFrom(sourceEntryId, ErrorArgs.General(e))
         } finally {
             submissionMutex.unlock()
         }
     }
+
+    private suspend fun authenticate(): WalletAccount {
+        biometricRepository.requestBiometrics(
+            request = BiometricRequest(
+                message = stringRes(
+                    R.string.authentication_system_ui_subtitle,
+                    stringRes(R.string.authentication_use_case_send_funds)
+                )
+            )
+        )
+        return accountDataSource.getSelectedAccount()
+    }
+
+    @Suppress("LongParameterList")
+    private fun approveSubmission(
+        account: WalletAccount,
+        reviewedProposal: TransactionProposal?,
+        reviewedQuote: SwapQuoteData.Success?,
+        sourceEntryId: String?,
+        reviewedOwner: AccountUuid?,
+        canSubmit: () -> Boolean,
+    ) {
+        check(reviewedOwner == null || account.sdkAccount.accountUuid == reviewedOwner) {
+            "The selected account changed. Review the payment again before sending."
+        }
+        if (!account.isSpendable) {
+            navigateToError.showFrom(
+                sourceEntryId,
+                ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()),
+            )
+            return
+        }
+        val proposal = checkNotNull(currentProposal(account)) {
+            "The reviewed transaction is unavailable. Review it again before sending."
+        }
+        check(proposal === reviewedProposal) {
+            "The reviewed transaction changed. Review it again before sending."
+        }
+        if (proposal is SwapTransactionProposal) {
+            check(proposal.fundingAccount.sdkAccount.accountUuid == account.sdkAccount.accountUuid) {
+                "The reviewed swap belongs to a different funding account."
+            }
+            check(swapRepository.quote.value === reviewedQuote) { "The reviewed swap quote changed." }
+            proposal.requireFundingApproval(reviewedQuote)
+        }
+        val canSign = { canSubmit() && currentProposal(account) === proposal }
+        when (account) {
+            is KeystoneAccount -> {
+                keystoneProposalRepository.approveForSigning(proposal, reviewedQuote)
+                navigationRouter.stageResultFrom(sourceEntryId, canSign) {
+                    NavigationCommand.Replace(listOf(SignKeystoneTransactionArgs))
+                }
+            }
+
+            is LedgerAccount -> {
+                ledgerProposalPipeline.approveForSigning(proposal, reviewedQuote)
+                ledgerNavigator.forwardToSign(sourceEntryId, canSign)
+            }
+
+            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
+
+            is ZodlAccount -> {
+                val owner = account.sdkAccount.accountUuid.takeIf { sourceEntryId != null }
+                submitOrShowSoftware(proposal, reviewedQuote, sourceEntryId, owner, canSubmit)
+            }
+        }
+    }
+
+    private fun selectedAccountId() =
+        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
 
     private fun currentProposal(account: WalletAccount): TransactionProposal? =
         when (account) {
@@ -160,13 +189,14 @@ class SubmitProposalUseCase(
         reviewedQuote: SwapQuoteData.Success?,
         sourceEntryId: String?,
         owner: AccountUuid?,
+        canSubmit: () -> Boolean,
     ) {
         if (submittedSoftwareProposal?.get() !== proposal) {
             swapRepository.clear()
             submittedSoftwareProposal = WeakReference(proposal)
             val progress = owner?.let { submissionProgress?.begin(proposal, it) }
             submittedProgressId = progress?.id
-            submitZashiProposal(proposal, reviewedQuote, progress)
+            submitZashiProposal(proposal, reviewedQuote, progress, canSubmit)
         }
         navigationRouter.showTransactionProgress(sourceEntryId, submittedProgressId)
     }
@@ -176,10 +206,14 @@ class SubmitProposalUseCase(
         proposal: TransactionProposal,
         reviewedQuote: SwapQuoteData.Success?,
         progress: SubmissionProgress?,
+        canSubmit: () -> Boolean,
     ) {
+        val originalPrefill = prefillSend.pendingThrough()
         scope.launch {
             try {
-                val result = zashiProposalRepository.submit(proposal, reviewedQuote)
+                val result = zashiProposalRepository.submit(proposal, reviewedQuote) {
+                    check(canSubmit()) { "The wallet context changed before sending." }
+                }
                 progress?.record(result)
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
@@ -189,7 +223,7 @@ class SubmitProposalUseCase(
             } catch (error: Exception) {
                 progress?.recordFailure(error)
             } finally {
-                prefillSend.clear()
+                prefillSend.clearThrough(originalPrefill)
             }
         }
     }

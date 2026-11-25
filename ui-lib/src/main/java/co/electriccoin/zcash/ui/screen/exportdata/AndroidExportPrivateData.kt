@@ -10,7 +10,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.di.koinActivityViewModel
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.usecase.ExportPrivateDataUseCase
@@ -24,7 +27,7 @@ import org.koin.compose.koinInject
 import java.io.File
 
 @Composable
-internal fun WrapExportPrivateData() {
+internal fun WrapExportPrivateData(entryId: String) {
     val walletViewModel = koinActivityViewModel<WalletViewModel>()
     val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val navigationRouter = koinInject<NavigationRouter>()
@@ -32,25 +35,26 @@ internal fun WrapExportPrivateData() {
     val accounts = koinInject<GetWalletAccountsUseCase>().observe().collectAsStateWithLifecycle().value
     val context = LocalActivity.current.applicationContext
 
-    BackHandler { navigationRouter.back() }
+    val close = { navigationRouter.stageResultFrom(entryId) { NavigationCommand.Back } }
+    BackHandler(onBack = close)
     if (synchronizer == null || accounts == null) {
         CircularScreenProgressIndicator()
     } else if (accounts.firstOrNull { it.isSelected }?.isSpendable != true) {
-        LaunchedEffect(Unit) { navigationRouter.back() }
+        LaunchedEffect(entryId) { close() }
     } else {
         val snackbar = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()
         ExportPrivateData(
             snackbarHostState = snackbar,
-            onBack = { navigationRouter.back() },
+            onBack = close,
             onAgree = {},
             onConfirm = {
                 scope.launch {
                     try {
-                        val shared = export {
+                        val shared = export(isSourceCurrent = { navigationRouter.isAtEntry(entryId) }) {
                             File(synchronizer.getExistingDataDbFilePath(context, ZcashNetwork.fromResources(context)))
                         }
-                        if (shared) navigationRouter.back()
+                        if (shared) close()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

@@ -266,6 +266,13 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
         validate_quotes(quote, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=use_tor)
 
 
+def require_current_hosted_upgrade(root, metadata):
+    fixture = json.loads((root / '.private/hosted-fixture.json').read_text())
+    live = metadata.api('/releases/latest')['tag_name']
+    require(live == fixture['release'], 'Latest public release needs its verified hosted baseline')
+    return fixture
+
+
 def admit(source, controller, metadata, *, preflight_only=False, custom_caller=False):
     require(source != controller, 'Hosted automatic releases require a prepared child candidate')
     from custom_release import MARKER as CUSTOM_MARKER
@@ -278,10 +285,8 @@ def admit(source, controller, metadata, *, preflight_only=False, custom_caller=F
     admit_cadence(ROOT, source, controller, metadata, api, preflight_only=preflight_only)
     hosted_changes(ROOT, source, controller)
     version = version_code(ROOT, source)
-    baseline = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']
-    live = metadata.api('/releases/latest')['tag_name']
-    selected = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['release']
-    require(live == selected and version > baseline, 'Latest public release needs its verified hosted baseline')
+    fixture = require_current_hosted_upgrade(ROOT, metadata)
+    require(version > fixture['version_code'], 'Candidate version must advance beyond its hosted baseline')
     from hosted_claim import ref_for
     ref = ref_for(binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), False))
     refs = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))

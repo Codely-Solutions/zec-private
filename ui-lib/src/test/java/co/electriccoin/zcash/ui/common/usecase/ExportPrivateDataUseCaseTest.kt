@@ -32,6 +32,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -114,12 +115,22 @@ class ExportPrivateDataUseCaseTest {
             assertNull(shadowOf(application).nextStartedActivity)
             accounts.value = listOf(account(1))
 
+            val sourceCurrent = AtomicBoolean(true)
+            every { FileProvider.getUriForFile(application, any(), any()) } answers {
+                sourceCurrent.set(false)
+                Uri.parse("content://synthetic/export")
+            }
+            assertFalse(export(sourceCurrent::get) { source })
+            assertFalse(checkNotNull(staged).exists())
+            assertNull(shadowOf(application).nextStartedActivity)
+
             every { FileProvider.getUriForFile(application, any(), any()) } returns
                 Uri.parse("content://synthetic/export")
-            assertTrue(export { source })
+            sourceCurrent.set(true)
+            assertTrue(export(sourceCurrent::get) { source })
             assertEquals(source.readText(), checkNotNull(staged).readText())
             assertEquals(Intent.ACTION_CHOOSER, shadowOf(application).nextStartedActivity.action)
-            coVerify(exactly = 5) { biometrics.requestBiometrics(any()) }
+            coVerify(exactly = 6) { biometrics.requestBiometrics(any()) }
         } finally {
             unmockkStatic(FileProvider::class)
             Dispatchers.resetMain()

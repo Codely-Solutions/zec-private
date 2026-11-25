@@ -46,6 +46,7 @@ class AdvancedSettingsVM(
     private val navigateToResetWallet: NavigateToResetWalletUseCase,
     private val migrationGate: MigrationGate,
     private val migrationNavigator: MigrationNavigator,
+    private val sourceEntryId: String,
 ) : ViewModel() {
     private val versionInfo by lazy { getVersionInfo() }
 
@@ -166,7 +167,7 @@ class AdvancedSettingsVM(
 
     private fun onCrashReportingClick() = navigationRouter.forward(NavigationTargets.CRASH_REPORTING_OPT_IN)
 
-    private fun onTaxExportClick() = viewModelScope.launch { navigateToTaxExport() }
+    private fun onTaxExportClick() = viewModelScope.launch { navigateToTaxExport(sourceEntryId) }
 
     private fun onSeedRecoveryClick() =
         viewModelScope.launch {

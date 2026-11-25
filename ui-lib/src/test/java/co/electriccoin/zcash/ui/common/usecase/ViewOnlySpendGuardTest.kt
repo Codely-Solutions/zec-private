@@ -259,6 +259,8 @@ class ViewOnlySpendGuardTest {
                     processSwapTransaction = mockk(relaxed = true),
                     prefillSend = mockk(relaxed = true),
                     navigateToError = navigateToError,
+                    appAccess = co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
+                    wallet = co.electriccoin.zcash.ui.common.provider.WalletWriteAccess(),
                 )
 
             useCase(null)

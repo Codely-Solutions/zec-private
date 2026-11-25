@@ -179,6 +179,8 @@ class ReviewTransactionVMTest {
             processSwapTransaction = mockk(),
             prefillSend = mockk(relaxed = true),
             navigateToError = navigateToError,
+            appAccess = co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
+            wallet = co.electriccoin.zcash.ui.common.provider.WalletWriteAccess(),
         ).also { it.scope = backgroundScope }
         val vm = vm(
             metadata = emptyMap(),
@@ -200,13 +202,13 @@ class ReviewTransactionVMTest {
         authentication.complete(Unit)
         runCurrent()
 
-        coVerify(exactly = 0) { zashiRepository.submit(any()) }
+        coVerify(exactly = 0) { zashiRepository.submit(any(), null, any()) }
         verify(exactly = 1) { navigateToError(any()) }
         verify(exactly = 0) { router.replace(TransactionProgressArgs) }
 
         assertNotNull(vm.state.value).primaryButton.onClick()
         runCurrent()
-        coVerify(exactly = 1) { zashiRepository.submit(replacement) }
+        coVerify(exactly = 1) { zashiRepository.submit(replacement, null, any()) }
         verify(exactly = 1) { router.replace(TransactionProgressArgs) }
     }
 

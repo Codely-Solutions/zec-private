@@ -22,6 +22,15 @@ with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
 
 
 class DirectUpgradeBaselineTest(unittest.TestCase):
+    def test_direct_receipt_must_name_the_same_candidate_source_and_version(self):
+        source = 'a' * 40
+        receipt = dict(build_source_sha=source, candidate_version_code=331)
+        publish.validate_direct_core_candidate(receipt, source, 331)
+        for expected, version in ((source, 332), ('b' * 40, 331)):
+            with self.subTest(expected=expected, version=version):
+                with self.assertRaisesRegex(ValueError, 'exact candidate source and version'):
+                    publish.validate_direct_core_candidate(receipt, expected, version)
+
     def test_direct_publication_requires_the_same_live_release_and_source_as_hosted(self):
         hosted = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330)
         legacy = dict(release='v3.19.0-private.21', source_sha='b' * 40, version_code=321)

@@ -232,12 +232,13 @@ class UnpublishedRun:
 
 
 def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing=False, preclaim_run='', core_run=''):
-    from hosted_release import verify_recovered_receipts
+    from hosted_release import require_current_hosted_upgrade, verify_recovered_receipts
 
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Exact original run required')
     require_dispatch(source, controller, metadata, publish=True, recover_run=run_id, quote_run=quote_run,
                      preclaim_run=preclaim_run, core_run=core_run)
     require(not (preclaim_run and core_run), 'Choose a passing wallet run or a failed pre-claim run')
+    require_current_hosted_upgrade(root, metadata)
     run = metadata.api('/actions/runs/' + run_id)
     original = run['head_sha']
     require(trusted_producer(run, run_id, maintenance=True)

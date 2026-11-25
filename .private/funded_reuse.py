@@ -71,12 +71,16 @@ def select(source, controller, metadata, root=ROOT):
         require(latest['funded_reuse'] == origin and latest['core'] == record['core']
                 and 'funded_reuse' not in record, 'Funded evidence must point to the original integrated receipt')
 
+    core = record['core']
+    has_hosted_origin = ('maintenance' in record or 'funded_reuse' in latest
+                         or 'hosted_reservation' in core or 'producer' in core or 'rehearsal' in core)
+    if not has_hosted_origin:
+        return None
     if (not wallet_inputs_match(origin['source'], source, root)
             or not wallet_inputs_match(origin['source'], fixture['source_sha'], root)
             or signing_identity(record['controller_sha'], root) != signing_identity(controller, root)):
         return None
 
-    core = record['core']
     require(core['build_source_sha'] == origin['source'] and core['candidate_version_code'] == record['versionCode']
             and record['real_funds_used'] is False and core['rehearsal'] is False
             and core['funding_setup']['claim_requests'] == 1

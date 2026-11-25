@@ -3,7 +3,10 @@ import base64, hashlib, importlib.util, json, os, re, shutil, subprocess, tempfi
 from unittest.mock import patch
 from pathlib import Path
 from apk_architecture import check_apk
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision, validate_core_sources, CORE_BINDING
+from acceptance_policy import (
+    CORE_BINDING, input_fingerprint, validate_binding, validate_core, validate_core_sources,
+    validate_direct_core_candidate, validate_quotes, verify_promotion_revision,
+)
 from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
 from release_metadata import ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, require, wallet_release_versions
@@ -244,12 +247,14 @@ def main():
     if simulation:
         verify_simulation_negative_control(proof)
     elif hosted:
-        from hosted_release import read_receipts
+        from hosted_release import read_receipts, require_current_hosted_upgrade
         from maintenance_cadence import admit_cadence
         from maintenance_watch import api
 
         if not recovery:
-            admit_cadence(ROOT, expected, controller, Metadata(), api)
+            metadata = Metadata()
+            require_current_hosted_upgrade(ROOT, metadata)
+            admit_cadence(ROOT, expected, controller, metadata, api)
         if (proof['core_acceptance']['input_fingerprint'] != input_fingerprint(expected, profile='core-runtime')
                 or proof['quote_acceptance']['input_fingerprint'] != quote_inputs):
             raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
@@ -266,6 +271,7 @@ def main():
         require_current_local_upgrade()
         core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
         core=json.loads(core_bytes)
+        validate_direct_core_candidate(core, expected, proof['versionCode'])
         acceptance_revision=controller if late_attestation else expected
         core_inputs=validate_core_sources(core,expected,acceptance_revision)
         core_artifact=artifact/'core-acceptance.json'

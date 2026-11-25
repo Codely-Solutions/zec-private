@@ -512,6 +512,8 @@ class Zip321MemoScanTest {
             navigationRouter = reviewRouter,
             submitProposal = SubmitProposalUseCase(
                 router, accounts, repository, keystone, ledger, mockk(), mockk(), mockk(), mockk(), prefill, error,
+                co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
+                co.electriccoin.zcash.ui.common.provider.WalletWriteAccess(),
             ),
         )
     }

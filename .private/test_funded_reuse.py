@@ -81,6 +81,23 @@ class FundedReuseTests(unittest.TestCase):
         with patch.object(funded_reuse, 'input_manifest', side_effect=(before, after)):
             return funded_reuse.wallet_inputs_match('a' * 40, 'b' * 40)
 
+    def test_direct_evidence_keeps_baseline_but_does_not_supply_hosted_funding(self):
+        tag = 'v3.19.0-private.31'
+        source = 'a' * 40
+        core = dict(build_source_sha=source, candidate_version_code=31,
+                    candidate_apk_sha256='b' * 64, instrumentation_apk_sha256='c' * 64)
+        latest = dict(source_sha=source, versionCode=31, core=core)
+        fixture = dict(release=tag, source_sha=source, version_code=31,
+                       candidate_apk_sha256=core['candidate_apk_sha256'],
+                       instrumentation_apk_sha256=core['instrumentation_apk_sha256'])
+        metadata = Mock()
+        with patch.object(funded_reuse, 'git', return_value=json.dumps(fixture).encode()), \
+                patch.object(funded_reuse, 'read_record', return_value=(latest, {})), \
+                patch.object(funded_reuse, 'wallet_inputs_match') as inputs:
+            self.assertIsNone(funded_reuse.select('d' * 40, 'e' * 40, metadata))
+            inputs.assert_not_called()
+        metadata.api.assert_not_called()
+
     def test_provenance_and_signing_changes_stop_reuse(self):
         tag = 'v3.19.0-private.27'
         origin_tag = 'v3.19.0-private.26'

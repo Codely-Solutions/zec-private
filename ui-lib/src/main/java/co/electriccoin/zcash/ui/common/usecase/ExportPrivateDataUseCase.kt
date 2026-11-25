@@ -35,14 +35,18 @@ class ExportPrivateDataUseCase(
         DeleteDiagnosticExportWorker.schedule(context, it).result.get()
     }
 
-    suspend operator fun invoke(sourceFile: suspend () -> File): Boolean {
+    suspend operator fun invoke(
+        isSourceCurrent: () -> Boolean = { true },
+        sourceFile: suspend () -> File,
+    ): Boolean {
         val owner = selectedSpendableAccount()
         if (owner == null || !export.tryLock()) return false
         return try {
             val grant = appAccess.grant.value
             val generation = walletAccess.token()
             val isAllowed = {
-                appAccess.permits(grant) && walletAccess.permits(generation) && selectedSpendableAccount() == owner
+                isSourceCurrent() && appAccess.permits(grant) &&
+                    walletAccess.permits(generation) && selectedSpendableAccount() == owner
             }
             isAllowed() && run {
                 biometricRepository.requestBiometrics(
@@ -76,6 +80,7 @@ class ExportPrivateDataUseCase(
             val intent = withContext(Dispatchers.IO) {
                 if (!isAllowed()) return@withContext null
                 val source = sourceFile()
+                if (!isAllowed()) return@withContext null
                 val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.DIRECTORY).apply { mkdirs() }
                 directory.listFiles()?.forEach { check(it.delete()) }
                 val output = File(directory, "${UUID.randomUUID()}_${source.name}")

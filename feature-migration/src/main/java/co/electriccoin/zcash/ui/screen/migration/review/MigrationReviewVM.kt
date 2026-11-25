@@ -382,7 +382,7 @@ class MigrationReviewVM(
 
     private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
         confirmLce.execute {
-            if (proposeLce.state.value.success !== proposal) return@execute
+            if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
             try {
                 biometricRepository.requestBiometrics(
                     request =
@@ -399,7 +399,7 @@ class MigrationReviewVM(
             } catch (_: BiometricsCancelledException) {
                 return@execute
             }
-            if (proposeLce.state.value.success === proposal) {
+            if (ownsReviewEntry() && proposeLce.state.value.success === proposal) {
                 confirmAutomatic(proposal.reviewed)
             }
         }
@@ -432,6 +432,7 @@ class MigrationReviewVM(
         check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
             "The migration changed. Return to Home to recover it."
         }
+        if (!ownsReviewEntry()) return
         val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
         if (account is KeystoneAccount) {
             confirmKeystone(reviewed, accountKeyId, newTorPreference)
@@ -454,6 +455,7 @@ class MigrationReviewVM(
         try {
             val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
             requireReviewAccount()
+            if (!ownsReviewEntry()) return
             val splitResult = if (split != null) {
                 val result = sdk.submitNoteSplit(split, spendingKey)
                 if (result !is TransferResult.Success) {
@@ -539,6 +541,7 @@ class MigrationReviewVM(
         // Keystone can't sign in-process — hand the unsigned schedule off to the QR
         // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
         // instead (MigrationKeystoneScanVM), not here.
+        if (!ownsReviewEntry()) return
         val existingPlan = pendingMigrationScheduleRepository.review(accountKeyId)
         val existingSignatures = pendingKeystone.peek(accountKeyId)
         if (existingPlan === reviewed && existingSignatures?.isFullySigned == true) {
@@ -564,6 +567,7 @@ class MigrationReviewVM(
     private fun onConfirmImmediate(proposal: Proposal) =
         confirmLce.execute {
             val account = requireReviewAccount()
+            if (!ownsReviewEntry()) return@execute
             if (account is KeystoneAccount) {
                 // Keystone can't sign in-process — adopt the already-built send-max proposal into the
                 // app's existing generic external-signer pipeline exactly as an ordinary Keystone
@@ -587,12 +591,17 @@ class MigrationReviewVM(
                     return@execute
                 }
                 requireReviewAccount()
+                if (!ownsReviewEntry()) return@execute
                 val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
                 keystoneProposalRepository.createPCZTFromProposal(account)
                 requireReviewAccount()
+                if (!ownsReviewEntry()) {
+                    keystoneProposalRepository.clear(reviewed)
+                    return@execute
+                }
                 keystoneProposalRepository.approveForSigning(reviewed)
                 navigationRouter.stageResultFrom(sourceEntryId, {
                     keystoneProposalRepository.transactionProposal.value === reviewed
@@ -604,6 +613,8 @@ class MigrationReviewVM(
                 submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }
+
+    private fun ownsReviewEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
 
     private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
         check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {

@@ -290,6 +290,11 @@ def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None, use_tor
     return True
 
 
+def validate_direct_core_candidate(receipt, source, version):
+    if receipt.get('build_source_sha') != source or receipt.get('candidate_version_code') != version:
+        raise ValueError('Direct release requires wallet acceptance for the exact candidate source and version')
+
+
 def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT, *, baseline=None,
                           use_tor=True, prepared=None):
     # For late test-only attestations use the trusted current acceptance source.

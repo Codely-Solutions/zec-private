@@ -83,6 +83,7 @@ interface ZashiProposalRepository {
     suspend fun submit(
         expectedProposal: TransactionProposal? = null,
         reviewedQuote: SwapQuoteData.Success? = null,
+        checkWalletContext: () -> Unit = {},
     ): SubmitResult
 
     suspend fun getTransactionProposal(): TransactionProposal
@@ -164,6 +165,7 @@ class ZashiProposalRepositoryImpl(
     override suspend fun submit(
         expectedProposal: TransactionProposal?,
         reviewedQuote: SwapQuoteData.Success?,
+        checkWalletContext: () -> Unit,
     ): SubmitResult = if (expectedProposal is ShieldTransactionProposal && expectedProposal.approval != null) {
         submitShield(expectedProposal)
     } else {
@@ -185,6 +187,7 @@ class ZashiProposalRepositoryImpl(
                         check(swapWasReviewed) {
                             "Review the prepared swap transaction before sending."
                         }
+                        checkWalletContext()
                         transactionProposal.requireCurrentShieldingApproval()
                         val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
                         if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
@@ -201,6 +204,7 @@ class ZashiProposalRepositoryImpl(
                             )
                         }
                         val validateFunding: () -> Unit = {
+                            checkWalletContext()
                             requireCurrentProposal(transactionProposal)
                             transactionProposal.requireCurrentShieldingApproval()
                             if (transactionProposal is SwapTransactionProposal) {

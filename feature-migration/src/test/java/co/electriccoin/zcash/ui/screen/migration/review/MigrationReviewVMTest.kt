@@ -11,6 +11,7 @@ import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -48,6 +49,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlin.reflect.KClass
@@ -259,7 +262,7 @@ class MigrationReviewVMTest {
     fun automaticConfirmWithNoteSplitDerivesScheduleFromSplitBeforeSubmittingIt() =
         runTest {
             val usk = mockk<UnifiedSpendingKey>()
-            val router = FakeNavigationRouter()
+            val router = FakeNavigationRouter("scheduled-review")
             val splitProposal =
                 NoteSplitProposal(
                     outputNotes = listOf(100_000L),
@@ -419,7 +422,7 @@ class MigrationReviewVMTest {
                 if (++attempts == 1) error("synthetic scheduler unavailable")
             }
         }
-        val router = FakeNavigationRouter()
+        val router = FakeNavigationRouter("automatic-review")
         val vm = vm(
             router = router,
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
@@ -440,6 +443,37 @@ class MigrationReviewVMTest {
         val handoff = router.scopedCommands.single()
         assertEquals("automatic-review", handoff.sourceEntryId)
         assertIs<NavigationCommand.Forward>(handoff.buildCommand())
+    }
+
+    @Test
+    fun automaticConfirmationDoesNotMutateTheWalletAfterItsReviewIsCovered() = runTest {
+        val review = "automatic-review"
+        val router = FakeNavigationRouter(review)
+        val resolvedKey = CompletableDeferred<UnifiedSpendingKey>()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { proposeMigrationTransfers() } returns schedule(7L, 90_000L)
+        }
+        val spendingKey = mockk<ZashiSpendingKeyDataSource> {
+            coEvery { getZashiSpendingKey() } coAnswers { resolvedKey.await() }
+        }
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            zashiSpendingKeyDataSource = spendingKey,
+            mode = MigrationMode.AUTOMATIC,
+            sourceEntryId = review,
+        )
+        vm.currentReview().onConfirm()
+        runCurrent()
+        coVerify(exactly = 1) { spendingKey.getZashiSpendingKey() }
+        router.activeEntry.value = ActiveNavigationEntry("scanner", null)
+        resolvedKey.complete(mockk())
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        assertTrue(router.scopedCommands.isEmpty())
     }
 
     @Test
@@ -693,7 +727,8 @@ class MigrationReviewVMTest {
         sourceEntryId = sourceEntryId,
     )
 
-    private class FakeNavigationRouter : NavigationRouter {
+    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
+        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
         val forwardedRoutes = mutableListOf<Any>()
         val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
 

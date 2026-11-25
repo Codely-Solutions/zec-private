@@ -124,6 +124,7 @@ class AdvancedSettingsViewOnlyVMTest {
                     coEvery { isRestartAvailable() } returns false
                 },
             migrationNavigator = mockk(relaxed = true),
+            sourceEntryId = "advanced-settings",
         )
 
     private fun zodl(isSelected: Boolean) =
