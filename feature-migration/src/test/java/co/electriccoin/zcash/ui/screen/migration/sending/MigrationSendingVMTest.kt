@@ -180,7 +180,7 @@ class MigrationSendingVMTest {
         val collectJob = launch { vm.state.collect {} }
         advanceUntilIdle()
 
-        assertEquals(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
+        assertEquals<List<Any>>(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
         assertEquals(null, vm.state.value.error)
         coVerify(exactly = 1) { schedule("fixture-owner") }
         coVerify(exactly = 1) { snapshot("fixture-owner") }
@@ -199,7 +199,7 @@ class MigrationSendingVMTest {
         val collectJob = launch { vm.state.collect {} }
         advanceUntilIdle()
 
-        assertEquals(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
+        assertEquals<List<Any>>(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
         assertTrue(vm.state.value.content?.canGoBack == true)
         vm.onBack()
         assertEquals(1, router.backCount)

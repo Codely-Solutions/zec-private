@@ -10622,7 +10622,7 @@ index a914d8998..da1aba40b 100644
 +            coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
 +        },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
-index 1918e57fa..c0b771cba 100644
+index 1918e57fa..3678b3ff0 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 @@ -3,0 +4,5 @@ import androidx.navigation.NavBackStackEntry
@@ -10675,7 +10675,7 @@ index 1918e57fa..c0b771cba 100644
 +        val collectJob = launch { vm.state.collect {} }
 +        advanceUntilIdle()
 +
-+        assertEquals(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
++        assertEquals<List<Any>>(listOf(MigrationSuccessArgs(txId.txIdString())), router.replacedRoutes)
 +        assertEquals(null, vm.state.value.error)
 +        coVerify(exactly = 1) { schedule("fixture-owner") }
 +        coVerify(exactly = 1) { snapshot("fixture-owner") }
@@ -10694,7 +10694,7 @@ index 1918e57fa..c0b771cba 100644
 +        val collectJob = launch { vm.state.collect {} }
 +        advanceUntilIdle()
 +
-+        assertEquals(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
++        assertEquals<List<Any>>(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
 +        assertTrue(vm.state.value.content?.canGoBack == true)
 +        vm.onBack()
 +        assertEquals(1, router.backCount)
