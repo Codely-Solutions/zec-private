@@ -69618,15 +69618,18 @@ index 000000000..2ae836acd
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..2d9877594
+index 000000000..4e30305ed
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,223 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
 +import androidx.compose.material3.Text
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.LifecycleOwner
++import androidx.lifecycle.LifecycleRegistry
 +import androidx.navigation.NavHostController
 +import androidx.navigation.compose.NavHost
 +import androidx.navigation.compose.composable
@@ -69651,6 +69654,7 @@ index 000000000..2d9877594
 +import org.robolectric.RobolectricTestRunner
 +import org.robolectric.annotation.Config
 +import kotlin.test.assertEquals
++import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
 +
 +@RunWith(RobolectricTestRunner::class)
@@ -69660,6 +69664,33 @@ index 000000000..2d9877594
 +    val compose = createComposeRule()
 +
 +    private lateinit var controller: NavHostController
++
++    @Test
++    fun reportHandoffFollowsTheHostLifecycleAndOriginatingEntry() {
++        install()
++        compose.runOnIdle {
++            val owner = object : LifecycleOwner {
++                override val lifecycle = LifecycleRegistry(this)
++            }
++            owner.lifecycle.currentState = Lifecycle.State.RESUMED
++            val router = NavigationRouterImpl()
++            val stopTracking = controller.trackActiveEntry(router, owner.lifecycle)
++            try {
++                val canShare = router.bindReportHandoff { true }
++                assertTrue(canShare())
++                owner.lifecycle.currentState = Lifecycle.State.CREATED
++                assertFalse(canShare())
++                val fromBackground = router.bindReportHandoff { true }
++                owner.lifecycle.currentState = Lifecycle.State.RESUMED
++                assertTrue(canShare())
++                assertFalse(fromBackground())
++                controller.navigate(DeliveryOrigin)
++                assertFalse(canShare())
++            } finally {
++                stopTracking()
++            }
++        }
++    }
 +
 +    @Test
 +    @OptIn(ExperimentalCoroutinesApi::class)
@@ -94144,7 +94175,7 @@ index 8a8f44aa3..a9696976f 100644
 +        return vm
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
 new file mode 100644
-index 000000000..9b68949e5
+index 000000000..205d34c14
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
 @@ -0,0 +1,292 @@
@@ -94298,7 +94329,7 @@ index 000000000..9b68949e5
 +        val height = ResyncHeightVM(router, mockk(), errors)
 +        val name = stringRes(DesignR.string.accessibility_wallet_birthday_help)
 +        observe(date, date.state) {
-+            val button = assertNotNull(date.state.value.content).dialogButton
++            val button = assertNotNull(date.state.value.content?.dialogButton)
 +            assertEquals(name, button.contentDescription)
 +            button.onClick()
 +        }
@@ -94308,7 +94339,7 @@ index 000000000..9b68949e5
 +            button.onClick()
 +        }
 +        observe(height, height.state) {
-+            val button = assertNotNull(height.state.value.content).dialogButton
++            val button = assertNotNull(height.state.value.content?.dialogButton)
 +            assertEquals(name, button.contentDescription)
 +            button.onClick()
 +        }

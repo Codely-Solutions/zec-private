@@ -148,7 +148,7 @@ class RestoreHeightBoundaryReviewTest {
         val height = ResyncHeightVM(router, mockk(), errors)
         val name = stringRes(DesignR.string.accessibility_wallet_birthday_help)
         observe(date, date.state) {
-            val button = assertNotNull(date.state.value.content).dialogButton
+            val button = assertNotNull(date.state.value.content?.dialogButton)
             assertEquals(name, button.contentDescription)
             button.onClick()
         }
@@ -158,7 +158,7 @@ class RestoreHeightBoundaryReviewTest {
             button.onClick()
         }
         observe(height, height.state) {
-            val button = assertNotNull(height.state.value.content).dialogButton
+            val button = assertNotNull(height.state.value.content?.dialogButton)
             assertEquals(name, button.contentDescription)
             button.onClick()
         }

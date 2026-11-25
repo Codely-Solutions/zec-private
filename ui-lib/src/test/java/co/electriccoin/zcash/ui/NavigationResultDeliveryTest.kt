@@ -3,6 +3,9 @@ package co.electriccoin.zcash.ui
 import android.app.Activity
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -27,6 +30,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -36,6 +40,33 @@ class NavigationResultDeliveryTest {
     val compose = createComposeRule()
 
     private lateinit var controller: NavHostController
+
+    @Test
+    fun reportHandoffFollowsTheHostLifecycleAndOriginatingEntry() {
+        install()
+        compose.runOnIdle {
+            val owner = object : LifecycleOwner {
+                override val lifecycle = LifecycleRegistry(this)
+            }
+            owner.lifecycle.currentState = Lifecycle.State.RESUMED
+            val router = NavigationRouterImpl()
+            val stopTracking = controller.trackActiveEntry(router, owner.lifecycle)
+            try {
+                val canShare = router.bindReportHandoff { true }
+                assertTrue(canShare())
+                owner.lifecycle.currentState = Lifecycle.State.CREATED
+                assertFalse(canShare())
+                val fromBackground = router.bindReportHandoff { true }
+                owner.lifecycle.currentState = Lifecycle.State.RESUMED
+                assertTrue(canShare())
+                assertFalse(fromBackground())
+                controller.navigate(DeliveryOrigin)
+                assertFalse(canShare())
+            } finally {
+                stopTracking()
+            }
+        }
+    }
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
