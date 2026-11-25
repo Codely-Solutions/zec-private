@@ -85,5 +85,9 @@
   "v3.19.0-private.31": [
     "Retry automatic update checks after an interruption.",
     "Refresh the inline QR code after fullscreen closes so it shows the current address or request."
+  ],
+  "v3.19.0-private.32": [
+    "Keep swap status tied to the original deposit address when refreshing.",
+    "Correct tax CSV amounts and report wallet-internal pool transfers as fees only."
   ]
 }

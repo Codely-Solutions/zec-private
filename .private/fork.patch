@@ -2376,7 +2376,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..2635d7d27 100644
+index ec56161b5..293dd093a 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -21742,7 +21742,7 @@ index 4d388e80f..aa9e205ae 100644
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffdcd..afc5f08fa 100644
+index a5bcffdcd..979f8de5a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 @@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
@@ -21777,19 +21777,21 @@ index a5bcffdcd..afc5f08fa 100644
 +            require(depositType != AddressType.Tex) {
 +                "TEX swap deposits require an intermediate transparent wallet address and are not supported."
 +            }
-@@ -209 +207,0 @@ class NearSwapDataSource(
+@@ -202,0 +202 @@ class NearSwapDataSource(
++        require(response.quoteResponse.quote.depositAddress == depositAddress) { "Swap status reference mismatch" }
+@@ -209 +208,0 @@ class NearSwapDataSource(
 -        log("checkSwapStatus $depositAddress")
-@@ -220,3 +217,0 @@ class NearSwapDataSource(
+@@ -220,3 +218,0 @@ class NearSwapDataSource(
 -    // The 1Click API normalises asset IDs for routing (e.g. "nep141:btc.omft.near" →
 -    // "1cs_v1:btc:native:coin"). Try an exact match first; fall back to extracting the ticker
 -    // from the normalised "1cs_v1:<ticker>:..." format and matching by tokenTicker.
-@@ -224,4 +219 @@ class NearSwapDataSource(
+@@ -224,4 +220 @@ class NearSwapDataSource(
 -        supportedTokens.find { it.assetId == echoedId }
 -            ?: echoedId.split(":").getOrNull(1)?.let { ticker ->
 -                supportedTokens.find { it.tokenTicker.equals(ticker, ignoreCase = true) }
 -            }
 +        co.electriccoin.zcash.ui.common.model.near.resolveNearAsset(supportedTokens, echoedId)
-@@ -256,2 +247,0 @@ class NearSwapDataSource(
+@@ -256,2 +248,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
@@ -25244,12 +25246,105 @@ index 565cd3bea..dc5c326ec 100644
 +    private val scope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
-index 81540cc83..e3ff2deb4 100644
+index 81540cc83..c5361ec9d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCase.kt
-@@ -53 +53 @@ class ExportTaxUseCase(
+@@ -3,0 +4 @@ import android.content.Context
++import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
+@@ -18,3 +18,0 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
+-import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
+-import co.electriccoin.zcash.ui.design.util.getString
+-import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -25,0 +24 @@ import kotlinx.coroutines.withContext
++import java.io.BufferedWriter
+@@ -28 +26,0 @@ import java.time.Year
+-import java.time.ZoneId
+@@ -42,8 +40 @@ class ExportTaxUseCase(
+-            val previousYear =
+-                Year
+-                    .now()
+-                    .minusYears(1)
+-                    .let {
+-                        val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy")
+-                        it.format(formatter)
+-                    }
++            val previousYear = Year.now(ZoneOffset.UTC).minusYears(1).value
+@@ -53 +44 @@ class ExportTaxUseCase(
 -                    context.cacheDir,
 +                    File(context.cacheDir, "tax_exports").apply { mkdirs() },
+@@ -75 +66 @@ class ExportTaxUseCase(
+-                data = getCsvEntries()
++                data = getCsvEntries(previousYear)
+@@ -100 +91 @@ class ExportTaxUseCase(
+-            writer.write(
++            writer.writeCsvRow(
+@@ -110 +101 @@ class ExportTaxUseCase(
+-                ).joinToString(separator = CSV_SEPARATOR)
++                )
+@@ -112 +102,0 @@ class ExportTaxUseCase(
+-            writer.newLine()
+@@ -115 +105 @@ class ExportTaxUseCase(
+-                writer.write(
++                writer.writeCsvRow(
+@@ -125 +115 @@ class ExportTaxUseCase(
+-                    ).joinToString(separator = CSV_SEPARATOR)
++                    )
+@@ -127 +116,0 @@ class ExportTaxUseCase(
+-                writer.newLine()
+@@ -129,2 +117,0 @@ class ExportTaxUseCase(
+-
+-            writer.flush()
+@@ -134 +121 @@ class ExportTaxUseCase(
+-    private suspend fun getCsvEntries() =
++    private suspend fun getCsvEntries(previousYear: Int) =
+@@ -138,4 +125,2 @@ class ExportTaxUseCase(
+-                val previousYear = Year.now().minusYears(1)
+-
+-                val date = transaction.timestamp?.atZone(ZoneId.of("UTC")) ?: return@mapNotNull null
+-                if (date.year != previousYear.value) return@mapNotNull null
++                val date = transaction.timestamp?.atZone(ZoneOffset.UTC) ?: return@mapNotNull null
++                if (date.year != previousYear) return@mapNotNull null
+@@ -156,8 +141,5 @@ class ExportTaxUseCase(
+-                        val fee = transaction.fee
+-
+-                        val sentQuantity =
+-                            if (fee != null) {
+-                                stringRes(transaction.amount - fee, HIDDEN)
+-                            } else {
+-                                stringRes(transaction.amount, HIDDEN)
+-                            }
++                        val overview = transaction.overview
++                        val debit = overview.netValue
++                        // The SDK reports a known wallet-internal pool crossing's net debit as its fee.
++                        val fee = if (overview.poolCrossingValue != null) debit else transaction.fee ?: Zatoshi(0)
++                        val sentQuantity = debit.takeIf { it > fee }?.minus(fee)
+@@ -169,3 +151,3 @@ class ExportTaxUseCase(
+-                            sentQuantity = sentQuantity.getString(context),
+-                            sentCurrency = CURRENCY_TICKER,
+-                            feeAmount = stringRes(fee ?: Zatoshi(0), HIDDEN).getString(context),
++                            sentQuantity = sentQuantity?.toCsvQuantity().orEmpty(),
++                            sentCurrency = CURRENCY_TICKER.takeIf { sentQuantity != null }.orEmpty(),
++                            feeAmount = fee.toCsvQuantity(),
+@@ -185 +167 @@ class ExportTaxUseCase(
+-                            receivedQuantity = stringRes(transaction.amount, HIDDEN).getString(context),
++                            receivedQuantity = transaction.amount.toCsvQuantity(),
+@@ -219 +201,15 @@ private data class CsvEntry(
+-private const val CSV_SEPARATOR = ","
++private fun Zatoshi.toCsvQuantity(): String =
++    convertZatoshiToZec(scale = ZEC_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
++
++internal fun BufferedWriter.writeCsvRow(fields: List<String>) {
++    write(fields.joinToString(",") { field ->
++        if (field.any { it in ",\"\r\n" }) {
++            "\"" + field.replace("\"", "\"\"") + "\""
++        } else {
++            field
++        }
++    })
++    write("\r\n")
++}
++
++private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
 index 48c238fb1..2c0064b49 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
@@ -36144,7 +36239,7 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..c95ad8e21 100644
+index c0be20563..061190900 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -36354,6 +36449,22 @@ index c0be20563..c95ad8e21 100644
 +        }
 +    }
 +
+@@ -382,0 +525,13 @@ class NearSwapDataSourceTest {
++    @Test
++    fun checkSwapStatusRejectsAReplyForAnotherDeposit() {
++        runBlocking {
++            coEvery { nearApiProvider.checkSwapStatus("requested-deposit") } returns
++                statusResponse(originAssetId = origin.assetId, destinationAssetId = origin.assetId)
++
++            val exception = assertFailsWith<IllegalArgumentException> {
++                dataSource.checkSwapStatus("requested-deposit", listOf(origin))
++            }
++            assertEquals("Swap status reference mismatch", exception.message)
++        }
++    }
++
+@@ -389,0 +545 @@ class NearSwapDataSourceTest {
++                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt
 new file mode 100644
 index 000000000..6dbf3b69f
@@ -39787,6 +39898,166 @@ index 000000000..ef29cc3a1
 +        assertNull(shared.data)
 +        assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
 +        assertEquals("Diagnostic report", shared.getStringExtra(Intent.EXTRA_SUBJECT))
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
+new file mode 100644
+index 000000000..422b243c6
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ExportTaxUseCaseTest.kt
+@@ -0,0 +1,154 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.Intent
++import android.net.Uri
++import androidx.core.content.FileProvider
++import cash.z.ecc.android.sdk.model.BlockHeight
++import cash.z.ecc.android.sdk.model.TransactionId
++import cash.z.ecc.android.sdk.model.TransactionOverview
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZcashNetwork
++import cash.z.ecc.android.sdk.model.Zip318Kind
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.DistributionDimension
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
++import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
++import co.electriccoin.zcash.ui.common.repository.SendTransaction
++import co.electriccoin.zcash.ui.common.repository.Transaction
++import co.electriccoin.zcash.ui.common.repository.TransactionRepository
++import co.electriccoin.zcash.ui.common.repository.sentTransactionAmount
++import io.mockk.coEvery
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkStatic
++import io.mockk.unmockkStatic
++import kotlinx.coroutines.test.runTest
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++import java.io.File
++import java.io.StringWriter
++import java.time.Instant
++import java.time.Year
++import java.time.ZoneOffset
++import kotlin.test.assertEquals
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class ExportTaxUseCaseTest {
++    @Test
++    fun exportsExactReceiptsExternalPaymentsAndInternalFeesForTheSameUtcYear() = runTest {
++        val context = RuntimeEnvironment.getApplication()
++        val year = Year.now(ZoneOffset.UTC).minusYears(1).value
++        val selected = mockk<ZodlAccount>()
++        val accounts = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns selected }
++        val history = mockk<TransactionRepository> {
++            coEvery { getTransactions() } returns transactions(year)
++        }
++        val versions = mockk<GetVersionInfoProvider>()
++        every { versions.invoke() } returns mockk {
++            every { network } returns ZcashNetwork.Mainnet
++            every { distribution } returns DistributionDimension.FOSS
++            every { isDebuggable } returns true
++        }
++        val router = mockk<NavigationRouter>(relaxed = true)
++        lateinit var file: File
++
++        mockkStatic(FileProvider::class)
++        try {
++            every { FileProvider.getUriForFile(context, any(), any()) } answers {
++                file = thirdArg()
++                Uri.parse("content://synthetic/tax.csv")
++            }
++            ExportTaxUseCase(history, accounts, versions, context, router, mockk())()
++        } finally {
++            unmockkStatic(FileProvider::class)
++        }
++
++        assertEquals(Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
++        assertEquals("Zodl_Transaction_History_$year.csv", file.name)
++        val date = "01/01/$year 00:00:00"
++        val rows = file.readLines().map { it.split(',') }
++        assertEquals(
++            listOf(
++                listOf(
++                    "Date", "Received Quantity", "Received Currency", "Sent Quantity", "Sent Currency",
++                    "Fee Amount", "Fee Currency", "Tag",
++                ),
++                listOf(date, "1000.00000001", "ZEC", "", "", "", "", ""),
++                listOf(date, "", "", "1000.00000002", "ZEC", "1000.00000001", "ZEC", ""),
++                listOf(date, "", "", "", "", "0.00001", "ZEC", ""),
++                listOf(date, "", "", "", "", "0.00002", "ZEC", ""),
++            ),
++            rows,
++        )
++    }
++
++    @Test
++    fun csvEscapesCommasQuotesAndBothLineEndings() {
++        val output = StringWriter()
++        output.buffered().use {
++            it.writeCsvRow(listOf("plain", "with,comma", "with\"quote", "with\rcarriage", "with\nnewline", ""))
++        }
++
++        assertEquals(
++            "plain,\"with,comma\",\"with\"\"quote\",\"with\rcarriage\",\"with\nnewline\",\r\n",
++            output.toString(),
++        )
++    }
++
++    private fun transactions(year: Int): List<Transaction> {
++        val date = Instant.parse("$year-01-01T00:00:00Z")
++        fun receive(at: Instant) = mockk<ReceiveTransaction.Success> {
++            every { timestamp } returns at
++            every { amount } returns Zatoshi(100_000_000_001L)
++        }
++        fun send(overview: TransactionOverview, fee: Zatoshi?) = SendTransaction.Success(
++            id = TransactionId.new(ByteArray(32)),
++            amount = sentTransactionAmount(overview),
++            timestamp = date,
++            memoCount = 0,
++            fee = fee,
++            transactionOutputs = emptyList(),
++            overview = overview,
++            recipient = null,
++        )
++        val external = send(
++            mockk {
++                every { netValue } returns Zatoshi(200_000_000_003L)
++                every { poolCrossingValue } returns null
++                every { sentNoteCount } returns 1
++                every { raw } returns null
++                every { minedHeight } returns BlockHeight.new(100L)
++                every { zip318Kind } returns Zip318Kind.TRANSFER
++            },
++            Zatoshi(100_000_000_001L),
++        )
++        val migration = send(
++            mockk {
++                every { netValue } returns Zatoshi(1_000)
++                every { poolCrossingValue } returns Zatoshi(500_000)
++                every { sentNoteCount } returns 0
++                every { receivedNoteCount } returns 0
++                every { totalReceived } returns Zatoshi(500_000)
++            },
++            null,
++        )
++        val historical = send(
++            mockk {
++                every { netValue } returns Zatoshi(2_000)
++                every { poolCrossingValue } returns null
++                every { sentNoteCount } returns 0
++                every { receivedNoteCount } returns 0
++                every { totalReceived } returns Zatoshi(600_000)
++            },
++            Zatoshi(2_000),
++        )
++        return listOf(receive(date.minusSeconds(1)), receive(date), external, migration, historical)
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt

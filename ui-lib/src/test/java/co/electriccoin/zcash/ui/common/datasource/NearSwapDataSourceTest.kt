@@ -522,6 +522,19 @@ class NearSwapDataSourceTest {
         }
     }
 
+    @Test
+    fun checkSwapStatusRejectsAReplyForAnotherDeposit() {
+        runBlocking {
+            coEvery { nearApiProvider.checkSwapStatus("requested-deposit") } returns
+                statusResponse(originAssetId = origin.assetId, destinationAssetId = origin.assetId)
+
+            val exception = assertFailsWith<IllegalArgumentException> {
+                dataSource.checkSwapStatus("requested-deposit", listOf(origin))
+            }
+            assertEquals("Swap status reference mismatch", exception.message)
+        }
+    }
+
     private fun statusResponse(
         originAssetId: String,
         destinationAssetId: String
@@ -529,6 +542,7 @@ class NearSwapDataSourceTest {
         mockk {
             every { quoteResponse } returns
                 mockk {
+                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
                     every { quoteRequest } returns
                         mockk {
                             every { originAsset } returns originAssetId

@@ -199,6 +199,7 @@ class NearSwapDataSource(
 
     override suspend fun checkSwapStatus(depositAddress: String, supportedTokens: List<SwapAsset>): SwapQuoteStatus {
         val response = this.nearApiProvider.checkSwapStatus(depositAddress)
+        require(response.quoteResponse.quote.depositAddress == depositAddress) { "Swap status reference mismatch" }
         val originAsset =
             findAssetByEchoedId(supportedTokens, response.quoteResponse.quoteRequest.originAsset)
                 ?: throw AssetNotFoundException(response.quoteResponse.quoteRequest.originAsset)
