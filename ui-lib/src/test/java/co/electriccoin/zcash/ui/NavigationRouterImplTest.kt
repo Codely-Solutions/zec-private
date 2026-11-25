@@ -153,7 +153,9 @@ class NavigationRouterImplTest {
                 isCurrent() && delivered.add(command)
             }
         }
-        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
+        val expected: List<NavigationCommand> =
+            listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true))))
+        assertEquals(expected, delivered)
         assertTrue(requests.saveExternalScans().isEmpty())
     }
 

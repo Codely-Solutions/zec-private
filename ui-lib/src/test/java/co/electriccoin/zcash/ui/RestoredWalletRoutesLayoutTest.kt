@@ -55,7 +55,6 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
-import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
@@ -89,6 +88,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.Serializable
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -244,11 +244,11 @@ class RestoredWalletRoutesLayoutTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
                 val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
                 val home = checkNotNull(controller.currentBackStackEntry).id
-                val progress = MigrationProgressArgs("fixture-owner")
+                val progress = FixtureMigrationProgress("fixture-owner")
                 repeat(2) {
                     controller.navigate(SignKeystoneTransactionArgs)
                     navigator.executeCommand(NavigationCommand.ReplaceAll(listOf(progress)))
-                    assertEquals(progress, controller.currentBackStackEntry?.toRoute<MigrationProgressArgs>())
+                    assertEquals(progress, controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>())
                     assertTrue(controller.popBackStack())
                     assertEquals(home, controller.currentBackStackEntry?.id)
                     assertEquals(null, controller.previousBackStackEntry)
@@ -419,7 +419,7 @@ class RestoredWalletRoutesLayoutTest {
                                 QrCodeScreenContent(QrCodeState.Loading(loadingBack))
                             }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
-                            composable<MigrationProgressArgs> { Text("Migration progress") }
+                            composable<FixtureMigrationProgress> { Text("Migration progress") }
                             composable<VKDetailArgs> {
                                 VKDetailScreenContent(
                                     state = null, unavailable = true, isRevealed = { false }, onBack = loadingBack
@@ -437,4 +437,7 @@ class RestoredWalletRoutesLayoutTest {
         }
         compose.onNodeWithText("Wallet home").assertIsDisplayed()
     }
+
+    @Serializable
+    private data class FixtureMigrationProgress(val accountKeyId: String)
 }

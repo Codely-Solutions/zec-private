@@ -62879,7 +62879,7 @@ index 000000000..2ae836acd
 +@SerialName("co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote")
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
-index b983bc0a2..ee0e7b4f5 100644
+index b983bc0a2..49653dece 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui
@@ -62916,7 +62916,7 @@ index b983bc0a2..ee0e7b4f5 100644
 -                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(VKDetailArgs(VKType.INCOMING)))
 +                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(full)),
 +                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(incoming)),
-@@ -78,0 +87,88 @@ class NavigationRouterImplTest {
+@@ -78,0 +87,90 @@ class NavigationRouterImplTest {
 +    @Test
 +    fun lockedWalletDropsOldCallbacksButRetainsAnExplicitLaunchRequest() =
 +        runTest(dispatcher) {
@@ -62986,7 +62986,9 @@ index b983bc0a2..ee0e7b4f5 100644
 +                isCurrent() && delivered.add(command)
 +            }
 +        }
-+        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
++        val expected: List<NavigationCommand> =
++            listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true))))
++        assertEquals(expected, delivered)
 +        assertTrue(requests.saveExternalScans().isEmpty())
 +    }
 +
@@ -63005,7 +63007,7 @@ index b983bc0a2..ee0e7b4f5 100644
 +        assertEquals(null, router.activeEntry.value)
 +    }
 +
-@@ -84,0 +181,2 @@ class NavigationRouterImplTest {
+@@ -84,0 +183,2 @@ class NavigationRouterImplTest {
 +
 +    private data object TestMigrationProgress
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt
@@ -63189,10 +63191,10 @@ index 000000000..4777cf6e0
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
 new file mode 100644
-index 000000000..6d29eae1b
+index 000000000..0c48e0e71
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,443 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -63250,7 +63252,6 @@ index 000000000..6d29eae1b
 +import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 +import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 +import co.electriccoin.zcash.ui.screen.home.HomeArgs
-+import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 +import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 +import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreenContent
 +import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
@@ -63284,6 +63285,7 @@ index 000000000..6d29eae1b
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
++import kotlinx.serialization.Serializable
 +import org.junit.Rule
 +import org.junit.Test
 +import org.junit.runner.RunWith
@@ -63439,11 +63441,11 @@ index 000000000..6d29eae1b
 +                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
 +                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
 +                val home = checkNotNull(controller.currentBackStackEntry).id
-+                val progress = MigrationProgressArgs("fixture-owner")
++                val progress = FixtureMigrationProgress("fixture-owner")
 +                repeat(2) {
 +                    controller.navigate(SignKeystoneTransactionArgs)
 +                    navigator.executeCommand(NavigationCommand.ReplaceAll(listOf(progress)))
-+                    assertEquals(progress, controller.currentBackStackEntry?.toRoute<MigrationProgressArgs>())
++                    assertEquals(progress, controller.currentBackStackEntry?.toRoute<FixtureMigrationProgress>())
 +                    assertTrue(controller.popBackStack())
 +                    assertEquals(home, controller.currentBackStackEntry?.id)
 +                    assertEquals(null, controller.previousBackStackEntry)
@@ -63614,7 +63616,7 @@ index 000000000..6d29eae1b
 +                                QrCodeScreenContent(QrCodeState.Loading(loadingBack))
 +                            }
 +                            composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
-+                            composable<MigrationProgressArgs> { Text("Migration progress") }
++                            composable<FixtureMigrationProgress> { Text("Migration progress") }
 +                            composable<VKDetailArgs> {
 +                                VKDetailScreenContent(
 +                                    state = null, unavailable = true, isRevealed = { false }, onBack = loadingBack
@@ -63632,6 +63634,9 @@ index 000000000..6d29eae1b
 +        }
 +        compose.onNodeWithText("Wallet home").assertIsDisplayed()
 +    }
++
++    @Serializable
++    private data class FixtureMigrationProgress(val accountKeyId: String)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/ReviewRestorationBoundaryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/ReviewRestorationBoundaryTest.kt
 new file mode 100644
