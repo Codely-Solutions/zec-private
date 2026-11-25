@@ -10,11 +10,11 @@ import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.extension.normalizedSendAmount
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
@@ -48,15 +48,15 @@ class CreateProposalUseCase(
                     ledgerProposalPipeline.createPCZTFromProposal()
                 }
 
-                is ViewOnlyAccount -> {
-                    throw AccountOperationUnsupportedException.viewOnly()
-                }
+                is ViewOnlyAccount -> account.requireSpendable()
 
                 is ZodlAccount -> {
                     zashiProposalRepository.createProposal(normalized)
                 }
             }
             forwardFromSend(sendEntryId, ReviewTransactionArgs, canReview)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
             forwardFromSend(sendEntryId, TEXUnsupportedArgs(isLedger = isLedger), canReview)
@@ -65,7 +65,7 @@ class CreateProposalUseCase(
             clearIfCurrent(canReview)
             forwardFromSend(sendEntryId, InsufficientFundsArgs, canReview)
         } catch (e: Exception) {
-            if (e !is CancellationException) clearIfCurrent(canReview)
+            clearIfCurrent(canReview)
             throw e
         }
     }
