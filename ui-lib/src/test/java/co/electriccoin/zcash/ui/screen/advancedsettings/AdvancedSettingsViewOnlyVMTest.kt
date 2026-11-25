@@ -112,7 +112,6 @@ class AdvancedSettingsViewOnlyVMTest {
                     every { observe() } returns accounts
                 },
             navigationRouter = router,
-            navigateToTaxExport = mockk(relaxed = true),
             navigateToWalletBackup = mockk(relaxed = true),
             getVersionInfo =
                 mockk<GetVersionInfoProvider> {

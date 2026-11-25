@@ -11,10 +11,13 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -47,6 +50,29 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExportTaxUseCaseTest {
+    @Test
+    fun downloadFromARestoredScreenStillRequiresExportAuthenticationBeforeReadingHistory() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val restoredEntry = "restored-tax-export"
+        val active = MutableStateFlow(ActiveNavigationEntry(restoredEntry, null))
+        val router = mockk<NavigationRouter> { every { activeEntry } returns active }
+        val transactions = mockk<TransactionRepository>()
+        val biometrics = mockk<BiometricRepository>()
+        val export = ExportTaxUseCase(transactions, mockk(), mockk(), context, router, mockk(), biometrics)
+
+        coEvery { biometrics.requestBiometrics(any()) } throws BiometricsCancelledException()
+        export(EditAccountFixtures.zodl(), restoredEntry) { true }
+
+        coEvery { biometrics.requestBiometrics(any()) } answers {
+            active.value = ActiveNavigationEntry("scanner", null)
+        }
+        export(EditAccountFixtures.zodl(), restoredEntry) { true }
+
+        coVerify(exactly = 2) { biometrics.requestBiometrics(any()) }
+        coVerify(exactly = 0) { transactions.getTransactions(any()) }
+        assertNull(shadowOf(context).nextStartedActivity)
+    }
+
     @Test
     fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runTest {
         val context = RuntimeEnvironment.getApplication()
@@ -112,7 +138,9 @@ class ExportTaxUseCaseTest {
                 output = thirdArg()
                 Uri.parse("content://synthetic/tax.csv")
             }
-            ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())
+            ExportTaxUseCase(
+                transactions, accounts, versions, context, mockk(relaxed = true), mockk(), mockk(relaxed = true),
+            )
                 .apply {
                     scheduleCleanup = { staging ->
                         assertTrue(staging.listFiles().orEmpty().isEmpty())
@@ -162,7 +190,7 @@ class ExportTaxUseCaseTest {
             coEvery { getTransactions(any()) } returns emptyList()
         }
         lateinit var staging: File
-        val useCase = ExportTaxUseCase(transactions, mockk(), mockk(), context, mockk(), mockk())
+        val useCase = ExportTaxUseCase(transactions, mockk(), mockk(), context, mockk(), mockk(), mockk(relaxed = true))
         useCase.scheduleCleanup = {
             staging = it
             assertTrue(it.listFiles().orEmpty().isEmpty())
@@ -201,7 +229,7 @@ class ExportTaxUseCaseTest {
                 entry.value = ActiveNavigationEntry("scanner", null)
                 Uri.parse("content://synthetic/tax.csv")
             }
-            ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk())
+            ExportTaxUseCase(transactions, mockk(), versions, context, router, mockk(), mockk(relaxed = true))
                 .apply { scheduleCleanup = {} }(account, sourceEntryId = "tax") { true }
         } finally {
             Dispatchers.resetMain()

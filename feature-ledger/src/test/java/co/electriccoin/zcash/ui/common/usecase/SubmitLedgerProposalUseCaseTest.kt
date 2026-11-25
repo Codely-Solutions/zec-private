@@ -13,6 +13,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,9 +106,25 @@ class SubmitLedgerProposalUseCaseTest {
 
             fx.useCase()
 
-            verify(exactly = 1) { fx.prefillSend.clear() }
+            verify(exactly = 1) { fx.prefillSend.clearThrough(any()) }
             verify(exactly = 1) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
         }
+
+    @Test
+    fun completedLedgerSubmissionDiscardsOnlyRequestsPresentWhenItStarted() = runTest {
+        val fx = useCase()
+        val nativeResult = CompletableDeferred<SubmitResult>()
+        fx.givenProposal(mockk<TransactionProposal>())
+        coEvery { fx.ledgerProposalRepository.submit(any()) } coAnswers { nativeResult.await() }
+        every { fx.prefillSend.pendingThrough() } returns 1
+
+        fx.useCase()
+        every { fx.prefillSend.pendingThrough() } returns 2
+        nativeResult.complete(mockk(relaxed = true))
+
+        verify(exactly = 1) { fx.prefillSend.clearThrough(1) }
+        verify(exactly = 0) { fx.prefillSend.clearThrough(2) }
+    }
 
     private fun Fixtures.givenProposal(
         proposal: TransactionProposal,

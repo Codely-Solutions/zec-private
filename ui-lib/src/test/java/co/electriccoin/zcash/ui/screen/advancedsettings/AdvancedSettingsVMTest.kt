@@ -122,7 +122,6 @@ class AdvancedSettingsVMTest {
                 getWalletRestoringState = getWalletRestoringState,
                 getWalletAccounts = getWalletAccounts,
                 navigationRouter = router,
-                navigateToTaxExport = mockk(relaxed = true),
                 navigateToWalletBackup = mockk(relaxed = true),
                 getVersionInfo = getVersionInfo,
                 navigateToResetWallet = mockk(relaxed = true),

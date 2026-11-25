@@ -47,6 +47,7 @@ class SubmitLedgerProposalUseCase(
 
     @Suppress("TooGenericExceptionCaught")
     private fun submitLedgerProposal(proposal: TransactionProposal, progress: SubmissionProgress?) {
+        val originalPrefill = prefillSend.pendingThrough()
         scope.launch {
             try {
                 val result = ledgerProposalRepository.submit(proposal)
@@ -58,7 +59,7 @@ class SubmitLedgerProposalUseCase(
                 progress?.recordFailure(e)
                 Twig.warn { "Ledger proposal submission failed: ${e.javaClass.simpleName}" }
             } finally {
-                prefillSend.clear()
+                prefillSend.clearThrough(originalPrefill)
             }
         }
     }

@@ -4,7 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.BuildConfig
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.ui.screen.taxexport.TaxExport
 import co.electriccoin.zcash.ui.NavigationTargets
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.migration.MigrationGate
@@ -17,7 +21,6 @@ import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletRestoringStateUseCase
 import co.electriccoin.zcash.ui.NavigationTargets.EXPORT_PRIVATE_DATA
 import co.electriccoin.zcash.ui.common.usecase.NavigateToResetWalletUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToTaxExportUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToWalletBackupUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.listitem.ListItemState
@@ -40,7 +43,6 @@ class AdvancedSettingsVM(
     getWalletRestoringState: GetWalletRestoringStateUseCase,
     private val getWalletAccounts: GetWalletAccountsUseCase,
     private val navigationRouter: NavigationRouter,
-    private val navigateToTaxExport: NavigateToTaxExportUseCase,
     private val navigateToWalletBackup: NavigateToWalletBackupUseCase,
     private val getVersionInfo: GetVersionInfoProvider,
     private val navigateToResetWallet: NavigateToResetWalletUseCase,
@@ -167,7 +169,13 @@ class AdvancedSettingsVM(
 
     private fun onCrashReportingClick() = navigationRouter.forward(NavigationTargets.CRASH_REPORTING_OPT_IN)
 
-    private fun onTaxExportClick() = viewModelScope.launch { navigateToTaxExport(sourceEntryId) }
+    private fun onTaxExportClick() {
+        if (navigationRouter.isAtEntry(sourceEntryId)) {
+            navigationRouter.stageResultFrom(sourceEntryId) {
+                NavigationCommand.Forward(listOf(TaxExport))
+            }
+        }
+    }
 
     private fun onSeedRecoveryClick() =
         viewModelScope.launch {

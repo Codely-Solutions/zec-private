@@ -183,11 +183,12 @@ def resume_draft(run_id, attempt, artifact_id):
         return output
 
     from integrate_release import integration_base
-    from publish import require_current_controller
+    from publish import require_current_controller, require_publication_baseline
 
     controller = os.environ['GITHUB_SHA']
     require_current_controller(controller)
     root = Path(__file__).resolve().parents[1]
+    require_publication_baseline(proof, root)
     subprocess.run(['git', 'fetch', '--no-tags', 'origin', proof['source_sha']], cwd=root, check=True, timeout=45)
     integration_base(proof['source_sha'], controller, proof['controller_sha'], root,
                      recovery=proof.get('quote_recovery'), funded=bool(proof.get('funded_reuse')))

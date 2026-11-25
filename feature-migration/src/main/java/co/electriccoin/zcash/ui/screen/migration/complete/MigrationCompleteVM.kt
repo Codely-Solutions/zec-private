@@ -223,6 +223,7 @@ class MigrationCompleteVM(
     private fun onMigrateAnyway() =
         migrateAnywayLce.execute {
             val owner = activeCompletionOwner()
+            if (!ownsCompletionEntry()) return@execute
             if (owner is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
             owner.requireSpendable()
             if (owner is KeystoneAccount && !authenticateMigrateAnyway()) return@execute
@@ -235,10 +236,15 @@ class MigrationCompleteVM(
             val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
             val proposal = sdk.proposeImmediateMigration()
             activeCompletionOwner()
+            if (!ownsCompletionEntry()) return@execute
             if (owner is KeystoneAccount) {
                 val reviewed = keystoneProposalRepository.setMigrationSweepProposal(proposal)
                 keystoneProposalRepository.createPCZTFromProposal(owner)
                 activeCompletionOwner()
+                if (!ownsCompletionEntry()) {
+                    keystoneProposalRepository.clear(reviewed)
+                    return@execute
+                }
                 keystoneProposalRepository.approveForSigning(reviewed)
                 navigationRouter.stageResultFrom(sourceEntryId, {
                     keystoneProposalRepository.transactionProposal.value === reviewed
@@ -252,6 +258,8 @@ class MigrationCompleteVM(
                 submitProposal(reviewed, sourceEntryId = sourceEntryId)
             }
         }
+
+    private fun ownsCompletionEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
 
     private suspend fun authenticateMigrateAnyway(): Boolean =
         try {

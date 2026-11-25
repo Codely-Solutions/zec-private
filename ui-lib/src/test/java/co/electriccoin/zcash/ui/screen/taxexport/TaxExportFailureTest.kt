@@ -98,6 +98,7 @@ class TaxExportFailureTest {
         val export = ExportTaxUseCase(
             mockk<TransactionRepository> { coEvery { getTransactions(any()) } returns emptyList() },
             accounts, mockk { every { this@mockk() } returns version }, context, navigation, mockk(),
+            mockk(relaxed = true),
         ).apply { scheduleCleanup = {} }
         val store = ViewModelStore()
         val vm = TaxExportViewModel(
@@ -192,7 +193,9 @@ class TaxExportFailureTest {
         }
         val accounts = accounts()
         val navigation = mockk<NavigationRouter>(relaxed = true)
-        val export = ExportTaxUseCase(transactions, accounts, mockk(), context, navigation, mockk())
+        val export = ExportTaxUseCase(
+            transactions, accounts, mockk(), context, navigation, mockk(), mockk(relaxed = true),
+        )
         val vm = TaxExportViewModel(
             GetSelectedWalletAccountUseCase(accounts), export, navigation,
             AppAccessSession().apply { unlock() }, WalletWriteAccess(),

@@ -2,7 +2,9 @@ package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
@@ -62,7 +64,11 @@ internal class ScanKeystonePCZTViewModel(
                 // MOB-1510: the QR decoded fine but the device firmware is too old — replace the
                 // scan screen with the firmware-update sheet so closing it lands back on the sign
                 // screen instead of the camera instantly re-scanning the same rejected QR.
-                navigateToError(ErrorArgs.KeystoneFirmwareUpdateRequired(e)) { replace(it) }
+                navigateToError(ErrorArgs.KeystoneFirmwareUpdateRequired(e)) { route ->
+                    stageResultFrom(sourceEntryId, { canScan(args) }) {
+                        NavigationCommand.Replace(listOf(route))
+                    }
+                }
             } catch (_: InvalidKeystonePCZTQRException) {
                 validationState.update { ScanValidationState.INVALID }
             } catch (_: ParsePCZTException) {

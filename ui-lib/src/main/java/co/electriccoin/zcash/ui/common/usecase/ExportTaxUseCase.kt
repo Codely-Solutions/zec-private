@@ -16,11 +16,16 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+import co.electriccoin.zcash.ui.common.repository.BiometricRequest
+import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
+import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import co.electriccoin.zcash.ui.util.FileShareUtil
 import co.electriccoin.zcash.ui.util.FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE
@@ -44,6 +49,7 @@ class ExportTaxUseCase(
     private val context: Context,
     private val navigationRouter: NavigationRouter,
     private val viewOnlyContent: ViewOnlyContent,
+    private val biometricRepository: BiometricRepository,
 ) {
     internal var scheduleCleanup: (File) -> Unit = {
         DeleteDiagnosticExportWorker.scheduleTax(context, it).result.get()
@@ -52,6 +58,33 @@ class ExportTaxUseCase(
     suspend operator fun invoke(
         approvedAccount: WalletAccount,
         sourceEntryId: String? = null,
+        isAllowed: () -> Boolean,
+    ) {
+        if (canHandOff(sourceEntryId, isAllowed) && requestApproval() && canHandOff(sourceEntryId, isAllowed)) {
+            exportApprovedAccount(approvedAccount, sourceEntryId, isAllowed)
+        }
+    }
+
+    private suspend fun requestApproval(): Boolean =
+        try {
+            biometricRepository.requestBiometrics(
+                BiometricRequest(
+                    message = stringRes(
+                        R.string.authentication_system_ui_subtitle,
+                        stringRes(R.string.authentication_use_case_tax_export),
+                    ),
+                ),
+            )
+            true
+        } catch (_: BiometricsCancelledException) {
+            false
+        } catch (_: BiometricsFailureException) {
+            false
+        }
+
+    private suspend fun exportApprovedAccount(
+        approvedAccount: WalletAccount,
+        sourceEntryId: String?,
         isAllowed: () -> Boolean,
     ) =
         withContext(Dispatchers.IO) {

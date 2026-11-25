@@ -91,7 +91,6 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapInfoUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToTaxExportUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToVotingUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToWalletBackupUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
@@ -256,7 +255,6 @@ val useCaseModule =
         factoryOf(::MarkTxMemoAsReadUseCase)
         factoryOf(::ExportTaxUseCase)
         factoryOf(::WalletReportAccess)
-        factoryOf(::NavigateToTaxExportUseCase)
         factoryOf(::IsRestoreSuccessDialogVisibleUseCase)
         factoryOf(::ValidateSeedUseCase)
         factoryOf(::RestoreWalletUseCase)

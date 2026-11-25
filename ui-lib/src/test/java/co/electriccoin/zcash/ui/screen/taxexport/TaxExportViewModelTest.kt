@@ -141,6 +141,7 @@ class TaxExportViewModelTest {
             application,
             navigation,
             mockk(),
+            mockk(relaxed = true),
         )
         val scheduled = mutableListOf<File>()
         export.scheduleCleanup = {

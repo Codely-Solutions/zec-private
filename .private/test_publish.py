@@ -22,6 +22,27 @@ with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
 
 
 class DirectUpgradeBaselineTest(unittest.TestCase):
+    def test_pending_publication_uses_attested_installed_upgrade_when_present(self):
+        fixture = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330)
+        current = dict(baseline_source_sha=fixture['source_sha'], baseline_version_code=330,
+                       hosted_fixture=fixture)
+        old = dict(baseline_source_sha='b' * 40, baseline_version_code=329)
+        metadata = MagicMock()
+        metadata.api.return_value = {'tag_name': fixture['release']}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(fixture))
+            publish.require_publication_baseline({'core': current}, root, metadata)
+            publish.require_publication_baseline(
+                {'core': old, 'installed_upgrade': current, 'funded_reuse': {}}, root, metadata)
+            for proof in ({'core': old}, {'core': current, 'installed_upgrade': old, 'funded_reuse': {}}):
+                with self.assertRaisesRegex(ValueError, 'attested upgrade baseline'):
+                    publish.require_publication_baseline(proof, root, metadata)
+            metadata.api.return_value = {'tag_name': 'v3.19.0-private.31'}
+            with self.assertRaisesRegex(ValueError, 'verified hosted baseline'):
+                publish.require_publication_baseline({'core': current}, root, metadata)
+
     def test_direct_receipt_must_name_the_same_candidate_source_and_version(self):
         source = 'a' * 40
         receipt = dict(build_source_sha=source, candidate_version_code=331)
@@ -535,6 +556,7 @@ class PublishMetadataTest(unittest.TestCase):
                 patch.object(publish, 'release_for_tag', side_effect=[draft, complete]), \
                 patch.object(publish, 'require_current_controller'), patch.object(publish, 'verify_release_identity'), \
                 patch.object(publish, 'require_advancing_version'), \
+                patch.object(publish, 'require_publication_baseline'), \
                 patch.object(publish, 'verify_tag', return_value={'type': 'commit', 'sha': proof['source_sha']}), \
                 patch.object(publish, 'release_api', return_value=dict(complete, draft=False)) as api, \
                 patch.object(publish, 'run') as cli:
@@ -559,9 +581,12 @@ class PublishMetadataTest(unittest.TestCase):
         inputs = dict(resume_draft='true', reconciliation_run='7', reconciliation_attempt='1',
                       reconciliation_artifact='53')
         smoke = ['bash', '.private/verify_signing_key.sh']
-        for scenario in ('failed-smoke', 'different-digest', 'matching-digest', 'already-uploaded'):
+        for scenario in ('failed-smoke', 'different-digest', 'matching-digest', 'already-uploaded',
+                         'superseded-baseline', 'already-public'):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as scratch:
                 draft = self.draft(proof)
+                if scenario == 'already-public':
+                    draft['draft'] = False
                 if scenario == 'already-uploaded':
                     draft['assets'] = [dict(self.assets(proof)[0], size=len(unsigned))]
                 event = Path(scratch) / 'event.json'
@@ -590,10 +615,21 @@ class PublishMetadataTest(unittest.TestCase):
                         patch.object(reconcile.subprocess, 'check_output', return_value=unsigned), \
                         patch.object(integrate_release, 'integration_base'), \
                         patch('publish.require_current_controller'), patch('publish.sign_apk', side_effect=sign), \
+                        patch('publish.require_publication_baseline',
+                              side_effect=ValueError('superseded baseline')
+                              if scenario in ('superseded-baseline', 'already-public') else None) as baseline, \
                         patch('signing_wiring.environment_wiring', side_effect=lambda _: key_checks.append('wiring')):
                     if scenario in ('matching-digest', 'already-uploaded'):
                         reconcile.resume_draft('7', '1', '53')
                         expose.assert_called_once()
+                    elif scenario == 'already-public':
+                        reconcile.resume_draft('7', '1', '53')
+                        baseline.assert_not_called()
+                        expose.assert_not_called()
+                    elif scenario == 'superseded-baseline':
+                        with self.assertRaisesRegex(ValueError, 'superseded baseline'):
+                            reconcile.resume_draft('7', '1', '53')
+                        expose.assert_not_called()
                     elif scenario == 'failed-smoke':
                         with self.assertRaises(subprocess.CalledProcessError):
                             reconcile.resume_draft('7', '1', '53')
@@ -607,6 +643,8 @@ class PublishMetadataTest(unittest.TestCase):
                     'different-digest': ['wiring', 'smoke', 'sign'],
                     'matching-digest': ['wiring', 'smoke', 'sign'],
                     'already-uploaded': [],
+                    'superseded-baseline': [],
+                    'already-public': [],
                 }
                 self.assertEqual(key_checks, expected[scenario])
 

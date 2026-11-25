@@ -460,6 +460,17 @@ def require_advancing_version(version_code, own_tag):
     require(not versions or version_code > max(code for _, code in versions), 'Android versionCode must increase')
 
 
+def require_publication_baseline(proof, root=None, metadata=None):
+    from hosted_release import require_current_hosted_upgrade
+
+    fixture = require_current_hosted_upgrade(root or ROOT, metadata or Metadata(repo=REPO))
+    upgrade = proof['installed_upgrade'] if 'funded_reuse' in proof else proof['core']
+    require(upgrade.get('baseline_source_sha') == fixture['source_sha']
+            and upgrade.get('baseline_version_code') == fixture['version_code']
+            and upgrade.get('hosted_fixture', fixture) == fixture,
+            'The attested upgrade baseline differs from the latest public release fixture')
+
+
 def expose_release(proof, dist, *, controller, existing=None):
     tag = proof['release_tag']
     source = proof['source_sha']
@@ -506,6 +517,7 @@ def expose_release(proof, dist, *, controller, existing=None):
     exact_assets(final, proof, complete=True)
     require(verify_tag(tag, source) is not None, 'Release tag disappeared before publication')
     require_current_controller(controller)
+    require_publication_baseline(proof)
     result = release_api(f'releases/{final["id"]}', method='PATCH', data={'draft': False, 'make_latest': 'true'})
     require(result['id'] == final['id'] and result['draft'] is False, 'Expected the exact release to be public')
     exact_assets(result, proof, complete=True)

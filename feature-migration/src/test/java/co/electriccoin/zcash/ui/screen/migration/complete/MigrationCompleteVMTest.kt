@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -45,6 +46,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -291,6 +294,35 @@ class MigrationCompleteVMTest {
             coVerify(exactly = 1) { submitProposal(adopted) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
+
+    @Test
+    fun preparationFromCoveredCompletionDoesNotReplaceTheNextPayment() = runTest {
+        val entry = "migration-complete"
+        val router = FakeNavigationRouter(entry)
+        val held = CompletableDeferred<Proposal>()
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { proposeImmediateMigration() } coAnswers { held.await() }
+        }
+        val repository = mockk<ZashiProposalRepository>(relaxed = true)
+        val vm = vm(
+            account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
+            orchardBalanceZatoshi = 500_000L,
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            zashiProposalRepository = repository,
+            args = MigrationCompleteArgs(isResidueOnly = true),
+            sourceEntryId = entry,
+        )
+
+        invokeOnMigrateAnyway(vm)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.proposeImmediateMigration() }
+        router.activeEntry.value = ActiveNavigationEntry("another-payment", null)
+        held.complete(mockk())
+        advanceUntilIdle()
+
+        verify(exactly = 0) { repository.setMigrationSweepProposal(any()) }
+    }
 
     @Test
     fun migrateAnywayForKeystoneAccountBuildsPcztAndNavigatesToSign() =
@@ -556,6 +588,7 @@ class MigrationCompleteVMTest {
         zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
         submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
         keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
+        sourceEntryId: String? = null,
     ) = MigrationCompleteVM(
         args = args,
         getOrchardBalance =
@@ -587,9 +620,11 @@ class MigrationCompleteVMTest {
         zashiProposalRepository = zashiProposalRepository,
         submitProposal = submitProposal,
         keystoneProposalRepository = keystoneProposalRepository,
+        sourceEntryId = sourceEntryId,
     )
 
-    private class FakeNavigationRouter : NavigationRouter {
+    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
+        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
         var backToRootCount = 0
         val forwardedRoutes = mutableListOf<Any>()
 

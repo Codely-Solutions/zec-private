@@ -6,7 +6,9 @@ import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
@@ -219,6 +221,26 @@ class ScanKeystonePCZTViewModelTest {
         sheet.positive.onClick()
 
         assertEquals(listOf<Any>(SignKeystoneTransactionArgs), routes)
+    }
+
+    @Test
+    fun firmwareErrorQueuesReplacementOnlyForItsOwnScanner() = runTest {
+        val entry = "keystone-scanner"
+        val pending = PendingNavigation()
+        every { router.pendingNavigation } returns pending
+        val obsolete = KeystoneFirmwareBelowMinimumException(detected = null)
+        coEvery { parse.scanFrom("legacy-signer-qr", route.preparationId, entry) } throws obsolete
+        val vm = ScanKeystonePCZTViewModel(parse, navigateToError, ready, router, entry)
+
+        vm.onScanned("legacy-signer-qr", route).join()
+
+        val handoff = assertNotNull(pending.commands.value[entry])
+        assertTrue(handoff.isStillAllowed())
+        val error = assertIs<NavigationCommand.Replace>(handoff.buildCommand()).routes.single()
+        assertSame(obsolete, assertIs<ErrorArgs.KeystoneFirmwareUpdateRequired>(
+            navigateToError.argsFor(assertIs<ErrorBottomSheet>(error))
+        ).exception)
+        verify(exactly = 0) { router.replace(*anyVararg()) }
     }
 
     private suspend fun assertInvalidScan(error: Exception) {
