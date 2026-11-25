@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.provider
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -22,12 +23,13 @@ class SelectedAccountUUIDProviderTest {
         val successor = AccountUuid.new(ByteArray(16) { 1 })
         val readingDeletedSelection = CompletableDeferred<Unit>()
         val finishReading = CompletableDeferred<Unit>()
+        val key = PreferenceKey("selected_account_uuid")
         var stored: String? = null
         val preferences = mockk<PreferenceProvider> {
-            coEvery { putStringWithRollback(any(), any()) } coAnswers {
+            coEvery { putStringWithRollback(key, any()) } coAnswers {
                 stored = secondArg<String?>()
             }
-            coEvery { getString(any()) } coAnswers {
+            coEvery { getString(key) } coAnswers {
                 val snapshot = stored
                 readingDeletedSelection.complete(Unit)
                 finishReading.await()
