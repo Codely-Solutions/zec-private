@@ -1562,7 +1562,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt": "9662b3a5b7a29b25b5d581ab996273651f20935fc766ec262e15b02beefbfe19",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionFilterRepository.kt": "1663b73afbe4bcfe8a89f052f99e354bdf0cc802d516a5d312e6d57cd507e05d",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt": "8a59a69d80c1ab5d5ac8ed1104ca06fcb9ccceaf7c90fca8a2fbe7edebfd5c86",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt": "665a1abef9a8dcf3258da8f8e479f42b8630be6d53f31a17b61ca159844e2de2",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt": "0be26572542cd7bc96497b93c9227daeeb94fe7dd045566c826a9fb7895d4bf2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletSnapshotRepository.kt": "d8ff5dcee4ce2d653bfdf430e943e79de15444ae36fa14073e65ac9d64c67535",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt": "550edef1734701da2c338270f2d69325045290063107e8ba85eb3619934611c5",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/serialization/BaseSerializer.kt": "cb2d156de6ed198511ccb156cc39a12b68f6c7af025edd48b8c447f1eb0d2f80",

@@ -316,9 +316,9 @@ class WalletRepositoryImpl(
         wallet: PersistableWallet?,
         onboardingState: OnboardingState
     ) {
-        if (resetProgressStore.isPending.value || !onboardingState.requiresWalletlessRecovery() ||
-            (onboardingState == OnboardingState.READY && wallet != null)
-        ) return
+        val needsRecovery = onboardingState.requiresWalletlessRecovery() &&
+            (onboardingState != OnboardingState.READY || wallet == null)
+        if (!needsRecovery || resetProgressStore.isPending.value) return
 
         startupRecovery.value = WalletInitializationState.RUNNING
         try {

@@ -43450,7 +43450,7 @@ index 26bf877f4..d7cb1f713 100644
 +    } == true
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..d6a78daf5 100644
+index fa652b038..2431561bf 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -6 +5,0 @@ import androidx.annotation.VisibleForTesting
@@ -43628,9 +43628,9 @@ index fa652b038..d6a78daf5 100644
 -            .onFailure {
 -                Twig.error(it) { "Erasing stale wallet data failed; continuing" }
 -                GlobalCrashReporter.reportCaughtException(it)
-+        if (resetProgressStore.isPending.value || !onboardingState.requiresWalletlessRecovery() ||
-+            (onboardingState == OnboardingState.READY && wallet != null)
-+        ) return
++        val needsRecovery = onboardingState.requiresWalletlessRecovery() &&
++            (onboardingState != OnboardingState.READY || wallet == null)
++        if (!needsRecovery || resetProgressStore.isPending.value) return
 +
 +        startupRecovery.value = WalletInitializationState.RUNNING
 +        try {
