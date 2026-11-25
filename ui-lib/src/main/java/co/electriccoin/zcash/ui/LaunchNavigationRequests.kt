@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** Holds sanitized app-launch requests until the corresponding screen graph is accessible. */
+@Suppress("TooManyFunctions") // One delivery queue owns launch priority and navigation acknowledgement.
 class LaunchNavigationRequests {
     private val pending = MutableStateFlow(emptyList<Request>())
     private val delivery = Mutex()

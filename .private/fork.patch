@@ -34628,10 +34628,10 @@ index 000000000..61358bc6b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..6f5401af7
+index 000000000..7ef6489d7
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,181 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
@@ -34644,6 +34644,7 @@ index 000000000..6f5401af7
 +import kotlinx.coroutines.sync.withLock
 +
 +/** Holds sanitized app-launch requests until the corresponding screen graph is accessible. */
++@Suppress("TooManyFunctions") // One delivery queue owns launch priority and navigation acknowledgement.
 +class LaunchNavigationRequests {
 +    private val pending = MutableStateFlow(emptyList<Request>())
 +    private val delivery = Mutex()
