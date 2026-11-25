@@ -4759,16 +4759,18 @@ index 9513b5798..949b12a17 100644
 -            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex)
 +            set(AccountUuid.new(ByteArray(16) { it.toByte() }), zip32AccountIndex, LedgerEnrollmentFixture().owner)
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
-index c8b49c833..5532f8450 100644
+index c8b49c833..55697188d 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt
-@@ -19,0 +20 @@ import co.electriccoin.zcash.ui.common.usecase.CancelLedgerSigningUseCase
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ledger.R
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
+@@ -19,0 +21 @@ import co.electriccoin.zcash.ui.common.usecase.CancelLedgerSigningUseCase
 +import co.electriccoin.zcash.ui.common.usecase.LedgerEnrollmentFixture
-@@ -26 +26,0 @@ import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
+@@ -26 +27,0 @@ import co.electriccoin.zcash.ui.common.usecase.StartLedgerSigningUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SubmitLedgerProposalUseCase
-@@ -35,0 +36 @@ import io.mockk.verify
+@@ -35,0 +37 @@ import io.mockk.verify
 +import io.mockk.verifyOrder
-@@ -225,23 +225,0 @@ class LedgerSignVMTest {
+@@ -225,23 +226,0 @@ class LedgerSignVMTest {
 -    @Test
 -    fun signedSubmitsExactlyOnce() =
 -        runTest(dispatcher) {
@@ -4792,30 +4794,33 @@ index c8b49c833..5532f8450 100644
 -            coVerify(exactly = 1) { submitAlreadySigned.invoke() }
 -        }
 -
-@@ -293 +271,2 @@ class LedgerSignVMTest {
+@@ -293 +272,5 @@ class LedgerSignVMTest {
 -            val vm = vm(cancelLedgerSigning = cancelLedgerSigning)
-+            val router = mockk<NavigationRouter>(relaxed = true)
++            val router = mockk<NavigationRouter>(relaxed = true) {
++                every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("sign", null))
++                every { pendingNavigation } returns null
++            }
 +            val vm = vm(cancelLedgerSigning = cancelLedgerSigning, navigationRouter = router, sourceEntryId = "sign")
-@@ -301 +280,4 @@ class LedgerSignVMTest {
+@@ -301 +284,4 @@ class LedgerSignVMTest {
 -            verify(exactly = 1) { cancelLedgerSigning.stopSession() }
 +            verifyOrder {
 +                cancelLedgerSigning.stopSession()
 +                router.pendingNavigation
 +            }
-@@ -625 +607,2 @@ class LedgerSignVMTest {
+@@ -625 +611,2 @@ class LedgerSignVMTest {
 -                    cancelLedgerSigning = mockk(relaxed = true),
 +                    walletEnrollment = LedgerEnrollmentFixture().access,
 +                    cancelLedgerSigning = mockk { every { invoke(navigateBack = false) } returns true },
-@@ -652 +635 @@ class LedgerSignVMTest {
+@@ -652 +639 @@ class LedgerSignVMTest {
 -            verify(exactly = 1) { navigationRouter.forward(LedgerConnectArgs) }
 +            verify(exactly = 1) { navigationRouter.replace(LedgerConnectArgs) }
-@@ -731 +713,0 @@ class LedgerSignVMTest {
+@@ -731 +717,0 @@ class LedgerSignVMTest {
 -        submitLedgerProposal: SubmitLedgerProposalUseCase = mockk(relaxed = true),
-@@ -733,0 +716 @@ class LedgerSignVMTest {
+@@ -733,0 +720 @@ class LedgerSignVMTest {
 +        sourceEntryId: String? = null,
-@@ -749 +731,0 @@ class LedgerSignVMTest {
+@@ -749 +735,0 @@ class LedgerSignVMTest {
 -        submitLedgerProposal = submitLedgerProposal,
-@@ -751,0 +734 @@ class LedgerSignVMTest {
+@@ -751,0 +738 @@ class LedgerSignVMTest {
 +        sourceEntryId = sourceEntryId,
 diff --git a/feature-migration/build.gradle.kts b/feature-migration/build.gradle.kts
 index 459ac8e4e..6d1aa04df 100644

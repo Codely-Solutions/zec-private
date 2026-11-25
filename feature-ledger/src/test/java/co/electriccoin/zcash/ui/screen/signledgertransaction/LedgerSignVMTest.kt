@@ -4,6 +4,7 @@ import android.app.Application
 import cash.z.ecc.android.sdk.exception.LedgerException
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ledger.R
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -268,7 +269,10 @@ class LedgerSignVMTest {
     fun aClearedSheetStopsItsSessionWithoutNavigating() =
         runTest(dispatcher) {
             val cancelLedgerSigning = mockk<CancelLedgerSigningUseCase>(relaxed = true)
-            val router = mockk<NavigationRouter>(relaxed = true)
+            val router = mockk<NavigationRouter>(relaxed = true) {
+                every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("sign", null))
+                every { pendingNavigation } returns null
+            }
             val vm = vm(cancelLedgerSigning = cancelLedgerSigning, navigationRouter = router, sourceEntryId = "sign")
             runCurrent()
 
