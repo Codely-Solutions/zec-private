@@ -81983,7 +81983,7 @@ index 5db80f520..0b203e637 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt
 new file mode 100644
-index 000000000..60c290ff5
+index 000000000..4a143221d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt
 @@ -0,0 +1,128 @@
@@ -82075,7 +82075,7 @@ index 000000000..60c290ff5
 +        assertNull(h.review.capture("covered"))
 +    }
 +
-+    private fun send(address: String) =
++    private suspend fun send(address: String) =
 +        ZecSend(WalletAddress.Unified.new(address), Zatoshi(5_000), Memo(""), null)
 +
 +    private fun proposal(send: ZecSend) =

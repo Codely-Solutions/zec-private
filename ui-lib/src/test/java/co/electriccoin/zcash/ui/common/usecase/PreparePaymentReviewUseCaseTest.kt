@@ -86,7 +86,7 @@ class PreparePaymentReviewUseCaseTest {
         assertNull(h.review.capture("covered"))
     }
 
-    private fun send(address: String) =
+    private suspend fun send(address: String) =
         ZecSend(WalletAddress.Unified.new(address), Zatoshi(5_000), Memo(""), null)
 
     private fun proposal(send: ZecSend) =

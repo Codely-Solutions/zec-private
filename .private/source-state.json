@@ -2944,7 +2944,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateUseCaseTest.kt": "df189bf7eac5a545355b1a93a20aaf6e11e67f4a0b07a5eb6cc5bef27f1aef77",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PaymentReviewFixtures.kt": "d54d75973e6c661fea155bb0d827d225a3f6013260e88cfe0162a03914283361",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCaseTest.kt": "d079b99cce4ea26c6da9fba404ab18b98f08a7a9ab8a29c7210a584e11b24bd0",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt": "6674e84d30491a92e90788cf5c0bbd4a233ee160c0c2e7c1db4872d1364aca41",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt": "8d639ab1c051c366bf206d3a2c68cfd7f2ec541a0d6364723e4d149060f65277",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt": "40ff1cd3e4ea185f978535c8fce20461cd7a0095f6a3c0cd9f8ec800e4a647f5",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt": "e5cee0fbb33cc19e729c176b58f2bcd9a793fed637fbd044a64f320555a02c1a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt": "14b54cb01326c79f178fbc54f64028f60e08090682e03264b91566db8e333e0b",
