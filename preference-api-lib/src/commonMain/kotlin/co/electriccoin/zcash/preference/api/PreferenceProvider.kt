@@ -36,6 +36,10 @@ interface PreferenceProvider {
 
     suspend fun getString(key: PreferenceKey): String?
 
+    /** Reads all requested values from the same preference state. */
+    suspend fun getStringSnapshot(keys: Set<PreferenceKey>): Map<PreferenceKey, String?> =
+        throw UnsupportedOperationException("This preference provider does not support grouped reads")
+
     suspend fun getStringSet(key: PreferenceKey): Set<String>?
 
     fun observe(key: PreferenceKey): Flow<String?>

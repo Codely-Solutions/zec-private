@@ -29,8 +29,8 @@ interface HttpClientProvider {
     suspend fun supportsKtorTimeouts(): Boolean = true
 }
 
-/** Carries a Tor-only requirement through suspending callers that use the shared HTTP factory. */
-internal object TorOnlyRequest : AbstractCoroutineContextElement(Key) {
+/** Carries a Tor-only requirement and optional ownership check to a scoped provider request. */
+internal class TorOnlyRequest(val canRequest: () -> Boolean = { true }) : AbstractCoroutineContextElement(Key) {
     object Key : CoroutineContext.Key<TorOnlyRequest>
 }
 

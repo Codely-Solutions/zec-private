@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -189,6 +190,7 @@ class ViewOnlySpendGuardTest {
                     navigateToError = navigateToError,
                     messageAvailabilityDataSource = mockk(relaxed = true),
                     walletWriteAccess = WalletWriteAccess(),
+                    appAccessSession = AppAccessSession().apply { unlock() },
                 )
 
             useCase.confirm(viewOnly, closeCurrentScreen = true)()

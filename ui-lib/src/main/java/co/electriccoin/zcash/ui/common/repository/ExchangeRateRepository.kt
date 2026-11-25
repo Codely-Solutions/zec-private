@@ -6,9 +6,8 @@ import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateUnavailable
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
+import co.electriccoin.zcash.ui.common.provider.CurrencyConversionPreference
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-import co.electriccoin.zcash.ui.common.provider.retryConversionPreferenceRead
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.RefreshLock
@@ -51,37 +50,24 @@ interface ExchangeRateRepository {
 
 class ExchangeRateRepositoryImpl(
     isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
-    preferredFiatProvider: PreferredFiatProvider,
     private val exchangeRateDataSource: ExchangeRateDataSource,
     private val synchronizerProvider: SynchronizerProvider,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 ) : ExchangeRateRepository {
     private val refreshPipeline = MutableSharedFlow<Unit>()
 
-    private val isExchangeRateOptedIn =
+    private val conversionPreference =
         isExchangeRateEnabledStorageProvider
-            .observe()
+            .observeSelection()
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
-                initialValue = null
-            )
-
-    private val preferredFiat =
-        preferredFiatProvider
-            .observe()
-            .map<FiatCurrency?, FiatCurrency?> { it ?: FiatCurrency.USD }
-            .retryConversionPreferenceRead(null)
-            .distinctUntilChanged()
-            .stateIn(
-                scope = scope,
-                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
-                initialValue = null
+                initialValue = CurrencyConversionPreference(enabled = null, fiat = null),
             )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val exchangeRateUsdInternal =
-        combine(isExchangeRateOptedIn, preferredFiat) { optedIn, fiat -> optedIn to fiat }
+        conversionPreference
             .flatMapLatest { (optedIn, fiat) ->
                 if (optedIn == true && fiat != null) {
                     channelFlow {
@@ -166,24 +152,23 @@ class ExchangeRateRepositoryImpl(
 
     override val state: StateFlow<ExchangeRateState> =
         combine(
-            isExchangeRateOptedIn,
+            conversionPreference,
             exchangeRateUsdInternal,
             staleExchangeRateUsdLock.state,
             refreshExchangeRateUsdLock.state,
-            preferredFiat,
-        ) { isOptedIn, exchangeRate, isStale, isRefreshEnabled, expectedCurrency ->
-            createState(isOptedIn, exchangeRate, isStale, isRefreshEnabled, expectedCurrency)
+        ) { preference, exchangeRate, isStale, isRefreshEnabled ->
+            createState(preference.enabled, exchangeRate, isStale, isRefreshEnabled, preference.fiat)
         }.distinctUntilChanged()
             .stateIn(
                 scope = scope,
                 started = SharingStarted.WhileSubscribed(5.seconds, replayExpiration = Duration.ZERO),
                 initialValue =
                     createState(
-                        isOptedIn = isExchangeRateOptedIn.value,
+                        isOptedIn = conversionPreference.value.enabled,
                         exchangeRate = exchangeRateUsdInternal.value,
                         isStale = false,
                         isRefreshEnabled = false,
-                        expectedCurrency = preferredFiat.value,
+                        expectedCurrency = conversionPreference.value.fiat,
                     )
             )
 

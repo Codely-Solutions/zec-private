@@ -99,7 +99,7 @@ class FixEphemeralAddressUseCase(
             AddressType.Shielded, AddressType.Tex, AddressType.Unified -> null
             AddressType.Transparent -> address
             is AddressType.Invalid -> {
-                if (!canRecover()) null else withContext(TorOnlyRequest) {
+                if (!canRecover()) null else withContext(TorOnlyRequest(canRecover)) {
                     getSwapStatus.observeForAccount(address, account, canRecover)
                         .first { !it.isLoading }.status?.destinationAddress?.address
                 }

@@ -61,10 +61,15 @@ class AndroidPreferenceWriteTest {
 
         assertFailsWith<IOException> { provider.putStringsWithRollback(choice) }
         assertEquals(original, stored)
+        assertEquals<Map<PreferenceKey, String?>>(
+            mapOf(enabled to "false", currency to "USD"),
+            provider.getStringSnapshot(choice.keys),
+        )
         assertEquals(listOf(requested, original), commits)
 
         provider.putStringsWithRollback(choice)
         assertEquals(requested, stored)
+        assertEquals<Map<PreferenceKey, String?>>(choice, provider.getStringSnapshot(choice.keys))
         assertEquals(listOf(requested, original, requested), commits)
     }
 

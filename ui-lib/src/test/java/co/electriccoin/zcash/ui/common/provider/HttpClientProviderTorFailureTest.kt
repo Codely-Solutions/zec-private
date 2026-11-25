@@ -5,6 +5,8 @@ import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import io.mockk.coEvery
 import io.mockk.every
@@ -12,11 +14,15 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
@@ -82,6 +88,41 @@ class HttpClientProviderTorFailureTest {
     }
 
     @Test
+    fun withdrawingTheOwnerDuringTorClientCreationKeepsTheSavedReferenceLocal() = runTest {
+        val active = AtomicBoolean(true)
+        val requests = AtomicInteger()
+        val started = CompletableDeferred<Unit>()
+        val ready = CompletableDeferred<Unit>()
+        val client = HttpClient(MockEngine {
+            requests.incrementAndGet()
+            error("A withdrawn status request must not reach the engine")
+        })
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { getTorHttpClient(any()) } coAnswers {
+                started.complete(Unit)
+                ready.await()
+                client
+            }
+        }
+        val provider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } returns synchronizer
+        }
+        val api = KtorNearApiProvider(HttpClientProviderImpl(provider, mockk()))
+
+        val request = async {
+            withContext(TorOnlyRequest(active::get)) {
+                assertFailsWith<IllegalStateException> { api.checkSwapStatus("synthetic-saved-reference") }
+            }
+        }
+        started.await()
+        active.set(false)
+        ready.complete(Unit)
+
+        assertEquals("Swap status request is no longer active", request.await().message)
+        assertEquals(0, requests.get())
+    }
+
+    @Test
     fun aTorOnlyRecoveryStatusRequestCannotFollowTheWalletToTheDirectRoute() = runTest {
         val preference = mockk<IsTorEnabledStorageProvider> {
             coEvery { get() } returns false
@@ -96,7 +137,7 @@ class HttpClientProviderTorFailureTest {
         mockkObject(OkHttp)
         try {
             every { OkHttp.create(any()) } throws AssertionError("A recovery status request must stay over Tor")
-            withContext(TorOnlyRequest) {
+            withContext(TorOnlyRequest()) {
                 assertFailsWith<IOException> { api.checkSwapStatus("isolated-unfunded-reference") }
             }
             verify(exactly = 0) { OkHttp.create(any()) }

@@ -154,6 +154,11 @@ class AndroidPreferenceProvider(
             mutex.withLock { sharedPreferences.getString(key.key, null) }
         }
 
+    override suspend fun getStringSnapshot(keys: Set<PreferenceKey>): Map<PreferenceKey, String?> =
+        withContext(dispatcher) {
+            mutex.withLock { keys.associateWith { sharedPreferences.getString(it.key, null) } }
+        }
+
     override suspend fun getStringSet(key: PreferenceKey): Set<String>? =
         withContext(dispatcher) {
             sharedPreferences.getStringSet(key.key, null)

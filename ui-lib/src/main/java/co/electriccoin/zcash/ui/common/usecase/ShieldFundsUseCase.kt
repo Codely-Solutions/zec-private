@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -42,6 +43,7 @@ class ShieldFundsUseCase(
     private val navigateToError: NavigateToErrorUseCase,
     private val messageAvailabilityDataSource: MessageAvailabilityDataSource,
     private val walletWriteAccess: WalletWriteAccess,
+    private val appAccessSession: AppAccessSession,
 ) {
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
@@ -50,11 +52,14 @@ class ShieldFundsUseCase(
     fun confirm(account: WalletAccount, closeCurrentScreen: Boolean, sourceEntryId: String? = null): () -> Unit {
         val wallet = walletWriteAccess.token()
         val owner = account.sdkAccount.accountUuid
-        val approval = ShieldingApproval(account) {
-            walletWriteAccess.permits(wallet) &&
-                accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
+        return {
+            val grant = appAccessSession.grant.value
+            val approval = ShieldingApproval(account) {
+                appAccessSession.permits(grant) && walletWriteAccess.permits(wallet) &&
+                    accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid == owner
+            }
+            shield(approval, closeCurrentScreen, sourceEntryId)
         }
-        return { shield(approval, closeCurrentScreen, sourceEntryId) }
     }
 
     private fun canStartShield(approval: ShieldingApproval, sourceEntryId: String?): Boolean =

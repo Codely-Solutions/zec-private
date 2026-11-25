@@ -30,10 +30,7 @@ private class PreferredFiatPreferenceDefault(
     override val key: PreferenceKey
 ) : PreferenceDefault<FiatCurrency?> {
     override suspend fun getValue(preferenceProvider: PreferenceProvider): FiatCurrency? =
-        preferenceProvider
-            .getString(key)
-            ?.takeIf { FiatCurrency.isAlpha3Code(it) }
-            ?.let { FiatCurrency(it) }
+        parsePreferredFiat(preferenceProvider.getString(key))
 
     override suspend fun putValue(
         preferenceProvider: PreferenceProvider,
@@ -42,3 +39,6 @@ private class PreferredFiatPreferenceDefault(
         preferenceProvider.putString(key, newValue?.code)
     }
 }
+
+internal fun parsePreferredFiat(value: String?): FiatCurrency? =
+    value?.takeIf { FiatCurrency.isAlpha3Code(it) }?.let { FiatCurrency(it) }

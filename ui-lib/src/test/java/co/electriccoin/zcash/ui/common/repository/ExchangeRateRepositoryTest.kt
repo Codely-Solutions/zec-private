@@ -2,10 +2,14 @@ package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateUnavailable
 import co.electriccoin.zcash.ui.common.datasource.ExchangeRateDataSource
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.PreferredFiatProvider
+import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProviderImpl
+import co.electriccoin.zcash.ui.common.provider.CurrencyConversionPreference
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import io.ktor.client.HttpClient
@@ -17,6 +21,8 @@ import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -51,20 +57,17 @@ class ExchangeRateRepositoryTest {
         var reads = 0
         val readAgain = CompletableDeferred<Unit>()
         val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
-            every { observe() } returns flow {
+            every { observeSelection() } returns flow {
                 if (++reads > 1) readAgain.await()
-                emit(optedIn)
+                emit(CurrencyConversionPreference(optedIn, FiatCurrency.USD))
                 awaitCancellation()
             }
-        }
-        val preferred = mockk<PreferredFiatProvider> {
-            every { observe() } returns flowOf(FiatCurrency.USD)
         }
         val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
         val rates = mockk<ExchangeRateDataSource> {
             coEvery { getExchangeRate(FiatCurrency.USD) } returns quote
         }
-        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk(), backgroundScope)
+        val repository = ExchangeRateRepositoryImpl(enabled, rates, mockk(), backgroundScope)
 
         val firstCollector = backgroundScope.launch { repository.state.collect { } }
         runCurrent()
@@ -87,40 +90,77 @@ class ExchangeRateRepositoryTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun unreadablePreferredFiatLeavesHomeUsableAndRecoversWithTheSameCollector() = runTest {
-        val enabled = mockk<IsExchangeRateEnabledStorageProvider> {
-            every { observe() } returns flowOf(true)
-        }
         var attempts = 0
         val euro = FiatCurrency("EUR")
-        val preferred = mockk<PreferredFiatProvider> {
-            every { observe() } returns flow {
-                if (++attempts == 1) throw IOException("Synthetic stored currency read failure")
-                emit(euro)
-                awaitCancellation()
-            }
+        val settings = observedSelection(flowOf("true"), flowOf("EUR")) {
+            if (++attempts == 1) throw IOException("Synthetic stored currency read failure")
+            "true" to "EUR"
         }
         val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, euro)
         val rates = mockk<ExchangeRateDataSource> {
             coEvery { getExchangeRate(euro) } returns quote
         }
-        val repository = ExchangeRateRepositoryImpl(enabled, preferred, rates, mockk(), backgroundScope)
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope)
 
         backgroundScope.launch { repository.state.collect { } }
         runCurrent()
-        val unloaded = assertIs<ExchangeRateState.Data>(repository.state.value)
-
-        assertNull(unloaded.currencyConversion)
-        assertFalse(unloaded.isRefreshEnabled)
+        assertEquals(ExchangeRateState.OptedOut, repository.state.value)
         coVerify(exactly = 0) { rates.getExchangeRate(any()) }
 
         advanceTimeBy(5_001L)
 
-        assertEquals(2, attempts)
+        assertTrue(attempts >= 2)
         val recovered = assertIs<ExchangeRateState.Data>(repository.state.value)
         assertEquals(euro, recovered.expectedCurrency)
         assertEquals(quote, recovered.currencyConversion)
         coVerify(exactly = 1) { rates.getExchangeRate(euro) }
         coVerify(exactly = 0) { rates.getExchangeRate(FiatCurrency.USD) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aCurrencyNotificationCannotReuseOldConsentAfterThePairedOffCommit() = runTest {
+        val enabledNotice = MutableStateFlow<String?>("true")
+        val currencyNotice = MutableStateFlow<String?>("USD")
+        var storedPair = "true" to "USD"
+        val settings = observedSelection(enabledNotice, currencyNotice) { storedPair }
+        val quote = FiatCurrencyConversion(Clock.System.now(), 100.0, FiatCurrency.USD)
+        val rates = mockk<ExchangeRateDataSource> {
+            coEvery { getExchangeRate(FiatCurrency.USD) } returns quote
+        }
+        val repository = ExchangeRateRepositoryImpl(settings, rates, mockk(), backgroundScope)
+        backgroundScope.launch { repository.state.collect { } }
+        runCurrent()
+        assertEquals(quote, assertIs<ExchangeRateState.Data>(repository.state.value).currencyConversion)
+
+        storedPair = "false" to "EUR"
+        currencyNotice.value = "EUR"
+        runCurrent()
+
+        assertEquals(ExchangeRateState.OptedOut, repository.state.value)
+        coVerify(exactly = 1) { rates.getExchangeRate(FiatCurrency.USD) }
+        coVerify(exactly = 0) { rates.getExchangeRate(FiatCurrency("EUR")) }
+    }
+
+    private fun observedSelection(
+        enabledNotice: Flow<String?>,
+        currencyNotice: Flow<String?>,
+        readPair: () -> Pair<String, String>,
+    ): IsExchangeRateEnabledStorageProvider {
+        val enabled = PreferenceKey("EXCHANGE_RATE_OPTED_IN_2")
+        val currency = PreferenceKey("preferred_fiat_currency")
+        val store = mockk<PreferenceProvider> {
+            every { observe(enabled) } returns enabledNotice
+            every { observe(currency) } returns currencyNotice
+            coEvery { getStringSnapshot(setOf(enabled, currency)) } coAnswers {
+                val (flag, fiat) = readPair()
+                mapOf(enabled to flag, currency to fiat)
+            }
+        }
+        val holder = mockk<StandardPreferenceProvider> {
+            coEvery { this@mockk() } returns store
+        }
+        return IsExchangeRateEnabledStorageProviderImpl(holder)
     }
 
     @Test

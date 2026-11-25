@@ -5,8 +5,10 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -33,6 +35,7 @@ import kotlinx.coroutines.test.setMain
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 /**
  * Shielding outcome routing (MOB-1145): shielding has no pending screen, so every non-success
@@ -164,6 +167,7 @@ class ShieldFundsUseCaseTest {
             navigateToError = mockk(),
             messageAvailabilityDataSource = marker,
             walletWriteAccess = wallet,
+            appAccessSession = AppAccessSession().apply { unlock() },
         )
         val confirm = operations.confirm(hardware, closeCurrentScreen = true)
         accounts.value = listOf(EditAccountFixtures.zodl())
@@ -203,6 +207,7 @@ class ShieldFundsUseCaseTest {
             navigateToError = mockk(),
             messageAvailabilityDataSource = mockk(relaxed = true),
             walletWriteAccess = WalletWriteAccess(),
+            appAccessSession = AppAccessSession().apply { unlock() },
         )
         operation.confirm(hardware, closeCurrentScreen = true, sourceEntryId = "shield-dialog")()
         runCurrent()
@@ -214,6 +219,52 @@ class ShieldFundsUseCaseTest {
 
         coVerify(exactly = 0) { ledger.createPCZTFromProposal() }
         verify(exactly = 0) { signer.forwardToSign(any(), any()) }
+    }
+
+    @Test
+    fun softwareShieldApprovalCannotEnterSubmissionAfterRelockAndUnlock() = runTest(dispatcher) {
+        val software = EditAccountFixtures.zodl()
+        val access = AppAccessSession().apply { unlock() }
+        val reviewed = CompletableDeferred<ShieldingApproval>()
+        val preparingKey = CompletableDeferred<Unit>()
+        var submissions = 0
+        val shield = mockk<ShieldTransactionProposal>()
+        val repository = mockk<ZashiProposalRepository> {
+            coEvery { createShieldProposal(any()) } coAnswers {
+                reviewed.complete(firstArg<ShieldingApproval>())
+                shield
+            }
+            coEvery { submit(shield) } coAnswers {
+                preparingKey.await()
+                reviewed.await().requireCurrent()
+                submissions++
+                SubmitResult.Success(listOf("synthetic-shield"))
+            }
+        }
+        val errors = mockk<NavigateToErrorUseCase>(relaxed = true)
+        val useCase = ShieldFundsUseCase(
+            keystoneProposalRepository = mockk(),
+            ledgerProposalPipeline = mockk(),
+            ledgerNavigator = mockk(),
+            zashiProposalRepository = repository,
+            navigationRouter = mockk(),
+            accountDataSource = selectedAccount(software),
+            navigateToError = errors,
+            messageAvailabilityDataSource = mockk(relaxed = true),
+            walletWriteAccess = WalletWriteAccess(),
+            appAccessSession = access,
+        )
+        useCase.confirm(software, closeCurrentScreen = false)()
+        runCurrent()
+        coVerify(exactly = 1) { repository.submit(shield) }
+
+        access.lock()
+        access.unlock()
+        preparingKey.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(0, submissions)
+        verify(exactly = 0) { errors(any(), any()) }
     }
 
     @Test
@@ -237,6 +288,7 @@ class ShieldFundsUseCaseTest {
             navigateToError = errors,
             messageAvailabilityDataSource = mockk(relaxed = true),
             walletWriteAccess = WalletWriteAccess(),
+            appAccessSession = AppAccessSession().apply { unlock() },
         )
         operation.confirm(software, closeCurrentScreen = false)()
         runCurrent()
@@ -268,6 +320,7 @@ class ShieldFundsUseCaseTest {
             navigateToError = navigateToError,
             messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true),
             walletWriteAccess = WalletWriteAccess(),
+            appAccessSession = AppAccessSession().apply { unlock() },
         )
         return { close -> useCase.confirm(account, close)() }
     }
@@ -288,6 +341,7 @@ class ShieldFundsUseCaseTest {
             navigateToError = navigateToError,
             messageAvailabilityDataSource = mockk<MessageAvailabilityDataSource>(relaxed = true),
             walletWriteAccess = WalletWriteAccess(),
+            appAccessSession = AppAccessSession().apply { unlock() },
         )
         return { close -> useCase.confirm(account, close)() }
     }

@@ -24,6 +24,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 
 typealias GetNearSupportedTokensResponse = List<NearTokenDto>
@@ -86,6 +87,8 @@ class KtorNearApiProvider(
 
     override suspend fun checkSwapStatus(depositAddress: String): SwapStatusResponseDto =
         execute {
+            val scope = currentCoroutineContext()[TorOnlyRequest.Key]
+            check(scope?.canRequest?.invoke() != false) { "Swap status request is no longer active" }
             val response = get("https://1click.chaindefuser.com/v0/status") {
                 contentType(ContentType.Application.Json)
                 header(HttpHeaders.CacheControl, "no-cache")
