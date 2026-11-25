@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
@@ -30,6 +32,17 @@ class SaveORSwapUseCase(
         val expected = acknowledgement.publication
         if (isWalletCurrent(expected) && swapRepository.clearIfCurrent(expected)) {
             navigationRouter.replaceAll(ActivityHistoryArgs)
+        }
+    }
+
+    internal suspend fun finishFunding(acknowledgement: FundingAcknowledgement, sourceEntryId: String) {
+        val expected = acknowledgement.publication
+        navigationRouter.commitFrom(sourceEntryId, { isWalletCurrent(expected) }) {
+            if (swapRepository.clearIfCurrent(expected)) {
+                NavigationCommand.ReplaceAll(listOf(ActivityHistoryArgs))
+            } else {
+                null
+            }
         }
     }
 

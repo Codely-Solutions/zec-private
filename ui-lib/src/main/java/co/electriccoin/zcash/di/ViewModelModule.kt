@@ -108,6 +108,7 @@ import co.electriccoin.zcash.ui.screen.transactionnote.viewmodel.TransactionNote
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressVM
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackupViewModel
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
@@ -185,7 +186,21 @@ val viewModelModule =
         viewModelOf(::SwapRefundWarningVM)
         viewModelOf(::SwapVM)
         viewModelOf(::PayVM)
-        viewModelOf(::SwapQuoteVM)
+        viewModel { parameters ->
+            SwapQuoteVM(
+                observeProposal = get(),
+                observeSelectedWalletAccount = get(),
+                applicationStateProvider = get(),
+                swapRepository = get(),
+                cancelSwapQuote = get(),
+                cancelSwap = get(),
+                swapQuoteSuccessMapper = get(),
+                submitProposal = get(),
+                navigationRouter = get(),
+                independentPrices = get(),
+                sourceEntryId = parameters.get(),
+            )
+        }
         viewModelOf(::ScanGenericAddressVM)
         viewModelOf(::ScanGiftCardVM)
         viewModelOf(::PasteGiftCardLinkVM)

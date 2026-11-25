@@ -7,7 +7,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.forwardFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -55,6 +58,7 @@ class ORSwapConfirmationVM(
     private val saveORSwap: SaveORSwapUseCase,
     private val shareQR: ShareQRUseCase,
     private val appAccessSession: AppAccessSession,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val _dialogState = MutableStateFlow<ErrorState?>(null)
     val dialogState = _dialogState.asStateFlow()
@@ -185,7 +189,11 @@ class ORSwapConfirmationVM(
     private fun canFund(publication: SwapQuoteData.Success): Boolean =
         isCurrent(publication) && publication.canFund(clock.now(), elapsedRealtime())
 
-    internal fun openActivity() = navigationRouter.replaceAll(ActivityHistoryArgs)
+    internal fun openActivity() {
+        viewModelScope.launch {
+            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.ReplaceAll(listOf(ActivityHistoryArgs)) }
+        }
+    }
 
     private fun isCurrent(publication: SwapQuoteData.Success): Boolean =
         publication.quote.mode == SwapMode.FLEX_INPUT && swapRepository.quote.value === publication &&
@@ -218,16 +226,24 @@ class ORSwapConfirmationVM(
     private fun onCancelSwapClick(publication: SwapQuoteData.Success) {
         if (!isCurrent(publication)) return
         _dialogState.value = null
-        cancelSwapQuote()
+        if (sourceEntryId == null) {
+            cancelSwapQuote()
+        } else {
+            viewModelScope.launch { cancelSwapQuote.cancelFrom(sourceEntryId) { isCurrent(publication) } }
+        }
     }
 
     private fun onSentFundsClick(acknowledgement: SaveORSwapUseCase.FundingAcknowledgement) {
         if (!isCurrent(acknowledgement.publication)) return
         _dialogState.value = null
-        saveORSwap.finishFunding(acknowledgement)
+        if (sourceEntryId == null) {
+            saveORSwap.finishFunding(acknowledgement)
+        } else {
+            viewModelScope.launch { saveORSwap.finishFunding(acknowledgement, sourceEntryId) }
+        }
     }
 
-    private fun onInfoClick() = navigationRouter.forward(DepositSwapInfoArgs)
+    private fun onInfoClick() = navigationRouter.forwardFrom(sourceEntryId, { true }) { DepositSwapInfoArgs }
 
     private fun onShareClick(
         publication: SwapQuoteData.Success,

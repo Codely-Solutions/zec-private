@@ -53,14 +53,16 @@ def critical(path):
     if any(part in path for part in ('/design/theme/', '/res/ui/about/', '/res/ui/theme/')):
         return True
     ui_root = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/'
-    if path.startswith(ui_root) and path.endswith('.kt') and '/' not in path[len(ui_root):]:
-        return True
+    if path.startswith(ui_root) and path.endswith('.kt'):
+        relative = path[len(ui_root):]
+        if '/' not in relative or relative.startswith('util/'):
+            return True
     sensitive_screen=re.match(
         r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
         r'(authentication|walletbackup|restore|onboarding|about|theme|exportvk|exportdata|deletewallet|tor|'
         r'chooseserver|donation|updates|send|pay|swap|reviewtransaction|transactionprogress|receive|request|qrcode|'
         r'scan|signkeystonetransaction|connecthw|connectkeystone|scankeystone|selectkeystoneaccount|'
-        r'choosehwwallet|ironwood|advancedsettings)/',path)
+        r'choosehwwallet|ironwood|advancedsettings|redeemgift|taxexport)/',path)
     return (bool(sensitive_screen) or path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
                             'app/src/','tools/','scripts/','preference-','crash-',
                             'configuration-','spackle-','build-info-lib/','wallet-foundation-lib/')) or

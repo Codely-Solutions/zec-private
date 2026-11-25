@@ -17,7 +17,12 @@ class NavigateToSwapQuoteIfAvailableUseCase(
         hideBottomSheet: suspend () -> Unit,
     ) {
         val atSource = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
-        val value = (if (atSource && canNavigate()) swapRepository.consumeReview() else null) ?: return
+        val value = when {
+            !atSource || !canNavigate() -> null
+            sourceEntryId == null -> swapRepository.consumeReview()
+            else -> swapRepository.quote.value
+        }
+        if (value == null || value == SwapQuoteData.Loading) return
         val mismatchArgs = (value as? SwapQuoteData.Error)?.toMismatchArgs()
 
         hideBottomSheet()
@@ -28,6 +33,7 @@ class NavigateToSwapQuoteIfAvailableUseCase(
                     if (value is SwapQuoteData.Success) swapRepository.clearIfCurrent(value)
                     null
                 }
+                sourceEntryId != null && swapRepository.consumeReview(value) == null -> null
                 mismatchArgs == null -> SwapQuoteArgs
                 else -> {
                     swapRepository.clearQuote()

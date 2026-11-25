@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
@@ -21,6 +22,7 @@ import java.util.UUID
 
 @Composable
 fun ScanGenericAddressScreen(args: ScanGenericAddressArgs, sourceEntryId: String) {
+    SecureScreen()
     val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args, sourceEntryId) }
     val isOwned by vm.isOwned.collectAsStateWithLifecycle()
     if (!isOwned) {

@@ -15,12 +15,11 @@ class CancelSwapUseCase(
         navigationRouter.backToRoot()
     }
 
-    internal suspend fun cancelFrom(sourceEntryId: String) {
+    internal suspend fun cancelFrom(sourceEntryId: String): Boolean =
         navigationRouter.commitFrom(sourceEntryId) {
             swapRepository.clear()
             NavigationCommand.BackToRoot
         }
-    }
 
     suspend fun afterDismissal(
         canReturnToRoot: () -> Boolean,

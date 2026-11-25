@@ -47,6 +47,8 @@ Use the [development session](DEVELOPMENT.md) for incremental checks and the [pr
 
 ## Build and validation
 
+Upstream changes to the retained root UI and shared UI utilities, gift redemption and tax export require human review before candidate preparation. These paths include app navigation, private-file grants and account-bound actions.
+
 Dependency-graph submission and hosted fixture preservation admit the exact `refs/heads/main` before entering their production concurrency queues. The permission-free admission jobs perform a case-sensitive comparison. Only an admitted job calls the reusable workflow for the complete production sequence. The fixture gate also checks the exact repository identity. GitHub's expression string equality is case-insensitive. [GitHub expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#operators)
 
 The same exact-ref check gates upstream discovery before its replaceable queue, custom release calls and production signing jobs. The shared release workflow uses a non-replacing workflow-wide queue with a separate group for unprotected refs and validation. Its exact-ref job also gates production steps when a dispatch runs from a protected case-variant branch.

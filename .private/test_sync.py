@@ -243,7 +243,9 @@ class SyncTests(unittest.TestCase):
             return original(*args,**kwargs)
         ui_root = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/'
         protected = ('common/usecase/RequestSwapQuoteUseCase.kt', 'BiometricActivity.kt',
-                     'NavigationExt.kt', 'OnboardingNavGraph.kt')
+                     'NavigationExt.kt', 'OnboardingNavGraph.kt', 'util/FileShareUtil.kt',
+                     'util/EmailUtil.kt', 'screen/redeemgift/RedeemGiftVM.kt',
+                     'screen/taxexport/TaxExportViewModel.kt')
         for relative in protected:
             with self.subTest(relative=relative), \
                     patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \

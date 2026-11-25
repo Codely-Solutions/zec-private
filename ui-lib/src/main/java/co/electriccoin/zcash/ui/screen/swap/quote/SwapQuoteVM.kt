@@ -7,6 +7,10 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.commitFrom
+import co.electriccoin.zcash.ui.forwardFrom
+import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.GiftCardAddressNotAllowedException
 import co.electriccoin.zcash.ui.common.datasource.QuoteLowAmountException
@@ -64,6 +68,7 @@ internal class SwapQuoteVM(
     private val navigationRouter: NavigationRouter,
     private val independentPrices: IndependentPriceProvider,
     private val priceClock: Clock = ElapsedTimeClock(),
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private companion object {
         const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
@@ -146,7 +151,7 @@ internal class SwapQuoteVM(
             val now = Clock.System.now()
             val proposalChanged = quote.quote.requiresLocalProposal && proposals.value !== proposal
             val invalidReview = currentPublication !== quote || !quote.canFund(now) || proposalChanged
-            if (isClosing || invalidReview) return
+            if (isClosing || invalidReview || !navigationRouter.isAtEntry(sourceEntryId)) return
             val current = priceCheck.value.current(quote.quote, fee, priceClock.now().toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
             action()
@@ -155,14 +160,18 @@ internal class SwapQuoteVM(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),
             onBack = { if (swapRepository.quote.value === quote) onBack() },
             onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal, quote) } },
-            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
+            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap(quote) } },
             priceCheck = assessment,
             assessmentTime = kotlin.time.Instant.fromEpochMilliseconds(nowMillis),
             canFund = { quote.canFund(Clock.System.now()) },
         )
     }
 
-    private fun onNavigateToOnRampSwap() = navigationRouter.forward(ORSwapConfirmationArgs)
+    private fun onNavigateToOnRampSwap(quote: SwapQuoteData.Success) {
+        navigationRouter.forwardFrom(sourceEntryId, {
+            swapRepository.quote.value === quote && quote.canFund(Clock.System.now()) && !isClosing
+        }) { ORSwapConfirmationArgs }
+    }
 
     private fun createErrorState(quote: SwapQuoteData.Error): SwapQuoteState.Error {
         val message =
@@ -234,20 +243,46 @@ internal class SwapQuoteVM(
         onBack = ::dismissUnavailable,
     )
 
-    private fun dismissUnavailable() = closeQuote { navigationRouter.back() }
+    private fun dismissUnavailable() = closeQuote {
+        navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
+    }
 
-    internal fun onBack() = closeQuote { cancelSwapQuote() }
+    internal fun onBack() {
+        val quote = swapRepository.quote.value
+        closeQuote {
+            if (sourceEntryId == null) {
+                cancelSwapQuote()
+                true
+            } else {
+                cancelSwapQuote.cancelFrom(sourceEntryId) { swapRepository.quote.value === quote }
+            }
+        }
+    }
 
-    private fun closeQuote(action: () -> Unit) {
+    private fun closeQuote(action: suspend () -> Boolean) {
         if (isClosing) return
         isClosing = true
-        action()
+        viewModelScope.launch {
+            var closed = false
+            try {
+                closed = action()
+            } finally {
+                if (!closed) isClosing = false
+            }
+        }
     }
 
     private fun onSubmitQuoteClick(proposal: TransactionProposal?, quote: SwapQuoteData.Success) =
         viewModelScope.launch { submitProposal(proposal, quote) }
 
-    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
+    private fun onCancelPaymentClick() = closeQuote {
+        if (sourceEntryId == null) {
+            cancelSwap()
+            true
+        } else {
+            cancelSwap.cancelFrom(sourceEntryId)
+        }
+    }
 }
 
 private fun TransactionProposal?.matchesFunding(quote: SwapQuote, account: WalletAccount): Boolean =

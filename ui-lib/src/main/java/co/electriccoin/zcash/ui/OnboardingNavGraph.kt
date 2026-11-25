@@ -90,7 +90,7 @@ fun NavGraphBuilder.onboardingNavGraph(
             )
         }
         restoreScreens()
-        composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id) }
+        composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id, walletRoutesAllowed = false) }
         dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
         dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
     }

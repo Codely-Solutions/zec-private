@@ -28,7 +28,25 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import co.electriccoin.zcash.ui.common.compose.LocalScreenSecurity
+import co.electriccoin.zcash.ui.common.compose.ScreenSecurity
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUseCase
+import co.electriccoin.zcash.ui.common.usecase.RescanQrUseCase
+import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
+import co.electriccoin.zcash.ui.common.viewmodel.SecretState
+import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
+import co.electriccoin.zcash.ui.screen.scan.ScanArgs
+import co.electriccoin.zcash.ui.screen.scan.ScanFlow
+import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressScreen
+import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressVM
+import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
+import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressScreen
+import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressVM
+import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -391,6 +409,165 @@ class RestoredWalletRoutesLayoutTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun migrationQueuedDuringImeCloseStillAppearsBelowTheScanner() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val requests = LaunchNavigationRequests()
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                requests.requestGiftScan()
+                val first = launch { requests.deliver(true, { true }, navigator::executeLaunchCommand) }
+                runCurrent()
+
+                val notice = requests.beginMigrationProgress("owner")
+                val progress = FixtureMigrationProgress("owner")
+                requests.finishMigrationProgress(notice, NavigationCommand.ReplaceAll(listOf(progress)))
+                keyboard.onKeyboardClosed()
+                first.join()
+                assertEquals(home, controller.currentBackStackEntry?.id)
+                assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
+
+                requests.deliver(true, { true }, navigator::executeLaunchCommand)
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertEquals(progress, controller.previousBackStackEntry?.toRoute<FixtureMigrationProgress>())
+                assertTrue(requests.saveExternalScans().isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun preparedQuoteSurvivesNavigationDeniedByTheActivity() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                var resumed = false
+                val navigation = collectOwnedNavigation { resumed }
+                val publication = SwapQuoteData.Success(mockk<SwapQuote>())
+                val swaps = mockk<SwapRepository> {
+                    every { quote } returns MutableStateFlow(publication)
+                    every { isReviewCurrent(publication) } returns true
+                    every { consumeReview(publication) } returns publication
+                }
+                val form = checkNotNull(controller.currentBackStackEntry).id
+                val openQuote = NavigateToSwapQuoteIfAvailableUseCase(swaps, navigation)
+                openQuote(sourceEntryId = form) { }
+                assertEquals(form, controller.currentBackStackEntry?.id)
+                verify(exactly = 0) { swaps.consumeReview(any()) }
+
+                resumed = true
+                openQuote(sourceEntryId = form) { }
+                assertEquals(SwapQuoteArgs, controller.currentBackStackEntry?.toRoute<SwapQuoteArgs>())
+                verify(exactly = 1) { swaps.consumeReview(publication) }
+            }
+        }
+    }
+
+    @Test
+    fun thirdPartyRescanRequiresBothReadyWalletAndItsGraph() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val navigation = collectOwnedNavigation()
+                val readiness = MutableStateFlow(SecretState.INCOMPLETE)
+                val wallet = mockk<WalletRepository> { every { secretState } returns readiness }
+                val rescan = RescanQrUseCase(wallet, navigation)
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                val explainer = ThirdPartyScan
+
+                controller.navigate(explainer)
+                rescan(checkNotNull(controller.currentBackStackEntry).id, walletRoutesAllowed = true)
+                assertEquals(home, controller.currentBackStackEntry?.id)
+                readiness.value = SecretState.READY
+
+                controller.navigate(explainer)
+                rescan(checkNotNull(controller.currentBackStackEntry).id, walletRoutesAllowed = false)
+                assertEquals(home, controller.currentBackStackEntry?.id)
+
+                controller.navigate(explainer)
+                rescan(checkNotNull(controller.currentBackStackEntry).id, walletRoutesAllowed = true)
+                assertEquals(ScanArgs(ScanFlow.HOMEPAGE), controller.currentBackStackEntry?.toRoute<ScanArgs>())
+                assertEquals(home, controller.previousBackStackEntry?.id)
+            }
+        }
+    }
+
+    @Test
+    fun fundingAcknowledgementIsRetainedUntilTheDepositScreenCanOpenActivity() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                var resumed = false
+                val navigation = collectOwnedNavigation { resumed }
+                val publication = SwapQuoteData.Success(mockk<SwapQuote>())
+                val acknowledgement = SaveORSwapUseCase.FundingAcknowledgement(publication)
+                val swaps = mockk<SwapRepository> {
+                    every { clearIfCurrent(publication) } returns true
+                }
+                val save = SaveORSwapUseCase(swaps, mockk(), navigation)
+                controller.navigate(ORSwapConfirmationArgs)
+                val deposit = checkNotNull(controller.currentBackStackEntry).id
+                save.finishFunding(acknowledgement, deposit)
+                assertEquals(deposit, controller.currentBackStackEntry?.id)
+                verify(exactly = 0) { swaps.clearIfCurrent(any()) }
+
+                resumed = true
+                save.finishFunding(acknowledgement, deposit)
+                assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                verify(exactly = 1) { swaps.clearIfCurrent(publication) }
+            }
+        }
+    }
+
+    @Test
+    fun bothGeneralScannersAcquireScreenProtectionBeforeRenderingCameraContent() {
+        val security = ScreenSecurity()
+        val destination = mutableStateOf<ScanFlow?>(null)
+        val dependencies = module {
+            single<NavigationRouter> { router }
+            viewModel {
+                mockk<WalletViewModel>(relaxed = true) { every { synchronizer } returns MutableStateFlow(null) }
+            }
+            viewModel {
+                mockk<ScanZashiAddressVM>(relaxed = true) {
+                    every { state } returns MutableStateFlow(ScanValidationState.NONE)
+                }
+            }
+            viewModel {
+                mockk<ScanGenericAddressVM>(relaxed = true) { every { isOwned } returns MutableStateFlow(false) }
+            }
+        }
+        compose.setContent {
+            KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
+                ZcashTheme {
+                    CompositionLocalProvider(LocalScreenSecurity provides security) {
+                        when (destination.value) {
+                            ScanFlow.HOMEPAGE -> ScanZashiAddressScreen(ScanArgs(ScanFlow.HOMEPAGE), "wallet")
+                            ScanFlow.SEND -> ScanGenericAddressScreen(ScanGenericAddressArgs("generic"), "generic")
+                            else -> Text("Outside scanner")
+                        }
+                    }
+                }
+            }
+        }
+        compose.runOnIdle {
+            assertEquals(0, security.referenceCount.value)
+            destination.value = ScanFlow.HOMEPAGE
+        }
+        compose.runOnIdle {
+            assertEquals(1, security.referenceCount.value)
+            destination.value = ScanFlow.SEND
+        }
+        compose.runOnIdle {
+            assertEquals(1, security.referenceCount.value)
+            destination.value = null
+        }
+        compose.runOnIdle { assertEquals(0, security.referenceCount.value) }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun TestScope.collectOwnedNavigation(canCommit: () -> Boolean = { true }): NavigationRouterImpl {
         val router = NavigationRouterImpl()
@@ -526,8 +703,10 @@ class RestoredWalletRoutesLayoutTest {
         val dependencies = module {
             single<NavigationRouter> { router }
             single { NavigateToErrorUseCase(router) }
-            viewModel {
-                ORSwapConfirmationVM(swaps, cancelQuote, mockk(), router, mockk(), mockk(), AppAccessSession())
+            viewModel { parameters ->
+                ORSwapConfirmationVM(
+                    swaps, cancelQuote, mockk(), router, mockk(), mockk(), AppAccessSession(), parameters.get(),
+                )
             }
             viewModel {
                 SignKeystoneTransactionVM(GetWalletAccountsUseCase(accounts), keys, router, mockk(), mockk(), mockk())
@@ -552,7 +731,7 @@ class RestoredWalletRoutesLayoutTest {
                             dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
                             dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
                             dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
-                            composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
+                            composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen(it.id) }
                             composable<RequestArgs> {
                                 RequestScreenContent(RequestState.Loading(loadingBack))
                             }
@@ -563,6 +742,10 @@ class RestoredWalletRoutesLayoutTest {
                             composable<FixtureMigrationProgress> { Text("Migration progress") }
                             composable<ScanGiftCardArgs> { Text("External scan") }
                             composable<ScanGenericAddressArgs> { Text("Generic scan") }
+                            composable<ScanArgs> { Text("Wallet scanner") }
+                            composable<ThirdPartyScan> { Text("Third-party scanner") }
+                            composable<ActivityHistoryArgs> { Text("Activity history") }
+                            dialogComposable<SwapQuoteArgs> { Text("Quote review") }
                             dialogComposable<SwapRefundWarningArgs> { Text("Refund warning") }
                             composable<VKDetailArgs> {
                                 VKDetailScreenContent(

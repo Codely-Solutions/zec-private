@@ -13,7 +13,8 @@ import kotlinx.coroutines.launch
 class ThirdPartyScanViewModel(
     private val rescanQr: RescanQrUseCase,
     private val navigationRouter: NavigationRouter,
-    private val sourceEntryId: String? = null,
+    private val sourceEntryId: String,
+    private val walletRoutesAllowed: Boolean,
 ) : ViewModel() {
     val state =
         MutableStateFlow(
@@ -23,7 +24,7 @@ class ThirdPartyScanViewModel(
             )
         ).asStateFlow()
 
-    private fun onScanClick() = viewModelScope.launch { rescanQr(sourceEntryId) }
+    private fun onScanClick() = viewModelScope.launch { rescanQr(sourceEntryId, walletRoutesAllowed) }
 
     private fun onBack() {
         viewModelScope.launch { navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back } }

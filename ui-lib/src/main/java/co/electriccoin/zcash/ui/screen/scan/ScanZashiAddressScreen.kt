@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.util.SettingsUtil
@@ -25,6 +26,7 @@ import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun ScanZashiAddressScreen(args: ScanArgs, sourceEntryId: String) {
+    SecureScreen()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }

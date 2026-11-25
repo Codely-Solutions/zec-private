@@ -320,7 +320,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen() }
         dialogComposable<BalanceBreakdownArgs> { BalanceBreakdownScreen() }
         composable<CrashReportOptIn> { AndroidCrashReportOptIn() }
-        composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id) }
+        composable<ThirdPartyScan> { AndroidThirdPartyScan(it.id, walletRoutesAllowed = true) }
         composable<ScanGiftCardArgs> { ScanGiftCardScreen(it.toRoute(), it.id) }
         composable<PasteGiftCardLinkArgs> { PasteGiftCardLinkScreen(it.id) }
         composable<RedeemGiftArgs> { RedeemGiftScreen(it.toRoute()) }
@@ -333,7 +333,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SwapRefundWarningArgs> { SwapRefundWarningScreen(it.toRoute()) }
         dialogComposable<SwapInfoArgs> { SwapInfoScreen() }
         dialogComposable<DepositSwapInfoArgs> { DepositSwapInfoScreen() }
-        dialogComposable<SwapQuoteArgs> { SwapQuoteScreen() }
+        dialogComposable<SwapQuoteArgs> { SwapQuoteScreen(it.id) }
         composable<ScanGenericAddressArgs> { ScanGenericAddressScreen(it.toRoute(), it.id) }
         composable<SelectABSwapRecipientArgs> { SelectSwapABRecipientScreen(it.toRoute(), it.id) }
         composable<AddSwapABContactArgs> { AddSwapABContactScreen(it.toRoute()) }
@@ -348,7 +348,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ExchangeRateOptInArgs> { ExchangeRateOptInScreen() }
         composable<PayArgs> { PayScreen(it.id) }
         dialogComposable<PayInfoArgs> { PayInfoScreen() }
-        composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
+        composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen(it.id) }
         composable<SwapDetailArgs> { SwapDetailScreen(it.toRoute()) }
         dialogComposable<SwapRefundAddressInfoArgs> { SwapRefundAddressInfoScreen(it.toRoute()) }
         dialogComposable<SwapSupportArgs> { SwapSupportScreen(it.toRoute()) }

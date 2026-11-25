@@ -99,12 +99,19 @@ class LaunchNavigationRequests {
             if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
-                val isCurrent = { hasAppAccess() && pending.value.any { it === request } }
+                val isCurrent = { hasAppAccess() && canDeliver(request, walletReady) }
                 if (isCurrent() && navigate(command, isCurrent)) {
                     pending.update { queue -> queue.filterNot { it === request } }
                 }
             }
         }
+    }
+
+    private fun canDeliver(request: Request, walletReady: Boolean): Boolean {
+        val current = pending.value
+        val migrationHasPriority = walletReady && request.command !is NavigationCommand.ReplaceAll &&
+            current.any { it.kind == Kind.MIGRATION_PROGRESS || it.command is NavigationCommand.ReplaceAll }
+        return !migrationHasPriority && current.any { it === request }
     }
 
     private fun offer(kind: Kind, command: NavigationCommand, recoveryOwnerKey: String? = null) {

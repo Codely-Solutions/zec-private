@@ -130,6 +130,24 @@ class SwapQuoteVMTest {
         }
 
     @Test
+    fun rejectedDismissalCanBeRetriedOnTheSameReview() =
+        runTest {
+            val cancelQuote = mockk<CancelSwapQuoteUseCase> {
+                coEvery { cancelFrom("quote", any()) } returnsMany listOf(false, true)
+            }
+            val vm = vm(account = zashi(), cancelQuote = cancelQuote, sourceEntryId = "quote")
+            collect(vm)
+            val state = assertNotNull(vm.state.value)
+
+            state.onBack()
+            state.onBack()
+            state.onBack()
+
+            coVerify(exactly = 2) { cancelQuote.cancelFrom("quote", any()) }
+            verify(exactly = 0) { cancelQuote() }
+        }
+
+    @Test
     fun lowAmountErrorKeepsExactProviderThreshold() =
         runTest {
             val vm = vm(
@@ -297,6 +315,7 @@ class SwapQuoteVMTest {
             quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
         ),
         proposals: MutableStateFlow<TransactionProposal?>? = null,
+        sourceEntryId: String? = null,
     ): SwapQuoteVM {
         val quoteFlow = quotes ?: MutableStateFlow(quoteData)
         val proposalFlow = proposals ?: quoteFlow.map { data ->
@@ -333,6 +352,7 @@ class SwapQuoteVMTest {
             submitProposal = submit,
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
             independentPrices = prices,
+            sourceEntryId = sourceEntryId,
         )
     }
 

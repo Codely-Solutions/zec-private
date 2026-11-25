@@ -36,10 +36,6 @@ class NavigatorImpl(
             command is NavigationCommand.ForEntry && canCommitOwnedNavigation() ->
                 keyboardManager.controller?.hide()
             command is NavigationCommand.ForEntry -> Unit
-            command is NavigationCommand.Forward && command.sourceEntryId != null -> {
-                if (!canForward(command)) return
-                keyboardManager.controller?.hide()
-            }
             else -> keyboardManager.close()
         }
         executeAfterKeyboard(command)
@@ -69,15 +65,10 @@ class NavigatorImpl(
     private suspend fun executeOwned(command: NavigationCommand.ForEntry) {
         val previous = navController.currentBackStackEntry
         if (previous?.id == command.sourceEntryId && canCommitOwnedNavigation() && command.isStillAllowed()) {
-            executeAfterKeyboard(command.buildCommand())
+            command.buildCommand()?.let { executeAfterKeyboard(it) }
         }
         command.acknowledge(navController.currentBackStackEntry !== previous)
     }
-
-    private fun canForward(command: NavigationCommand.Forward): Boolean =
-        (command.sourceEntryId == null ||
-            (canCommitOwnedNavigation() && navController.currentBackStackEntry?.id == command.sourceEntryId)) &&
-            command.isStillAllowed?.invoke() != false
 
     override suspend fun executeCommand(command: CustomNavigationCommand) {
         val current = navController.currentBackStackEntry
@@ -206,7 +197,6 @@ class NavigatorImpl(
     }
 
     private suspend fun forward(command: NavigationCommand.Forward) {
-        if (!canForward(command)) return
         command.routes.forEach { route ->
             when (route) {
                 is ExternalUrl -> startWebBrowser(route)

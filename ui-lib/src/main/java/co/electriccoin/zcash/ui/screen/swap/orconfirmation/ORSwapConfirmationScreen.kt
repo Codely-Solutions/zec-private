@@ -16,10 +16,11 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun ORSwapConfirmationScreen() {
-    val vm = koinViewModel<ORSwapConfirmationVM>()
+fun ORSwapConfirmationScreen(sourceEntryId: String) {
+    val vm = koinViewModel<ORSwapConfirmationVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val dialogState by vm.dialogState.collectAsStateWithLifecycle()
     val saving by vm.saving.collectAsStateWithLifecycle()

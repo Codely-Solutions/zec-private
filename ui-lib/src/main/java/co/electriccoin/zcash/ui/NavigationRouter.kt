@@ -94,7 +94,12 @@ internal fun NavigationRouter.forwardFrom(
     } else {
         custom { current ->
             if (current?.id == sourceEntryId && isStillAllowed()) {
-                buildRoute()?.let { NavigationCommand.Forward(listOf(it), sourceEntryId, isStillAllowed) }
+                NavigationCommand.ForEntry(
+                    sourceEntryId,
+                    isStillAllowed,
+                    buildCommand = { buildRoute()?.let { NavigationCommand.Forward(listOf(it)) } },
+                    acknowledge = {},
+                )
             } else {
                 null
             }
@@ -105,9 +110,11 @@ internal fun NavigationRouter.forwardFrom(
 @Suppress("SpreadOperator") // Only the unscoped compatibility path adapts the existing vararg API.
 internal suspend fun NavigationRouter.commitFrom(
     sourceEntryId: String?,
-    buildCommand: () -> NavigationCommand,
+    isStillAllowed: () -> Boolean = { true },
+    buildCommand: () -> NavigationCommand?,
 ): Boolean = if (sourceEntryId == null) {
-    when (val command = buildCommand()) {
+    val command = if (isStillAllowed()) buildCommand() else null
+    when (command) {
         is NavigationCommand.Forward -> forward(*command.routes.toTypedArray())
         is NavigationCommand.Replace -> replace(*command.routes.toTypedArray())
         is NavigationCommand.ReplaceAll -> replaceAll(*command.routes.toTypedArray())
@@ -116,14 +123,16 @@ internal suspend fun NavigationRouter.commitFrom(
         NavigationCommand.Back -> back()
         NavigationCommand.BackToRoot -> backToRoot()
         is NavigationCommand.ForEntry -> error("A scoped command requires its source entry")
+        null -> Unit
     }
-    true
+    command != null
 } else withTimeoutOrNull(2.seconds) {
     val waiter = currentCoroutineContext().job
     val receipt = CompletableDeferred<Boolean>()
     custom { current ->
-        if (current?.id == sourceEntryId && waiter.isActive) {
-            NavigationCommand.ForEntry(sourceEntryId, { waiter.isActive }, buildCommand) { receipt.complete(it) }
+        val canCommit = { waiter.isActive && isStillAllowed() }
+        if (current?.id == sourceEntryId && canCommit()) {
+            NavigationCommand.ForEntry(sourceEntryId, canCommit, buildCommand) { receipt.complete(it) }
         } else {
             receipt.complete(false)
             null
@@ -225,14 +234,12 @@ sealed interface NavigationCommand : BaseNavigationCommand {
     data class ForEntry(
         val sourceEntryId: String,
         val isStillAllowed: () -> Boolean,
-        val buildCommand: () -> NavigationCommand,
+        val buildCommand: () -> NavigationCommand?,
         val acknowledge: (Boolean) -> Unit,
     ) : NavigationCommand
 
     data class Forward(
         val routes: List<Any>,
-        val sourceEntryId: String? = null,
-        val isStillAllowed: (() -> Boolean)? = null,
     ) : NavigationCommand
 
     data class Replace(

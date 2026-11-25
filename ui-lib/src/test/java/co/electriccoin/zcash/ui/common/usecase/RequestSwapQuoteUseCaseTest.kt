@@ -148,9 +148,10 @@ class RequestSwapQuoteUseCaseTest {
         assertEquals(null, delivery.captured(scanner))
         verify(exactly = 0) { swapRepository.consumeReview(any()) }
         val owningEntry = mockk<NavBackStackEntry> { every { id } returns "swap-entry" }
-        val command = delivery.captured(owningEntry) as NavigationCommand.Forward
-        assertEquals(listOf(SwapQuoteArgs), command.routes)
+        val command = delivery.captured(owningEntry) as NavigationCommand.ForEntry
         assertEquals("swap-entry", command.sourceEntryId)
+        verify(exactly = 0) { swapRepository.consumeReview(any()) }
+        assertEquals(NavigationCommand.Forward(listOf(SwapQuoteArgs)), command.buildCommand())
         verify(exactly = 1) { swapRepository.consumeReview(result) }
     }
 
