@@ -10,6 +10,8 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToScanGenericAddressUseCa
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -25,6 +27,11 @@ internal class ScanGenericAddressVM(
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
     val state = MutableStateFlow(ScanValidationState.NONE)
+    val isOwned = navigateToScanAddress.observeOwnership(args).stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(),
+        navigateToScanAddress.owns(args),
+    )
 
     private val mutex = Mutex()
 

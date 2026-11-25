@@ -32553,7 +32553,7 @@ index 67c1e883c..80d901c35 100644
 +        val sourceEntryId: String? = null,
 +        val isStillAllowed: (() -> Boolean)? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt
-index 11ab4c65f..c3608f272 100644
+index 11ab4c65f..df76f1335 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt
 @@ -15,3 +14,0 @@ import co.electriccoin.zcash.ui.screen.about.util.WebBrowserUtil
@@ -32562,9 +32562,13 @@ index 11ab4c65f..c3608f272 100644
 -import com.flexa.spend.buildSpend
 @@ -31 +27,0 @@ class NavigatorImpl(
 -    private val flexaViewModel: FlexaViewModel,
-@@ -37,0 +34,12 @@ class NavigatorImpl(
+@@ -35,0 +32 @@ class NavigatorImpl(
++    private val canCommitOwnedNavigation: () -> Boolean = { true },
+@@ -37,0 +35,14 @@ class NavigatorImpl(
 +        when {
-+            command is NavigationCommand.ForEntry -> keyboardManager.controller?.hide()
++            command is NavigationCommand.ForEntry && canCommitOwnedNavigation() ->
++                keyboardManager.controller?.hide()
++            command is NavigationCommand.ForEntry -> Unit
 +            command is NavigationCommand.Forward && command.sourceEntryId != null -> {
 +                if (!canForward(command)) return
 +                keyboardManager.controller?.hide()
@@ -32575,30 +32579,31 @@ index 11ab4c65f..c3608f272 100644
 +    }
 +
 +    internal suspend fun executeLaunchCommand(command: NavigationCommand, canNavigate: () -> Boolean): Boolean {
-@@ -38,0 +47,5 @@ class NavigatorImpl(
+@@ -38,0 +50,5 @@ class NavigatorImpl(
 +        if (!canNavigate()) return false
 +        val previous = navController.currentBackStackEntry
 +        executeAfterKeyboard(command)
 +        return navController.currentBackStackEntry !== previous
 +    }
-@@ -39,0 +53 @@ class NavigatorImpl(
+@@ -39,0 +56 @@ class NavigatorImpl(
 +    private suspend fun executeAfterKeyboard(command: NavigationCommand) {
-@@ -40,0 +55 @@ class NavigatorImpl(
+@@ -40,0 +58 @@ class NavigatorImpl(
 +            is NavigationCommand.ForEntry -> executeOwned(command)
-@@ -50,0 +66,12 @@ class NavigatorImpl(
+@@ -50,0 +69,13 @@ class NavigatorImpl(
 +    private suspend fun executeOwned(command: NavigationCommand.ForEntry) {
 +        val previous = navController.currentBackStackEntry
-+        if (previous?.id == command.sourceEntryId && command.isStillAllowed()) {
++        if (previous?.id == command.sourceEntryId && canCommitOwnedNavigation() && command.isStillAllowed()) {
 +            executeAfterKeyboard(command.buildCommand())
 +        }
 +        command.acknowledge(navController.currentBackStackEntry !== previous)
 +    }
 +
 +    private fun canForward(command: NavigationCommand.Forward): Boolean =
-+        (command.sourceEntryId == null || navController.currentBackStackEntry?.id == command.sourceEntryId) &&
++        (command.sourceEntryId == null ||
++            (canCommitOwnedNavigation() && navController.currentBackStackEntry?.id == command.sourceEntryId)) &&
 +            command.isStillAllowed?.invoke() != false
 +
-@@ -80,16 +106,0 @@ class NavigatorImpl(
+@@ -80,16 +110,0 @@ class NavigatorImpl(
 -                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
 -                    if (index == 0) {
 -                        navController.currentDestination?.parent?.startDestinationId?.let {
@@ -32615,7 +32620,7 @@ index 11ab4c65f..c3608f272 100644
 -
 -                    createFlexaFlow(flexaViewModel)
 -                }
-@@ -136,11 +146,0 @@ class NavigatorImpl(
+@@ -136,11 +150,0 @@ class NavigatorImpl(
 -                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
 -                    if (index == 0) {
 -                        navController.popBackStack(destinationId = popUpToId, inclusive = true)
@@ -32627,7 +32632,7 @@ index 11ab4c65f..c3608f272 100644
 -
 -                    createFlexaFlow(flexaViewModel)
 -                }
-@@ -177,11 +176,0 @@ class NavigatorImpl(
+@@ -177,11 +180,0 @@ class NavigatorImpl(
 -                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
 -                    if (index == 0) {
 -                        navController.popBackStack()
@@ -32639,14 +32644,14 @@ index 11ab4c65f..c3608f272 100644
 -
 -                    createFlexaFlow(flexaViewModel)
 -                }
-@@ -215,0 +205 @@ class NavigatorImpl(
+@@ -215,0 +209 @@ class NavigatorImpl(
 +        if (!canForward(command)) return
-@@ -218 +207,0 @@ class NavigatorImpl(
+@@ -218 +211,0 @@ class NavigatorImpl(
 -                co.electriccoin.zcash.ui.screen.flexa.Flexa -> createFlexaFlow(flexaViewModel)
-@@ -224 +213 @@ class NavigatorImpl(
+@@ -224 +217 @@ class NavigatorImpl(
 -        if (command.routes.lastOrNull() in listOf(ExternalUrl, co.electriccoin.zcash.ui.screen.flexa.Flexa)) {
 +        if (command.routes.lastOrNull() is ExternalUrl) {
-@@ -257,8 +245,0 @@ class NavigatorImpl(
+@@ -257,8 +249,0 @@ class NavigatorImpl(
 -    private fun createFlexaFlow(flexaViewModel: FlexaViewModel) {
 -        applicationStateProvider.onThirdPartyUiShown()
 -        Flexa
@@ -32754,7 +32759,7 @@ index 36840dcc5..81dcd4a75 100644
 +    if (!popBackStack(RestoreSeedArgs, inclusive = false)) {
 +        navigate(RestoreSeedArgs) { popUpTo<Onboarding>() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
-index a93926c57..50d04e9ec 100644
+index a93926c57..cf71751c3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 @@ -4,0 +5 @@ import androidx.compose.runtime.Composable
@@ -32807,33 +32812,42 @@ index a93926c57..50d04e9ec 100644
 -    val giftCardLinkStore = koinInject<GiftCardLinkStore>()
 -    val navigateToRedeemGiftCard = koinInject<NavigateToRedeemGiftCardUseCase>()
 +    val launchNavigation = koinInject<LaunchNavigationRequests>()
-@@ -55 +66,2 @@ fun RootNavGraph(
+@@ -55 +66,3 @@ fun RootNavGraph(
 -    val navigator: Navigator =
++    val lifecycle = LocalLifecycleOwner.current.lifecycle
 +    val currentAccess = rememberUpdatedState(hasAppAccess)
 +    val navigator =
-@@ -59 +70,0 @@ fun RootNavGraph(
+@@ -57,0 +71 @@ fun RootNavGraph(
++            lifecycle,
+@@ -59 +72,0 @@ fun RootNavGraph(
 -            flexaViewModel,
-@@ -68 +78,0 @@ fun RootNavGraph(
+@@ -68 +80,0 @@ fun RootNavGraph(
 -                flexaViewModel = flexaViewModel,
-@@ -75,0 +86,2 @@ fun RootNavGraph(
+@@ -72 +84,4 @@ fun RootNavGraph(
+-                isOledEnabledStorageProvider = isOledEnabledStorageProvider
++                isOledEnabledStorageProvider = isOledEnabledStorageProvider,
++                canCommitOwnedNavigation = {
++                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
++                }
+@@ -75,0 +91,2 @@ fun RootNavGraph(
 +    TrackActiveNavigationEntry(navController, navigationRouter)
 +
-@@ -77,0 +90 @@ fun RootNavGraph(
+@@ -77,0 +95 @@ fun RootNavGraph(
 +            if (!currentAccess.value()) return@collect
-@@ -107,0 +121 @@ fun RootNavGraph(
+@@ -107,0 +126 @@ fun RootNavGraph(
 +        if (!currentAccess.value()) return@LaunchedEffect
-@@ -117,5 +130,0 @@ fun RootNavGraph(
+@@ -117,5 +135,0 @@ fun RootNavGraph(
 -            // Same pattern as MainActivity.handleMigrationIntent — Home always lands on the
 -            // back stack first, then we redirect on top of it if a migration transfer needs
 -            // attention. isSyncBlocked() (fed into the synchronizer directly) already stopped
 -            // sync regardless of whether this redirect lands — this is routing only.
 -            migrationAppHooks.checkRecovery()
-@@ -123 +132 @@ fun RootNavGraph(
+@@ -123 +137 @@ fun RootNavGraph(
 -            secretState == SecretState.NONE &&
 +            (secretState == SecretState.NONE || secretState == SecretState.INCOMPLETE) &&
-@@ -132,0 +142 @@ fun RootNavGraph(
+@@ -132,0 +147 @@ fun RootNavGraph(
 +        if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
-@@ -135,4 +145,38 @@ fun RootNavGraph(
+@@ -135,4 +150,28 @@ fun RootNavGraph(
 -    LaunchedEffect(secretState, navController) {
 -        if (secretState != SecretState.READY) return@LaunchedEffect
 -        navController.currentBackStackEntryFlow.first {
@@ -32866,7 +32880,9 @@ index a93926c57..50d04e9ec 100644
 +                    navigate = navigator::executeLaunchCommand
 +                )
 +            }
-+        }
+@@ -140,2 +179,14 @@ fun RootNavGraph(
+-        giftCardLinkStore.isInAppScanRequested.filter { it }.collect {
+-            navigateToRedeemGiftCard.openRequestedInAppScan()
 +    }
 +}
 +
@@ -32876,14 +32892,12 @@ index a93926c57..50d04e9ec 100644
 +        val observer = navigationRouter.registerEntryObserver()
 +        val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
 +            observer.update(controller.currentBackStackEntry?.toActiveNavigationEntry())
-@@ -140,2 +184,4 @@ fun RootNavGraph(
--        giftCardLinkStore.isInAppScanRequested.filter { it }.collect {
--            navigateToRedeemGiftCard.openRequestedInAppScan()
++        }
 +        navController.addOnDestinationChangedListener(listener)
 +        onDispose {
 +            navController.removeOnDestinationChangedListener(listener)
 +            observer.close()
-@@ -145,0 +192,11 @@ fun RootNavGraph(
+@@ -145,0 +197,11 @@ fun RootNavGraph(
 +internal fun NavBackStackEntry.toActiveNavigationEntry() = ActiveNavigationEntry(
 +    id = id,
 +    route = destination.route,
@@ -42736,7 +42750,7 @@ index 337602656..988dd41c4 100644
 -        }
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
-index 3a33ec79d..e3cecff69 100644
+index 3a33ec79d..51a008aba 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -42744,39 +42758,47 @@ index 3a33ec79d..e3cecff69 100644
 @@ -3,0 +5,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.isAtEntry
-@@ -6,0 +10,7 @@ import kotlinx.coroutines.flow.first
+@@ -5,0 +9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -6,0 +11,9 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.onSubscription
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.selects.select
 +import kotlinx.coroutines.withTimeoutOrNull
-@@ -7,0 +18 @@ import java.math.BigDecimal
+@@ -7,0 +21 @@ import java.math.BigDecimal
 +import kotlin.time.Duration.Companion.seconds
-@@ -12,0 +24 @@ class NavigateToScanGenericAddressUseCase(
-+    private val ownedRequests = mutableMapOf<String, Channel<ScanAddressPipelineResult.Scanned>>()
-@@ -16,2 +28,2 @@ class NavigateToScanGenericAddressUseCase(
+@@ -12,0 +27,4 @@ class NavigateToScanGenericAddressUseCase(
++    private val ownedRequests = MutableStateFlow<Map<String, Channel<ScanAddressPipelineResult.Scanned>>>(emptyMap())
++
++    internal fun observeOwnership(args: ScanGenericAddressArgs) = ownedRequests.map { args.requestId in it }
++    internal fun owns(args: ScanGenericAddressArgs) = args.requestId in ownedRequests.value
+@@ -16,2 +34,2 @@ class NavigateToScanGenericAddressUseCase(
 -        navigationRouter.forward(args)
 -        val result = pipeline.first { it.args.requestId == args.requestId }
 +        val result = pipeline.onSubscription { navigationRouter.forward(args) }
 +            .first { it.args.requestId == args.requestId }
-@@ -20 +32,5 @@ class NavigateToScanGenericAddressUseCase(
+@@ -20 +38,27 @@ class NavigateToScanGenericAddressUseCase(
 -            is ScanAddressPipelineResult.Scanned -> ScanResult(address = result.address, amount = result.amount)
 +            is ScanAddressPipelineResult.Scanned -> ScanResult(
 +                address = result.address,
 +                amount = result.amount,
 +                rawInput = result.rawInput
 +            )
-@@ -24 +40,52 @@ class NavigateToScanGenericAddressUseCase(
--    suspend fun onScanCancelled(args: ScanGenericAddressArgs) {
++        }
++    }
++
 +    internal suspend fun scanFrom(
 +        sourceEntryId: String,
 +        onAccepted: (ScanResult) -> NavigationCommand = { NavigationCommand.Back },
 +    ): ScanResult? {
 +        val args = ScanGenericAddressArgs()
 +        val scans = Channel<ScanAddressPipelineResult.Scanned>(capacity = 1)
-+        ownedRequests[args.requestId] = scans
++        ownedRequests.update { it + (args.requestId to scans) }
 +        return try {
 +            val active = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Forward(listOf(args)) }
 +            val scanner = navigationRouter.activeEntry.value
@@ -42786,12 +42808,11 @@ index 3a33ec79d..e3cecff69 100644
 +                null
 +            }
 +        } finally {
-+            ownedRequests.remove(args.requestId)
++            ownedRequests.update { it - args.requestId }
 +            scans.close()
 +            scans.tryReceive().getOrNull()?.acknowledge?.complete(false)
-+        }
-+    }
-+
+@@ -24 +68,30 @@ class NavigateToScanGenericAddressUseCase(
+-    suspend fun onScanCancelled(args: ScanGenericAddressArgs) {
 +    private suspend fun acceptFromScanner(
 +        sourceEntryId: String,
 +        scans: Channel<ScanAddressPipelineResult.Scanned>,
@@ -42822,7 +42843,7 @@ index 3a33ec79d..e3cecff69 100644
 +            navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
 +            return
 +        }
-@@ -40,3 +107,13 @@ class NavigateToScanGenericAddressUseCase(
+@@ -40,3 +113,13 @@ class NavigateToScanGenericAddressUseCase(
 -        args: ScanGenericAddressArgs
 -    ) {
 -        pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args))
@@ -42834,18 +42855,18 @@ index 3a33ec79d..e3cecff69 100644
 +            pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args, rawInput))
 +            return true
 +        }
-+        val request = ownedRequests[args.requestId]
++        val request = ownedRequests.value[args.requestId]
 +        val acknowledged = CompletableDeferred<Boolean>()
 +        val scanned = ScanAddressPipelineResult.Scanned(address, amount, args, rawInput, sourceEntryId, acknowledged)
 +        return navigationRouter.isAtEntry(sourceEntryId) && request?.trySend(scanned)?.isSuccess == true &&
 +            withTimeoutOrNull(3.seconds) { acknowledged.await() } == true
-@@ -56 +133,4 @@ private sealed interface ScanAddressPipelineResult {
+@@ -56 +139,4 @@ private sealed interface ScanAddressPipelineResult {
 -        override val args: ScanGenericAddressArgs
 +        override val args: ScanGenericAddressArgs,
 +        val rawInput: String? = null,
 +        val sourceEntryId: String? = null,
 +        val acknowledge: CompletableDeferred<Boolean>? = null,
-@@ -62 +142,2 @@ data class ScanResult(
+@@ -62 +148,2 @@ data class ScanResult(
 -    val amount: BigDecimal?
 +    val amount: BigDecimal?,
 +    val rawInput: String? = null
@@ -52134,31 +52155,54 @@ index 7db73b703..2698a3260 100644
 -                                title = stringRes(co.electriccoin.zcash.ui.R.string.send_feeSummary),
 +                                title = stringRes(co.electriccoin.zcash.ui.R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressScreen.kt
-index 2bea2d16f..2b3dcf86f 100644
+index 2bea2d16f..7926ee53c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressScreen.kt
-@@ -20,2 +20,2 @@ import java.util.UUID
+@@ -11,0 +12,3 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.component.ButtonState
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
+@@ -20,2 +23,12 @@ import java.util.UUID
 -fun ScanGenericAddressScreen(args: ScanGenericAddressArgs) {
 -    val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args) }
 +fun ScanGenericAddressScreen(args: ScanGenericAddressArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args, sourceEntryId) }
++    val isOwned by vm.isOwned.collectAsStateWithLifecycle()
++    if (!isOwned) {
++        UnavailableWalletAction(
++            screenTitle = stringRes(R.string.private_scan_title),
++            title = stringRes(R.string.private_scan_unavailable_title),
++            message = stringRes(R.string.private_scan_unavailable_message),
++            action = ButtonState(text = stringRes(R.string.general_back), onClick = { vm.onBack() }),
++        )
++        return
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
-index 7cbe1420c..4fb22a042 100644
+index 7cbe1420c..9a991bdb3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
 @@ -4,0 +5,3 @@ import androidx.lifecycle.viewModelScope
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.isAtEntry
 +import co.electriccoin.zcash.ui.whileAtEntry
-@@ -20,0 +24,2 @@ internal class ScanGenericAddressVM(
+@@ -9,0 +13,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.SharingStarted
++import kotlinx.coroutines.flow.stateIn
+@@ -20,0 +26,2 @@ internal class ScanGenericAddressVM(
 +    private val navigationRouter: NavigationRouter,
 +    private val sourceEntryId: String? = null,
-@@ -26,0 +32 @@ internal class ScanGenericAddressVM(
+@@ -22,0 +30,5 @@ internal class ScanGenericAddressVM(
++    val isOwned = navigateToScanAddress.observeOwnership(args).stateIn(
++        viewModelScope,
++        SharingStarted.WhileSubscribed(),
++        navigateToScanAddress.owns(args),
++    )
+@@ -26,0 +39 @@ internal class ScanGenericAddressVM(
 +    private val acceptsScan get() = !hasBeenScannedSuccessfully && navigationRouter.isAtEntry(sourceEntryId)
-@@ -35 +41 @@ internal class ScanGenericAddressVM(
+@@ -35 +48 @@ internal class ScanGenericAddressVM(
 -                if (!hasBeenScannedSuccessfully) {
 +                if (acceptsScan) {
-@@ -41,3 +47,5 @@ internal class ScanGenericAddressVM(
+@@ -41,3 +54,5 @@ internal class ScanGenericAddressVM(
 -                        when (val zip321Result = parseZip321(result)) {
 -                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result)
 -                            is Zip321ParseUriValidation.SingleAddress -> onZip321SingleAddressScanned(zip321Result)
@@ -52167,31 +52211,31 @@ index 7cbe1420c..4fb22a042 100644
 +                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result, result)
 +                            is Zip321ParseUriValidation.SingleAddress ->
 +                                onZip321SingleAddressScanned(zip321Result, result)
-@@ -52,4 +60,2 @@ internal class ScanGenericAddressVM(
+@@ -52,4 +67,2 @@ internal class ScanGenericAddressVM(
 -        state.update { ScanValidationState.VALID }
 -        hasBeenScannedSuccessfully = true
 -        navigateToScanAddress.onScanRedirected(args)
 -        navigateToRedeemGiftCard.replaceWithRedeem(link.trim())
 +        if (sourceEntryId == null) navigateToScanAddress.onScanRedirected(args)
 +        updateResult(navigateToRedeemGiftCard.replaceWithRedeem(link.trim(), sourceEntryId))
-@@ -59,2 +65 @@ internal class ScanGenericAddressVM(
+@@ -59,2 +72 @@ internal class ScanGenericAddressVM(
 -        state.update { ScanValidationState.VALID }
 -        navigateToScanAddress.onScanned(
 +        updateResult(navigateToScanAddress.onScanned(
-@@ -63,3 +68,3 @@ internal class ScanGenericAddressVM(
+@@ -63,3 +75,3 @@ internal class ScanGenericAddressVM(
 -            args = args
 -        )
 -        hasBeenScannedSuccessfully = true
 +            args = args,
 +            sourceEntryId = sourceEntryId,
 +        ))
-@@ -68,3 +73,2 @@ internal class ScanGenericAddressVM(
+@@ -68,3 +80,2 @@ internal class ScanGenericAddressVM(
 -    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress) {
 -        state.update { ScanValidationState.VALID }
 -        navigateToScanAddress.onScanned(
 +    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress, raw: String) {
 +        updateResult(navigateToScanAddress.onScanned(
-@@ -73,3 +77,4 @@ internal class ScanGenericAddressVM(
+@@ -73,3 +84,4 @@ internal class ScanGenericAddressVM(
 -            args = args
 -        )
 -        hasBeenScannedSuccessfully = true
@@ -52199,11 +52243,11 @@ index 7cbe1420c..4fb22a042 100644
 +            rawInput = raw,
 +            sourceEntryId = sourceEntryId,
 +        ))
-@@ -78,2 +83 @@ internal class ScanGenericAddressVM(
+@@ -78,2 +90 @@ internal class ScanGenericAddressVM(
 -    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid) {
 -        state.update { ScanValidationState.VALID }
 +    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid, raw: String) {
-@@ -88,2 +92,6 @@ internal class ScanGenericAddressVM(
+@@ -88,2 +99,6 @@ internal class ScanGenericAddressVM(
 -        navigateToScanAddress.onScanned(address, amount, args)
 -        hasBeenScannedSuccessfully = true
 +        updateResult(navigateToScanAddress.onScanned(address, amount, args, raw, sourceEntryId))
@@ -52212,13 +52256,13 @@ index 7cbe1420c..4fb22a042 100644
 +    private fun updateResult(delivered: Boolean) {
 +        hasBeenScannedSuccessfully = delivered
 +        state.value = if (delivered) ScanValidationState.VALID else ScanValidationState.NONE
-@@ -95 +103 @@ internal class ScanGenericAddressVM(
+@@ -95 +110 @@ internal class ScanGenericAddressVM(
 -                if (!hasBeenScannedSuccessfully) {
 +                if (acceptsScan) {
-@@ -104 +112 @@ internal class ScanGenericAddressVM(
+@@ -104 +119 @@ internal class ScanGenericAddressVM(
 -                if (!hasBeenScannedSuccessfully) {
 +                if (acceptsScan) {
-@@ -124 +132 @@ internal class ScanGenericAddressVM(
+@@ -124 +139 @@ internal class ScanGenericAddressVM(
 -    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args) }
 +    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args, sourceEntryId) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt
@@ -63157,10 +63201,10 @@ index 000000000..bdaf3e5ab
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..0ed4ea32b
+index 000000000..139c04b80
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,60 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
@@ -63215,6 +63259,9 @@ index 000000000..0ed4ea32b
 +    <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
 +    <string name="private_viewing_key_unavailable_title">Viewing key unavailable</string>
 +    <string name="private_viewing_key_unavailable_message">Go back to review the viewing key again.</string>
++    <string name="private_scan_title">Scan</string>
++    <string name="private_scan_unavailable_title">Scan interrupted</string>
++    <string name="private_scan_unavailable_message">Go back and start the scan again.</string>
 +    <string name="private_swap_funding_unconfirmed" translatable="false">Funding unconfirmed</string>
 +    <string name="private_swap_funding_not_sent" translatable="false">Funding not sent</string>
 +</resources>
@@ -64197,10 +64244,10 @@ index 000000000..4777cf6e0
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
 new file mode 100644
-index 000000000..fc3d81a7d
+index 000000000..fb306eec1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
-@@ -0,0 +1,580 @@
+@@ -0,0 +1,587 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -64498,7 +64545,8 @@ index 000000000..fc3d81a7d
 +        install()
 +        compose.runOnIdle {
 +            runTest {
-+                val router = collectOwnedNavigation()
++                var resumed = true
++                val router = collectOwnedNavigation { resumed }
 +                val preference = mockk<IsSwapRefundWarningDismissedStorageProvider>(relaxed = true)
 +                val warning = NavigateToSwapRefundWarningUseCase(router, preference)
 +                val form = checkNotNull(controller.currentBackStackEntry).id
@@ -64511,7 +64559,11 @@ index 000000000..fc3d81a7d
 +                warning.onContinue(dismissed, dontShowAgain = true)
 +                assertTrue(controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>()?.isFromExternalLink == true)
 +                assertTrue(controller.popBackStack())
++                resumed = false
++                assertFalse(warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form))
++                assertEquals(form, controller.currentBackStackEntry?.id)
 +
++                resumed = true
 +                val next = async { warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form) }
 +                runCurrent()
 +                val retry = checkNotNull(controller.currentBackStackEntry).toRoute<SwapRefundWarningArgs>()
@@ -64536,9 +64588,11 @@ index 000000000..fc3d81a7d
 +                runCurrent()
 +                val oldEntry = checkNotNull(controller.currentBackStackEntry)
 +                val oldRequest = oldEntry.toRoute<ScanGenericAddressArgs>()
++                assertTrue(scanner.owns(oldRequest))
 +                controller.navigate(ScanGiftCardArgs(isFromExternalLink = true))
 +                assertFalse(scanner.onScanned("synthetic", null, oldRequest, sourceEntryId = oldEntry.id))
 +                assertNull(first.await())
++                assertFalse(scanner.owns(oldRequest))
 +                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
 +                assertTrue(controller.popBackStack())
 +                assertTrue(controller.popBackStack())
@@ -64588,7 +64642,7 @@ index 000000000..fc3d81a7d
 +    }
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
-+    private fun TestScope.collectOwnedNavigation(): NavigationRouterImpl {
++    private fun TestScope.collectOwnedNavigation(canCommit: () -> Boolean = { true }): NavigationRouterImpl {
 +        val router = NavigationRouterImpl()
 +        val observer = router.registerEntryObserver()
 +        val listener = NavController.OnDestinationChangedListener { nav, _, _ ->
@@ -64596,7 +64650,7 @@ index 000000000..fc3d81a7d
 +        }
 +        controller.addOnDestinationChangedListener(listener)
 +        val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-+        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
++        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk(), canCommit)
 +        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
 +            try {
 +                router.observePipeline().collect {
@@ -85734,11 +85788,27 @@ index 1dec990ab..4804e8d55 100644
 +            navigationRouter = router,
 +            getSelectedWalletAccount = getSelectedWalletAccount,
 +        )
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
+index 4ff11b7a6..168374a83 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
+@@ -116,0 +117 @@ class ScanGiftCardVMTest {
++            runCurrent()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
-index fcda335bd..a57b60e46 100644
+index fcda335bd..39c357d3f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
-@@ -322,0 +323,30 @@ class PasteGiftCardLinkVMTest {
+@@ -246,0 +247 @@ class PasteGiftCardLinkVMTest {
++            runCurrent()
+@@ -260,0 +262 @@ class PasteGiftCardLinkVMTest {
++            runCurrent()
+@@ -276,0 +279 @@ class PasteGiftCardLinkVMTest {
++            runCurrent()
+@@ -288,0 +292 @@ class PasteGiftCardLinkVMTest {
++            runCurrent()
+@@ -318,0 +323 @@ class PasteGiftCardLinkVMTest {
++            runCurrent()
+@@ -322,0 +328,31 @@ class PasteGiftCardLinkVMTest {
 +    @Test
 +    fun backPreservesAReplacementClipboardItem() =
 +        runTest(dispatcher) {
@@ -85749,6 +85819,7 @@ index fcda335bd..a57b60e46 100644
 +
 +            env.clipboard = "unrelated copied text"
 +            env.state.onBack()
++            runCurrent()
 +
 +            assertEquals("unrelated copied text", env.clipboard)
 +            verify(exactly = 0) { env.clearClipboard() }
@@ -85769,10 +85840,10 @@ index fcda335bd..a57b60e46 100644
 +            verify(exactly = 0) { env.clearClipboard() }
 +        }
 +
-@@ -325 +355 @@ class PasteGiftCardLinkVMTest {
+@@ -325 +361 @@ class PasteGiftCardLinkVMTest {
 -        clipboard: String? = null,
 +        var clipboard: String? = null,
-@@ -333 +363,2 @@ class PasteGiftCardLinkVMTest {
+@@ -333 +369,2 @@ class PasteGiftCardLinkVMTest {
 -                readClipboardText = mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } returns clipboard },
 +                readClipboardText =
 +                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },

@@ -244,6 +244,7 @@ class PasteGiftCardLinkVMTest {
             val env = Env(this)
 
             env.state.onBack()
+            runCurrent()
 
             assertEquals(1, env.router.backCount)
             assertTrue(env.router.replacedFrom.isEmpty())
@@ -258,6 +259,7 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             env.state.onBack()
+            runCurrent()
 
             assertEquals(1, env.router.backCount)
             assertTrue(env.router.redeemReplacingGiftCardScan().isEmpty())
@@ -274,6 +276,7 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             env.state.onBack()
+            runCurrent()
 
             verify(exactly = 1) { env.clearClipboard() }
         }
@@ -286,6 +289,7 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             env.state.onBack()
+            runCurrent()
 
             assertEquals(1, env.router.backCount)
             verify(exactly = 0) { env.clearClipboard() }
@@ -316,6 +320,7 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             env.state.onBack()
+            runCurrent()
 
             verify(exactly = 1) { env.clearClipboard() }
         }
@@ -330,6 +335,7 @@ class PasteGiftCardLinkVMTest {
 
             env.clipboard = "unrelated copied text"
             env.state.onBack()
+            runCurrent()
 
             assertEquals("unrelated copied text", env.clipboard)
             verify(exactly = 0) { env.clearClipboard() }

@@ -9,6 +9,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.common.UnavailableWalletAction
 import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -19,6 +22,16 @@ import java.util.UUID
 @Composable
 fun ScanGenericAddressScreen(args: ScanGenericAddressArgs, sourceEntryId: String) {
     val vm = koinViewModel<ScanGenericAddressVM> { parametersOf(args, sourceEntryId) }
+    val isOwned by vm.isOwned.collectAsStateWithLifecycle()
+    if (!isOwned) {
+        UnavailableWalletAction(
+            screenTitle = stringRes(R.string.private_scan_title),
+            title = stringRes(R.string.private_scan_unavailable_title),
+            message = stringRes(R.string.private_scan_unavailable_message),
+            action = ButtonState(text = stringRes(R.string.general_back), onClick = { vm.onBack() }),
+        )
+        return
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

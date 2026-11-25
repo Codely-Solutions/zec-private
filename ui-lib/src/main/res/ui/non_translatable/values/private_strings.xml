@@ -52,6 +52,9 @@
     <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
     <string name="private_viewing_key_unavailable_title">Viewing key unavailable</string>
     <string name="private_viewing_key_unavailable_message">Go back to review the viewing key again.</string>
+    <string name="private_scan_title">Scan</string>
+    <string name="private_scan_unavailable_title">Scan interrupted</string>
+    <string name="private_scan_unavailable_message">Go back and start the scan again.</string>
     <string name="private_swap_funding_unconfirmed" translatable="false">Funding unconfirmed</string>
     <string name="private_swap_funding_not_sent" translatable="false">Funding not sent</string>
 </resources>

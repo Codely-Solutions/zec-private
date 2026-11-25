@@ -295,7 +295,8 @@ class RestoredWalletRoutesLayoutTest {
         install()
         compose.runOnIdle {
             runTest {
-                val router = collectOwnedNavigation()
+                var resumed = true
+                val router = collectOwnedNavigation { resumed }
                 val preference = mockk<IsSwapRefundWarningDismissedStorageProvider>(relaxed = true)
                 val warning = NavigateToSwapRefundWarningUseCase(router, preference)
                 val form = checkNotNull(controller.currentBackStackEntry).id
@@ -308,7 +309,11 @@ class RestoredWalletRoutesLayoutTest {
                 warning.onContinue(dismissed, dontShowAgain = true)
                 assertTrue(controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>()?.isFromExternalLink == true)
                 assertTrue(controller.popBackStack())
+                resumed = false
+                assertFalse(warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form))
+                assertEquals(form, controller.currentBackStackEntry?.id)
 
+                resumed = true
                 val next = async { warning(BigDecimal.ONE, SwapMode.EXACT_OUTPUT, form) }
                 runCurrent()
                 val retry = checkNotNull(controller.currentBackStackEntry).toRoute<SwapRefundWarningArgs>()
@@ -333,9 +338,11 @@ class RestoredWalletRoutesLayoutTest {
                 runCurrent()
                 val oldEntry = checkNotNull(controller.currentBackStackEntry)
                 val oldRequest = oldEntry.toRoute<ScanGenericAddressArgs>()
+                assertTrue(scanner.owns(oldRequest))
                 controller.navigate(ScanGiftCardArgs(isFromExternalLink = true))
                 assertFalse(scanner.onScanned("synthetic", null, oldRequest, sourceEntryId = oldEntry.id))
                 assertNull(first.await())
+                assertFalse(scanner.owns(oldRequest))
                 assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
                 assertTrue(controller.popBackStack())
                 assertTrue(controller.popBackStack())
@@ -385,7 +392,7 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun TestScope.collectOwnedNavigation(): NavigationRouterImpl {
+    private fun TestScope.collectOwnedNavigation(canCommit: () -> Boolean = { true }): NavigationRouterImpl {
         val router = NavigationRouterImpl()
         val observer = router.registerEntryObserver()
         val listener = NavController.OnDestinationChangedListener { nav, _, _ ->
@@ -393,7 +400,7 @@ class RestoredWalletRoutesLayoutTest {
         }
         controller.addOnDestinationChangedListener(listener)
         val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk(), canCommit)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {
                 router.observePipeline().collect {

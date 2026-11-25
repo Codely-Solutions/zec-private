@@ -114,6 +114,7 @@ class ScanGiftCardVMTest {
             assertNull(env.vm.state.value.infoText)
             env.vm.state.value
                 .onBack()
+            runCurrent()
             assertEquals(1, env.router.backCount)
 
             val external = Env(isFromExternalLink = true)

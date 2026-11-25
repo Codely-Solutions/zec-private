@@ -63,10 +63,12 @@ fun RootNavGraph(
     val launchNavigation = koinInject<LaunchNavigationRequests>()
     val navController = LocalNavController.current
     val activity = LocalActivity.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val currentAccess = rememberUpdatedState(hasAppAccess)
     val navigator =
         remember(
             activity,
+            lifecycle,
             navController,
             keyboardManager,
             applicationStateProvider,
@@ -79,7 +81,10 @@ fun RootNavGraph(
                 keyboardManager = keyboardManager,
                 applicationStateProvider = applicationStateProvider,
                 appearanceModeStorageProvider = appearanceModeStorageProvider,
-                isOledEnabledStorageProvider = isOledEnabledStorageProvider
+                isOledEnabledStorageProvider = isOledEnabledStorageProvider,
+                canCommitOwnedNavigation = {
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
+                }
             )
         }
 

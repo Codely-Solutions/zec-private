@@ -6,8 +6,11 @@ import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -21,7 +24,10 @@ class NavigateToScanGenericAddressUseCase(
     private val navigationRouter: NavigationRouter
 ) {
     private val pipeline = MutableSharedFlow<ScanAddressPipelineResult>()
-    private val ownedRequests = mutableMapOf<String, Channel<ScanAddressPipelineResult.Scanned>>()
+    private val ownedRequests = MutableStateFlow<Map<String, Channel<ScanAddressPipelineResult.Scanned>>>(emptyMap())
+
+    internal fun observeOwnership(args: ScanGenericAddressArgs) = ownedRequests.map { args.requestId in it }
+    internal fun owns(args: ScanGenericAddressArgs) = args.requestId in ownedRequests.value
 
     suspend operator fun invoke(): ScanResult? {
         val args = ScanGenericAddressArgs()
@@ -43,7 +49,7 @@ class NavigateToScanGenericAddressUseCase(
     ): ScanResult? {
         val args = ScanGenericAddressArgs()
         val scans = Channel<ScanAddressPipelineResult.Scanned>(capacity = 1)
-        ownedRequests[args.requestId] = scans
+        ownedRequests.update { it + (args.requestId to scans) }
         return try {
             val active = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Forward(listOf(args)) }
             val scanner = navigationRouter.activeEntry.value
@@ -53,7 +59,7 @@ class NavigateToScanGenericAddressUseCase(
                 null
             }
         } finally {
-            ownedRequests.remove(args.requestId)
+            ownedRequests.update { it - args.requestId }
             scans.close()
             scans.tryReceive().getOrNull()?.acknowledge?.complete(false)
         }
@@ -112,7 +118,7 @@ class NavigateToScanGenericAddressUseCase(
             pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args, rawInput))
             return true
         }
-        val request = ownedRequests[args.requestId]
+        val request = ownedRequests.value[args.requestId]
         val acknowledged = CompletableDeferred<Boolean>()
         val scanned = ScanAddressPipelineResult.Scanned(address, amount, args, rawInput, sourceEntryId, acknowledged)
         return navigationRouter.isAtEntry(sourceEntryId) && request?.trySend(scanned)?.isSuccess == true &&

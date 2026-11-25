@@ -29,10 +29,13 @@ class NavigatorImpl(
     private val applicationStateProvider: ApplicationStateProvider,
     private val appearanceModeStorageProvider: AppearanceModeStorageProvider,
     private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
+    private val canCommitOwnedNavigation: () -> Boolean = { true },
 ) : Navigator {
     override suspend fun executeCommand(command: NavigationCommand) {
         when {
-            command is NavigationCommand.ForEntry -> keyboardManager.controller?.hide()
+            command is NavigationCommand.ForEntry && canCommitOwnedNavigation() ->
+                keyboardManager.controller?.hide()
+            command is NavigationCommand.ForEntry -> Unit
             command is NavigationCommand.Forward && command.sourceEntryId != null -> {
                 if (!canForward(command)) return
                 keyboardManager.controller?.hide()
@@ -65,14 +68,15 @@ class NavigatorImpl(
 
     private suspend fun executeOwned(command: NavigationCommand.ForEntry) {
         val previous = navController.currentBackStackEntry
-        if (previous?.id == command.sourceEntryId && command.isStillAllowed()) {
+        if (previous?.id == command.sourceEntryId && canCommitOwnedNavigation() && command.isStillAllowed()) {
             executeAfterKeyboard(command.buildCommand())
         }
         command.acknowledge(navController.currentBackStackEntry !== previous)
     }
 
     private fun canForward(command: NavigationCommand.Forward): Boolean =
-        (command.sourceEntryId == null || navController.currentBackStackEntry?.id == command.sourceEntryId) &&
+        (command.sourceEntryId == null ||
+            (canCommitOwnedNavigation() && navController.currentBackStackEntry?.id == command.sourceEntryId)) &&
             command.isStillAllowed?.invoke() != false
 
     override suspend fun executeCommand(command: CustomNavigationCommand) {
