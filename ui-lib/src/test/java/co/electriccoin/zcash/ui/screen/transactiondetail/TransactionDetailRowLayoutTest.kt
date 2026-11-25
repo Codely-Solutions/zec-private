@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
@@ -148,7 +149,6 @@ class TransactionDetailRowLayoutTest {
         val status = mutableStateOf(saved)
         val theme = mutableStateOf("light")
         val fontScale = mutableStateOf(1f)
-        var depositClicks = 0
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale.value)) {
                 ZcashTheme(
@@ -167,7 +167,6 @@ class TransactionDetailRowLayoutTest {
                                 transactionId = stringRes("Synthetic funding transaction"),
                                 refundedAmount = null,
                                 onTransactionIdClick = {},
-                                onDepositAddressClick = { depositClicks++ },
                                 onRecipientAddressClick = null,
                                 maxSlippage = null,
                                 note = null,
@@ -192,6 +191,7 @@ class TransactionDetailRowLayoutTest {
             compose.onNodeWithText("Saved status").assertIsDisplayed()
             compose.onNodeWithText(application.getString(R.string.swapAndPay_status_refunded)).assertIsDisplayed()
             compose.onNodeWithText("Synthetic deposit").assertIsDisplayed()
+            compose.onNodeWithText("Deposit reference").assertIsDisplayed().assertHasNoClickAction()
             capture("outgoing-saved-$appearance-$scale")
             compose.runOnIdle { status.value = unavailable }
             compose.onNodeWithText("Saved status").assertDoesNotExist()
@@ -200,8 +200,7 @@ class TransactionDetailRowLayoutTest {
             capture("outgoing-unavailable-$appearance-$scale")
         }
         assertCompleteText("Synthetic deposit")
-        compose.onNodeWithText("Synthetic deposit").performClick()
-        compose.runOnIdle { assertEquals(1, depositClicks) }
+        compose.onNodeWithText("Synthetic deposit").assertHasNoClickAction()
     }
 
     private fun assertCompleteText(text: String) {

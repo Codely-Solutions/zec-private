@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import sys
-from acceptance_policy import input_fingerprint
+from acceptance_policy import BRIDGE_RECIPE_PATHS, direct_bridge_inputs, input_fingerprint
 from acceptance_planning import plan_execution
 from release_inputs import git, local_upgrade_artifacts, require_local_upgrade_pair, selected_baseline, version_code
 from release_metadata import Metadata, require
@@ -14,7 +14,8 @@ from release_metadata import Metadata, require
 SOURCE = Path(__file__).resolve().parents[1]
 
 
-def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=None, metadata=None, planning=None, profiles=None):
+def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=None, metadata=None,
+            planning=None, profiles=None, bridge_run=None):
     source, out = Path(source).resolve(), Path(out).resolve()
     require(source == SOURCE, 'Run helper from selected source checkout')
     require(re.fullmatch('[0-9a-f]{40}', sha), 'Exact source SHA required')
@@ -36,8 +37,13 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
     _, production, production_proof = metadata.producer(candidate_run, sha, 'build-release.yml', 'unsigned', 'validated-unsigned-apk')
     ui, core = {}, {}
     ui_proof, core_proof = {}, {}
+    bridge, bridge_proof, bridge_inputs = None, None, None
     if 'quotes' in profiles:
+        require(type(bridge_run) is int and bridge_run > 0, 'Local quotes require a verified bridge producer run')
         _, ui, ui_proof = metadata.producer(candidate_run, sha, 'build-release.yml', 'emulator', 'isolated-ui-repro-apk')
+        _, bridge, bridge_proof = metadata.producer(bridge_run, sha, 'ui-bridge.yml', 'probe', 'android-ui-bridge')
+        bridge['source_sha'] = sha
+        bridge_inputs = direct_bridge_inputs(sha, source)
     if 'core' in profiles:
         _, core, core_proof = metadata.producer(core_run, sha, 'core-validation.yml', 'testnet', 'core-testnet-candidate')
     baseline = selected_baseline(source, sha, baseline_path)
@@ -46,8 +52,7 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
 
         fixture = require_current_hosted_upgrade(source, metadata)
         require_local_upgrade_pair(baseline, fixture)
-    bridge = json.loads(git(source, 'show', sha + ':.private/maintenance-assets.json'))['ui_bridge']
-    for asset in (baseline['artifact'], baseline['instrumentation']['artifact'], bridge):
+    for asset in (baseline['artifact'], baseline['instrumentation']['artifact']):
         metadata.verify_asset(asset)
     version = version_code(source, sha)
     require('core' not in profiles or version > baseline['version_code'], 'Candidate must advance the paired baseline version')
@@ -58,6 +63,8 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
         '.private/core-network-policy.json', '.private/core-wallet/include.gradle',
         '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt',
         '.github/workflows/build-release.yml', '.github/workflows/core-validation.yml')]
+    if 'quotes' in profiles:
+        paths += [source / p for p in BRIDGE_RECIPE_PATHS if (source / p).is_file()]
     common = dict(build_source_sha=sha, product_source_sha=sha, stable_candidate_run=candidate_run,
                   productionUnsignedArtifact=production, controller_source_sha=sha,
                   productionUnsignedProducer=production_proof)
@@ -72,6 +79,7 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
     recipe_ids = dict(zip(recipes, git(source, 'rev-parse', *[sha + ':' + p for p in recipes]).splitlines(), strict=True))
     ui.update(common, artifactProducer=ui_proof, workflow_run_id=candidate_run, probeKind='ui', package=baseline['package'].replace('.testnet', ''),
         expectedVersionCode=version, phase1Scenario=True, sizeWorkflowScenario=True, residentUiBridge=bridge,
+        bridgeProducer=bridge_proof, bridgeInputs=bridge_inputs,
         uiBuildInputs=dict(profile='production-quotes', input_fingerprint=fp['production-quotes'], recipes=recipe_ids))
     bindings = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     # All verification precedes creating task outputs; remove only this fresh owned output on write failure.
@@ -110,6 +118,7 @@ def main():
     parser.add_argument('--source-sha', required=True)
     parser.add_argument('--candidate-run', required=True, type=int)
     parser.add_argument('--core-run', type=int)
+    parser.add_argument('--bridge-run', type=int)
     parser.add_argument('--profile',choices=('core','quotes'),action='append')
     parser.add_argument('--owner', required=True)
     parser.add_argument('--out', required=True, type=Path)
@@ -119,7 +128,8 @@ def main():
     args = parser.parse_args()
     print(json.dumps(prepare(args.source, args.source_sha, args.candidate_run, args.core_run, args.owner,
                              args.out, baseline_path=args.baseline, metadata=Metadata(repo=args.repo),
-                             planning=json.loads(args.planning_evidence.read_text()) if args.planning_evidence else None, profiles=args.profile)))
+                             planning=json.loads(args.planning_evidence.read_text()) if args.planning_evidence else None,
+                             profiles=args.profile, bridge_run=args.bridge_run)))
 
 
 if __name__ == '__main__':

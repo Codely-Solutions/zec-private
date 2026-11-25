@@ -64,10 +64,8 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 state =
                     TransactionDetailInfoRowState(
-                        title = stringRes(R.string.transactionHistory_sentTo),
+                        title = stringRes(R.string.private_swap_deposit_reference),
                         message = state.depositAddress,
-                        trailingIcon = R.drawable.ic_transaction_detail_info_copy,
-                        onClick = state.onDepositAddressClick
                     ),
             )
             AnimatedVisibility(
@@ -187,7 +185,6 @@ private fun Preview() =
                         transactionId = stringRes("Transaction ID"),
                         refundedAmount = stringRes("Refunded amount"),
                         onTransactionIdClick = {},
-                        onDepositAddressClick = {},
                         onRecipientAddressClick = {},
                         maxSlippage = null,
                         note = stringRes("None"),

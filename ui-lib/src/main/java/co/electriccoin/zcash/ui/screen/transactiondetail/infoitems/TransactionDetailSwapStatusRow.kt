@@ -19,6 +19,8 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
+import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
+import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
@@ -118,6 +120,10 @@ private fun StatusChip(state: TransactionDetailSwapStatusRowState) {
                     stringResource(R.string.swapAndPay_status_success)
                 }
 
+                PAYMENT_SHORTFALL -> {
+                    stringResource(R.string.private_payment_shortfall)
+                }
+
                 REFUNDED -> {
                     stringResource(R.string.swapAndPay_status_refunded)
                 }
@@ -155,6 +161,7 @@ private fun StatusChip(state: TransactionDetailSwapStatusRowState) {
 
                 EXPIRED,
                 REFUNDED,
+                PAYMENT_SHORTFALL,
                 FAILED -> {
                     ZashiBadgeDefaults.errorColors()
                 }
@@ -181,8 +188,9 @@ internal fun SwapQuoteStatusData.toDetailStatusRow(
     metadata: TransactionSwapMetadata? = savedMetadata,
     outgoingStatus: SwapStatus? = null,
 ): TransactionDetailSwapStatusRowState {
-    val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
-    val providerStatus = status?.status ?: savedStatus
+    val savedStatus = metadata?.recordedStatus?.let { metadata.status }
+        ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
+    val providerStatus = status?.settlementStatus { metadata?.executedAmountOut } ?: savedStatus
     val value = outgoingStatus ?: providerStatus
     val localOutcome = isLocalFundingStatus(value, providerStatus, outgoingStatus, metadata)
     val isSaved = value != null && (status == null || error != null)

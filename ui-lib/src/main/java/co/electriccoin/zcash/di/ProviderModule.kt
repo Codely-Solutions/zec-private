@@ -105,6 +105,7 @@ val providerModule =
                 persistableWalletProvider = get(),
                 // lazy {} breaks the AccountDataSource -> SynchronizerProvider resolution cycle
                 migrationSyncedHook = lazy { get() },
+                migrationSyncGate = get(),
             )
         } bind SynchronizerProvider::class
         singleOf(::ApplicationStateProviderImpl) bind ApplicationStateProvider::class

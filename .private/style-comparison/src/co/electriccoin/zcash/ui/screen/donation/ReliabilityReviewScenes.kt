@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.common.usecase.ShieldFundsUseCase
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.design.component.*
 import co.electriccoin.zcash.ui.design.util.*
 import co.electriccoin.zcash.ui.screen.balances.spendable.SpendableBalanceVM
@@ -92,7 +93,8 @@ internal fun ReliabilityReviewScene(screen: String, originalAccount: ZodlAccount
                     navigationRouter = navigation,
                     accountDataSource = accounts,
                     navigateToError = NavigateToErrorUseCase(navigation),
-                    messageAvailabilityDataSource = reviewInterface(emptyMap())
+                    messageAvailabilityDataSource = reviewInterface(emptyMap()),
+                    walletWriteAccess = WalletWriteAccess(),
                 )
             }
             // The real VM computes its initial state from the synthetic SDK balances. No flow is subscribed.

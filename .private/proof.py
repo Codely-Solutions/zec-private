@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,zipfile
 from pathlib import Path
 from apk_architecture import check_apk
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_core_sources, CORE_BINDING
+from acceptance_policy import input_fingerprint, validate_core, validate_direct_quotes, validate_core_sources, CORE_BINDING
 root=Path(__file__).resolve().parents[1]
 apks=list((root/'app/build/outputs/apk/zcashmainnetFoss/release').glob('*unsigned.apk'))
 if len(apks)!=1: raise SystemExit('Expected exactly one unsigned FOSS release APK')
@@ -55,9 +55,13 @@ proof['quote_acceptance']={'input_fingerprint':quote_inputs,'status':'pending'}
 if quote_path.exists():
     quote=json.loads(quote_path.read_text())
     if quote.get('input_fingerprint')==quote_inputs:
-        validate_quotes(quote,quote_inputs)
-        shutil.copy2(quote_path,out/'quote-acceptance.json')
-        proof['quote_acceptance'].update(status='passed',receipt_sha256=hashlib.sha256(quote_path.read_bytes()).hexdigest())
+        try:
+            validate_direct_quotes(quote,quote_inputs,sha,root)
+        except ValueError as error:
+            print('Local production quote acceptance pending: ' + str(error))
+        else:
+            shutil.copy2(quote_path,out/'quote-acceptance.json')
+            proof['quote_acceptance'].update(status='passed',receipt_sha256=hashlib.sha256(quote_path.read_bytes()).hexdigest())
 if os.environ.get('BUILD_EMULATOR')=='true':
     debug=list((root/'app/build/outputs/apk/zcashmainnetFoss/debug').glob('*.apk'))
     if len(debug)!=1: raise SystemExit('Expected one emulator candidate APK')

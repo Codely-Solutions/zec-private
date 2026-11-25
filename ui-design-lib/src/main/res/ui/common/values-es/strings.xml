@@ -351,6 +351,7 @@
     <string name="export_data_unable_to_share">No se encontró una aplicación con la cual compartir.</string>
     <!-- ===== feedback ===== -->
     <string name="support_header">Soporte</string>
+    <string name="wallet_seed_recovery_waiting_title">Recuperación de la billetera en curso</string>
     <string name="wallet_seed_recovery_failed_title">La recuperación de la billetera requiere atención</string>
     <string name="wallet_seed_recovery_failed_message">Abre Soporte para compartir un mensaje sin datos de la billetera.</string>
     <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
@@ -1042,6 +1043,8 @@
     <string name="transaction_history_receiving_failed">Error al recibir</string>
     <string name="transaction_history_shielding">Protegiendo…</string>
     <string name="swapStatus_paid">Pagado</string>
+    <string name="private_payment_shortfall">Pago inferior al solicitado</string>
+    <string name="private_payment_shortfall_info">Comprueba el estado del pago o contacta con Soporte antes de enviar más.</string>
     <string name="transaction_history_paying">Pagando…</string>
     <string name="swapStatus_paymentFailed">Error en el pago</string>
     <string name="swapStatus_paymentRefunded">Pago reembolsado</string>

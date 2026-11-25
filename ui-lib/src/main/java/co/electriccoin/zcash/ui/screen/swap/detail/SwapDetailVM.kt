@@ -13,6 +13,8 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
+import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
+import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
@@ -259,7 +261,8 @@ class SwapDetailVM(
     }
 
     private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState {
-        val settlement = swapData.status?.status ?: swapData.savedMetadata?.status
+        val settlement = swapData.status?.settlementStatus { swapData.savedMetadata?.executedAmountOut }
+            ?: swapData.savedMetadata?.status
         val showAmount = when (settlement) {
             EXPIRED, REFUNDED, FAILED -> false
             PENDING -> swapData.savedMetadata?.fundingNotSubmitted != true
@@ -286,7 +289,8 @@ class SwapDetailVM(
     }
 
     private fun createHeaderTitle(swapData: SwapData): StringResource? =
-        when (swapData.status?.status ?: swapData.savedMetadata?.status) {
+        when (swapData.status?.settlementStatus { swapData.savedMetadata?.executedAmountOut }
+            ?: swapData.savedMetadata?.status) {
             EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
             PENDING -> stringRes(
                 when {
@@ -298,6 +302,7 @@ class SwapDetailVM(
             INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
             PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
             SUCCESS -> createSuccessfulOutputTitle(swapData)
+            PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
             REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
             FAILED -> stringRes(R.string.swapStatus_swapFailed)
             null -> null

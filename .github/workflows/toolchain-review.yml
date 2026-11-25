@@ -12,6 +12,7 @@ on:
       - '**/settings.gradle.kts'
       - .private/gradle_resolution.py
       - .private/gradle_resolution_probe.py
+      - .private/build_ui_bridge.py
       - .private/test_toolchain_policy.py
       - buildSrc/**
       - .github/dependabot.yml
@@ -57,7 +58,7 @@ jobs:
         if: ${{ inputs.resolution_probe && !inputs.metadata_proposal }}
         run: |
           python3 -B .private/gradle_resolution.py -- ./gradlew -p build-conventions-secant help --dependency-verification strict --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx2g -XX:MaxMetaspaceSize=1g'
-          python3 -B .private/gradle_resolution.py -- ./gradlew -p .private/ui-bridge help --dependency-verification strict --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx2g -XX:MaxMetaspaceSize=1g'
+          python3 -B .private/build_ui_bridge.py help
       - name: Exercise a real Gradle missing-metadata cache and checksum rejection
         if: ${{ inputs.resolution_probe && !inputs.metadata_proposal }}
         run: python3 -B .private/gradle_resolution_probe.py --out "$RUNNER_TEMP/gradle-resolution-probe"

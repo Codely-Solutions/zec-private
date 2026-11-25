@@ -2,8 +2,9 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
 import cash.z.ecc.android.sdk.model.PersistableWallet
+import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.global.hideResetWallet
-import co.electriccoin.zcash.global.observeSdkMigrationSyncBlock
+import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import io.mockk.every
 import io.mockk.mockk
@@ -16,8 +17,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Rule
@@ -30,6 +33,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class WalletCoordinatorResetGateTest {
     @get:Rule val directory = TemporaryFolder()
@@ -115,12 +119,14 @@ class WalletCoordinatorResetGateTest {
     fun explicitErasureWaitsForMigrationPreferenceAccessToFinishAfterSuppression() = runTest {
         val store = progressStore()
         val preferences = MutableStateFlow<PersistableWallet?>(mockk())
+        val entered = CompletableDeferred<Unit>()
         val draining = CompletableDeferred<Unit>()
         val drained = CompletableDeferred<Unit>()
         val states = Channel<Boolean>(Channel.UNLIMITED)
-        val syncBlock = preferences.hideResetWallet(store).observeSdkMigrationSyncBlock(store) {
+        val syncBlock = WalletMigrationSyncGate().observe(preferences.hideResetWallet(store), store) {
             flow {
                 try {
+                    entered.complete(Unit)
                     emit(true)
                     awaitCancellation()
                 } finally {
@@ -133,6 +139,7 @@ class WalletCoordinatorResetGateTest {
         }
         backgroundScope.launch { syncBlock.collect { states.send(it) } }
         assertTrue(states.receive())
+        entered.await()
 
         store.store(ResetStage.ERASE_SDK)
         store.suppressSdkInput()
@@ -147,6 +154,56 @@ class WalletCoordinatorResetGateTest {
         } finally {
             drained.complete(Unit)
         }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun migrationPreferenceFailurePausesSyncAndClearsAfterAnAuthoritativeResult() = runTest {
+        val store = progressStore()
+        val wallet = MutableStateFlow<PersistableWallet?>(mockk())
+        val gate = WalletMigrationSyncGate()
+        var opens = 0
+        val states = Channel<Boolean>(Channel.UNLIMITED)
+        backgroundScope.launch {
+            gate.observe(wallet.hideResetWallet(store), store) {
+                if (++opens == 1) throw IOException("Synthetic unavailable store")
+                flowOf(false)
+            }.collect { states.send(it) }
+        }
+
+        assertTrue(states.receive())
+        runCurrent()
+        assertSame(SynchronizerError.MigrationStateUnavailable, gate.error.value)
+        assertFalse(states.receive())
+        assertNull(gate.error.value)
+        assertEquals(2, opens)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun persistentMigrationReadFailureStaysPausedUntilTheWalletIsWithdrawn() = runTest {
+        val store = progressStore()
+        val wallet = MutableStateFlow<PersistableWallet?>(mockk())
+        val gate = WalletMigrationSyncGate()
+        var opens = 0
+        val states = Channel<Boolean>(Channel.UNLIMITED)
+        backgroundScope.launch {
+            gate.observe(wallet.hideResetWallet(store), store) {
+                opens += 1
+                flow { throw IOException("Synthetic unavailable store") }
+            }.collect { states.send(it) }
+        }
+
+        assertTrue(states.receive())
+        advanceTimeBy(10.seconds)
+        assertEquals(3, opens)
+        assertSame(SynchronizerError.MigrationStateUnavailable, gate.error.value)
+        assertTrue(states.tryReceive().isFailure)
+
+        store.store(ResetStage.ERASE_SDK)
+        store.suppressSdkInput()
+        assertFalse(states.receive())
+        assertNull(gate.error.value)
     }
 
     private fun progressStore(sync: DirectorySync = DirectorySync {}): ResetProgressStore =

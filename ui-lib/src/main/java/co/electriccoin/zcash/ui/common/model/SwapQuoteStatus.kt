@@ -36,3 +36,9 @@ interface SwapQuoteStatus {
     val depositedAmountFormatted: BigDecimal?
     val refundedFormatted: BigDecimal?
 }
+
+internal inline fun SwapQuoteStatus.settlementStatus(retainedOutput: () -> BigDecimal? = { null }): SwapStatus {
+    val reported = status
+    if (reported != SwapStatus.SUCCESS || mode != SwapMode.EXACT_OUTPUT) return reported
+    return reported.withPaymentOutcome(SwapMode.EXACT_OUTPUT, quotedAmountOut, executedAmountOut ?: retainedOutput())
+}

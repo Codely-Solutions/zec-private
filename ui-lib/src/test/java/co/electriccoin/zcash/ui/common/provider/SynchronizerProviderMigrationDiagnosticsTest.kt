@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
+import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -37,7 +38,7 @@ class SynchronizerProviderMigrationDiagnosticsTest {
             coEvery { onSynced() } throws IllegalStateException(detail)
         }
         ShadowLog.clear()
-        SynchronizerProviderImpl(coordinator, mockk(), lazyOf(hook), backgroundScope)
+        SynchronizerProviderImpl(coordinator, mockk(), lazyOf(hook), WalletMigrationSyncGate(), backgroundScope)
         runCurrent()
 
         status.value = Synchronizer.Status.SYNCED

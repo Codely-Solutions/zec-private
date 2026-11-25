@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
+import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
@@ -94,7 +95,7 @@ class ActivityMapper {
                 color =
                     when (data.swap.status) {
                         INCOMPLETE_DEPOSIT, PROCESSING, PENDING, SUCCESS -> StringResourceColor.PRIMARY
-                        EXPIRED, REFUNDED, FAILED -> StringResourceColor.NEGATIVE
+                        EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> StringResourceColor.NEGATIVE
                     }
             )
         )
@@ -107,6 +108,7 @@ class ActivityMapper {
             when (data.swap.status) {
                 INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.string.transaction_history_swapping
                 SUCCESS -> R.string.swapStatus_swapped
+                PAYMENT_SHORTFALL -> R.string.private_payment_shortfall
                 REFUNDED -> R.string.swapStatus_swapRefunded
                 FAILED -> R.string.swapStatus_swapFailed
                 EXPIRED -> R.string.swapAndPay_expiredTitle
@@ -118,12 +120,12 @@ class ActivityMapper {
             when (data.swap.status) {
                 INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
                 SUCCESS -> R.drawable.ic_transaction_sent
-                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
+                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_send_failed
             }
         } else when (data.swap.status) {
             INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_receive_pending
             SUCCESS -> R.drawable.ic_transaction_received
-            EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_receive_failed
+            EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_receive_failed
         }
 
     private fun isTransactionUnread(data: ActivityData.ByTransaction, restoreTimestamp: Instant): Boolean {
@@ -193,7 +195,7 @@ class ActivityMapper {
                             when (status) {
                                 INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
                                 SUCCESS -> R.drawable.ic_transaction_sent
-                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
+                                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_send_failed
                             }
                         }
 
@@ -201,7 +203,7 @@ class ActivityMapper {
                             when (status) {
                                 INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
                                 SUCCESS -> R.drawable.ic_transaction_paid
-                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
+                                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_pay_failed
                             }
                         }
                     }
@@ -280,6 +282,7 @@ class ActivityMapper {
                                 )
 
                                 SUCCESS -> stringRes(R.string.swapStatus_swapped)
+                                PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
 
                                 REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 
@@ -303,6 +306,7 @@ class ActivityMapper {
                                 )
 
                                 SUCCESS -> stringRes(R.string.swapStatus_paid)
+                                PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
 
                                 REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 
@@ -418,6 +422,7 @@ class ActivityMapper {
 
                                 EXPIRED,
                                 REFUNDED,
+                                PAYMENT_SHORTFALL,
                                 FAILED -> StringResourceColor.NEGATIVE
                             }
                         }
@@ -432,17 +437,19 @@ class ActivityMapper {
 private const val MONTH_THRESHOLD = 30
 
 private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
-    val isPayment = data.swap.mode == EXACT_OUTPUT
+    fun byMode(payment: Int, swap: Int) = if (data.swap.mode == EXACT_OUTPUT) payment else swap
+
     return when (data.swap.status) {
         PENDING -> if (data.swap.fundingNotSubmitted) R.string.private_swap_funding_not_sent
             else R.string.private_swap_funding_unconfirmed
         INCOMPLETE_DEPOSIT -> {
-            if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
+            byMode(R.string.swapStatus_paymentIncomplete, R.string.swapStatus_swapIncomplete)
         }
-        PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
-        SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
-        REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
-        FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
+        PROCESSING -> byMode(R.string.swapStatus_paying, R.string.transaction_history_swapping)
+        SUCCESS -> byMode(R.string.swapStatus_paid, R.string.swapStatus_swapped)
+        PAYMENT_SHORTFALL -> R.string.private_payment_shortfall
+        REFUNDED -> byMode(R.string.swapStatus_paymentRefunded, R.string.swapStatus_swapRefunded)
+        FAILED -> byMode(R.string.swapStatus_paymentFailed, R.string.swapStatus_swapFailed)
         EXPIRED -> R.string.swapAndPay_expiredTitle
     }
 }

@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
+import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.errorCopy
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
@@ -14,6 +15,7 @@ import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.common.viewmodel.STACKTRACE_LIMIT
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.util.asPrivacySensitive
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +34,20 @@ class ErrorVM(
     private val route: ErrorRoute? = null,
 ) : ViewModel() {
     private val reportPermission = reportAccess.bind(viewModelScope)
-    val state: StateFlow<ErrorState> = MutableStateFlow(createState(args)).asStateFlow()
+    private val mutableState = MutableStateFlow(createState(args))
+    val state: StateFlow<ErrorState> = mutableState.asStateFlow()
+
+    init {
+        if (args is ErrorArgs.SeedRecoveryNotice) {
+            viewModelScope.launch {
+                args.phase.collect {
+                    if (it != SeedRecoveryPhase.FINISHED) {
+                        mutableState.value = createSeedRecoveryErrorState(waiting = it == SeedRecoveryPhase.WAITING)
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCleared() {
         route?.let(navigateToErrorBottom::clear)
@@ -44,9 +59,12 @@ class ErrorVM(
     private fun createState(args: ErrorArgs): ErrorState =
         when (args) {
             ErrorArgs.SeedRecoveryFailed -> createSeedRecoveryErrorState()
+            is ErrorArgs.SeedRecoveryNotice -> createSeedRecoveryErrorState(
+                waiting = args.phase.value == SeedRecoveryPhase.WAITING,
+            )
             is ErrorArgs.SyncError -> createSyncErrorState(args)
             is ErrorArgs.ShieldingError -> if (args.error is SubmitResult.GrpcFailure) {
-                createShieldingPendingState()
+                createShieldingPendingState(args, args.error)
             } else {
                 createShieldingErrorState(args)
             }
@@ -56,8 +74,10 @@ class ErrorVM(
             is ErrorArgs.KeystoneAccountUnsupported -> createKeystoneAccountUnsupportedState(args)
         }
 
-    private fun createSeedRecoveryErrorState() = ErrorState(
-        title = stringRes(R.string.wallet_seed_recovery_failed_title),
+    private fun createSeedRecoveryErrorState(waiting: Boolean = false) = ErrorState(
+        title = stringRes(
+            if (waiting) R.string.wallet_seed_recovery_waiting_title else R.string.wallet_seed_recovery_failed_title,
+        ),
         message = stringRes(R.string.wallet_seed_recovery_failed_message),
         positive = ButtonState(
             text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
@@ -65,30 +85,41 @@ class ErrorVM(
         ),
         negative = ButtonState(
             text = stringRes(R.string.support_header),
-            onClick = {
-                val allowed = reportAccess.bindToCurrentEntry(reportAccess.captureWallet())
-                sendEmailUseCase.sendBlankSupport(allowed)
-            },
+            onClick = ::openBlankSupport,
         ),
         onBack = ::onBack,
     )
 
-    private fun createSyncErrorState(args: ErrorArgs.SyncError) =
-        ErrorState(
+    private fun createSyncErrorState(args: ErrorArgs.SyncError): ErrorState {
+        val migrationUnavailable = args.synchronizerError == SynchronizerError.MigrationStateUnavailable
+        return ErrorState(
             title = stringRes(R.string.smartBanner_help_syncError_title),
-            message = stringRes(args.synchronizerError.getStackTrace(STACKTRACE_LIMIT).orEmpty()),
+            message = if (migrationUnavailable) {
+                stringRes(R.string.migration_sync_state_unavailable)
+            } else {
+                stringRes(args.synchronizerError.getStackTrace(STACKTRACE_LIMIT).orEmpty())
+            },
             positive =
                 ButtonState(
                     text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
                     onClick = { navigationRouter.back() }
                 ),
-            negative =
+            negative = if (migrationUnavailable) {
+                ButtonState(text = stringRes(R.string.support_header), onClick = ::openBlankSupport)
+            } else {
                 ButtonState(
                     text = stringRes(co.electriccoin.zcash.ui.design.R.string.send_report),
                     onClick = { sendReportClick(args) }
-                ),
+                )
+            },
             onBack = ::onBack,
         )
+    }
+
+    private fun openBlankSupport() {
+        val allowed = reportAccess.bindToCurrentEntry(reportAccess.captureWallet())
+        sendEmailUseCase.sendBlankSupport(allowed)
+    }
 
     private fun createKeystoneAccountUnsupportedState(args: ErrorArgs.KeystoneAccountUnsupported) =
         ErrorState(
@@ -180,16 +211,36 @@ class ErrorVM(
             onBack = ::onBack,
         )
 
-    private fun createShieldingPendingState() = ErrorState(
-        title = stringRes(R.string.send_pendingShieldingTitle),
-        message = stringRes(R.string.send_pendingSdkStateInfo),
-        positive = ButtonState(
-            text = stringRes(R.string.private_recovery_open_activity),
-            onClick = { navigationRouter.replaceAll(ActivityHistoryArgs) },
-        ),
-        negative = null,
-        onBack = ::onBack,
-    )
+    private fun createShieldingPendingState(
+        args: ErrorArgs.ShieldingError,
+        result: SubmitResult.GrpcFailure,
+    ): ErrorState {
+        val message = stringRes(
+            when (result.reason) {
+                SubmitResult.GrpcFailure.Reason.TIMEOUT -> R.string.send_pendingTimeoutInfo
+                SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN -> R.string.send_pendingSdkStateInfo
+                null -> R.string.send_pendingShieldingInfo
+            }
+        )
+        return ErrorState(
+            title = stringRes(R.string.send_pendingShieldingTitle),
+            message = if (result.txIds.isEmpty()) message else stringRes(
+                R.string.shielding_pending_with_ids,
+                message,
+                stringRes(R.string.send_confirmation_multiple_trx_failure_ids_title),
+                stringRes(result.txIds.joinToString("\n")).asPrivacySensitive(),
+            ),
+            positive = ButtonState(
+                text = stringRes(R.string.private_recovery_open_activity),
+                onClick = { navigationRouter.replaceAll(ActivityHistoryArgs) },
+            ),
+            negative = if (result.reason == SubmitResult.GrpcFailure.Reason.SDK_STATE_UNCERTAIN) null else ButtonState(
+                text = stringRes(R.string.send_report),
+                onClick = { sendReportClick(args) },
+            ),
+            onBack = ::onBack,
+        )
+    }
 
     /**
      * [AccountOperationUnsupportedException] is a product limitation, not a failure — it gets the

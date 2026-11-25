@@ -486,6 +486,34 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun shortCrossPayOutputDoesNotReadPaidInLiveOrSavedDetails() = runTest(dispatcher) {
+        val fixture = SwapOutputProvenanceFixture
+        val origin = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val shortAmount = fixture.quotedAmount - BigDecimal.ONE.movePointLeft(destination.decimals)
+        val saved = swapMetadata(SwapStatus.SUCCESS, SwapCatalogTestFixture.simple(origin)).copy(
+            mode = SwapMode.EXACT_OUTPUT,
+            quotedAmountOut = fixture.quotedAmount,
+            executedAmountOut = shortAmount,
+        )
+        val live = fixture.status(
+            origin, destination, saved.depositAddress, SwapType.EXACT_OUTPUT, true, false, shortAmount,
+        )
+        val sparse = fixture.status(origin, destination, saved.depositAddress, SwapType.EXACT_OUTPUT, false, false)
+
+        assertEquals(SwapStatus.SUCCESS, live.status)
+        for (provider in listOf(live, sparse, null)) {
+            val detail = state(data(sent, saved, SwapQuoteStatusData(provider, false, savedMetadata = saved)))
+            val info = assertIs<SendSwapState>(detail.info)
+            assertEquals(stringRes(R.string.private_payment_shortfall), detail.header.title)
+            assertEquals(SwapStatus.PAYMENT_SHORTFALL, info.statusRow.status)
+            assertEquals(stringRes(R.string.private_payment_shortfall), info.message?.title)
+            assertNotNull(detail.secondaryButton)
+            assertNull(info.donationBasisZec)
+        }
+    }
+
+    @Test
     fun outgoingDetailKeepsUsdWithItsQuotedOrExecutedOutput() = runTest(dispatcher) {
         val fixture = SwapOutputProvenanceFixture
         val origin = SwapCatalogTestFixture.nativeZec

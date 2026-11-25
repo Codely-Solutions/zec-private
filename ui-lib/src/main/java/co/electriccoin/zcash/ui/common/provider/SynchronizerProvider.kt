@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.model.AccountBalance
 import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 import co.electriccoin.zcash.ui.common.model.SynchronizerError
@@ -62,9 +63,13 @@ class SynchronizerProviderImpl(
     // crashes startup with a StackOverflowError (caught on-emulator 2026-07-28). Resolved at
     // first hook fire instead, when the graph is fully built.
     private val migrationSyncedHook: Lazy<MigrationSyncedHook>,
+    migrationSyncGate: WalletMigrationSyncGate,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
 ) : SynchronizerProvider {
-    override val error = MutableStateFlow<SynchronizerError?>(null)
+    private val engineError = MutableStateFlow<SynchronizerError?>(null)
+    override val error = combine(engineError, migrationSyncGate.error) { engine, migration ->
+        migration ?: engine
+    }.stateIn(scope, SharingStarted.Eagerly, null)
 
     override val isSeedMismatch: StateFlow<Boolean> = walletCoordinator.isSeedMismatch
 
@@ -79,7 +84,7 @@ class SynchronizerProviderImpl(
 
                         launch {
                             pipeline.collect { new ->
-                                error.update { new }
+                                engineError.update { new }
                             }
                         }
                     }

@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveTransactionSubmitStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
+import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
@@ -71,10 +72,24 @@ class ErrorReportHandoffTest {
         ).state.value
 
         assertEquals(stringRes(R.string.send_pendingShieldingTitle), state.title)
-        assertEquals(stringRes(R.string.send_pendingSdkStateInfo), state.message)
+        val application = RuntimeEnvironment.getApplication()
+        assertTrue(application.getString(R.string.send_pendingSdkStateInfo) in state.message.getString(application))
+        assertTrue("synthetic" in state.message.getString(application))
+        assertTrue("synthetic" !in state.message.getString(application, isHideBalances = true))
         assertNull(state.negative)
         state.positive.onClick()
         verify { router.replaceAll(ActivityHistoryArgs) }
+    }
+
+    @Test
+    fun shieldingTimeoutKeepsItsSpecificExplanationAndReport() {
+        val pending = SubmitResult.GrpcFailure(emptyList(), reason = SubmitResult.GrpcFailure.Reason.TIMEOUT)
+        val state = ErrorVM(
+            ErrorArgs.ShieldingError(pending), mockk(), mockk(), mockk(), mockk(), noReportAccess(),
+        ).state.value
+
+        assertEquals(stringRes(R.string.send_pendingTimeoutInfo), state.message)
+        assertEquals(stringRes(R.string.send_report), state.negative?.text)
     }
 
     @Test

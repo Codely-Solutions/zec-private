@@ -330,7 +330,7 @@ class SwapDetailVMTest {
         assertEquals("BTC", savedHeader.amountTicker)
         assertEquals(stringResByNumber(OUTPUT), savedHeader.amount)
 
-        val completedAmount = BigDecimal("0.1")
+        val completedAmount = OUTPUT
         val completed = status(SwapStatus.SUCCESS, origin, asset, completedAmount)
         every { completed.mode } returns SwapMode.EXACT_OUTPUT
         harness.emit(SwapQuoteStatusData(isLoading = false, status = completed, savedMetadata = stored))
@@ -340,6 +340,15 @@ class SwapDetailVMTest {
         assertEquals("BTC", liveHeader.amountTicker)
         assertEquals(stringResByNumber(completedAmount), liveHeader.amount)
         assertEquals(stringRes(R.string.private_provider_output), liveHeader.title)
+
+        val shortAmount = completedAmount - BigDecimal.ONE.movePointLeft(asset.decimals)
+        val short = status(SwapStatus.SUCCESS, origin, asset, shortAmount)
+        every { short.mode } returns SwapMode.EXACT_OUTPUT
+        harness.emit(SwapQuoteStatusData(isLoading = false, status = short, savedMetadata = stored))
+        runCurrent()
+        val shortfall = harness.state().transactionHeader
+        assertEquals(stringRes(R.string.private_payment_shortfall), shortfall.title)
+        assertEquals(stringResByNumber(shortAmount), shortfall.amount)
     }
 
     @Test

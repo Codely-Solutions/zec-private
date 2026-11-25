@@ -108,7 +108,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                         depositAddress = stringRes("Synthetic deposit").withStyle(), totalFees = stringRes("0.0001 ZEC"),
                         recipientAddress = stringRes("Synthetic recipient").withStyle(), transactionId = stringRes("abab…abab"),
                         refundedAmount = if (screen == "sprint-no-refund") null else stringRes(if (refunded) "0.01 ZEC" else "0.0002 ZEC"),
-                        onTransactionIdClick = {}, onDepositAddressClick = {}, onRecipientAddressClick = {},
+                        onTransactionIdClick = {}, onRecipientAddressClick = {},
                         maxSlippage = stringRes("0.5%"), note = null, isSlippageRealized = true,
                         isPending = false, completedTimestamp = stringRes("8 November 2026, 12:00"),
                     ),

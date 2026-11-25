@@ -5,7 +5,7 @@ from pathlib import Path
 from apk_architecture import check_apk
 from acceptance_policy import (
     CORE_BINDING, input_fingerprint, validate_binding, validate_core, validate_core_sources,
-    validate_direct_core_candidate, validate_quotes, verify_promotion_revision,
+    validate_direct_core_candidate, validate_direct_quotes, verify_promotion_revision,
 )
 from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
@@ -278,7 +278,7 @@ def main():
                          core_artifact.read_bytes() if core_artifact.exists() else None,allow_late=late_attestation)
         quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
         quote=json.loads(quote_bytes)
-        validate_quotes(quote,quote_inputs)
+        validate_direct_quotes(quote,quote_inputs,controller,ROOT)
         if input_fingerprint(quote['build_source_sha'],profile='production-quotes')!=quote_inputs:
             raise RuntimeError('Production quote inputs changed since executed acceptance')
         quote_artifact=artifact/'quote-acceptance.json'

@@ -4,6 +4,7 @@ import androidx.compose.ui.text.font.FontWeight
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.near.bindsReviewedFundingTerms
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -28,7 +29,9 @@ class SwapSupportMapper {
         savedMetadata: TransactionSwapMetadata? = null,
         isFundingWindowOpen: Boolean = false,
     ): ZashiMessageState? =
-        when (quoteStatus?.status) {
+        when (quoteStatus?.settlementStatus { savedMetadata?.executedAmountOut }) {
+            SwapStatus.PAYMENT_SHORTFALL -> paymentShortfallMessage()
+
             SwapStatus.REFUNDED -> {
                 ZashiMessageState(
                     title = stringRes(R.string.swapAndPay_refundTitle),
@@ -70,17 +73,19 @@ class SwapSupportMapper {
             }
 
             SwapStatus.PENDING,
-            SwapStatus.SUCCESS,
-            null -> {
+            SwapStatus.SUCCESS -> {
                 null
             }
+
+            null -> if (savedMetadata?.status == SwapStatus.PAYMENT_SHORTFALL) paymentShortfallMessage() else null
         }
 
     fun getButton(quoteStatus: SwapQuoteStatus?, onSupportClicked: (String) -> Unit): ButtonState? =
-        if (when (quoteStatus?.status) {
+        if (when (quoteStatus?.settlementStatus()) {
                 SwapStatus.REFUNDED,
                 SwapStatus.FAILED,
                 SwapStatus.EXPIRED,
+                SwapStatus.PAYMENT_SHORTFALL,
                 SwapStatus.INCOMPLETE_DEPOSIT -> true
 
                 SwapStatus.PROCESSING -> isProcessingLongEnough(quoteStatus)
@@ -102,6 +107,12 @@ class SwapSupportMapper {
         } else {
             null
         }
+
+    private fun paymentShortfallMessage() = ZashiMessageState(
+        title = stringRes(R.string.private_payment_shortfall),
+        text = styledStringResource(R.string.private_payment_shortfall_info),
+        type = ZashiMessageState.Type.WARNING,
+    )
 
     private fun createIncompleteDepositMessage(
         quoteStatus: SwapQuoteStatus,
@@ -167,4 +178,5 @@ internal fun TransactionSwapMetadata.savedSwapSupportButton(onSupportClicked: (S
 
 private val SETTLEMENT_SUPPORT_STATUSES = setOf(
     SwapStatus.INCOMPLETE_DEPOSIT, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED,
+    SwapStatus.PAYMENT_SHORTFALL,
 )

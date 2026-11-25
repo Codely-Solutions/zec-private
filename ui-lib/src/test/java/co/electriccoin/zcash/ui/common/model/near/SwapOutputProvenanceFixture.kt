@@ -18,6 +18,7 @@ internal object SwapOutputProvenanceFixture {
         mode: SwapType,
         hasExecutedAmount: Boolean,
         hasExecutedUsd: Boolean,
+        reportedOutput: BigDecimal = executedAmount,
     ): NearSwapQuoteStatus {
         val recipient = "fixture-recipient"
         val refund = "fixture-refund"
@@ -30,7 +31,11 @@ internal object SwapOutputProvenanceFixture {
                 slippageTolerance = 100,
                 originAsset = origin.assetId,
                 destinationAsset = destination.assetId,
-                amount = BigDecimal.ONE.movePointRight(origin.decimals),
+                amount = if (mode == SwapType.EXACT_OUTPUT) {
+                    quotedAmount.movePointRight(destination.decimals)
+                } else {
+                    BigDecimal.ONE.movePointRight(origin.decimals)
+                },
                 refundTo = refund,
                 recipient = recipient,
                 deadline = timestamp,
@@ -55,7 +60,7 @@ internal object SwapOutputProvenanceFixture {
                 status = SwapStatus.SUCCESS,
                 updatedAt = "",
                 swapDetails = SwapDetails(
-                    amountOut = executedAmount.movePointRight(destination.decimals).takeIf { hasExecutedAmount },
+                    amountOut = reportedOutput.movePointRight(destination.decimals).takeIf { hasExecutedAmount },
                     amountOutUsd = executedUsd.takeIf { hasExecutedUsd },
                 ),
             ),

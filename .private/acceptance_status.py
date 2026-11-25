@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from acceptance_policy import ROOT, input_fingerprint, validate_core, validate_quotes, validate_core_sources, changed_inputs
+from acceptance_policy import ROOT, input_fingerprint, validate_direct_quotes, validate_core_sources, changed_inputs
 
 
 def status(root=ROOT, revision='HEAD'):
@@ -13,8 +13,8 @@ def status(root=ROOT, revision='HEAD'):
     pending = []
     diagnostics = {}
     reusable = {}
-    for profile, name, validate in (('core-testnet', 'core-acceptance.json', validate_core),
-                                    ('production-quotes', 'quote-acceptance.json', validate_quotes)):
+    for profile, name in (('core-testnet', 'core-acceptance.json'),
+                          ('production-quotes', 'quote-acceptance.json')):
         path = root / '.private' / name
         receipt = {}
         try:
@@ -26,7 +26,7 @@ def status(root=ROOT, revision='HEAD'):
             if profile == 'core-testnet':
                 validate_core_sources(receipt, product_revision=revision, root=root)
             else:
-                validate(receipt, fingerprint)
+                validate_direct_quotes(receipt, fingerprint, revision, root)
                 if input_fingerprint(receipt['build_source_sha'], root=root, profile=profile) != fingerprint:
                     raise ValueError('Executed quote build inputs differ')
             reusable[profile] = {

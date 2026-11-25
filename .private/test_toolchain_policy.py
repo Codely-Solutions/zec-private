@@ -6,10 +6,36 @@ import tempfile
 from unittest.mock import Mock, patch
 
 import gradle_resolution as resolution
+from build_ui_bridge import stage_metadata
 
 ROOT=Path(__file__).resolve().parents[1]
 
 class ToolchainPolicyTests(unittest.TestCase):
+    def test_all_bridge_producers_stage_the_canonical_pins(self):
+        for workflow in ('quote-bridge', 'ui-bridge', 'toolchain-review'):
+            with self.subTest(workflow=workflow):
+                script = (ROOT / f'.github/workflows/{workflow}.yml').read_text()
+                self.assertIn('python3 -B .private/build_ui_bridge.py', script)
+                self.assertNotIn('gradlew -p .private/ui-bridge', script)
+        settings = (ROOT / '.private/ui-bridge/settings.gradle.kts').read_text()
+        self.assertLess(settings.index('Files.mismatch'), settings.index('plugins {'))
+        self.assertIn('DependencyVerificationMode.STRICT', settings)
+        self.assertIn('writeDependencyVerifications.isEmpty()', settings)
+
+    def test_bridge_staging_replaces_stale_copies_with_the_canonical_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'gradle/verification-metadata.xml'
+            source.parent.mkdir()
+            source.write_bytes(b'canonical test pins')
+            self.assertEqual(stage_metadata(root), source)
+            staged = root / '.private/ui-bridge/gradle/verification-metadata.xml'
+            self.assertEqual(staged.read_bytes(), source.read_bytes())
+            staged.write_bytes(b'stale previous copy')
+            stage_metadata(root)
+            self.assertEqual(staged.read_bytes(), source.read_bytes())
+            self.assertEqual(list(staged.parent.iterdir()), [staged])
+
     def test_proposals_exclude_majors_and_runtime_dependency_sweep(self):
         config=(ROOT/'.github/dependabot.yml').read_text()
         self.assertIn('dependency-name: gradle-wrapper',config)

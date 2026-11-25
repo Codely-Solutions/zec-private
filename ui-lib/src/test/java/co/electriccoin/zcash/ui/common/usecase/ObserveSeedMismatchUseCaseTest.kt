@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -127,6 +128,33 @@ class ObserveSeedMismatchUseCaseTest {
             listOf(LaunchNavigationRequests.Kind.MIGRATION_PROGRESS, LaunchNavigationRequests.Kind.GIFT_SCAN),
             launchNavigation.changes.value.map { it.kind },
         )
+    }
+
+    @Test
+    fun terminalFailureUpdatesTheDeliveredWaitingNoticeWithoutQueueingAnotherDialog() = runTest {
+        val finish = CompletableDeferred<Unit>()
+        coEvery { recoverFromSeedMismatch(any(), any()) } coAnswers {
+            secondArg<() -> Unit>().invoke()
+            finish.await()
+            throw SeedMismatchRecoveryException(1)
+        }
+        backgroundScope.launch { useCase() }
+        runCurrent()
+        isSeedMismatchState.value = true
+        runCurrent()
+        var route: ErrorRoute? = null
+        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+            route = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
+            true
+        }
+        val notice = assertIs<ErrorArgs.SeedRecoveryNotice>(navigateToError.argsFor(checkNotNull(route)))
+        assertEquals(SeedRecoveryPhase.WAITING, notice.phase.value)
+
+        finish.complete(Unit)
+        runCurrent()
+
+        assertEquals(SeedRecoveryPhase.FAILED, notice.phase.value)
+        assertTrue(launchNavigation.changes.value.isEmpty())
     }
 
     @Test

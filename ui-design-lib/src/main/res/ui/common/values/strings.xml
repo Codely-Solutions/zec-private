@@ -376,6 +376,7 @@
 
     <!-- ===== feedback ===== -->
     <string name="support_header">Support</string>
+    <string name="wallet_seed_recovery_waiting_title">Wallet recovery in progress</string>
     <string name="wallet_seed_recovery_failed_title">Wallet recovery needs attention</string>
     <string name="wallet_seed_recovery_failed_message">Open Support to share a message without wallet details.</string>
     <string name="tabs_send">Send</string>
@@ -1106,6 +1107,8 @@
     <string name="transaction_history_receiving_failed">Receiving failed</string>
     <string name="transaction_history_shielding">Shielding…</string>
     <string name="swapStatus_paid">Paid</string>
+    <string name="private_payment_shortfall">Paid less than requested</string>
+    <string name="private_payment_shortfall_info">Check the payment status or contact support before sending more.</string>
     <string name="transaction_history_paying">Paying…</string>
     <string name="swapStatus_paymentFailed">Payment Failed</string>
     <string name="swapStatus_paymentRefunded">Payment Refunded</string>

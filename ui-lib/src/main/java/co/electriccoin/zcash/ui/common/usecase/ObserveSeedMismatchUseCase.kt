@@ -5,8 +5,11 @@ import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -32,22 +35,36 @@ class ObserveSeedMismatchUseCase(
         val token = walletWriteAccess.token()
         val stillApplies = { walletWriteAccess.permits(token) }
         if (!stillApplies()) return
-        val offerHelp = {
+        val phase = MutableStateFlow(SeedRecoveryPhase.WAITING)
+        var noticeRoute: ErrorRoute? = null
+        val offerWaiting = {
             if (stillApplies()) {
-                val route = navigateToError.stage(ErrorArgs.SeedRecoveryFailed)
+                val route = navigateToError.stage(ErrorArgs.SeedRecoveryNotice(phase))
+                noticeRoute = route
                 launchNavigation.updateSeedRecoveryError(route, stillApplies)
             }
         }
         try {
-            recoverFromSeedMismatch(token, offerHelp)
-            launchNavigation.updateSeedRecoveryError(null, stillApplies)
+            recoverFromSeedMismatch(token, offerWaiting)
+            finishNotice(phase, stillApplies)
         } catch (e: CancellationException) {
+            finishNotice(phase, stillApplies)
             throw e
         } catch (e: SeedMismatchRecoveryException) {
             Twig.error(e) { "Seed-mismatch recovery failed" }
-            offerHelp()
+            phase.value = SeedRecoveryPhase.FAILED
+            if (noticeRoute?.let(navigateToError::argsFor) == null && stillApplies()) {
+                val failure = navigateToError.stage(ErrorArgs.SeedRecoveryFailed)
+                launchNavigation.updateSeedRecoveryError(failure, stillApplies)
+            }
         } catch (e: Exception) {
             Twig.error(e) { "Seed-mismatch recovery failed" }
+            phase.value = SeedRecoveryPhase.FAILED
         }
+    }
+
+    private fun finishNotice(phase: MutableStateFlow<SeedRecoveryPhase>, stillApplies: () -> Boolean) {
+        phase.value = SeedRecoveryPhase.FINISHED
+        launchNavigation.updateSeedRecoveryError(null, stillApplies)
     }
 }

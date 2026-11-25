@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.withPaymentOutcome
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
@@ -543,7 +544,7 @@ data class TransactionSwapMetadata(
     val fundingNotSubmitted: Boolean = false,
 ) {
     val status: SwapStatus
-        get() = recordedStatus ?: SwapStatus.SUCCESS
+        get() = (recordedStatus ?: SwapStatus.SUCCESS).withPaymentOutcome(mode, quotedAmountOut, executedAmountOut)
 
     internal fun matchesStoredSwap(other: TransactionSwapMetadata): Boolean =
         depositAddress == other.depositAddress && provider == other.provider && lastUpdated == other.lastUpdated &&
@@ -561,7 +562,7 @@ data class TransactionSwapMetadata(
         }
 
     internal fun outgoingStatus(transaction: SendTransaction, liveStatus: SwapStatus? = null): SwapStatus {
-        val settlement = liveStatus ?: recordedStatus
+        val settlement = liveStatus ?: recordedStatus?.withPaymentOutcome(mode, quotedAmountOut, executedAmountOut)
         return when {
             fundingNotSubmitted && (settlement == null || settlement == SwapStatus.PENDING) -> SwapStatus.PENDING
             transaction is SendTransaction.Failed && (settlement == null || settlement == SwapStatus.PENDING) ->

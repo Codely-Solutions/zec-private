@@ -25,6 +25,10 @@ sealed interface SynchronizerError {
         override val cause: Throwable?
     ) : SynchronizerError
 
+    data object MigrationStateUnavailable : SynchronizerError {
+        override val cause = null
+    }
+
     class Chain(
         val x: BlockHeight,
         val y: BlockHeight

@@ -38,6 +38,9 @@ class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix='release-preparation-test-', dir=preparation.SOURCE.parent/'work'))
         self.addCleanup(shutil.rmtree, self.root)
+        bridge_inputs = patch('acceptance_policy.direct_bridge_inputs', return_value=DIGEST)
+        bridge_inputs.start()
+        self.addCleanup(bridge_inputs.stop)
 
     def fake_git(self, source, *args):
         if args[0] == 'rev-parse':
@@ -50,11 +53,13 @@ class ReleaseTests(unittest.TestCase):
         raise AssertionError(args)
 
     def prepare(self, *, fixture=None, **kwargs):
+        kwargs.setdefault('bridge_run', 3)
         if fixture is None:
             fixture = dict(BASELINE, candidate_apk_sha256=BASELINE['apk_sha256'],
                            instrumentation_apk_sha256=BASELINE['instrumentation']['apk_sha256'])
         with patch.object(preparation, 'git', self.fake_git), patch('release_inputs.git', self.fake_git), \
              patch.object(preparation, 'input_fingerprint', return_value=DIGEST), \
+             patch.object(preparation, 'direct_bridge_inputs', return_value=DIGEST), \
              patch('hosted_release.require_current_hosted_upgrade', return_value=fixture), \
              patch('acceptance_status.status',return_value={}):
             return preparation.prepare(preparation.SOURCE, SHA, 1, 2, 'release-test-owner', self.root/'prepared',
@@ -146,18 +151,45 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(metadata,'producer',wraps=metadata.producer) as calls, \
              patch.object(preparation,'git',self.fake_git), patch('release_inputs.git',self.fake_git), \
              patch.object(preparation,'input_fingerprint',return_value=DIGEST), \
+             patch.object(preparation,'direct_bridge_inputs',return_value=DIGEST), \
              patch('acceptance_status.status',return_value={}):
             result=preparation.prepare(preparation.SOURCE,SHA,1,None,'release-test-owner',self.root/'prepared',
-                metadata=metadata,profiles=['quotes'])
-        self.assertEqual(len(calls.call_args_list),2)
+                metadata=metadata,profiles=['quotes'],bridge_run=3)
+        self.assertEqual(len(calls.call_args_list),3)
         self.assertEqual(result['profiles'],['production-quotes'])
         self.assertFalse((self.root/'prepared/core-job.json').exists())
 
-    def quote_receipt(self):
-        return dict(schema=1,evidence_class='real-app-production-quotes',passed=True,build_source_sha=SHA,
+    def quote_receipt(self, source=SHA):
+        return dict(schema=1,evidence_class='real-app-production-quotes',passed=True,build_source_sha=source,
             input_fingerprint=DIGEST,executed_apk_sha256=DIGEST,quote_requests=3,quote_reviews=3,dismissals=3,
             tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
-            recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True,independent_comparisons=1)
+            recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True,independent_comparisons=1,
+            ui_bridge=dict(artifact=dict(ARTIFACT, source_sha=source),
+                producer=dict(workflow='ui-bridge.yml', head_branch='main', event='workflow_dispatch', head_sha=source,
+                              producer_job_name='probe', producer_job_conclusion='success',
+                              artifact_name='android-ui-bridge', run_id=3, run_attempt=1, producer_job_id=20),
+                apk_preparation=dict(executionEntriesUnchanged=True, originalSha256=DIGEST, testedSha256=DIGEST),
+                input_fingerprint=DIGEST))
+
+    def test_local_quote_reuse_rejects_legacy_or_mismatched_bridge_evidence(self):
+        from copy import deepcopy
+        from acceptance_policy import validate_direct_quotes
+
+        receipt = self.quote_receipt()
+        self.assertTrue(validate_direct_quotes(receipt, DIGEST, SHA))
+        for component, field, value in (
+            ('artifact', 'source_sha', 'a'*39+'f'), ('producer', 'head_branch', 'review'),
+            ('apk_preparation', 'executionEntriesUnchanged', False),
+        ):
+            mismatched = deepcopy(receipt)
+            mismatched['ui_bridge'][component][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'verified bridge'):
+                validate_direct_quotes(mismatched, DIGEST, SHA)
+        with self.assertRaisesRegex(ValueError, 'verified bridge'):
+            validate_direct_quotes({key: value for key, value in receipt.items() if key != 'ui_bridge'}, DIGEST, SHA)
+        with patch('acceptance_policy.direct_bridge_inputs', return_value='a'*64):
+            with self.assertRaisesRegex(ValueError, 'inputs differ'):
+                validate_direct_quotes(receipt, DIGEST, SHA)
 
     def test_quote_reuse_preserves_bytes_and_rejects_stale_build_or_fingerprint(self):
         path=self.root/'quotes.json'
@@ -230,7 +262,7 @@ class ReleaseTests(unittest.TestCase):
         core=json.loads((preparation.SOURCE/'.private/core-acceptance.json').read_text())
         source=core['build_source_sha']
         version=core['candidate_version_code']
-        quotes=dict(self.quote_receipt(), build_source_sha=source)
+        quotes=self.quote_receipt(source)
         core_path=self.root/'core.json'; quote_path=self.root/'quotes.json'
         core_raw=json.dumps(core,indent=3).encode()+b'\n'; quote_raw=json.dumps(quotes,indent=3).encode()+b'\n'
         core_path.write_bytes(core_raw); quote_path.write_bytes(quote_raw)

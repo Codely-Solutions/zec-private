@@ -13,7 +13,7 @@ HERE=Path(__file__).resolve().parent
 SOURCE=HERE.parent
 sys.path.insert(0,str(SOURCE/'.private'))
 from acceptance_policy import (
-    ATTESTATION_PATHS, input_fingerprint, validate_core_sources, validate_direct_core_candidate, validate_quotes,
+    ATTESTATION_PATHS, input_fingerprint, validate_core_sources, validate_direct_core_candidate, validate_direct_quotes,
 )
 from release_metadata import Metadata, require
 from release_inputs import local_upgrade_artifacts, selected_baseline
@@ -89,7 +89,7 @@ def reusable(path, profile_name, head):
     if profile_name == 'core-testnet':
         validate_core_sources(receipt, receipt['build_source_sha'], head, root=SOURCE)
     else:
-        validate_quotes(receipt, expected)
+        validate_direct_quotes(receipt, expected, head, SOURCE)
         require(input_fingerprint(receipt['build_source_sha'], root=SOURCE, profile=profile_name) == expected,
                 'Executed quote build inputs differ')
     return receipt, raw
@@ -213,6 +213,18 @@ def main():
                 'Current UI artifact differs from execution')
         require(probe['passed'] and probe['probeArtifact']['id'] == ui_manifest['id'] and
                 probe['probeArtifact']['digest'] == ui_manifest['digest'], 'Executed artifact binding mismatch')
+        bridge_artifact = ui_manifest.get('residentUiBridge') or {}
+        bridge_producer = ui_manifest.get('bridgeProducer') or {}
+        _, current_bridge, verified_bridge = metadata.producer(
+            bridge_producer.get('run_id'), args.source_sha, 'ui-bridge.yml', 'probe', 'android-ui-bridge',
+        )
+        require(bridge_artifact == dict(current_bridge, source_sha=args.source_sha) and
+                bridge_producer == verified_bridge, 'Local quote bridge producer or archive differs')
+        bridge_preparation = probe['apkPreparation'].get('ui-bridge.apk') or {}
+        require(probe['apkHashes'].get('ui-bridge.apk') == bridge_preparation.get('testedSha256'),
+                'Local quote executed bridge differs from its prepared bytes')
+        bridge = dict(artifact=bridge_artifact, producer=bridge_producer,
+                      apk_preparation=bridge_preparation, input_fingerprint=ui_manifest.get('bridgeInputs'))
         app_names = [name for name in probe['apkPreparation'] if name != 'ui-bridge.apk']
         require(len(app_names) == 1, 'Expected a single quote application APK')
         preparation = probe['apkPreparation'][app_names[0]]
@@ -226,14 +238,14 @@ def main():
                       tor_enabled=ui['torOptInVerified'], funds_transferred=ui['fundsTransferred'],
                       personal_wallet_access=ui['personalWalletAccess'], artifact_id=ui_manifest['id'],
                       workflow_run_id=args.ui_run, archive_sha256=ui_manifest['digest'].removeprefix('sha256:'),
-                      apk_preparation=preparation, guard_job=profiles['quotes']['receipt']['job'],
+                      apk_preparation=preparation, ui_bridge=bridge, guard_job=profiles['quotes']['receipt']['job'],
                       guard_receipt_sha256=profiles['quotes']['receipt_sha256'],
                       provider_timeouts=ui.get('phase1Scenario', {}).get('providerTimeouts', []),
                       recipient_network_mismatch_blocked=ui['phase1Scenario']['recipientNetworkMismatchBlocked'],
                       corrected_without_leaving_form=ui['phase1Scenario']['correctedWithoutLeavingForm'],
                       independent_comparisons=ui['phase1Scenario']['independentComparisons'],
                       reference_states=ui['phase1Scenario']['referenceStates'])
-        validate_quotes(quotes, input_fingerprint(head, root=SOURCE, profile='production-quotes'))
+        validate_direct_quotes(quotes, input_fingerprint(head, root=SOURCE, profile='production-quotes'), head, SOURCE)
     summary = dict(status='accepted-awaiting-signing', scope='Exact guarded core and production quote acceptance', source_sha=args.source_sha,
                    acceptance_source_sha=head, core_build_source_sha=core['build_source_sha'],
                    ui_source_sha=quotes['build_source_sha'], ui_run=quotes.get('workflow_run_id',args.ui_run),

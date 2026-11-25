@@ -21,9 +21,13 @@ jobs:
       - name: Build test-only UI instrumentation
         run: |
           chmod +x gradlew
-          ./gradlew -p .private/ui-bridge --no-daemon --no-watch-fs assembleDebug
+          python3 -B .private/build_ui_bridge.py assembleDebug
+          mkdir "$RUNNER_TEMP/zec-direct-ui-bridge"
+          cp .private/ui-bridge/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/zec-direct-ui-bridge/ui-bridge.apk"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/zec-direct-ui-bridge/source-sha.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android-ui-bridge
-          path: .private/ui-bridge/build/outputs/apk/**/*.apk
+          path: ${{ runner.temp }}/zec-direct-ui-bridge/
+          if-no-files-found: error
           retention-days: 2

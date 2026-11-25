@@ -1,6 +1,9 @@
 import org.gradle.api.file.FileCollection
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.verification.DependencyVerificationMode
 import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.ClasspathNormalizer
+import org.gradle.api.tasks.Sync
 import org.gradle.process.CommandLineArgumentProvider
 
 // Use the checksum-verified agent selected by the resolved runtime. Startup instrumentation avoids external self-attachment
@@ -20,11 +23,9 @@ class MockKStartupAgent implements CommandLineArgumentProvider {
     }
 }
 
-// Maven Central canonical endpoint; avoid repo1 rate limiting in the test JVM.
 allprojects {
     tasks.withType(org.gradle.api.tasks.testing.Test).configureEach { testTask ->
         jvmArgs '-XX:+ExitOnOutOfMemoryError', '-XX:-HeapDumpOnOutOfMemoryError'
-        systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
         def agents = project.files(project.provider {
             def variant = testTask.name
             if (variant.startsWith('test') && variant != 'test') {
@@ -41,5 +42,43 @@ allprojects {
             }.files
         })
         jvmArgumentProviders.add(new MockKStartupAgent(agentClasspath: agents))
+    }
+}
+
+// Gradle verifies the sandbox JARs once, before any Robolectric worker can run code from them.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def robolectricProjects = project.allprojects.findAll { candidate ->
+        candidate.configurations.findByName('testImplementation')?.dependencies?.any {
+            it.group == 'org.robolectric' && it.name == 'robolectric'
+        }
+    }
+    if (robolectricProjects.isEmpty()) return
+    if (!project.file('gradle/verification-metadata.xml').isFile() ||
+        gradle.startParameter.dependencyVerificationMode != DependencyVerificationMode.STRICT ||
+        !gradle.startParameter.writeDependencyVerifications.isEmpty()) {
+        throw new GradleException('Robolectric sandbox staging requires reviewed metadata and strict verification')
+    }
+
+    // Separate configurations keep Gradle from choosing only the highest version of this module.
+    def sandboxes = ['9-robolectric-4913185-2-i7', '14-robolectric-10818077-i7'].collect { version ->
+        def dependency = project.dependencies.create("org.robolectric:android-all-instrumented:${version}@jar")
+        def configuration = project.configurations.detachedConfiguration(dependency)
+        configuration.transitive = false
+        configuration.resolutionStrategy.deactivateDependencyLocking()
+        configuration
+    }
+    def directory = project.layout.buildDirectory.dir('verified-robolectric-sdks')
+    def stage = project.tasks.register('stageVerifiedRobolectricSdks', Sync) {
+        from(sandboxes)
+        into(directory)
+    }
+    robolectricProjects.each { candidate ->
+        candidate.tasks.withType(org.gradle.api.tasks.testing.Test).configureEach { testTask ->
+            dependsOn(stage)
+            inputs.files(sandboxes).withPropertyName('robolectricSandboxes').withNormalizer(ClasspathNormalizer)
+            systemProperty 'robolectric.offline', 'true'
+            systemProperty 'robolectric.dependency.dir', directory.get().asFile.absolutePath
+        }
     }
 }

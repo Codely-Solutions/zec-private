@@ -53,7 +53,7 @@ class RecoverFromSeedMismatchUseCase(
             throw SeedMismatchRecoveryException(failedAttempts)
         }
 
-        val readable = runCatchingRecoverable { preferenceRecovery.checkReadableForErase() }.isSuccess
+        val readable = canReadSdkPreferences()
         if (!readable || !waitForErase(onEraseDelayed)) {
             failedAttempts += 1
             Twig.error {
@@ -64,6 +64,14 @@ class RecoverFromSeedMismatchUseCase(
         }
 
         failedAttempts = 0
+    }
+
+    private suspend fun canReadSdkPreferences(): Boolean {
+        repeat(PREFERENCE_READ_ATTEMPTS) { attempt ->
+            if (runCatchingRecoverable { preferenceRecovery.checkReadableForErase() }.isSuccess) return true
+            if (attempt < PREFERENCE_READ_ATTEMPTS - 1) delay(1.seconds)
+        }
+        return false
     }
 
     private suspend fun waitForErase(onEraseDelayed: () -> Unit): Boolean = coroutineScope {
@@ -82,6 +90,7 @@ class RecoverFromSeedMismatchUseCase(
 
     companion object {
         private const val MAX_RECOVERY_ATTEMPTS = 3
+        private const val PREFERENCE_READ_ATTEMPTS = 3
         private val ERASE_NOTICE_DELAY = 30.seconds
     }
 }

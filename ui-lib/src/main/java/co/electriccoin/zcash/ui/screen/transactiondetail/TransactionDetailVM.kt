@@ -18,6 +18,8 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
+import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
+import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
@@ -226,7 +228,8 @@ class TransactionDetailVM(
                                 ?.address
                         val saved = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata
                         val statusOverride = saved?.outgoingStatus(
-                            transaction.transaction, transaction.swap.status?.status
+                            transaction.transaction,
+                            transaction.swap.status?.settlementStatus { saved.executedAmountOut },
                         ).takeIf {
                             transaction.transaction is SendTransaction.Failed || saved?.fundingNotSubmitted == true
                         }
@@ -267,9 +270,6 @@ class TransactionDetailVM(
                             onTransactionIdClick = {
                                 onCopyToClipboard(transaction.transaction.id.txIdString())
                             },
-                            onDepositAddressClick = {
-                                onCopyToClipboard(transaction.recipient?.address.orEmpty())
-                            },
                             onRecipientAddressClick =
                                 if (recipient == null) {
                                     null
@@ -290,7 +290,7 @@ class TransactionDetailVM(
                                     .subtract(transaction.swap.status?.refundedFormatted ?: java.math.BigDecimal.ZERO)
                                     .takeIf {
                                         !isPending(transaction) && it.signum() > 0 &&
-                                            transaction.swap.status?.status ==
+                                            transaction.swap.status?.settlementStatus { saved?.executedAmountOut } ==
                                             co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
                                     }?.toPlainString()
                             },
@@ -583,7 +583,8 @@ class TransactionDetailVM(
                             }
                         } else {
                             val saved = data.swap?.savedMetadata ?: data.metadata.swapMetadata
-                            val swapStatus = saved.outgoingStatus(transaction, data.swap?.status?.status)
+                            val live = data.swap?.status?.settlementStatus { saved.executedAmountOut }
+                            val swapStatus = saved.outgoingStatus(transaction, live)
                             when (saved.mode) {
                                 EXACT_INPUT -> {
                                     when (swapStatus) {
@@ -600,6 +601,7 @@ class TransactionDetailVM(
                                         INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
 
                                         SUCCESS -> stringRes(R.string.swapStatus_swapped)
+                                        PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
 
                                         REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 
@@ -624,6 +626,7 @@ class TransactionDetailVM(
                                         INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 
                                         SUCCESS -> stringRes(R.string.swapStatus_paid)
+                                        PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
 
                                         REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 

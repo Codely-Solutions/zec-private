@@ -56,3 +56,4 @@ stores/config.yaml
 # Local validation bytecode is never an upstream-integration input.
 .private/**/__pycache__/
 .private/**/*.pyc
+/.private/ui-bridge/gradle/verification-metadata.xml

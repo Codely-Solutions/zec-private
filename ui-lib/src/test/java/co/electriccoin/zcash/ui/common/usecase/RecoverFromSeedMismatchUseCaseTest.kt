@@ -93,6 +93,18 @@ class RecoverFromSeedMismatchUseCaseTest {
     }
 
     @Test
+    fun recoveryRetriesAReadFailureBeforeEnteringTheSdkOnce() = runTest {
+        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unavailable") andThen Unit
+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+
+        useCase()
+
+        coVerify(exactly = 2) { preferenceRecovery.checkReadableForErase() }
+        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+        assertEquals(WalletInitMode.RestoreWallet, walletProvider.persistableWallet.value?.walletInitMode)
+    }
+
+    @Test
     fun repeatedFailuresAreCappedAndStopHittingTheSdk() = runTest {
         every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 

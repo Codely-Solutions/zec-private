@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
@@ -149,6 +150,38 @@ class NavigationResultDeliveryTest {
                 assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
                 assertTrue(controller.popBackStack())
                 assertEquals(progress, controller.currentBackStackEntry?.toRoute<DeliveryMigrationArgs>())
+            }
+        }
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun completedSeedRecoveryDismissesOnlyItsOwnNoticeAndResumesQueuedNavigation() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val requests = LaunchNavigationRequests()
+                val errors = NavigateToErrorUseCase(mockk())
+                val phase = kotlinx.coroutines.flow.MutableStateFlow(SeedRecoveryPhase.WAITING)
+                val notice = errors.stage(ErrorArgs.SeedRecoveryNotice(phase)) as ErrorDialog
+                requests.updateSeedRecoveryError(notice) { true }
+                requests.requestGiftScan()
+                backgroundScope.launch {
+                    requests.deliverOnChanges(controller, true, { true }, navigator::executeLaunchCommand, errors)
+                }
+                runCurrent()
+                assertEquals(notice, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
+
+                phase.value = SeedRecoveryPhase.FAILED
+                runCurrent()
+                assertEquals(notice, controller.currentBackStackEntry?.toRoute<ErrorDialog>())
+                phase.value = SeedRecoveryPhase.FINISHED
+                runCurrent()
+                assertEquals(ScanGiftCardArgs(true), controller.currentBackStackEntry?.toRoute<ScanGiftCardArgs>())
+                assertTrue(controller.popBackStack())
+                assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
             }
         }
     }

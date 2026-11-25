@@ -53,7 +53,9 @@ class NativePriceProbeActivity : ComponentActivity() {
                     }
                     check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == true)
                     record("isolated_zero_balance_ready")
-                    val ownAddress = accounts.requestNextShieldedAddress(requireFresh = true)
+                    val ownAddress = checkNotNull(accounts.requestNextShieldedAddress(requireFresh = true)) {
+                        "The isolated quote wallet could not reserve a shielded address"
+                    }
                     val assets = swaps.getSupportedTokens()
                     val zec = assets.single { it.assetId == "nep141:zec.omft.near" }
                     data class Case(val name: String, val symbol: String, val amount: String, val incoming: Boolean = false,

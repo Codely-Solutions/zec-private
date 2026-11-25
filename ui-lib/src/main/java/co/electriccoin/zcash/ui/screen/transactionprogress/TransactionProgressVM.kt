@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionsAfterSuccessfulPr
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.util.asPrivacySensitive
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.loadingImageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -319,6 +320,7 @@ class TransactionProgressVM(
         return TransactionProgressState(
             onBack = ::onCloseClick,
             background = PENDING,
+            transactionIds = result.txIds.takeIf { it.isNotEmpty() }?.map { stringRes(it).asPrivacySensitive() },
             title =
                 when (proposal) {
                     // Same shape as this block's RegularTransactionProposal/default arm — a

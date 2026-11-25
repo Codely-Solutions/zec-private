@@ -349,6 +349,48 @@ def validate_quotes(receipt, expected_inputs, *, use_tor=True):
     return True
 
 
+BRIDGE_RECIPE_PATHS = (
+    '.github/workflows/ui-bridge.yml', '.private/build_ui_bridge.py', '.private/gradle_resolution.py',
+    '.private/ui-bridge', 'gradle.properties', 'gradle/verification-metadata.xml',
+    'gradle/wrapper', 'gradlew',
+)
+
+
+def direct_bridge_inputs(revision, root=ROOT):
+    if revision != 'HEAD' and not re.fullmatch('[0-9a-f]{40}', revision):
+        raise ValueError('Exact local quote bridge source required')
+    objects = subprocess.check_output(
+        ['git', 'rev-parse', *(revision + ':' + path for path in BRIDGE_RECIPE_PATHS)], cwd=root, timeout=30,
+    )
+    return hashlib.sha256(objects).hexdigest()
+
+
+def validate_direct_quotes(receipt, expected_inputs, revision, root=ROOT):
+    validate_quotes(receipt, expected_inputs)
+    binding = receipt.get('ui_bridge') or {}
+    artifact = binding.get('artifact') or {}
+    producer = binding.get('producer') or {}
+    apk = binding.get('apk_preparation') or {}
+    source = receipt['build_source_sha']
+    if (producer.get('workflow') != 'ui-bridge.yml' or producer.get('head_branch') != 'main' or
+            producer.get('event') != 'workflow_dispatch' or producer.get('head_sha') != source or
+            producer.get('producer_job_name') != 'probe' or producer.get('producer_job_conclusion') != 'success' or
+            producer.get('artifact_name') != 'android-ui-bridge' or
+            any(type(producer.get(field)) is not int or producer[field] < 1
+                for field in ('run_id', 'run_attempt', 'producer_job_id')) or
+            type(artifact.get('id')) is not int or artifact['id'] < 1 or
+            type(artifact.get('size_in_bytes')) is not int or not 0 < artifact['size_in_bytes'] <= 1024**2 or
+            not re.fullmatch(r'sha256:[0-9a-f]{64}', artifact.get('digest') or '') or
+            artifact.get('source_sha') != source or apk.get('executionEntriesUnchanged') is not True or
+            any(not re.fullmatch('[0-9a-f]{64}', apk.get(field) or '')
+                for field in ('originalSha256', 'testedSha256'))):
+        raise ValueError('Fresh local quote acceptance requires the exact verified bridge producer and execution')
+    expected = direct_bridge_inputs(revision, root)
+    if binding.get('input_fingerprint') != expected or direct_bridge_inputs(source, root) != expected:
+        raise ValueError('Verified quote bridge inputs differ from the original execution')
+    return True
+
+
 def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_bytes, allow_late=False):
     bound=proof.get(profile,{})
     if profile=='core_acceptance' and bound.get('binding')!=CORE_BINDING:

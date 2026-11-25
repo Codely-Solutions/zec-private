@@ -21,6 +21,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
     isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     resetProgressStore: ResetProgressStore,
+    migrationSyncGate: WalletMigrationSyncGate,
 ): WalletCoordinator {
     val sdkWallet = persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore)
     return WalletCoordinator(
@@ -30,7 +31,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
         keySource = "zashi",
         isTorEnabled = isTorEnabledStorageProvider.observe(),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
-        isSyncBlocked = isSyncBlocked(context, sdkWallet, resetProgressStore),
+        isSyncBlocked = isSyncBlocked(context, sdkWallet, resetProgressStore, migrationSyncGate),
     )
 }
 
@@ -58,8 +59,9 @@ private fun isSyncBlocked(
     context: Context,
     sdkWallet: Flow<PersistableWallet?>,
     resetProgressStore: ResetProgressStore,
+    migrationSyncGate: WalletMigrationSyncGate,
 ) =
-    sdkWallet.observeSdkMigrationSyncBlock(resetProgressStore) { wallet ->
+    migrationSyncGate.observe(sdkWallet, resetProgressStore) { wallet ->
         OrchardMigrationSdk
             .new(
                 appContext = context,
@@ -67,13 +69,4 @@ private fun isSyncBlocked(
                 lightWalletEndpoint = wallet.endpoint,
                 account = null,
             ).isSyncBlocked()
-    }
-
-@OptIn(ExperimentalCoroutinesApi::class)
-internal fun Flow<PersistableWallet?>.observeSdkMigrationSyncBlock(
-    resetProgressStore: ResetProgressStore,
-    observe: (PersistableWallet) -> Flow<Boolean>,
-): Flow<Boolean> =
-    flatMapLatest { wallet ->
-        if (wallet == null) flowOf(false) else resetProgressStore.observeMigrationSyncBlock { observe(wallet) }
     }

@@ -219,7 +219,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             fingerprint = stack.enter_context(patch.dict(namespace, {
                 'input_fingerprint': lambda revision, **kwargs: 'same-inputs',
                 'validate_core_sources': lambda value, **kwargs: True,
-                'validate_quotes': lambda value, inputs: True,
+                'validate_direct_quotes': lambda value, inputs, revision, root: True,
             }))
             report = module['status'](root=Path(__file__).parents[1], revision='d'*40)
         self.assertTrue(report['publication_permitted'])
@@ -237,7 +237,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             stack.enter_context(patch.object(Path, 'read_bytes', return_value=receipt.encode()))
             stack.enter_context(patch('acceptance_policy.input_fingerprint', return_value='current'))
             stack.enter_context(patch('acceptance_policy.validate_core_sources', side_effect=ValueError('stale core')))
-            stack.enter_context(patch('acceptance_policy.validate_quotes', side_effect=ValueError('stale quotes')))
+            stack.enter_context(patch('acceptance_policy.validate_direct_quotes', side_effect=ValueError('stale quotes')))
             stack.enter_context(patch('acceptance_policy.changed_inputs', return_value=['shared/Runtime.kt']))
             output = stack.enter_context(redirect_stdout(io.StringIO()))
             runpy.run_path(str(Path(__file__).with_name('acceptance_status.py')), run_name='__main__')
