@@ -12,6 +12,7 @@ import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.StoredWalletDecodeException
 import io.mockk.coEvery
 import io.mockk.every
@@ -104,6 +105,28 @@ class WalletSdkInputCommitTest {
     }
 
     @Test
+    fun unreadableRecordWithholdsSdkInputUntilTheUserRetries() = runTest {
+        val storage = CommitFixture("{synthetic-unreadable}")
+        val walletProvider = provider(storage)
+        val availability = mutableListOf<StoredWalletAvailability>()
+        val sdkInputs = mutableListOf<PersistableWallet?>()
+        backgroundScope.launch { walletProvider.availability.collect { availability += it } }
+        backgroundScope.launch { walletProvider.persistableWallet.collect { sdkInputs += it } }
+        runCurrent()
+
+        assertEquals(listOf(StoredWalletAvailability.UNAVAILABLE), availability)
+        assertEquals(listOf<PersistableWallet?>(null), sdkInputs)
+        assertEquals("{synthetic-unreadable}", storage.durable)
+
+        storage.replaceFixtureBytes(candidate.toJson().toString())
+        walletProvider.retryRead()
+        runCurrent()
+
+        assertEquals(listOf(StoredWalletAvailability.UNAVAILABLE, StoredWalletAvailability.PRESENT), availability)
+        assertEquals(listOf(null, candidate.seedPhrase), sdkInputs.map { it?.seedPhrase })
+    }
+
+    @Test
     fun coldPendingResetSkipsUnreadableWalletHydration() = runTest {
         val context = mockk<Context> { every { noBackupFilesDir } returns directory.root }
         ResetProgressStore(context, DirectorySync {}).store(ResetStage.ERASE_SDK)
@@ -158,6 +181,12 @@ class WalletSdkInputCommitTest {
         private var cached = initial
         private var staged = initial
         private val listeners = mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+
+        fun replaceFixtureBytes(value: String) {
+            cached = value
+            durable = value
+        }
+
         val preferences = mockk<SharedPreferences> {
             every { getString(any(), null) } answers { cached }
             every { registerOnSharedPreferenceChangeListener(any()) } answers { listeners.add(firstArg()) }

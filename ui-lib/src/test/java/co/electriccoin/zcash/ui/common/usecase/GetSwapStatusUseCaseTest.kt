@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import android.content.Context
+import android.content.SharedPreferences
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.datasource.AssetNotFoundException
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -14,6 +16,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -46,6 +49,32 @@ import kotlin.time.Instant
 class GetSwapStatusUseCaseTest {
     private val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
     private val zec = SwapAssetTestFixture.zecAsset()
+
+    @Test
+    fun donationEligibilityUsesAcceptedSettlementRatherThanRawProviderSuccess() = runTest {
+        for (outcome in listOf(SwapStatus.PAYMENT_SHORTFALL, SwapStatus.SUCCESS)) {
+            val accepted = mockk<TransactionSwapMetadata> { every { status } returns outcome }
+            val metadata = mockk<MetadataRepository> {
+                coEvery { getSwapMetadata("deposit") } returns accepted
+                coEvery { updateSwap(accepted, any()) } returns accepted
+            }
+            val settled = swapStatusResult(swapStatus = SwapStatus.SUCCESS)
+            val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(accepted) } returns settled }
+            val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+            val prefs = mockk<SharedPreferences> {
+                every { getBoolean("successful_activity", false) } returns false
+                every { edit() } returns editor
+            }
+            val context = mockk<Context> { every { getSharedPreferences(any(), any()) } returns prefs }
+
+            val result = GetSwapStatusUseCase(metadata, provider, context).invoke("deposit")
+
+            assertSame(accepted, result.savedMetadata)
+            verify(exactly = if (outcome == SwapStatus.SUCCESS) 1 else 0) {
+                editor.putBoolean("successful_activity", true)
+            }
+        }
+    }
 
     @Test
     fun boundDetailRetriesAStorageReadFailureWithoutLookingUpAnUnverifiedReference() = runTest {

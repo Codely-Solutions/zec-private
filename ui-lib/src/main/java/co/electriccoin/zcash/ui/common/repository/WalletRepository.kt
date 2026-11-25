@@ -14,6 +14,7 @@ import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.spackle.Twig
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.FastestServersState
 import co.electriccoin.zcash.ui.common.model.OnboardingState
@@ -22,6 +23,7 @@ import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStora
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
@@ -77,6 +79,8 @@ interface WalletRepository {
 
     fun retryWalletInitialization()
 
+    fun retryWalletRead()
+
     suspend fun markIronwoodAnnouncementShown()
 
     fun restoreWallet(
@@ -107,6 +111,7 @@ class WalletRepositoryImpl(
     private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val resetProgressStore: ResetProgressStore,
+    transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
 ) : WalletRepository {
     /**
      * Scope the repository's `stateIn`-shared flows run on. Captured by those flows at
@@ -155,21 +160,30 @@ class WalletRepositoryImpl(
                 onboardingStateBeforeCommit.value ?: state
             }
 
-    private val onboardingWithWallet = onboardingState.combine(persistableWalletProvider.persistableWallet) {
-        state, wallet -> state to (wallet != null)
-    }
+    private val onboardingWithWallet =
+        combine(onboardingState, persistableWalletProvider.availability, transportGate.unavailable) {
+            state, availability, transportUnavailable ->
+            val walletAvailability = if (transportUnavailable && availability == StoredWalletAvailability.PRESENT) {
+                StoredWalletAvailability.UNAVAILABLE
+            } else {
+                availability
+            }
+            state to walletAvailability
+        }
 
     override val walletInitialization =
         combine(
             initialization,
             startupRecovery,
             onboardingWithWallet
-        ) { operation, recovery, (state, hasWallet) ->
+        ) { operation, recovery, (state, availability) ->
             when {
                 operation != WalletInitializationState.IDLE -> operation
-                !hasWallet && state.requiresWalletlessRecovery() ->
+                availability == StoredWalletAvailability.UNAVAILABLE -> WalletInitializationState.CHECKING
+                availability == StoredWalletAvailability.ABSENT && state.requiresWalletlessRecovery() ->
                     recovery.takeUnless { it == WalletInitializationState.IDLE } ?: WalletInitializationState.CHECKING
-                hasWallet && state != OnboardingState.READY -> WalletInitializationState.INCOMPLETE
+                availability == StoredWalletAvailability.PRESENT && state != OnboardingState.READY ->
+                    WalletInitializationState.INCOMPLETE
                 else -> WalletInitializationState.IDLE
             }
         }.stateIn(sharingScope, SharingStarted.Eagerly, WalletInitializationState.CHECKING)
@@ -177,24 +191,25 @@ class WalletRepositoryImpl(
     /**
      * READY additionally requires a stored wallet ([resolveSecretState]), because the plain
      * onboarding flag and the encrypted wallet store can diverge when the encrypted store is
-     * recreated after provable corruption (MOB-1836). This flow never catches: a transient
-     * Keystore failure surfacing here is left to crash the sharing coroutine, the same terminal
-     * outcome the app already reaches today via [co.electriccoin.zcash.ui.common.provider.SynchronizerProvider]
-     * collecting the same underlying store, rather than misrouting an intact-but-unreadable store
-     * to onboarding.
+     * recreated after provable corruption (MOB-1836). An unreadable store takes the dedicated recovery
+     * route and preserves the existing data. Only a confirmed absent record can enter walletless setup.
      */
     override val secretState: StateFlow<SecretState> =
         combine(
             configurationRepository.configurationFlow,
             onboardingWithWallet,
             storedByCurrentSetup
-        ) { config, (onboardingState, hasWallet), _ ->
-            resolveSecretState(
-                isConfigurationLoaded = config != null,
-                onboardingState = onboardingState,
-                hasWallet = hasWallet,
-                storedByCurrentSetup = storedByCurrentSetup.value
-            )
+        ) { config, (onboardingState, availability), _ ->
+            if (availability == StoredWalletAvailability.UNAVAILABLE) {
+                SecretState.UNAVAILABLE
+            } else {
+                resolveSecretState(
+                    isConfigurationLoaded = config != null,
+                    onboardingState = onboardingState,
+                    hasWallet = availability == StoredWalletAvailability.PRESENT,
+                    storedByCurrentSetup = storedByCurrentSetup.value,
+                )
+            }
         }.stateIn(
             scope = sharingScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -282,6 +297,11 @@ class WalletRepositoryImpl(
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
                 initialValue = WalletRestoringState.NONE
             )
+
+    override fun retryWalletRead() {
+        persistableWalletProvider.retryRead()
+        init()
+    }
 
     @Suppress("TooGenericExceptionCaught")
     override fun init() {

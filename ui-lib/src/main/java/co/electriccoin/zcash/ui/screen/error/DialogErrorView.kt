@@ -41,6 +41,19 @@ internal fun UnavailableErrorView() {
     )
 }
 
+@Composable
+internal fun StoredWalletUnavailableView(onRetry: () -> Unit, onSupport: () -> Unit, onBack: () -> Unit) {
+    DialogView(
+        ErrorState(
+            title = stringRes(R.string.wallet_store_unavailable_title),
+            message = stringRes(R.string.wallet_store_unavailable_message),
+            positive = ButtonState(text = stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
+            negative = ButtonState(text = stringRes(R.string.support_header), onClick = onSupport),
+            onBack = onBack,
+        )
+    )
+}
+
 @PreviewScreens
 @Composable
 private fun Preview() =

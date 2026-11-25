@@ -22,14 +22,19 @@ internal operator fun WalletCoordinator.Companion.invoke(
     isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
     resetProgressStore: ResetProgressStore,
     migrationSyncGate: WalletMigrationSyncGate,
+    transportGate: WalletSdkTransportGate,
 ): WalletCoordinator {
-    val sdkWallet = persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore)
+    val generation = persistableWalletProvider.readGeneration
+    val sdkWallet = transportGate.walletInput(
+        persistableWalletProvider.persistableWallet.hideResetWallet(resetProgressStore),
+        generation,
+    )
     return WalletCoordinator(
         context = context,
         persistableWallet = sdkWallet,
         accountName = context.getString(R.string.accounts_zashi),
         keySource = "zashi",
-        isTorEnabled = isTorEnabledStorageProvider.observe(),
+        isTorEnabled = transportGate.transportInput(isTorEnabledStorageProvider.observe(), generation),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
         isSyncBlocked = isSyncBlocked(context, sdkWallet, resetProgressStore, migrationSyncGate),
     )

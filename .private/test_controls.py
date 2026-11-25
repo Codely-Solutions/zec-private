@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from urllib.parse import parse_qs, unquote, urlsplit
+import xml.etree.ElementTree as ET
 
 spec=importlib.util.spec_from_file_location('forkcheck',Path(__file__).with_name('check.py'))
 checks=importlib.util.module_from_spec(spec);spec.loader.exec_module(checks)
@@ -73,6 +74,28 @@ for clear in (False, True):
         for path in paths:
             with self.subTest(path=path.relative_to(root).as_posix()):
                 self.assertNotIn(legacy,path.read_text())
+
+    def test_refund_help_limits_the_recovery_threshold_to_missent_funds(self):
+        recovery = {'swap_info_message', 'swap_refund_warning_message_swap', 'swap_refund_warning_message_pay'}
+        for locale, wrong_asset, wrong_network in (
+            ('values', 'wrong asset', 'wrong network'),
+            ('values-es', 'activo incorrecto', 'red incorrecta'),
+        ):
+            path = checks.ROOT / 'ui-design-lib/src/main/res/ui/common' / locale / 'strings.xml'
+            strings = {element.attrib['name']: ''.join(element.itertext())
+                       for element in ET.parse(path).getroot().findall('string')}
+            with self.subTest(locale=locale):
+                self.assertEqual(recovery, {name for name, value in strings.items() if '$300' in value})
+                for name in recovery:
+                    copy = strings[name].replace('-', ' ')
+                    self.assertIn(wrong_asset, copy)
+                    if locale == 'values-es' and name == 'swap_info_message':
+                        self.assertIn('red equivocada', copy)
+                    else:
+                        self.assertIn(wrong_network, copy)
+                self.assertEqual(['%1$s', '%2$s', '%3$s'], re.findall(r'%[123]\$s', strings['swap_info_message']))
+                minimum = 'quoted minimum' if locale == 'values' else 'mínimo de la cotización'
+                self.assertIn(minimum, strings['depositFunds_bulletPoint1'])
 
     def test_obtainium_import_is_valid_and_selects_only_production_apk(self):
         config=json.loads((checks.ROOT/'docs/obtainium.json').read_text())

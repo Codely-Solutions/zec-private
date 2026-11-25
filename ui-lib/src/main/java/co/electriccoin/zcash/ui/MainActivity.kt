@@ -347,8 +347,9 @@ class MainActivity : FragmentActivity() {
                 val isSecretReadyFlow = walletViewModel.secretState.map { it == SecretState.READY }
                 val isBackgroundSyncEnabledFlow = oldHomeViewModel.isBackgroundSyncEnabled.filterNotNull()
 
-                isSecretReadyFlow.combine(isBackgroundSyncEnabledFlow) { isSecretReady, isBackgroundSyncEnabled ->
-                    isSecretReady && isBackgroundSyncEnabled
+                combine(isSecretReadyFlow, isBackgroundSyncEnabledFlow, resetProgressStore.isPending) {
+                    isSecretReady, isBackgroundSyncEnabled, resetPending ->
+                    isSecretReady && isBackgroundSyncEnabled && !resetPending
                 }
             }
 

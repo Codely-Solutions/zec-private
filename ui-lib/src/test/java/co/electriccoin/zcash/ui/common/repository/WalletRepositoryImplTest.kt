@@ -14,6 +14,7 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.configuration.model.map.Configuration
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
@@ -60,10 +62,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -154,7 +158,10 @@ class WalletRepositoryImplTest {
             val loaded = CompletableDeferred<PersistableWallet?>()
             val neverEmittingWalletProvider =
                 mockk<PersistableWalletProvider> {
-                    every { persistableWallet } returns flow { emit(loaded.await()) }
+                    every { availability } returns flow {
+                        loaded.await()
+                        emit(StoredWalletAvailability.PRESENT)
+                    }
                 }
 
             val (repository, _) =
@@ -235,7 +242,10 @@ class WalletRepositoryImplTest {
         runTest {
             val walletLoaded = CompletableDeferred<PersistableWallet?>()
             val provider = mockk<PersistableWalletProvider> {
-                every { persistableWallet } returns flow { emit(walletLoaded.await()) }
+                every { availability } returns flow {
+                    walletLoaded.await()
+                    emit(StoredWalletAvailability.PRESENT)
+                }
             }
             val (repository, _) = newRepository(OnboardingState.NONE, null, provider)
             assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
@@ -932,7 +942,7 @@ class WalletRepositoryImplTest {
         runTest {
             val failingWalletProvider =
                 mockk<PersistableWalletProvider> {
-                    every { persistableWallet } returns MutableSharedFlow()
+                    every { availability } returns flowOf(StoredWalletAvailability.UNAVAILABLE)
                     every { writeVersion } returns 0L
                 }
             coEvery { failingWalletProvider.getPersistableWallet() } throws
@@ -951,8 +961,57 @@ class WalletRepositoryImplTest {
 
             assertEquals(emptyList<String>(), harness.events)
             assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING })
+            assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
             coVerify(exactly = 0) { Synchronizer.erase(any(), any(), any()) }
         }
+
+    @Test
+    fun storedWalletWithUnreadableTransportShowsRecoveryInsteadOfSetup() = runTest {
+        val transportGate = WalletSdkTransportGate()
+        backgroundScope.launch {
+            transportGate.transportInput(
+                flow { error("Synthetic unreadable Tor setting") },
+                MutableStateFlow(0L),
+            ).collect()
+        }
+        runCurrent()
+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet(), transportGate = transportGate)
+
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it == SecretState.UNAVAILABLE })
+        assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
+        assertTrue(harness.events.isEmpty())
+    }
+
+    @Test
+    fun retryFromUnreadableToAbsentRunsStartupRecoveryBeforeSetup() = runTest {
+        val walletAvailability = MutableStateFlow(StoredWalletAvailability.UNAVAILABLE)
+        val walletProvider = mockk<PersistableWalletProvider> {
+            every { availability } returns walletAvailability
+            every { writeVersion } returns 0L
+            every { retryRead() } answers { walletAvailability.value = StoredWalletAvailability.ABSENT }
+            coEvery { getPersistableWallet() } coAnswers {
+                check(walletAvailability.value == StoredWalletAvailability.ABSENT) { "Synthetic unreadable wallet" }
+                null
+            }
+        }
+        val (repository, harness) = newRepository(OnboardingState.READY, null, walletProvider)
+        repository.useTestScope(testScheduler)
+        repository.init()
+        advanceUntilIdle()
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING })
+        assertTrue(harness.events.isEmpty())
+
+        repository.retryWalletRead()
+        advanceUntilIdle()
+
+        assertEquals(SecretState.NONE, repository.secretState.first { it == SecretState.NONE })
+        assertEquals(
+            WalletInitializationState.IDLE,
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE },
+        )
+        assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"), harness.events)
+    }
 
     @Test
     fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
@@ -1058,6 +1117,7 @@ class WalletRepositoryImplTest {
         persistableWalletProviderOverride: PersistableWalletProvider? = null,
         torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
         resetPending: Boolean = false,
+        transportGate: WalletSdkTransportGate = WalletSdkTransportGate(),
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()
 
@@ -1131,6 +1191,7 @@ class WalletRepositoryImplTest {
                 sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
                 isTorEnabledStorageProvider = torPreference,
                 resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
+                transportGate = transportGate,
             )
 
         scopes += repository.scope

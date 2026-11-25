@@ -1,5 +1,6 @@
 """One resident UiAutomation instrumentation session; no repeated UI-dump JVMs."""
 import os,socket,json,time,re,subprocess,threading
+from release_metadata import require_acceptance_checks
 
 
 def quote_stage_records(adb):
@@ -16,6 +17,7 @@ def quote_stage_records(adb):
 
 
 def run(adb, root, apks, manifest):
+    require_acceptance_checks()
     if manifest['package']!='com.personal.zecprivate.foss.debug':
         raise ValueError('Only the isolated debug wallet package is supported')
     use_tor = manifest.get('tor_enabled', True)

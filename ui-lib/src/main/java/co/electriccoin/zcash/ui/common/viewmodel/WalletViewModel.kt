@@ -77,6 +77,8 @@ class WalletViewModel(
 
     fun retryWalletInitialization() = walletRepository.retryWalletInitialization()
 
+    fun retryWalletRead() = walletRepository.retryWalletRead()
+
     fun persistExistingWalletWithSeedPhrase(
         network: ZcashNetwork,
         seedPhrase: SeedPhrase,
@@ -93,7 +95,8 @@ enum class SecretState {
     LOADING,
     NONE,
     INCOMPLETE,
-    READY
+    READY,
+    UNAVAILABLE,
 }
 
 /**

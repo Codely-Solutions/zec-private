@@ -7,7 +7,9 @@ by shared admission. This adapter is specific to this credential-free probe.
 import os,subprocess,json,zipfile,hashlib
 from pathlib import Path
 from emulator_session import EmulatorSession, SDK, load_manifest
-from release_metadata import GH
+from release_metadata import GH, require_acceptance_checks
+
+require_acceptance_checks()
 ROOT=Path(os.environ["CODEX_GUARD_OUTPUT"])
 PROJECT=Path(__file__).resolve().parents[1]
 manifest=load_manifest(PROJECT)

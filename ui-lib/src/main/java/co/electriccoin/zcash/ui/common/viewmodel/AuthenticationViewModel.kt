@@ -120,13 +120,14 @@ class AuthenticationViewModel(
             showWelcomeAnimation,
             resetProgressStore.isPending,
         ) { required, state, secretState, animate, resetPending ->
+            val requiresWalletAccess = resetPending ||
+                secretState == SecretState.INCOMPLETE || secretState == SecretState.UNAVAILABLE
             when {
                 (!required || versionInfo.isRunningUnderTestService) -> {
                     AuthenticationUIState.NotRequired
                 }
 
-                state == AuthenticationUIState.NotRequired &&
-                    (secretState == SecretState.INCOMPLETE || resetPending) -> {
+                state == AuthenticationUIState.NotRequired && requiresWalletAccess -> {
                     appAccessAuthentication.value = AuthenticationUIState.Initial
                     AuthenticationUIState.Required
                 }
@@ -139,7 +140,8 @@ class AuthenticationViewModel(
                         SecretState.NONE -> AuthenticationUIState.NotRequired.also {
                             appAccessAuthentication.value = it
                         }
-                        SecretState.INCOMPLETE, SecretState.READY -> AuthenticationUIState.Required
+                        SecretState.INCOMPLETE, SecretState.READY, SecretState.UNAVAILABLE ->
+                            AuthenticationUIState.Required
                     }
                 }
 

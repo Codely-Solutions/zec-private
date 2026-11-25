@@ -225,6 +225,23 @@ class AuthenticationViewModelTest {
         }
 
     @Test
+    fun unavailableWalletRevokesFirstRunGrantAndRequiresConfiguredAppAccess() = runTest {
+        val (viewModel, secretState, _) = newViewModel(
+            secretState = SecretState.NONE,
+            isAppAccessAuthenticationPreference = "true",
+        )
+        viewModel.setWelcomeAnimationDisplayed()
+        advanceUntilIdle()
+        assertNotNull(viewModel.appAccessSession.grant.value)
+
+        secretState.value = SecretState.UNAVAILABLE
+        advanceUntilIdle()
+
+        assertEquals(AuthenticationUIState.Required, viewModel.appAccessAuthenticationResultState.value)
+        assertNull(viewModel.appAccessSession.grant.value)
+    }
+
+    @Test
     fun pendingResetRequiresAppAccessBeforeWalletHydrates() = runTest {
         val (viewModel, _, _) = newViewModel(
             secretState = SecretState.LOADING,

@@ -7,4 +7,6 @@
     <string name="wallet_initialization_incomplete">Ya hay una billetera guardada en este dispositivo. Completa la configuración para usarla. Después podrás restablecerla en Ajustes.</string>
     <string name="wallet_initialization_continue">Continuar con la configuración de la billetera</string>
     <string name="wallet_initialization_conflict">Ya se inició otra configuración de billetera. Vuelve a la pantalla de bienvenida para completarla o vuelve a intentarlo con su frase y opciones de recuperación originales.</string>
+    <string name="wallet_store_unavailable_title">No se pudo abrir la billetera</string>
+    <string name="wallet_store_unavailable_message">No se pudo leer la billetera guardada. Inténtalo de nuevo o contacta con Soporte.</string>
 </resources>

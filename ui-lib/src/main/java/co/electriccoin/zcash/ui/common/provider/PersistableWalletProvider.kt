@@ -8,19 +8,33 @@ import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDef
 import co.electriccoin.zcash.preference.model.entry.PreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 
 interface PersistableWalletProvider {
     val persistableWallet: Flow<PersistableWallet?>
+    val availability: Flow<StoredWalletAvailability>
+        get() = persistableWallet.map { wallet ->
+            if (wallet == null) StoredWalletAvailability.ABSENT else StoredWalletAvailability.PRESENT
+        }
     val writeVersion: Long get() = 0L
+    val readGeneration: StateFlow<Long> get() = initialWalletReadGeneration
+
+    fun retryRead() = Unit
 
     suspend fun store(persistableWallet: PersistableWallet)
 
@@ -30,6 +44,14 @@ interface PersistableWalletProvider {
     suspend fun getPersistableWallet(): PersistableWallet?
 
     suspend fun requirePersistableWallet(): PersistableWallet
+}
+
+private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
+
+enum class StoredWalletAvailability {
+    PRESENT,
+    ABSENT,
+    UNAVAILABLE,
 }
 
 data class WalletServerSelection(val endpoint: LightWalletEndpoint, val isAutomatic: Boolean?)
@@ -57,21 +79,42 @@ class PersistableWalletProviderImpl(
 
     private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
 
+    private val readRequests = MutableStateFlow(0L)
+    override val readGeneration = readRequests.asStateFlow()
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val records = (readsSuppressed ?: flowOf(false)).flatMapLatest { suppressed ->
-        if (suppressed) flowOf(null) else persistableWalletStorageProvider.observe()
-    }
+    private val records = combine(readsSuppressed ?: flowOf(false), readRequests) { suppressed, _ -> suppressed }
+        .flatMapLatest { suppressed ->
+            if (suppressed) {
+                flowOf(Result.success(null))
+            } else {
+                persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
+                    if (failure !is Exception || failure is CancellationException) throw failure
+                    emit(Result.failure(failure))
+                }
+            }
+        }
+
+    override val availability = records.map { result ->
+        when {
+            result.isFailure -> StoredWalletAvailability.UNAVAILABLE
+            result.getOrNull() != null -> StoredWalletAvailability.PRESENT
+            else -> StoredWalletAvailability.ABSENT
+        }
+    }.distinctUntilChanged()
 
     override val persistableWallet: Flow<PersistableWallet?> =
-        records.map { record ->
-            val wallet = record?.wallet
+        records.map { result ->
+            val wallet = result.getOrNull()?.wallet
             wallet?.copy(
                 seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
             )
         }.distinctUntilChanged()
 
     override val serverSelection =
-        records.map { it?.serverSelection() }.distinctUntilChanged()
+        records.map { it.getOrNull()?.serverSelection() }.distinctUntilChanged()
+
+    override fun retryRead() = readRequests.update { it + 1 }
 
     override suspend fun getServerSelection() = currentRecord()?.serverSelection()
 

@@ -35,6 +35,11 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def require_acceptance_checks():
+    if not __debug__:
+        raise RuntimeError('Wallet acceptance requires Python assertions enabled')
+
+
 def checksum_bytes(digest):
     require(isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest), 'Invalid attested APK digest')
     return f'{digest}  {WALLET_APK}\n'.encode('ascii')

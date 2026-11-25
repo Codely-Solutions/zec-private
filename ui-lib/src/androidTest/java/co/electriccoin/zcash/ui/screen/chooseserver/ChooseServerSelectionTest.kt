@@ -296,6 +296,7 @@ private class FakeWalletRepository(
     var refreshCount = 0
         private set
 
+    override fun retryWalletRead() = Unit
     override fun init() = Unit
 
     override fun createNewWallet() = Unit

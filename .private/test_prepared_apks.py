@@ -1,5 +1,8 @@
 import hashlib
 import io
+import shutil
+import subprocess
+import sys
 import json
 from pathlib import Path
 import tempfile
@@ -7,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 from prepared_apks import reuse, write_receipt, export_prepared
-from strip_emulator_apk import verify_prepared, signing_identity
+from strip_emulator_apk import prepare, signing_identity, verify_prepared
 from tor_differential_driver import fetch_baseline
 from ui_step import active_root, identity
 
@@ -18,6 +21,46 @@ class ArtifactTests(unittest.TestCase):
         output = b'Signer #1 certificate DN: CN=Isolated Unfunded Emulator Test\r\nSigner #1 certificate SHA-256 digest: '+b'b'*64+b'\r\n'
         with patch('strip_emulator_apk.subprocess.run', return_value=SimpleNamespace(stdout=output)):
             self.assertEqual('b'*64, signing_identity(Path('fixture.apk'), Path('sdk')))
+
+    def test_resident_acceptance_rejects_optimized_interpreter_before_guest_access(self):
+        script = 'from tor_resident_ui_driver import run; run(None, None, (), {})'
+        result = subprocess.run([sys.executable, '-O', '-B', '-c', script],
+                                cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Wallet acceptance requires Python assertions enabled', result.stderr)
+
+    def test_fresh_preparation_verifies_all_execution_entries_and_abi(self):
+        for change, error in (
+            ({}, None),
+            ({'classes.dex': b'changed'}, 'execution entries changed'),
+            ({'classes2.dex': b'extra'}, 'execution entries changed'),
+            ({'lib/arm64-v8a/libfixture.so': b'alien ABI'}, 'incompatible or duplicate'),
+        ):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                apk = root / 'fixture.apk'
+                with zipfile.ZipFile(apk, 'w') as original:
+                    original.writestr('classes.dex', b'original DEX')
+                    original.writestr('lib/arm64-v8a/libfixture.so', b'drop this original ABI')
+
+                def run(arguments, **kwargs):
+                    if 'sign' in arguments:
+                        source = Path(arguments[-1])
+                        with zipfile.ZipFile(source) as archive:
+                            data = {name: archive.read(name) for name in archive.namelist()}
+                        with zipfile.ZipFile(apk, 'w') as output:
+                            for name, content in dict(data, **change).items():
+                                output.writestr(name, content)
+                    elif '-P' in arguments:
+                        shutil.copyfile(arguments[-2], arguments[-1])
+
+                with patch('strip_emulator_apk.subprocess.run', side_effect=run), \
+                        patch('strip_emulator_apk.signing_identity', return_value='a' * 64):
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            prepare([apk], root, root)
+                    else:
+                        self.assertTrue(prepare([apk], root, root)[apk.name]['executionEntriesUnchanged'])
 
     def test_reuse_and_bindings(self):
         with tempfile.TemporaryDirectory() as temporary:

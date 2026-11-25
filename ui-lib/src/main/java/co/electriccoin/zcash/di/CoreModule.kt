@@ -4,6 +4,7 @@ import androidx.biometric.BiometricManager
 import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.configuration.AndroidConfigurationFactory
 import co.electriccoin.zcash.global.WalletMigrationSyncGate
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.global.invoke
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
@@ -20,6 +21,7 @@ val coreModule =
     module {
         singleOf(WalletCoordinator::invoke)
         singleOf(::WalletMigrationSyncGate)
+        singleOf(::WalletSdkTransportGate)
         singleOf(::StandardPreferenceProvider)
         singleOf(::EncryptedPreferenceProvider)
         single { BiometricManager.from(get()) }

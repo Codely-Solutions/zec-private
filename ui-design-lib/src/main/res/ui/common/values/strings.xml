@@ -508,8 +508,8 @@
 
     <!-- ===== pay ===== -->
     <string name="crosspay_help_payWith">CrossPay with</string>
-    <string name="pay_info_subtitle">Make cross-chain payments in any NEAR-supported coin or token.\n\nIf slippage or network conditions result in your recipient receiving less than the promised amount, your payment will be refunded minus network fees.\n\nRefunds only apply to payments of $300 or more. Payments under $300 aren\'t eligible for a refund. Please double-check all details before continuing.</string>
-    <string name="swapAndPay_slippageWarn">Slippage is a price-movement allowance, not a fixed fee. Any unused allowance is refunded.</string>
+    <string name="pay_info_subtitle">Pay a fixed amount in a supported asset. If the payment fails or arrives short, check Activity before paying again. The provider may issue a refund after fees.</string>
+    <string name="swapAndPay_slippageWarn">Slippage allows for price changes. The provider may return unused funds after fees.</string>
 
     <!-- ===== payment_request ===== -->
     <string name="send_requestPayment_title">Payment Request</string>
@@ -864,7 +864,7 @@
     <string name="authorize_vote_use_signed_bundles_only_subtitle" tools:ignore="MissingTranslation" translatable="false">Continue without the remaining %1$s</string>
 
     <!-- ===== swap ===== -->
-    <string name="swap_info_message">Swap between %1$s and any NEAR-supported coin or token.\n\nIf swapping TO %2$s, you will send funds from a third-party wallet and provide an address where funds can be refunded.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund if the wrong asset is sent, or sent on the wrong network.\n\nIf swapping FROM %3$s, you must provide a valid address for the asset you are swapping to.</string>
+    <string name="swap_info_message">Swap between %1$s and supported assets.\n\nSwapping into %2$s requires a deposit from another wallet and a refund address on the sending network.\n\nNEAR offers no recovery for wrong-asset or wrong-network transfers under $300.\n\nWhen swapping from %3$s, enter a recipient address on the receiving network.</string>
     <string name="swap_info_learn_more">Learn more</string>
     <string name="swapAndPay_help_swapWith">Swap with</string>
     <string name="swap_select_token">Select Token</string>
@@ -917,9 +917,9 @@
     <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
     <string name="swapToZec_refundAddress">Refund Address</string>
     <string name="swapToZec_refundAddress_title">Refund Address</string>
-    <string name="swap_refund_address_info_message_empty">If the swap fails or market conditions change, your transaction may be refunded minus network fees.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund.\n\nThe refunded amount will be returned to your wallet in the source currency. Please enter a valid address to avoid loss of funds.</string>
-    <string name="swap_refund_address_info_message">If the swap fails or market conditions change, your transaction may be refunded minus network fees.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund.\n\nThe refunded amount will be returned to your wallet in the source currency on the same network. Please enter a valid address to avoid loss of funds.</string>
-    <string name="swap_refund_warning_title">No Refunds Under $300</string>
+    <string name="swap_refund_address_info_message_empty">Enter an address for the asset and network you send from. If a refund is available, it goes to that address and network fees may reduce it.</string>
+    <string name="swap_refund_address_info_message">Any refund goes to this address in the original asset and network. Network fees may reduce the amount returned.</string>
+    <string name="swap_refund_warning_title">Check asset and network</string>
     <string name="swap_refund_warning_message_swap">NEAR doesn\'t refund mistakes like a wrong asset or wrong network for swaps under $300. Please double-check all details before continuing.</string>
     <string name="swap_refund_warning_message_pay">NEAR doesn\'t refund mistakes like a wrong asset or wrong network for payments under $300. Please double-check all details before continuing.</string>
     <string name="swap_refund_warning_checkbox">Don\'t show this message again</string>
@@ -938,7 +938,7 @@
     <string name="depositFunds_alert_message">If you\'ve sent or intend to send the funds, tap \'I\'ve sent the funds.\' Or cancel the swap to return to the previous screen.</string>
     <string name="depositFunds_title">Deposit Funds</string>
     <string name="depositFunds_desc">Swap into ZEC with any NEAR-supported asset.</string>
-    <string name="depositFunds_bulletPoint1">Send the exact amount of the asset displayed. Sending less will result in a refund.</string>
+    <string name="depositFunds_bulletPoint1">Use the suggested amount. A smaller deposit may complete if it meets the quoted minimum.</string>
     <string name="depositFunds_bulletPoint2">Double-check that you are sending the correct asset on the correct network (e.g., USDC on Solana).</string>
     <string name="depositFunds_bulletPoint3">It’s best to send from a wallet you own. Sending from an exchange may result in delays or refunds.</string>
 

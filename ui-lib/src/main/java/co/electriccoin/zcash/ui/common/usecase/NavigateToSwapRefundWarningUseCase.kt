@@ -18,8 +18,7 @@ import java.math.BigDecimal
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Gates the Swap/CrossPay primary CTA behind the sub-$300 "no refunds" warning sheet, which all
- * three surfaces (Swap to ZEC, Swap from ZEC and CrossPay) share. The
+ * Warns about wrong-asset or wrong-network deposits under $300 before Swap and CrossPay review. The
  * "Don't show this message again" flag that suppresses it is kept per surface, so silencing the
  * warning on Swap leaves it armed for CrossPay.
  */

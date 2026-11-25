@@ -87,9 +87,7 @@ class GetSwapStatusUseCase(
                     try {
                         val requestStartedAt = fundingClock.now()
                         val (result, saved) = refresh(depositAddress, expectedMetadata)
-                        if (result.status == SwapStatus.SUCCESS) {
-                            donationPreferences?.recordSuccessfulTransaction()
-                        }
+                        donationPreferences?.recordSuccessfulSettlement(saved)
                         val fundingUntil = fundingDeadline(result, requestStartedAt)
                         fundingExpiry?.cancelAndJoin()
                         data.update {
@@ -193,6 +191,10 @@ class GetSwapStatusUseCase(
 
     private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
         IllegalStateException("Swap status refresh was not saved")
+}
+
+private fun DonationPreferences.recordSuccessfulSettlement(saved: TransactionSwapMetadata) {
+    if (saved.status == SwapStatus.SUCCESS) recordSuccessfulTransaction()
 }
 
 data class SwapQuoteStatusData(

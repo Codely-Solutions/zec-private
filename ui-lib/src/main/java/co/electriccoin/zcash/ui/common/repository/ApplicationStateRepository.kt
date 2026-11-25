@@ -6,6 +6,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,7 @@ class ApplicationStateRepositoryImpl(
     private val applicationStateProvider: ApplicationStateProvider,
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationSyncGate: WalletMigrationSyncGate,
+    private val resetProgressStore: ResetProgressStore,
 ) : ApplicationStateRepository {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -45,6 +47,7 @@ class ApplicationStateRepositoryImpl(
                 synchronizerProvider.synchronizer,
                 applicationStateProvider.isInForeground,
                 migrationSyncGate.isBlocked,
+                resetProgressStore.isPending,
             )
         }
     }
@@ -54,10 +57,12 @@ internal suspend fun relaySynchronizerLifecycle(
     synchronizers: Flow<Synchronizer?>,
     applicationForeground: Flow<Boolean>,
     migrationBlocked: Flow<Boolean>,
+    resetPending: Flow<Boolean>,
 ) {
-    // The SDK's migration pause guards bursts and resubmission. Foreground start is a separate API.
-    combine(synchronizers, applicationForeground, migrationBlocked) { synchronizer, foreground, blocked ->
-        synchronizer to (foreground && !blocked)
+    // Withhold app-requested starts while a migration or reset owns the wallet.
+    combine(synchronizers, applicationForeground, migrationBlocked, resetPending) {
+        sync, foreground, migration, reset ->
+        sync to (foreground && !migration && !reset)
     }.distinctUntilChanged()
         .collect { (synchronizer, runInForeground) ->
             if (runInForeground) {

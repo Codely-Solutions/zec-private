@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.LocalKeyboardManager
@@ -39,6 +40,7 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
+import co.electriccoin.zcash.ui.screen.error.StoredWalletUnavailableView
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
@@ -60,11 +62,21 @@ fun RootNavGraph(
 ) {
     val resetProgress = koinInject<ResetProgressStore>()
     val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
-    if (isResetPending) {
-        ResetZashiScreen()
-        return
+    when {
+        isResetPending -> ResetZashiScreen()
+        secretState == SecretState.UNAVAILABLE ->
+            UnavailableWalletRecovery(walletViewModel, resetProgress, hasAppAccess)
+        else -> WalletNavHost(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
     }
+}
 
+@Composable
+private fun WalletNavHost(
+    secretState: SecretState,
+    walletViewModel: WalletViewModel,
+    storageCheckViewModel: StorageCheckViewModel,
+    hasAppAccess: () -> Boolean,
+) {
     val keyboardManager = LocalKeyboardManager.current
     val navigationRouter = koinInject<NavigationRouter>()
     val applicationStateProvider = koinInject<ApplicationStateProvider>()
@@ -167,6 +179,27 @@ fun RootNavGraph(
     }
 
     CollectLaunchRequests(secretState, navController, launchNavigation, navigator, currentAccess.value)
+}
+
+@Composable
+private fun UnavailableWalletRecovery(
+    walletViewModel: WalletViewModel,
+    resetProgress: ResetProgressStore,
+    hasAppAccess: () -> Boolean,
+) {
+    val support = koinInject<SendEmailUseCase>()
+    val activity = LocalActivity.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val canAct = {
+        hasAppAccess() && !resetProgress.isPending.value &&
+            walletViewModel.secretState.value == SecretState.UNAVAILABLE &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+    }
+    StoredWalletUnavailableView(
+        onRetry = { if (canAct()) walletViewModel.retryWalletRead() },
+        onSupport = { support.sendBlankSupport(canAct) },
+        onBack = activity::finish,
+    )
 }
 
 @Composable

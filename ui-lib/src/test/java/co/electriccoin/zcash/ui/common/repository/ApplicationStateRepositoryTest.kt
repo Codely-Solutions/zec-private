@@ -23,7 +23,8 @@ class ApplicationStateRepositoryTest {
         val current = MutableStateFlow<Synchronizer?>(synchronizer)
         val foreground = MutableStateFlow(true)
         val blocked = MutableStateFlow(true)
-        backgroundScope.launch { relaySynchronizerLifecycle(current, foreground, blocked) }
+        val pending = MutableStateFlow(false)
+        backgroundScope.launch { relaySynchronizerLifecycle(current, foreground, blocked, pending) }
         runCurrent()
         blocked.value = false
         runCurrent()
@@ -37,5 +38,14 @@ class ApplicationStateRepositoryTest {
         runCurrent()
 
         assertEquals(listOf("background", "foreground", "background", "foreground"), lifecycleCalls)
+
+        // Reset preparation can fail while the existing SDK is still loaded.
+        pending.value = true
+        runCurrent()
+        foreground.value = false
+        runCurrent()
+        foreground.value = true
+        runCurrent()
+        assertEquals(listOf("background", "foreground", "background", "foreground", "background"), lifecycleCalls)
     }
 }

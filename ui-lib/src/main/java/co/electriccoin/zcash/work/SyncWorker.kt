@@ -14,6 +14,7 @@ import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.migration.MigrationGate
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
@@ -49,12 +50,13 @@ class SyncWorker(
     KoinComponent {
     private val synchronizerProvider: SynchronizerProvider by inject()
     private val migrationGate: MigrationGate by inject()
+    private val resetProgressStore: ResetProgressStore by inject()
     private val lastNetworkActivity: LastNetworkActivityStorageProvider by inject()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun doWork(): Result {
-        if (migrationGate.isMigrationActive()) {
-            Twig.debug { "BG Sync: migration active — Lane A supersedes, skipping." }
+        if (resetProgressStore.isPending.value || migrationGate.isMigrationActive()) {
+            Twig.debug { "BG Sync: wallet migration or reset owns sync; skipping" }
             return Result.success()
         }
 

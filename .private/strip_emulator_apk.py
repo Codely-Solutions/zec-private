@@ -27,8 +27,8 @@ def prepare(paths, root, sdk):
         subprocess.run([str(sdk_binary(JDK,'bin','java')),'-jar',str(sdk/'build-tools/36.0.0/lib/apksigner.jar'),'sign','--ks',str(key),'--ks-key-alias','test','--ks-pass','pass:android','--key-pass','pass:android','--out',str(original),str(aligned)],capture_output=True,check=True,timeout=90)
         subprocess.run([str(sdk_binary(JDK,'bin','java')),'-jar',str(sdk/'build-tools/36.0.0/lib/apksigner.jar'),'verify',str(original)],capture_output=True,check=True,timeout=30)
         with zipfile.ZipFile(original) as signed:
-            assert all(hashlib.sha256(signed.read(n)).hexdigest()==h for n,h in executable.items())
-            assert not any(n.startswith('lib/') and not n.startswith('lib/x86_64/') for n in signed.namelist())
+            if not executable or execution_entries(signed) != executable:
+                raise ValueError('Test APK execution entries changed during preparation')
         stripped.unlink();aligned.unlink()
         receipts[original.name]={'originalSha256':original_hash,'testedSha256':hashlib.sha256(original.read_bytes()).hexdigest(),'preservedExecutionEntries':len(executable),'executionEntriesDigest':hashlib.sha256(json.dumps(executable,sort_keys=True).encode()).hexdigest(),'executionEntriesUnchanged':True,'abi':'x86_64','signing':'ephemeral test key; not release key','testSignerSha256':signing_identity(original,sdk)}
     return receipts
@@ -45,6 +45,14 @@ def signing_identity(path, sdk):
     return digests[0].lower()
 
 
+def execution_entries(archive):
+    names = archive.namelist()
+    if len(names) != len(set(names)) or any(n.startswith('lib/') and not n.startswith('lib/x86_64/') for n in names):
+        raise ValueError('Prepared APK contains incompatible or duplicate entries')
+    return {n: hashlib.sha256(archive.read(n)).hexdigest() for n in names
+            if n.startswith('lib/x86_64/') or n.endswith('.dex') or n in ('AndroidManifest.xml', 'resources.arsc')}
+
+
 def verify_prepared(path, receipt, sdk):
     if (receipt.get('abi') != 'x86_64' or receipt.get('signing') != 'ephemeral test key; not release key'
             or receipt.get('executionEntriesUnchanged') is not True
@@ -54,11 +62,7 @@ def verify_prepared(path, receipt, sdk):
     if hashlib.sha256(path.read_bytes()).hexdigest() != receipt.get('testedSha256'):
         raise ValueError('Prepared APK digest mismatch')
     with zipfile.ZipFile(path) as archive:
-        names = archive.namelist()
-        if len(names) != len(set(names)) or any(n.startswith('lib/') and not n.startswith('lib/x86_64/') for n in names):
-            raise ValueError('Prepared APK contains incompatible or duplicate entries')
-        executable = {n: hashlib.sha256(archive.read(n)).hexdigest() for n in names
-            if n.startswith('lib/x86_64/') or n.endswith('.dex') or n in ('AndroidManifest.xml', 'resources.arsc')}
+        executable = execution_entries(archive)
     if (not executable or len(executable) != receipt.get('preservedExecutionEntries') or
             hashlib.sha256(json.dumps(executable, sort_keys=True).encode()).hexdigest() != receipt.get('executionEntriesDigest')):
         raise ValueError('Prepared APK execution-entry receipt mismatch')
