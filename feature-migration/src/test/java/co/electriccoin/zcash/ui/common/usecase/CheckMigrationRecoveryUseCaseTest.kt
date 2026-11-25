@@ -17,7 +17,6 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
@@ -281,7 +280,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = false).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationProgressArgs()) }
         }
 
     @Test
@@ -320,7 +319,7 @@ class CheckMigrationRecoveryUseCaseTest {
             )
             recovery()
             assertEquals(otherAccount, selected.value)
-            coVerify(exactly = 1) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 1) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
 
             selected.value = testWalletAccount
             CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
@@ -348,9 +347,9 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs(ownerKey)) }
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationCompleteArgs()) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationTransferInvalidArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationProgressArgs()) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationCompleteArgs()) }
         }
 
     @Test
@@ -384,7 +383,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
             coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 
@@ -411,7 +410,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailureStorageProvider = storageProvider,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationSendingArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationSendingArgs(ownerKey)) }
             coVerify(exactly = 1) { storageProvider.store(ownerKey, false) }
         }
 
@@ -430,7 +429,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = false).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs(ownerKey)) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationTransferInvalidArgs(ownerKey)) }
             coVerify(exactly = 0) { router.replaceAll(any()) }
         }
 
@@ -453,7 +452,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 pendingMigrationTorFailure = false,
             ).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationCompleteArgs()) }
+            coVerify(exactly = 0) { router.replaceAll(MigrationCompleteArgs()) }
             coVerify(exactly = 0) { router.replaceAll(any()) }
         }
 

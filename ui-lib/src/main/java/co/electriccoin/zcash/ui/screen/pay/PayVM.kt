@@ -29,6 +29,7 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapAssetPickerUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
+import co.electriccoin.zcash.ui.common.usecase.awaitQuoteOrigin
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.component.TextSelection
@@ -69,6 +70,7 @@ internal class PayVM(
     private val navigateToSlippage: NavigateToSlippageUseCase,
     private val navigateToSwapAssetPicker: NavigateToSwapAssetPickerUseCase,
     private val navigateToSwapRefundWarning: NavigateToSwapRefundWarningUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     // VM-owned state. The externally-observed `swapAssets`/`account`/`isABHintVisible` fields are
     // injected by the `state` combine below, so the VM only ever updates the fields it owns.
@@ -266,7 +268,7 @@ internal class PayVM(
 
     private suspend fun continueQuote(owner: () -> Boolean) {
         dismissCancelSheet()
-        navigateToSwapQuoteIfAvailable(owner) {}
+        navigateToSwapQuoteIfAvailable(owner, sourceEntryId) {}
     }
 
     private suspend fun dismissCancelSheet() = cancelSheetDismissal.awaitHidden { cancelSheet.value = null }
@@ -332,6 +334,7 @@ internal class PayVM(
                 if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
                     return@launch
                 }
+                if (!navigationRouter.awaitQuoteOrigin(sourceEntryId)) return@launch
                 if (isCancellingQuote) return@launch
                 if (!hasSameQuoteInputs(snapshot)) return@launch
                 quoteRequestJob = coroutineContext.job
@@ -342,7 +345,8 @@ internal class PayVM(
                     selectedAsset = asset,
                     slippage = slippage,
                     canNavigateToSwapQuote = ::awaitReviewNavigation,
-                    contactNetwork = contactNetwork
+                    contactNetwork = contactNetwork,
+                    sourceEntryId = sourceEntryId,
                 )
             } finally {
                 quoteRequestJob = null
@@ -362,8 +366,10 @@ internal class PayVM(
     }
 
     private fun onInfoClick() {
-        if (!quoteActionInProgress && canNavigateToReview()) navigationRouter.forward(PayInfoArgs)
+        if (canOpenSecondaryScreen()) navigationRouter.forward(PayInfoArgs)
     }
+
+    internal fun canOpenSecondaryScreen() = !quoteActionInProgress && canNavigateToReview()
 
     private fun onAddressChange(new: String) =
         internalState.update { state ->

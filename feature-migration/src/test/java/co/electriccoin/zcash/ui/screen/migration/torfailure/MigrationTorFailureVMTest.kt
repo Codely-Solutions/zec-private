@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.screen.migration.torfailure
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -52,7 +51,7 @@ class MigrationTorFailureVMTest {
                 ?.invoke()
             advanceUntilIdle()
 
-            verify(exactly = 1) { router.replaceAll(HomeArgs, MigrationProgressArgs("fixture-owner")) }
+            verify(exactly = 1) { router.replaceAll(MigrationProgressArgs("fixture-owner")) }
             verify(exactly = 0) { decisionRepository.set(any(), any()) }
             collectJob.cancel()
         }

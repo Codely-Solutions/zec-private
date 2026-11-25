@@ -51,6 +51,7 @@ internal fun BalanceWidgetButton(
 
     Button(
         onClick = state.onClick,
+        enabled = state.isEnabled,
         modifier = modifier,
         shape = RoundedCornerShape(ZashiDimensions.Radius.radiusLg),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
@@ -109,7 +110,8 @@ data class BalanceButtonState(
     @field:DrawableRes val icon: Int,
     val text: StringResource,
     val amount: Zatoshi?,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val isEnabled: Boolean = true,
 )
 
 @PreviewScreens

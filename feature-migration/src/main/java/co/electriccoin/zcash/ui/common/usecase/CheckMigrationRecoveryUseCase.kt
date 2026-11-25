@@ -14,7 +14,6 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
 import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
@@ -86,7 +85,7 @@ class CheckMigrationRecoveryUseCase(
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
-        requestSendingScreen: (String) -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs(it)) },
+        requestSendingScreen: (String) -> Unit = { navigationRouter.replaceAll(MigrationSendingArgs(it)) },
     ) {
         if (!recoveryMutex.tryLock()) return
         try {

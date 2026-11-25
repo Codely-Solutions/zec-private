@@ -32,6 +32,7 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapInfoUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
+import co.electriccoin.zcash.ui.common.usecase.awaitQuoteOrigin
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.InnerTextFieldState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
@@ -74,6 +75,7 @@ internal class SwapVM(
     private val navigateToSlippage: NavigateToSlippageUseCase,
     private val navigateToSwapAssetPicker: NavigateToSwapAssetPickerUseCase,
     private val navigateToSwapRefundWarning: NavigateToSwapRefundWarningUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     // VM-owned state. The externally-observed `swapAssets`/`account` fields are injected by the
     // `state` combine below, so the VM only ever updates the fields it owns.
@@ -231,7 +233,9 @@ internal class SwapVM(
     }
 
     private fun onAddressClick() {
-        val asset = internalState.value.swapAsset
+        val state = internalState.value
+        if (state.swapDirection != SWAP_INTO_ZEC || !canOpenInfo()) return
+        val asset = state.swapAsset
         navigationRouter.forward(
             SwapRefundAddressInfoArgs(tokenTicker = asset?.tokenTicker, chainTicker = asset?.chainTicker)
         )
@@ -330,7 +334,7 @@ internal class SwapVM(
 
     private suspend fun continueQuote(owner: () -> Boolean) {
         dismissCancelSheet()
-        navigateToSwapQuoteIfAvailable(owner) {}
+        navigateToSwapQuoteIfAvailable(owner, sourceEntryId) {}
     }
 
     private suspend fun dismissCancelSheet() = cancelSheetDismissal.awaitHidden { cancelSheet.value = null }
@@ -413,7 +417,8 @@ internal class SwapVM(
                             selectedAsset = asset,
                             slippage = slippage,
                             canNavigateToSwapQuote = ::awaitReviewNavigation,
-                            contactNetwork = contactNetwork
+                            contactNetwork = contactNetwork,
+                            sourceEntryId = sourceEntryId,
                         )
                     }
 
@@ -424,7 +429,8 @@ internal class SwapVM(
                             selectedAsset = asset,
                             slippage = slippage,
                             canNavigateToSwapQuote = ::awaitReviewNavigation,
-                            contactNetwork = contactNetwork
+                            contactNetwork = contactNetwork,
+                            sourceEntryId = sourceEntryId,
                         )
                     }
                 }
@@ -455,11 +461,14 @@ internal class SwapVM(
         direction: SwapDirection,
     ): Boolean =
         navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode()) &&
+            navigationRouter.awaitQuoteOrigin(sourceEntryId) &&
             currentQuoteDraft(rendered, checkAction = false) != null
 
     private fun onSwapInfoClick() {
-        if (!quoteActionInProgress && canNavigateToReview()) navigateToSwapInfo()
+        if (canOpenInfo()) navigateToSwapInfo()
     }
+
+    private fun canOpenInfo() = !quoteActionInProgress && canNavigateToReview()
 
     private fun onAddressChange(new: String) =
         internalState.update { it.copy(selectedContact = null, addressText = new) }

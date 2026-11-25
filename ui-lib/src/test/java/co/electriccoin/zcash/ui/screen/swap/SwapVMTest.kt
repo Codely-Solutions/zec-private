@@ -343,13 +343,17 @@ class SwapVMTest {
 
             harness.onAddressChange(BTC_ADDRESS)
             val retainedInfo = harness.info
+            val retainedRefundInfo = assertNotNull(harness.vm.state.value?.onAddressClick)
             assertTrue(retainedInfo.isEnabled)
 
             harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             assertEquals(true, harness.capturedState.isRequestingQuote)
             assertFalse(harness.info.isEnabled)
+            assertNull(harness.vm.state.value?.onAddressClick)
             retainedInfo.onClick()
+            retainedRefundInfo()
             verify(exactly = 0) { harness.navigateToSwapInfo() }
+            verify(exactly = 0) { harness.navigationRouter.forward(any<SwapRefundAddressInfoArgs>()) }
 
             gate.complete(Unit)
             assertEquals(false, harness.capturedState.isRequestingQuote)
@@ -357,6 +361,8 @@ class SwapVMTest {
             assertTrue(currentInfo.isEnabled)
             currentInfo.onClick()
             verify(exactly = 1) { harness.navigateToSwapInfo() }
+            assertNotNull(harness.vm.state.value?.onAddressClick)()
+            verify(exactly = 1) { harness.navigationRouter.forward(any<SwapRefundAddressInfoArgs>()) }
         }
 
     @Test
@@ -492,9 +498,9 @@ class SwapVMTest {
             assertNotNull(harness.vm.cancelState.value).onBack()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
             harness.vm.onCancelSheetHidden()
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
         }
 
     @Test
@@ -534,9 +540,9 @@ class SwapVMTest {
                 ?.invoke()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
             harness.vm.onCancelSheetHidden()
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
         }
 
     // endregion

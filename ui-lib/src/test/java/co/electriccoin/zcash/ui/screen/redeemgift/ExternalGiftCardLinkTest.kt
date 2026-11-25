@@ -21,14 +21,16 @@ class ExternalGiftCardLinkTest {
         val authorized = { session.permits(session.grant.value) }
 
         repeat(2) { assertTrue(handleExternalLink("https", "gift.zodl.com", isRedelivery = false)) }
-        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ -> delivered.add(command) }
         assertTrue(delivered.isEmpty())
 
         session.unlock()
-        launchNavigation.deliver(walletReady = false, hasAppAccess = authorized) { delivered += it }
+        launchNavigation.deliver(walletReady = false, hasAppAccess = authorized) { command, _ ->
+            delivered.add(command)
+        }
         assertTrue(delivered.isEmpty())
-        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
-        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ -> delivered.add(command) }
+        launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ -> delivered.add(command) }
 
         val expected = NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))
         assertEquals(listOf<NavigationCommand>(expected), delivered)
@@ -58,10 +60,10 @@ class ExternalGiftCardLinkTest {
         val delivered = mutableListOf<NavigationCommand>()
 
         assertTrue(HandleExternalLinkUseCase(launchNavigation)("zcash", host = null, isRedelivery = false))
-        launchNavigation.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
+        launchNavigation.deliver(walletReady = true, hasAppAccess = { false }) { command, _ -> delivered.add(command) }
         assertTrue(delivered.isEmpty())
 
-        launchNavigation.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
+        launchNavigation.deliver(walletReady = false, hasAppAccess = { true }) { command, _ -> delivered.add(command) }
         assertEquals(listOf<NavigationCommand>(NavigationCommand.Forward(listOf(ThirdPartyScan))), delivered)
         assertTrue(launchNavigation.changes.value.isEmpty())
     }
@@ -82,7 +84,7 @@ class ExternalGiftCardLinkTest {
         val handle = HandleExternalLinkUseCase(original)
         original.restoreExternalScans(emptyList())
         handle("zcash", null, isRedelivery = false)
-        original.deliver(walletReady = true, hasAppAccess = { true }) { }
+        original.deliver(walletReady = true, hasAppAccess = { true }) { _, _ -> true }
         handle("https", "gift.zodl.com", isRedelivery = false)
         val saved = original.saveExternalScans()
         assertEquals(listOf(LaunchNavigationRequests.Kind.GIFT_SCAN.name), saved)
@@ -91,10 +93,10 @@ class ExternalGiftCardLinkTest {
         restored.restoreExternalScans(saved)
         HandleExternalLinkUseCase(restored)("zcash", null, isRedelivery = true)
         val delivered = mutableListOf<NavigationCommand>()
-        restored.deliver(walletReady = true, hasAppAccess = { false }) { delivered += it }
-        restored.deliver(walletReady = false, hasAppAccess = { true }) { delivered += it }
+        restored.deliver(walletReady = true, hasAppAccess = { false }) { command, _ -> delivered.add(command) }
+        restored.deliver(walletReady = false, hasAppAccess = { true }) { command, _ -> delivered.add(command) }
         assertTrue(delivered.isEmpty())
-        restored.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
+        restored.deliver(walletReady = true, hasAppAccess = { true }) { command, _ -> delivered.add(command) }
         val expected = NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))
         assertEquals(listOf<NavigationCommand>(expected), delivered)
         restored.restoreExternalScans(saved)

@@ -7,7 +7,9 @@ import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Gates the Swap/CrossPay primary CTA behind the sub-$300 "no refunds" warning sheet, which all
@@ -118,3 +120,16 @@ private sealed interface SwapRefundWarningPipelineResult {
 
 /** NEAR only refunds user error - a wrong address or a wrong network - above this USD value. */
 val SWAP_REFUND_WARNING_THRESHOLD_USD = BigDecimal("300")
+
+internal suspend fun NavigationRouter.awaitQuoteOrigin(sourceEntryId: String?): Boolean {
+    if (sourceEntryId == null) return true
+    val active = activeEntry.value ?: return false
+    return when {
+        active.id == sourceEntryId -> true
+        active.route?.substringBefore('/')?.substringBefore('?') == SwapRefundWarningArgs::class.qualifiedName ->
+            withTimeoutOrNull(2.seconds) {
+                activeEntry.first { it?.id != active.id }?.id == sourceEntryId
+            } == true
+        else -> false
+    }
+}

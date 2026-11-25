@@ -3,8 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
-import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.forwardFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
@@ -54,30 +54,19 @@ class CreateProposalUseCase(
                     zashiProposalRepository.createProposal(normalized)
                 }
             }
-            forwardFromSend(sendEntryId, ReviewTransactionArgs, canReview)
+            navigationRouter.forwardFrom(sendEntryId, canReview) { ReviewTransactionArgs }
         } catch (e: CancellationException) {
             throw e
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-            forwardFromSend(sendEntryId, TEXUnsupportedArgs(isLedger = isLedger), canReview)
+            navigationRouter.forwardFrom(sendEntryId, canReview) { TEXUnsupportedArgs(isLedger = isLedger) }
             clearIfCurrent(canReview)
         } catch (_: InsufficientFundsException) {
             clearIfCurrent(canReview)
-            forwardFromSend(sendEntryId, InsufficientFundsArgs, canReview)
+            navigationRouter.forwardFrom(sendEntryId, canReview) { InsufficientFundsArgs }
         } catch (e: Exception) {
             clearIfCurrent(canReview)
             throw e
-        }
-    }
-
-    private fun forwardFromSend(sendEntryId: String, route: Any, canReview: () -> Boolean) {
-        if (!canReview()) return
-        navigationRouter.custom { current ->
-            if (current?.id == sendEntryId && canReview()) {
-                NavigationCommand.Forward(listOf(route), sendEntryId, canReview)
-            } else {
-                null
-            }
         }
     }
 

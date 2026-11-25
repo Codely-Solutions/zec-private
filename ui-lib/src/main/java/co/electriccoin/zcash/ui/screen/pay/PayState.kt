@@ -28,4 +28,5 @@ internal data class PayState(
     val primaryButton: ButtonState?,
     val isABHintVisible: Boolean,
     val onBack: () -> Unit,
+    val isRequestingQuote: Boolean = false,
 )

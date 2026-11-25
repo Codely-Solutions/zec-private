@@ -12,10 +12,11 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.design.util.tryRequestFocus
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun SwapScreen() {
-    val vm = koinViewModel<SwapVM>()
+fun SwapScreen(sourceEntryId: String) {
+    val vm = koinViewModel<SwapVM> { parametersOf(sourceEntryId) }
     val appBarVM = koinViewModel<ZashiTopAppBarVM>()
     val state by vm.state.collectAsStateWithLifecycle()
     val cancelState by vm.cancelState.collectAsStateWithLifecycle()

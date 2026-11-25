@@ -121,11 +121,9 @@ internal class SwapVMMapper {
                     onClick = callbacks.onChangeButtonClick,
                     isEnabled = !state.isRequestingQuote
                 ).takeIf { state.account?.isSpendable == true },
-            onAddressClick =
-                when (state.swapDirection) {
-                    SWAP_FROM_ZEC -> null
-                    SWAP_INTO_ZEC -> callbacks.onAddressClick
-                },
+            onAddressClick = callbacks.onAddressClick.takeIf {
+                state.swapDirection == SWAP_INTO_ZEC && !state.isRequestingQuote
+            },
             addressPlaceholder =
                 state.swapAsset
                     ?.let {

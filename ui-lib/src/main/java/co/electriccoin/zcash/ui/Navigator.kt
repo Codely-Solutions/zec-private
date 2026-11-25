@@ -31,8 +31,24 @@ class NavigatorImpl(
     private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
 ) : Navigator {
     override suspend fun executeCommand(command: NavigationCommand) {
-        keyboardManager.close()
+        if (command is NavigationCommand.Forward && command.sourceEntryId != null) {
+            if (!canForward(command)) return
+            keyboardManager.controller?.hide()
+        } else {
+            keyboardManager.close()
+        }
+        executeAfterKeyboard(command)
+    }
 
+    internal suspend fun executeLaunchCommand(command: NavigationCommand, canNavigate: () -> Boolean): Boolean {
+        keyboardManager.close()
+        if (!canNavigate()) return false
+        val previous = navController.currentBackStackEntry
+        executeAfterKeyboard(command)
+        return navController.currentBackStackEntry !== previous
+    }
+
+    private suspend fun executeAfterKeyboard(command: NavigationCommand) {
         when (command) {
             is NavigationCommand.Forward -> forward(command)
             is NavigationCommand.Replace -> replace(command)
@@ -43,6 +59,10 @@ class NavigatorImpl(
             NavigationCommand.BackToRoot -> backToRoot()
         }
     }
+
+    private fun canForward(command: NavigationCommand.Forward): Boolean =
+        (command.sourceEntryId == null || navController.currentBackStackEntry?.id == command.sourceEntryId) &&
+            command.isStillAllowed?.invoke() != false
 
     override suspend fun executeCommand(command: CustomNavigationCommand) {
         val current = navController.currentBackStackEntry
@@ -171,8 +191,7 @@ class NavigatorImpl(
     }
 
     private suspend fun forward(command: NavigationCommand.Forward) {
-        if (command.sourceEntryId != null && navController.currentBackStackEntry?.id != command.sourceEntryId) return
-        if (command.isStillAllowed?.invoke() == false) return
+        if (!canForward(command)) return
         command.routes.forEach { route ->
             when (route) {
                 is ExternalUrl -> startWebBrowser(route)

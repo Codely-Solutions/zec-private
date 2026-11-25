@@ -13,8 +13,8 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun PayScreen() {
-    val vm = koinViewModel<PayVM>()
+fun PayScreen(sourceEntryId: String) {
+    val vm = koinViewModel<PayVM> { parametersOf(sourceEntryId) }
     val balanceVM =
         koinViewModel<BalanceWidgetVM> {
             parametersOf(
@@ -30,7 +30,15 @@ fun PayScreen() {
     val balanceState by balanceVM.state.collectAsStateWithLifecycle()
     val appBarState by appBarVM.state.collectAsStateWithLifecycle()
     val cancelState by vm.cancelState.collectAsStateWithLifecycle()
-    state?.let { PayView(it, balanceState, appBarState) }
+    state?.let { payState ->
+        val balanceButton = balanceState.button?.let { button ->
+            button.copy(
+                isEnabled = !payState.isRequestingQuote,
+                onClick = { if (vm.canOpenSecondaryScreen()) button.onClick() },
+            )
+        }
+        PayView(payState, balanceState.copy(button = balanceButton), appBarState)
+    }
     BackHandler(state != null) { state?.onBack?.invoke() }
     SwapCancelView(cancelState, vm::onCancelSheetHidden)
 }

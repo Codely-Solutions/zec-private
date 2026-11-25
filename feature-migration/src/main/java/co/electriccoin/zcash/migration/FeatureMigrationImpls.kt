@@ -32,7 +32,6 @@ import co.electriccoin.zcash.ui.common.usecase.OnMigrationSyncCompletedUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestartMigrationUseCase
 import co.electriccoin.zcash.ui.dialogComposable
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
 import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryScreen
 import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
@@ -223,7 +222,7 @@ class MigrationAppHooksImpl(
                         if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
                             MigrationScheduler(context).runNotificationStep(key)
                         }
-                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
+                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
                     }
                 }
                 val offered = MigrationAccountRetirement.admit(key) {
@@ -245,7 +244,7 @@ class MigrationAppHooksImpl(
                 MigrationAccountRetirement.admit(ownerKey) {
                     launchNavigation.requestMigrationRecovery(
                         ownerKey,
-                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
+                        NavigationCommand.ReplaceAll(listOf(MigrationSendingArgs(ownerKey)))
                     )
                 }
             }

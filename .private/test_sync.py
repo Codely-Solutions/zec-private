@@ -177,6 +177,12 @@ class SyncTests(unittest.TestCase):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+        ui_root = base.removesuffix('screen/')
+        for path in ('AppAccessBoundary.kt', 'LaunchNavigationRequests.kt', 'MainActivity.kt',
+                     'NavigationRouter.kt', 'Navigator.kt', 'RootNavGraph.kt', 'WalletNavGraph.kt'):
+            with self.subTest(path=path):
+                self.assertTrue(sync.critical(ui_root+path))
+        self.assertFalse(sync.critical(ui_root+'UiPreview.kt'))
         for path in ('ui-design-lib/src/main/res/ui/common/drawable-night-v35/app_logo.png',
                      'ui-lib/src/main/res/ui/about/values/strings.xml',
                      'ui-design-lib/src/main/java/example/design/theme/Theme.kt'):

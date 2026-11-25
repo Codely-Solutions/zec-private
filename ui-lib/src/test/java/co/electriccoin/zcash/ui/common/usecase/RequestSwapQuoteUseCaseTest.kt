@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.BaseNavigationCommand
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouterImpl
 import kotlinx.coroutines.CompletableDeferred
@@ -50,6 +52,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -100,6 +103,56 @@ class RequestSwapQuoteUseCaseTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun quoteFinishingAfterExternalNavigationCannotPrepareOrConsumeReview() = runTest(dispatcher) {
+        val result = SwapQuoteData.Success(swapQuote(zec, btc))
+        val instance = useCase(result)
+        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("swap-entry", "Swap"))
+        val responses = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Loading)
+        every { navigationRouter.activeEntry } returns active
+        every { swapRepository.quote } returns responses
+        val request = launch {
+            instance.requestExactInput(
+                BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
+                canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
+            )
+        }
+        runCurrent()
+        verify(exactly = 1) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
+        active.value = ActiveNavigationEntry("scanner", "Scanner")
+        runCurrent()
+        responses.value = result
+        request.join()
+        assertFalse(request.isActive)
+        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
+        verify(exactly = 0) { swapRepository.consumeReview(any()) }
+        verify(exactly = 0) { navigationRouter.custom(any()) }
+    }
+
+    @Test
+    fun resultIsConsumedOnlyWhenItsExactFormReceivesTheNavigation() = runTest(dispatcher) {
+        val result = SwapQuoteData.Success(flexQuote())
+        val instance = useCase(result)
+        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("swap-entry", "Swap"))
+        val delivery = slot<(NavBackStackEntry?) -> NavigationCommand?>()
+        every { navigationRouter.activeEntry } returns active
+        every { navigationRouter.custom(capture(delivery)) } returns Unit
+
+        instance.requestFlexInputIntoZec(
+            BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE,
+            canNavigateToSwapQuote = { true }, sourceEntryId = "swap-entry"
+        )
+        val scanner = mockk<NavBackStackEntry> { every { id } returns "scanner" }
+        assertEquals(null, delivery.captured(scanner))
+        verify(exactly = 0) { swapRepository.consumeReview(any()) }
+        val owningEntry = mockk<NavBackStackEntry> { every { id } returns "swap-entry" }
+        val command = delivery.captured(owningEntry) as NavigationCommand.Forward
+        assertEquals(listOf(SwapQuoteArgs), command.routes)
+        assertEquals("swap-entry", command.sourceEntryId)
+        verify(exactly = 1) { swapRepository.consumeReview(result) }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test

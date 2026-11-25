@@ -2,12 +2,14 @@ package co.electriccoin.zcash.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
@@ -54,7 +56,7 @@ fun RootNavGraph(
     val navController = LocalNavController.current
     val activity = LocalActivity.current
     val currentAccess = rememberUpdatedState(hasAppAccess)
-    val navigator: Navigator =
+    val navigator =
         remember(
             activity,
             navController,
@@ -72,6 +74,20 @@ fun RootNavGraph(
                 isOledEnabledStorageProvider = isOledEnabledStorageProvider
             )
         }
+
+    DisposableEffect(navController, navigationRouter) {
+        val observer = navigationRouter.registerEntryObserver()
+        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
+            observer.update(
+                controller.currentBackStackEntry?.id?.let { ActiveNavigationEntry(it, destination.route) }
+            )
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose {
+            navController.removeOnDestinationChangedListener(listener)
+            observer.close()
+        }
+    }
 
     LaunchedEffect(navigationRouter) {
         navigationRouter.observePipeline().collect {
@@ -141,7 +157,7 @@ fun RootNavGraph(
             launchNavigation.deliver(
                 walletReady,
                 hasAppAccess = { currentAccess.value() },
-                navigate = navigator::executeCommand
+                navigate = navigator::executeLaunchCommand
             )
         }
     }

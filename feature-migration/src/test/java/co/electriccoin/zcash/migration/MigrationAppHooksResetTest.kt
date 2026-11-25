@@ -16,7 +16,6 @@ import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateReposito
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationAccountRetirement
@@ -317,7 +316,7 @@ class MigrationAppHooksResetTest {
             mockk(), mockk(), launchNavigation, accounts, mockk(), mockk(), progress,
             mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), writeAccess,
         )
-        val command = NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(ownerKey)))
+        val command = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
         coEvery { accounts.getAllAccounts() } returns listOf(target)
         coEvery { accounts.selectAccount(target) } throws IllegalStateException("fixture selection failed")
         hooks.restoreNotificationProgress(ownerKey, this)
@@ -377,7 +376,7 @@ class MigrationAppHooksResetTest {
             runCurrent()
 
             coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) }
-            val progress = NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(ownerKey)))
+            val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
         } finally {
             acknowledged.complete(Unit)

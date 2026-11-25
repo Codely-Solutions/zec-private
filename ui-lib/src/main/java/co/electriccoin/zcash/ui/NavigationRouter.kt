@@ -8,12 +8,22 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.seconds
 
 interface NavigationRouter {
+    val activeEntry: StateFlow<ActiveNavigationEntry?> get() = noActiveEntry
+
+    fun registerEntryObserver(): ActiveNavigationEntryObserver = object : ActiveNavigationEntryObserver {
+        override fun update(entry: ActiveNavigationEntry?) = Unit
+        override fun close() = Unit
+    }
+
     /**
      * Add [routes] to backstack.
      */
@@ -52,6 +62,34 @@ interface NavigationRouter {
     fun observePipeline(): Flow<BaseNavigationCommand>
 }
 
+data class ActiveNavigationEntry(val id: String, val route: String?)
+
+interface ActiveNavigationEntryObserver {
+    fun update(entry: ActiveNavigationEntry?)
+    fun close()
+}
+
+private val noActiveEntry = MutableStateFlow<ActiveNavigationEntry?>(null).asStateFlow()
+
+internal fun NavigationRouter.forwardFrom(
+    sourceEntryId: String?,
+    isStillAllowed: () -> Boolean,
+    buildRoute: () -> Any?,
+) {
+    if (!isStillAllowed()) return
+    if (sourceEntryId == null) {
+        buildRoute()?.let { forward(it) }
+    } else {
+        custom { current ->
+            if (current?.id == sourceEntryId && isStillAllowed()) {
+                buildRoute()?.let { NavigationCommand.Forward(listOf(it), sourceEntryId, isStillAllowed) }
+            } else {
+                null
+            }
+        }
+    }
+}
+
 class NavigationRouterImpl : NavigationRouter {
     private var job: Job? = null
 
@@ -60,6 +98,27 @@ class NavigationRouterImpl : NavigationRouter {
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
     private val channel = Channel<BaseNavigationCommand>()
+    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
+    private var entryObserver: ActiveNavigationEntryObserver? = null
+
+    override val activeEntry = entryState.asStateFlow()
+
+    override fun registerEntryObserver(): ActiveNavigationEntryObserver =
+        object : ActiveNavigationEntryObserver {
+            override fun update(entry: ActiveNavigationEntry?) {
+                if (entryObserver === this) entryState.value = entry
+            }
+
+            override fun close() {
+                if (entryObserver === this) {
+                    entryObserver = null
+                    entryState.value = null
+                }
+            }
+        }.also {
+            entryObserver = it
+            entryState.value = null
+        }
 
     override fun forward(vararg routes: Any) = navigateWithBackoff(NavigationCommand.Forward(routes.toList()))
 

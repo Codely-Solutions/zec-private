@@ -327,7 +327,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<SwapAssetPickerArgs> { SwapAssetPickerScreen(it.toRoute()) }
         dialogComposable<SwapBlockchainPickerArgs> { SwapBlockchainPickerScreen(it.toRoute()) }
         dialogComposable<CurrencyConversionPickerArgs> { CurrencyConversionPickerScreen(it.toRoute()) }
-        composable<SwapArgs> { SwapScreen() }
+        composable<SwapArgs> { SwapScreen(it.id) }
         dialogComposable<SwapSlippageArgs> { SwapSlippageScreen(it.toRoute()) }
         dialogComposable<ColorPickerArgs> { ColorPickerScreen(it.toRoute()) }
         dialogComposable<SwapRefundWarningArgs> { SwapRefundWarningScreen(it.toRoute()) }
@@ -346,7 +346,7 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<ShieldedAddressInfoArgs> { ShieldedAddressInfoScreen() }
         dialogComposable<TransparentAddressInfoArgs> { TransparentAddressInfoScreen() }
         composable<ExchangeRateOptInArgs> { ExchangeRateOptInScreen() }
-        composable<PayArgs> { PayScreen() }
+        composable<PayArgs> { PayScreen(it.id) }
         dialogComposable<PayInfoArgs> { PayInfoScreen() }
         composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
         composable<SwapDetailArgs> { SwapDetailScreen(it.toRoute()) }

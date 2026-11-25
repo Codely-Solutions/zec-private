@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.forwardFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
@@ -52,6 +53,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.util.concurrent.atomic.AtomicReference
@@ -77,7 +79,8 @@ class RequestSwapQuoteUseCase(
         return { request != null && request.caller === caller && latestRequest.get() === request }
     }
 
-    private suspend fun runRequest(block: suspend () -> Unit) {
+    private suspend fun runRequest(sourceEntryId: String?, block: suspend QuoteNavigation.() -> Unit) {
+        if (sourceEntryId != null && navigationRouter.activeEntry.value?.id != sourceEntryId) return
         val caller = currentCoroutineContext().job
         coroutineScope {
             val request = RequestOwner(caller, coroutineContext.job)
@@ -87,11 +90,31 @@ class RequestSwapQuoteUseCase(
                 // recipient/address checks can suspend and expose the previous result to Continue.
                 swapRepository.clearQuote()
             }
-            block()
+            val monitor = sourceEntryId?.let { source ->
+                launch {
+                    navigationRouter.activeEntry.first { it?.id != source }
+                    request.child.cancel()
+                }
+            }
+            try {
+                QuoteNavigation(sourceEntryId, request).block()
+            } finally {
+                monitor?.cancel()
+            }
         }
     }
 
     private class RequestOwner(val caller: Job, val child: Job)
+
+    private inner class QuoteNavigation(private val sourceEntryId: String?, private val request: RequestOwner) {
+        private fun isCurrent() = latestRequest.get() === request && !request.child.isCancelled
+
+        fun forward(route: () -> Any?) = navigationRouter.forwardFrom(sourceEntryId, ::isCurrent, route)
+
+        fun error(args: ErrorArgs) {
+            navigateToErrorUseCase(args) { route -> forward { route } }
+        }
+    }
 
     private data class FundingOwner(val account: WalletAccount, val writeToken: Long)
 
@@ -101,8 +124,9 @@ class RequestSwapQuoteUseCase(
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
         canNavigateToSwapQuote: suspend () -> Boolean,
-        contactNetwork: String? = null
-    ) = runRequest {
+        contactNetwork: String? = null,
+        sourceEntryId: String? = null,
+    ) = runRequest(sourceEntryId) {
         val recipient = validatedRecipient(
             address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
@@ -130,15 +154,16 @@ class RequestSwapQuoteUseCase(
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
         canNavigateToSwapQuote: suspend () -> Boolean,
-        contactNetwork: String? = null
-    ) = runRequest {
+        contactNetwork: String? = null,
+        sourceEntryId: String? = null,
+    ) = runRequest(sourceEntryId) {
         val recipient =
             if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) != null) {
                 validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
             } else {
                 if (canNavigateToSwapQuote()) {
-                    val error = IllegalArgumentException("Quote amount must be a positive whole number of base units")
-                    navigateToErrorUseCase(ErrorArgs.General(error))
+                    val failure = IllegalArgumentException("Quote amount must be a positive whole number of base units")
+                    error(ErrorArgs.General(failure))
                 }
                 null
             } ?: return@runRequest
@@ -166,8 +191,9 @@ class RequestSwapQuoteUseCase(
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
         canNavigateToSwapQuote: suspend () -> Boolean,
-        contactNetwork: String? = null
-    ) = runRequest {
+        contactNetwork: String? = null,
+        sourceEntryId: String? = null,
+    ) = runRequest(sourceEntryId) {
         val refund = validatedRecipient(
             refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
@@ -196,18 +222,21 @@ class RequestSwapQuoteUseCase(
         return FundingOwner(accountDataSource.getSelectedAccount(), token)
     }
 
-    private suspend fun requestFreshAddress(canNavigate: suspend () -> Boolean, account: WalletAccount): String? =
+    private suspend fun QuoteNavigation.requestFreshAddress(
+        canNavigate: suspend () -> Boolean,
+        account: WalletAccount,
+    ): String? =
         try {
             diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
                 accountDataSource.requestNextShieldedAddress(requireFresh = true, account = account)
             }
         } catch (e: FreshShieldedAddressUnavailableException) {
             currentCoroutineContext().ensureActive()
-            if (canNavigate()) navigateToErrorUseCase(ErrorArgs.General(e))
+            if (canNavigate()) error(ErrorArgs.General(e))
             null
         }
 
-    private suspend fun validatedRecipient(
+    private suspend fun QuoteNavigation.validatedRecipient(
         value: String,
         selectedAsset: SwapAsset,
         contactNetwork: String?,
@@ -227,14 +256,14 @@ class RequestSwapQuoteUseCase(
         currentCoroutineContext().ensureActive()
         if (validation.isValid && sdkValid) return address
         if (canNavigate()) {
-            navigateToErrorUseCase(
+            error(
                 ErrorArgs.General(IllegalArgumentException("Invalid swap recipient for selected asset"))
             )
         }
         return null
     }
 
-    private suspend fun requestQuote(
+    private suspend fun QuoteNavigation.requestQuote(
         requestQuote: suspend () -> Unit,
         canNavigateToSwapQuote: suspend () -> Boolean,
         fundingOwner: FundingOwner? = null,
@@ -247,9 +276,13 @@ class RequestSwapQuoteUseCase(
 
         val mismatchArgs = (result as? SwapQuoteData.Error)?.toMismatchArgs()
         if (mismatchArgs != null) {
-            if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
-                swapRepository.clearQuote()
-                navigationRouter.forward(mismatchArgs)
+            if (canNavigateToSwapQuote()) {
+                forward {
+                    swapRepository.consumeReview(result)?.let {
+                        swapRepository.clearQuote()
+                        mismatchArgs
+                    }
+                }
             }
             return
         }
@@ -262,7 +295,7 @@ class RequestSwapQuoteUseCase(
         navigateToPreparedReview(result, fundingOwner, canNavigateToSwapQuote)
     }
 
-    private suspend fun prepareForReview(
+    private suspend fun QuoteNavigation.prepareForReview(
         result: SwapQuoteData.Success,
         owner: FundingOwner?,
         canNavigate: suspend () -> Boolean
@@ -270,7 +303,7 @@ class RequestSwapQuoteUseCase(
         currentCoroutineContext().ensureActive()
         if (owner != null && !owner.account.isSpendable) {
             onPreparationFailure(result, canNavigate) {
-                navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
+                error(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
             }
             return false
         }
@@ -278,7 +311,7 @@ class RequestSwapQuoteUseCase(
             (owner == null || prepareProposal(result, owner, canNavigate))
     }
 
-    private suspend fun validateComposition(
+    private suspend fun QuoteNavigation.validateComposition(
         result: SwapQuoteData.Success,
         canNavigate: suspend () -> Boolean,
     ): Boolean =
@@ -288,13 +321,13 @@ class RequestSwapQuoteUseCase(
         } catch (e: IllegalArgumentException) {
             if (canNavigate() && swapRepository.quote.value === result) {
                 swapRepository.clearQuote()
-                navigateToErrorUseCase(ErrorArgs.General(e))
+                error(ErrorArgs.General(e))
             }
             false
         }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun prepareProposal(
+    private suspend fun QuoteNavigation.prepareProposal(
         result: SwapQuoteData.Success,
         owner: FundingOwner,
         canNavigate: suspend () -> Boolean
@@ -309,14 +342,14 @@ class RequestSwapQuoteUseCase(
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = owner.account is LedgerAccount
             onPreparationFailure(result, canNavigate) {
-                navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
+                forward { TEXUnsupportedArgs(isLedger = isLedger) }
             }
             false
         } catch (_: InsufficientFundsException) {
-            onPreparationFailure(result, canNavigate) { navigationRouter.forward(InsufficientFundsArgs) }
+            onPreparationFailure(result, canNavigate) { forward { InsufficientFundsArgs } }
             false
         } catch (e: Exception) {
-            onPreparationFailure(result, canNavigate) { navigateToErrorUseCase(ErrorArgs.General(e)) }
+            onPreparationFailure(result, canNavigate) { error(ErrorArgs.General(e)) }
             false
         }
 
@@ -334,7 +367,7 @@ class RequestSwapQuoteUseCase(
         if (canNavigate()) navigate()
     }
 
-    private suspend fun navigateToPreparedReview(
+    private suspend fun QuoteNavigation.navigateToPreparedReview(
         result: SwapQuoteData,
         owner: FundingOwner?,
         canNavigateToSwapQuote: suspend () -> Boolean,
@@ -344,17 +377,20 @@ class RequestSwapQuoteUseCase(
         when {
             result is SwapQuoteData.Success && owner != null && !owner.matchesCurrentSelection() -> {
                 onPreparationFailure(result, canNavigateToSwapQuote) {
-                    navigateToErrorUseCase(ErrorArgs.General(IllegalStateException(QUOTE_ACCOUNT_CHANGED)))
+                    error(ErrorArgs.General(IllegalStateException(QUOTE_ACCOUNT_CHANGED)))
                 }
             }
             result is SwapQuoteData.Success && !swapRepository.markReviewReady(result) -> {
                 if (swapRepository.quote.value === result && !swapRepository.isReviewCurrent(result)) {
                     onPreparationFailure(result, canNavigateToSwapQuote) {
-                        navigateToErrorUseCase(ErrorArgs.General(SwapAssetsUnavailableException()))
+                        error(ErrorArgs.General(SwapAssetsUnavailableException()))
                     }
                 }
             }
-            swapRepository.consumeReview(result) != null -> navigationRouter.forward(SwapQuoteArgs)
+            else -> forward {
+                val ownerMatches = owner?.matchesCurrentSelection() != false
+                if (ownerMatches && swapRepository.consumeReview(result) != null) SwapQuoteArgs else null
+            }
         }
     }
 

@@ -383,12 +383,14 @@ class PayVMTest {
                 harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
                 assertEquals(true, harness.capturedState.isRequestingQuote)
                 assertFalse(harness.info.isEnabled)
+                assertFalse(harness.vm.canOpenSecondaryScreen())
                 retainedInfo.onClick()
                 verify(exactly = 0) { harness.navigationRouter.forward(PayInfoArgs) }
 
                 gate.complete(Unit)
                 assertEquals(false, harness.capturedState.isRequestingQuote)
                 assertTrue(harness.info.isEnabled)
+                assertTrue(harness.vm.canOpenSecondaryScreen())
                 harness.info.onClick()
                 verify(exactly = 1) { harness.navigationRouter.forward(PayInfoArgs) }
             }
@@ -469,9 +471,9 @@ class PayVMTest {
             assertNotNull(harness.vm.cancelState.value).onBack()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
             harness.vm.onCancelSheetHidden()
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
         }
 
     @Test
@@ -511,9 +513,9 @@ class PayVMTest {
                 ?.invoke()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify(exactly = 0) { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
             harness.vm.onCancelSheetHidden()
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any(), any()) }
         }
 
     // endregion

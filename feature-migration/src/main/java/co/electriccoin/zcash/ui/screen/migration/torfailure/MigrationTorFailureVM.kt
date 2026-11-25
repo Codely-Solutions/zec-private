@@ -7,7 +7,6 @@ import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -64,7 +63,7 @@ class MigrationTorFailureVM(
     // via CheckMigrationRecoveryUseCase's background-failure routing.
     private fun onTryAgain() {
         if (continuing?.isActive != true) {
-            navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs(args.accountKeyId))
+            navigationRouter.replaceAll(MigrationProgressArgs(args.accountKeyId))
         }
     }
 

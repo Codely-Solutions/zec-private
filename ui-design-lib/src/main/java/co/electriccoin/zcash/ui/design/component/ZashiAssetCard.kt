@@ -50,7 +50,7 @@ fun ZashiAssetCard(state: AssetCardState, modifier: Modifier = Modifier) {
 
 @Composable
 private fun Content(state: AssetCardState, interactionSource: MutableInteractionSource) {
-    val onClick = state.onClick
+    val onClick = state.onClick.takeIf { state.isEnabled }
     val clickModifier =
         if (onClick != null) {
             Modifier.clickable(

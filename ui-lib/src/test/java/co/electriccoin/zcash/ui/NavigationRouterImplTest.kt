@@ -4,9 +4,11 @@ import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.screen.exportvk.ExportVKArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
-import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -88,7 +90,7 @@ class NavigationRouterImplTest {
             val session = AppAccessSession()
             val launchNavigation = LaunchNavigationRequests()
             val router = NavigationRouterImpl()
-            val requestedProgress = NavigationCommand.ReplaceAll(listOf(HomeArgs, TestMigrationProgress))
+            val requestedProgress = NavigationCommand.ReplaceAll(listOf(TestMigrationProgress))
             val delivered = mutableListOf<NavigationCommand>()
             val authorized = { session.permits(session.grant.value) }
 
@@ -98,25 +100,77 @@ class NavigationRouterImplTest {
             val pending = LaunchNavigationRequests.SavedMigrationNotice("owner", runStepPending = true)
             assertEquals(pending, launchNavigation.migrationNoticeToSave)
             assertEquals(pending, launchNavigation.pendingMigrationLookup)
-            launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { delivered += it }
+            launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+                delivered.add(command)
+            }
             assertTrue(delivered.isEmpty())
 
             launchNavigation.finishMigrationProgress(notice, requestedProgress)
             assertEquals(null, launchNavigation.pendingMigrationLookup)
             assertEquals(pending.copy(runStepPending = false), launchNavigation.migrationNoticeToSave)
-            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ ->
+                delivered.add(command)
+            }
             assertTrue(delivered.isEmpty())
 
             session.unlock()
             val genericCallbacks = collectedCommands(router)
-            launchNavigation.deliver(walletReady = false, hasAppAccess = authorized) { delivered += it }
+            launchNavigation.deliver(walletReady = false, hasAppAccess = authorized) { command, _ ->
+                delivered.add(command)
+            }
             assertTrue(delivered.isEmpty())
-            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
-            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+            repeat(2) {
+                launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ ->
+                    delivered.add(command)
+                }
+            }
 
             assertEquals(listOf<NavigationCommand>(requestedProgress), delivered)
             assertTrue(genericCallbacks.isEmpty())
         }
+
+    @Test
+    fun interruptedExplicitLaunchIsSavedUntilConfirmedDelivery() = runTest(dispatcher) {
+        val requests = LaunchNavigationRequests()
+        val delivered = mutableListOf<NavigationCommand>()
+        val waitingForKeyboard = CompletableDeferred<Unit>()
+        requests.requestGiftScan()
+        val previous = launch {
+            requests.deliver(walletReady = true, hasAppAccess = { true }) { command, isCurrent ->
+                waitingForKeyboard.await()
+                isCurrent() && delivered.add(command)
+            }
+        }
+        runCurrent()
+        assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
+        previous.cancelAndJoin()
+        assertTrue(delivered.isEmpty())
+        requests.deliver(walletReady = true, hasAppAccess = { true }) { _, _ -> false }
+        assertEquals(listOf("GIFT_SCAN"), requests.saveExternalScans())
+
+        repeat(2) {
+            requests.deliver(walletReady = true, hasAppAccess = { true }) { command, isCurrent ->
+                isCurrent() && delivered.add(command)
+            }
+        }
+        assertEquals(listOf(NavigationCommand.Forward(listOf(ScanGiftCardArgs(isFromExternalLink = true)))), delivered)
+        assertTrue(requests.saveExternalScans().isEmpty())
+    }
+
+    @Test
+    fun replacingTheGraphObserverRevokesCallbacksFromItsPredecessor() {
+        val router = NavigationRouterImpl()
+        val first = router.registerEntryObserver()
+        first.update(ActiveNavigationEntry("old", null))
+        val replacement = router.registerEntryObserver()
+        val newEntry = ActiveNavigationEntry("new", null)
+        replacement.update(newEntry)
+        first.update(ActiveNavigationEntry("late", null))
+        first.close()
+        assertEquals(newEntry, router.activeEntry.value)
+        replacement.close()
+        assertEquals(null, router.activeEntry.value)
+    }
 
     private fun TestScope.collectedCommands(router: NavigationRouter): List<BaseNavigationCommand> {
         val commands = mutableListOf<BaseNavigationCommand>()

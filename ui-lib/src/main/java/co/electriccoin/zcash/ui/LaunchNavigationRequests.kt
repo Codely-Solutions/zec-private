@@ -5,10 +5,13 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Holds sanitized app-launch requests until the corresponding screen graph is accessible. */
 class LaunchNavigationRequests {
     private val pending = MutableStateFlow(emptyList<Request>())
+    private val delivery = Mutex()
     private var restoredExternalScans = false
     internal val changes = pending.asStateFlow()
 
@@ -84,15 +87,15 @@ class LaunchNavigationRequests {
     internal suspend fun deliver(
         walletReady: Boolean,
         hasAppAccess: () -> Boolean,
-        navigate: suspend (NavigationCommand) -> Unit,
-    ) {
+        navigate: suspend (NavigationCommand, isCurrent: () -> Boolean) -> Boolean,
+    ) = delivery.withLock {
         for (request in pending.value) {
-            if (!hasAppAccess()) return
+            if (!hasAppAccess()) return@withLock
             val command = request.command ?: continue
             if (walletReady || request.kind == Kind.THIRD_PARTY_SCAN) {
-                val queue = pending.value
-                if (request in queue && pending.compareAndSet(queue, queue - request)) {
-                    navigate(command)
+                val isCurrent = { hasAppAccess() && pending.value.any { it === request } }
+                if (isCurrent() && navigate(command, isCurrent)) {
+                    pending.update { queue -> queue.filterNot { it === request } }
                 }
             }
         }

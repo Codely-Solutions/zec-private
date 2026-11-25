@@ -8,9 +8,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,6 +41,8 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCa
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarNavigationTag
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.AssetCardState
+import co.electriccoin.zcash.ui.design.component.ZashiAssetCard
 import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.imageRes
@@ -51,6 +55,7 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreenContent
 import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
@@ -81,6 +86,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -182,31 +188,92 @@ class RestoredWalletRoutesLayoutTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun guardedForwardChecksTheActualDestinationAfterKeyboardClose() {
+    fun invalidatedProposalLeavesTheRealRouterFreeWhileTheKeyboardRemainsOpen() {
         install()
         compose.runOnIdle {
             runTest {
-                val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
+                var reviewAllowed = true
+                val ime = mockk<SoftwareKeyboardController> {
+                    every { hide() } answers { reviewAllowed = false }
+                }
+                val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = ime)
                 val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val router = NavigationRouterImpl()
+                backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                    router.observePipeline().collect {
+                        when (it) {
+                            is CustomNavigationCommand -> navigator.executeCommand(it)
+                            is NavigationCommand -> navigator.executeCommand(it)
+                        }
+                    }
+                }
                 val originalEntry = checkNotNull(controller.currentBackStackEntry).id
                 val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
-                val command = CustomNavigationCommand { NavigationCommand.Forward(listOf(request), originalEntry) }
-                val pending = launch { navigator.executeCommand(command) }
+                router.forwardFrom(originalEntry, { reviewAllowed }) { request }
                 runCurrent()
-                assertTrue(pending.isActive)
-                controller.navigate(SignKeystoneTransactionArgs)
+                assertTrue(keyboard.isOpen)
+                assertEquals(originalEntry, controller.currentBackStackEntry?.id)
+                router.forward(SignKeystoneTransactionArgs)
+                runCurrent()
                 keyboard.onKeyboardClosed()
-                pending.join()
+                runCurrent()
+                assertEquals(
+                    SignKeystoneTransactionArgs,
+                    controller.currentBackStackEntry?.toRoute<SignKeystoneTransactionArgs>()
+                )
+                router.forwardFrom(originalEntry, { true }) { request }
+                runCurrent()
                 assertEquals(
                     SignKeystoneTransactionArgs,
                     controller.currentBackStackEntry?.toRoute<SignKeystoneTransactionArgs>()
                 )
 
                 assertTrue(controller.popBackStack())
-                navigator.executeCommand(command)
+                router.forwardFrom(originalEntry, { true }) { request }
+                runCurrent()
                 assertEquals(request, controller.currentBackStackEntry?.toRoute<RequestArgs>())
             }
         }
+    }
+
+    @Test
+    fun migrationRecoveryUsesTheExistingHomeAfterRepeatedOpens() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val home = checkNotNull(controller.currentBackStackEntry).id
+                val progress = MigrationProgressArgs("fixture-owner")
+                repeat(2) {
+                    controller.navigate(SignKeystoneTransactionArgs)
+                    navigator.executeCommand(NavigationCommand.ReplaceAll(listOf(progress)))
+                    assertEquals(progress, controller.currentBackStackEntry?.toRoute<MigrationProgressArgs>())
+                    assertTrue(controller.popBackStack())
+                    assertEquals(home, controller.currentBackStackEntry?.id)
+                    assertEquals(null, controller.previousBackStackEntry)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun assetCardContentCannotOpenThePickerWhileDisabled() {
+        val enabled = mutableStateOf(false)
+        var picks = 0
+        compose.setContent {
+            ZcashTheme {
+                ZashiAssetCard(
+                    AssetCardState.Data(
+                        token = stringRes("Fixture asset"), isEnabled = enabled.value, onClick = { picks++ }
+                    )
+                )
+            }
+        }
+        compose.onNodeWithText("Fixture asset").assertHasNoClickAction()
+        compose.runOnIdle { enabled.value = true }
+        compose.onNodeWithText("Fixture asset").performClick()
+        compose.runOnIdle { assertEquals(1, picks) }
     }
 
     @Test
@@ -352,6 +419,7 @@ class RestoredWalletRoutesLayoutTest {
                                 QrCodeScreenContent(QrCodeState.Loading(loadingBack))
                             }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+                            composable<MigrationProgressArgs> { Text("Migration progress") }
                             composable<VKDetailArgs> {
                                 VKDetailScreenContent(
                                     state = null, unavailable = true, isRevealed = { false }, onBack = loadingBack

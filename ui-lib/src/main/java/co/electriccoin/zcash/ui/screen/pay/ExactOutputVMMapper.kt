@@ -84,6 +84,7 @@ internal class ExactOutputVMMapper {
                 ),
             isABHintVisible = state.isABHintVisible,
             onBack = callbacks.onBack,
+            isRequestingQuote = state.isRequestingQuote,
             addressPlaceholder =
                 state.asset
                     ?.let {

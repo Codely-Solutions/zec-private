@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProvider
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
@@ -9,6 +10,8 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
@@ -33,6 +36,27 @@ class NavigateToSwapRefundWarningUseCaseTest {
             every { forward(*anyVararg()) } answers {
                 (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
             }
+        }
+
+    @Test
+    fun quoteWaitsForItsOwnFormToReturnAfterWarningContinue() =
+        runTest(UnconfinedTestDispatcher()) {
+            val form = ActiveNavigationEntry("pay-entry", "Pay")
+            val warning = ActiveNavigationEntry("warning-entry", SwapRefundWarningArgs::class.qualifiedName)
+            val active = MutableStateFlow<ActiveNavigationEntry?>(warning)
+            every { router.activeEntry } returns active
+
+            val returned = async { router.awaitQuoteOrigin(form.id) }
+            runCurrent()
+            assertTrue(returned.isActive)
+            active.value = form
+            assertTrue(returned.await())
+
+            active.value = warning
+            val replaced = async { router.awaitQuoteOrigin(form.id) }
+            runCurrent()
+            active.value = ActiveNavigationEntry("external-scan", "Scanner")
+            assertFalse(replaced.await())
         }
 
     @Test
