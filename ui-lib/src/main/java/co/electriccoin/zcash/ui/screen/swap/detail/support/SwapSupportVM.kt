@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.bindReportHandoff
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -88,24 +89,26 @@ class SwapSupportVM(
     private fun onBack() = navigationRouter.back()
 
     private fun onReportIssue(swapData: SwapData, isAllowed: () -> Boolean) {
+        val canShare = navigationRouter.bindReportHandoff(isAllowed)
         viewModelScope.launch {
-            if (isAllowed() && sendEmailUseCase(swapData, isAllowed)) onBack()
+            if (canShare() && sendEmailUseCase(swapData, canShare) && canShare()) onBack()
         }
     }
 
     private fun onShareOriginalQuote(expected: TransactionSwapMetadata, isAllowed: () -> Boolean) {
         val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
+        val canShare = navigationRouter.bindReportHandoff(isAllowed)
         viewModelScope.launch {
-            if (!isAllowed()) return@launch
+            if (!canShare()) return@launch
             val evidence = runCatchingRecoverable {
                 metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
             }.getOrNull() ?: return@launch
-            if (!isAllowed()) return@launch
+            if (!canShare()) return@launch
             val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
             if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
                 selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
             ) return@launch
-            if (isAllowed()) sendEmailUseCase.shareOriginalQuote(evidence)
+            if (canShare()) sendEmailUseCase.shareOriginalQuote(evidence)
         }
     }
 }

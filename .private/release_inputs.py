@@ -27,6 +27,13 @@ def selected_baseline(source, sha, path=None):
     return value
 
 
+def require_local_upgrade_pair(local, hosted):
+    require(all(local.get(key) == hosted[key] for key in ('release', 'source_sha', 'version_code'))
+            and local.get('apk_sha256') == hosted['candidate_apk_sha256']
+            and local.get('instrumentation', {}).get('apk_sha256') == hosted['instrumentation_apk_sha256'],
+            'Direct release requires the exact paired fixture for the latest wallet release')
+
+
 def version_code(source, sha):
     match = re.search(r'^ZCASH_VERSION_CODE=(\d+)$', git(source, 'show', sha + ':gradle.properties'), re.M)
     require(match is not None, 'Source versionCode required')

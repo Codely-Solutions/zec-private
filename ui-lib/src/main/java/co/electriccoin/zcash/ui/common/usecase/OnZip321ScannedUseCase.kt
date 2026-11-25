@@ -91,12 +91,12 @@ class OnZip321ScannedUseCase(
                 NavigationCommand.Replace(listOf(InsufficientFundsArgs))
             }
         } catch (_: TransactionProposalNotCreatedException) {
-            owner.permits() && editUnpreparedPayment(zip321, sourceEntryId, fromHome)
+            editUnpreparedPayment(zip321, sourceEntryId, fromHome, owner.permits)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            owner.permits() && showError(
-                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome,
+            showError(
+                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome, isStillAllowed = owner.permits,
             ) && !fromHome
         }
     }
@@ -105,9 +105,10 @@ class OnZip321ScannedUseCase(
         zip321: Zip321ParseUriValidation.Valid,
         sourceEntryId: String?,
         fromHome: Boolean,
+        isStillAllowed: () -> Boolean,
     ): Boolean {
-        if (!canEdit(zip321, sourceEntryId)) return false
-        return navigationRouter.commitFrom(sourceEntryId) {
+        if (!isStillAllowed() || !canEdit(zip321, sourceEntryId, isStillAllowed)) return false
+        return navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
             prefillSend.requestFromZip321(zip321.payment)
             if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
         }
@@ -122,10 +123,14 @@ class OnZip321ScannedUseCase(
         }
     }
 
-    private suspend fun canEdit(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
+    private suspend fun canEdit(
+        zip321: Zip321ParseUriValidation.Valid,
+        sourceEntryId: String?,
+        isStillAllowed: () -> Boolean = { true },
+    ): Boolean {
         val memo = zip321.payment.payments.single().memo
         if (memo == null || memo.data.zip321MemoTextOrNull() != null) return true
-        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()))
+        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()), isStillAllowed = isStillAllowed)
         return false
     }
 
@@ -133,13 +138,9 @@ class OnZip321ScannedUseCase(
         sourceEntryId: String?,
         args: ErrorArgs,
         replaceScanner: Boolean = false,
-    ): Boolean = if (sourceEntryId == null) {
-        if (replaceScanner) navigateToErrorUseCase(args) { replace(it) } else navigateToErrorUseCase(args)
-        true
-    } else {
-        navigationRouter.commitFrom(sourceEntryId) {
-            val routes = listOf(navigateToErrorUseCase.stage(args))
-            if (replaceScanner) NavigationCommand.Replace(routes) else NavigationCommand.Forward(routes)
-        }
+        isStillAllowed: () -> Boolean = { true },
+    ): Boolean = navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
+        val routes = listOf(navigateToErrorUseCase.stage(args))
+        if (replaceScanner) NavigationCommand.Replace(routes) else NavigationCommand.Forward(routes)
     }
 }

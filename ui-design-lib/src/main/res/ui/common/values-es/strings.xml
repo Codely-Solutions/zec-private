@@ -284,13 +284,13 @@
 
     <!-- ===== delete_wallet ===== -->
     <string name="deleteWallet_title">Restablecer ZEC Private</string>
-    <string name="deleteWallet_message2">Asegúrate de haber guardado tanto tu frase de recuperación secreta como la altura de cumpleaños de la billetera antes de continuar.</string>
+    <string name="deleteWallet_message2">Guarda la frase secreta de recuperación de tu billetera de software. Si conoces su altura de cumpleaños, guárdala también.</string>
     <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
         caché de la aplicación, además de desconectar todas las billeteras de hardware conectadas.</string>
-    <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
+    <string name="deleteWallet_message4">Restaura las billeteras de software con sus frases de recuperación. Vuelve a conectar las billeteras de hardware con sus dispositivos.</string>
     <string name="deleteWallet_metadataWarn1">Conserva en este dispositivo los contactos, notas, marcadores y detalles de intercambios y pagos cifrados.</string>
     <string name="deleteWallet_metadataWarn2">Desactivar esta opción elimina las copias de seguridad locales de todas las billeteras. El restablecimiento no afecta las copias guardadas por Android.</string>
-    <string name="deleteWallet_sheet_msg">Restablecer la app no se puede deshacer. Necesitarás restaurar tu billetera usando tu frase secreta de recuperación.</string>
+    <string name="deleteWallet_sheet_msg">El restablecimiento es irreversible. Asegúrate de tener lo necesario para restaurar tus billeteras.</string>
     <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
     <string name="delete_wallet_failed">Error al eliminar la billetera. Inténtalo nuevamente, por favor.</string>
 
@@ -1175,7 +1175,7 @@
     <string name="migrationComplete_migrateAnywayFailureRejected">La red rechazó esta transacción. Comunícate con el soporte.</string>
     <string name="migrationComplete_migrateAnywayFailureError">Ocurrió un error al enviar. Comunícate con el soporte.</string>
     <string name="migrationComplete_migrateAnywayFailurePartial">Se enviaron algunas partes de esta transacción, pero no todas. Comunícate con el soporte.</string>
-    <string name="migrationComplete_residueTitle">Te has movido a Ironwood</string>
+    <string name="migrationComplete_residueTitle">Saldo pequeño en Orchard</string>
     <string name="migrationComplete_residueSubtitle">Un pequeño saldo todavía permanece en Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">En Ironwood</string>
     <string name="migrationComplete_leftInOrchardLabel">Restante en Orchard</string>

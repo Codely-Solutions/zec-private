@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.os.Parcel
 import androidx.lifecycle.ViewModelStore
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.ComposeNavigator
 import androidx.navigation.compose.composable
@@ -15,6 +16,8 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.type.AddressType
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -25,6 +28,7 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
@@ -86,6 +90,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -343,6 +348,42 @@ class Zip321MemoScanTest {
         for (entry in logs) {
             assertFalse(request.zip321Uri in entry.msg)
             assertFalse(sentinel in entry.throwable?.stackTraceToString().orEmpty())
+        }
+    }
+
+    @Test
+    fun deferredZip321FallbackRechecksTheWalletBeforePrefillingOrShowingAnError() = runTest {
+        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws
+            IllegalStateException("synthetic proposal failure")
+        for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
+            val wallet = WalletWriteAccess()
+            val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
+            var queued: NavigationCommand.ForEntry? = null
+            val guarded = mockk<NavigationRouter>(relaxed = true) {
+                every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("scanner", null))
+                every { custom(any()) } answers {
+                    val createCommand = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()
+                    queued = createCommand(entry) as? NavigationCommand.ForEntry
+                }
+            }
+            val fallback = OnZip321ScannedUseCase(
+                review = paymentReviewFixture(accounts, guarded, repository, wallet = wallet),
+                navigationRouter = guarded,
+                prefillSend = prefill,
+                navigateToErrorUseCase = NavigateToErrorUseCase(guarded),
+            )
+            var delivered: Boolean? = null
+            val operation = launch {
+                delivered = fallback(parse(memo), ScanArgs(ScanFlow.HOMEPAGE), "scanner")
+            }
+            runCurrent()
+            val command = assertNotNull(queued)
+            assertTrue(command.isStillAllowed())
+            wallet.beginReset()
+            assertFalse(command.isStillAllowed())
+            command.acknowledge(false)
+            operation.join()
+            assertEquals(false, delivered)
         }
     }
 

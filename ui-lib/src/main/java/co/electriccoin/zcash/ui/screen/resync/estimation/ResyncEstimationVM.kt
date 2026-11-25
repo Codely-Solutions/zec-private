@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.design.R as DesignR
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.mutableLce
@@ -82,6 +83,7 @@ class ResyncEstimationVM(
             dialogButton =
                 IconButtonState(
                     icon = R.drawable.ic_help,
+                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
                     onClick = ::onInfoClick,
                 ),
             onBack = ::onBack,

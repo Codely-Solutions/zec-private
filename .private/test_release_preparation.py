@@ -18,7 +18,7 @@ from release_inputs import selected_baseline
 SHA = 'a' * 40
 DIGEST = 'b' * 64
 BASELINE = dict(schema=1, release='baseline', source_sha='c'*40, version_code=1,
-    package='com.personal.zecprivate.testnet.foss.debug',
+    package='com.personal.zecprivate.testnet.foss.debug', apk_sha256='c' * 64,
     artifact=dict(release_asset_id=1, size_in_bytes=2, digest='sha256:'+DIGEST),
     instrumentation=dict(apk_sha256=DIGEST, artifact=dict(release_asset_id=1, size_in_bytes=2,
         digest='sha256:'+DIGEST, source_sha='c'*40, source_release='baseline')))
@@ -49,9 +49,13 @@ class ReleaseTests(unittest.TestCase):
         if args[-1].endswith('gradle.properties'): return 'ZCASH_VERSION_CODE=2'
         raise AssertionError(args)
 
-    def prepare(self, **kwargs):
+    def prepare(self, *, fixture=None, **kwargs):
+        if fixture is None:
+            fixture = dict(BASELINE, candidate_apk_sha256=BASELINE['apk_sha256'],
+                           instrumentation_apk_sha256=BASELINE['instrumentation']['apk_sha256'])
         with patch.object(preparation, 'git', self.fake_git), patch('release_inputs.git', self.fake_git), \
              patch.object(preparation, 'input_fingerprint', return_value=DIGEST), \
+             patch('hosted_release.require_current_hosted_upgrade', return_value=fixture), \
              patch('acceptance_status.status',return_value={}):
             return preparation.prepare(preparation.SOURCE, SHA, 1, 2, 'release-test-owner', self.root/'prepared',
                                        metadata=FakeMetadata(), **kwargs)
@@ -84,6 +88,16 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, 'injected'):
                 self.prepare()
         self.assertFalse((self.root/'prepared').exists())
+
+    def test_funded_preparation_refuses_a_same_tag_alternate_pair_before_writing_a_job(self):
+        fixture = dict(BASELINE, candidate_apk_sha256='0' * 64, instrumentation_apk_sha256=DIGEST)
+        with self.assertRaisesRegex(ValueError, 'exact paired fixture'):
+            self.prepare(fixture=fixture)
+        self.assertFalse((self.root/'prepared').exists())
+        self.prepare()
+        manifest = json.loads((self.root/'prepared/core-manifest.json').read_text())
+        self.assertEqual(manifest['upgradeBaseline']['apk_sha256'], BASELINE['apk_sha256'])
+        self.assertEqual(manifest['upgradeBaselineInstrumentation']['apk_sha256'], DIGEST)
 
     def test_baseline_pairing_rejected(self):
         malformed=json.loads(json.dumps(BASELINE))

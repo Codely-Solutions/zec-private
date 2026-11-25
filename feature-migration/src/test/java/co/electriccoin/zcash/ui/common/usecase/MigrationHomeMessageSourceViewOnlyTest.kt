@@ -13,7 +13,19 @@ import kotlinx.coroutines.flow.first
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSource
+import co.electriccoin.zcash.ui.common.model.WalletSnapshot
+import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_DUST_THRESHOLD_ZATOSHI
+import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZATOSHI
+import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
+import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStorageProvider
+import io.mockk.coEvery
+import kotlinx.coroutines.flow.flowOf
+import kotlin.test.assertNull
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -60,6 +72,27 @@ class MigrationHomeMessageSourceViewOnlyTest {
 
             verify(exactly = 1) { observeMigrationLiveReadout(any()) }
         }
+
+    @Test
+    fun unavailableEligibilityDoesNotBecomeAnInvitationFromThePublishedBalance() = runTest {
+        val native = mockk<OrchardMigrationSdk> {
+            coEvery { migrationDustThresholdZatoshi() } returns MIGRATION_DUST_THRESHOLD_ZATOSHI
+        }
+        val sdk = mockk<GetOrchardMigrationSdkUseCase>()
+        every { observeMigrationLiveReadout(any()) } returns flowOf(null)
+
+        for (balance in listOf(MIGRATION_RESIDUAL_MIN_ZATOSHI + 1, MIGRATION_RESIDUAL_MIN_ZATOSHI - 1)) {
+            val home = source(zodl(), sdk = sdk, balance = balance)
+            coEvery { sdk(any<String>()) } returns null
+            assertNull(home.observe().first())
+            coEvery { sdk(any<String>()) } returns native
+            coEvery { native.migratableOrchardTotal() } throws IllegalStateException("synthetic unavailable read")
+            assertNull(home.observe().first())
+            coEvery { native.migratableOrchardTotal() } returns balance
+            val current = assertIs<MigrationHomeMessageData>(home.observe().first())
+            assertEquals(balance < MIGRATION_RESIDUAL_MIN_ZATOSHI, current.isResidueOnly)
+        }
+    }
 
     @Test
     fun homeResumesASignedHandoffForItsOwnerWithoutReopeningAScanner() = runTest {
@@ -123,6 +156,8 @@ class MigrationHomeMessageSourceViewOnlyTest {
         account: WalletAccount,
         pending: PendingKeystoneMigrationPcztsRepositoryImpl = PendingKeystoneMigrationPcztsRepositoryImpl(),
         router: NavigationRouter = mockk(relaxed = true),
+        sdk: GetOrchardMigrationSdkUseCase = mockk(relaxed = true),
+        balance: Long = 0L,
     ) =
         MigrationHomeMessageSourceImpl(
             context = mockk(relaxed = true),
@@ -130,14 +165,24 @@ class MigrationHomeMessageSourceViewOnlyTest {
                 mockk<AccountDataSource> {
                     every { selectedAccount } returns MutableStateFlow(account)
                 },
-            getOrchardMigrationSdk = mockk(relaxed = true),
+            getOrchardMigrationSdk = sdk,
             observeMigrationLiveReadout = observeMigrationLiveReadout,
-            getOrchardBalance = mockk(relaxed = true),
-            walletSnapshotDataSource = mockk(relaxed = true),
-            hasSeenMigrationCompleteStorageProvider = mockk(relaxed = true),
+            getOrchardBalance = mockk<GetOrchardBalanceUseCase> {
+                every { observe(any()) } returns flowOf(Zatoshi(balance))
+            },
+            walletSnapshotDataSource = mockk<WalletSnapshotDataSource> {
+                every { observe() } returns MutableStateFlow(mockk<WalletSnapshot> {
+                    every { status } returns Synchronizer.Status.SYNCED
+                })
+            },
+            hasSeenMigrationCompleteStorageProvider = mockk<HasSeenMigrationCompleteStorageProvider> {
+                every { observe(any()) } returns flowOf(false)
+            },
             isBackgroundExecutionAvailableProvider = mockk(relaxed = true),
             navigationRouter = router,
-            migrationUpgradeNoticeStorageProvider = mockk(relaxed = true),
+            migrationUpgradeNoticeStorageProvider = mockk<MigrationUpgradeNoticeStorageProvider> {
+                every { observePendingForSelected() } returns flowOf(false)
+            },
             pendingKeystone = pending,
             pendingSchedule = PendingMigrationScheduleRepositoryImpl(),
         )

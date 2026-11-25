@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.bindReportHandoff
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
@@ -51,8 +52,9 @@ class SwapQuoteMismatchVM(
     private fun onBack() = navigationRouter.back()
 
     private fun onReport(isAllowed: () -> Boolean) {
+        val canShare = navigationRouter.bindReportHandoff(isAllowed)
         viewModelScope.launch {
-            if (isAllowed() && sendEmailUseCase(args, isAllowed)) onBack()
+            if (canShare() && sendEmailUseCase(args, canShare) && canShare()) onBack()
         }
     }
 }

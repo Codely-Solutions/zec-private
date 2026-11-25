@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui
 
+import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,13 @@ class LaunchNavigationRequests {
 
     internal fun requestThirdPartyScan() =
         offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
+
+    internal fun requestSeedRecoveryError(route: ErrorRoute, stillApplies: () -> Boolean) =
+        offer(Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies)
+
+    internal fun clearSeedRecoveryError() {
+        pending.update { queue -> queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR } }
+    }
 
     internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->
         when (request.kind) {
@@ -140,7 +148,13 @@ class LaunchNavigationRequests {
         val stillApplies: () -> Boolean = { true },
     )
 
-    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
+    internal enum class Kind {
+        THIRD_PARTY_SCAN,
+        GIFT_SCAN,
+        MIGRATION_PROGRESS,
+        MIGRATION_RECOVERY,
+        SEED_RECOVERY_ERROR,
+    }
 }
 
 private fun List<LaunchNavigationRequests.Request>.admits(

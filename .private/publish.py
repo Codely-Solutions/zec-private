@@ -35,10 +35,10 @@ def require_current_controller(controller):
 def require_current_local_upgrade(root=ROOT, metadata=None):
     local = json.loads((root / '.private/upgrade-baseline.json').read_text())
     hosted = json.loads((root / '.private/hosted-fixture.json').read_text())
-    require(all(local[key] == hosted[key] for key in ('release', 'source_sha', 'version_code')),
-            'Direct publication requires the paired fixture for the latest wallet release')
     from hosted_release import require_current_hosted_upgrade
+    from release_inputs import require_local_upgrade_pair
 
+    require_local_upgrade_pair(local, hosted)
     return require_current_hosted_upgrade(root, metadata or Metadata(REPO))
 
 
@@ -458,11 +458,28 @@ def require_publication_baseline(proof, root=None, metadata=None):
 
 
 def require_attested_upgrade(upgrade, fixture):
-    require(upgrade.get('baseline_source_sha') == fixture['source_sha']
+    source = fixture['source_sha']
+    app = fixture['candidate_apk_sha256']
+    instrumentation = upgrade.get('baseline_instrumentation_apk_sha256')
+    prepared = upgrade.get('direct_preparation')
+    hosted = upgrade.get('hosted_fixture')
+    accepted_instrumentation = fixture['instrumentation_apk_sha256']
+    if prepared is not None:
+        # The receipt was verified against the original protected fixture and the
+        # source-bound direct producer before signing. Keep both bindings here.
+        pair = upgrade.get('instrumentation_pairing', {}).get('baseline', {})
+        derived = prepared.get('baseline_instrumentation_sha256')
+        require(hosted == fixture and prepared.get('baseline_source') == source
+                and prepared.get('baseline_apk_sha256') == app
+                and re.fullmatch('[0-9a-f]{64}', str(derived)) is not None
+                and pair.get('original_sha256') == derived and pair.get('source_sha') == source
+                and pair.get('app_version_code') == fixture['version_code'],
+                'The attested upgrade baseline harness differs from its trusted direct preparation')
+        accepted_instrumentation = derived
+    require(upgrade.get('baseline_source_sha') == source
             and upgrade.get('baseline_version_code') == fixture['version_code']
-            and upgrade.get('baseline_apk_sha256') == fixture['candidate_apk_sha256']
-            and upgrade.get('baseline_instrumentation_apk_sha256') == fixture['instrumentation_apk_sha256']
-            and upgrade.get('hosted_fixture', fixture) == fixture,
+            and upgrade.get('baseline_apk_sha256') == app and instrumentation == accepted_instrumentation
+            and (hosted is None or hosted == fixture),
             'The attested upgrade baseline differs from the latest public release fixture')
 
 

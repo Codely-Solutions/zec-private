@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -114,7 +115,7 @@ class SwapSupportVMTest {
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData())
         }
-        val navigation = mockk<NavigationRouter>()
+        val navigation = reportNavigation()
         val share = mockk<SendEmailUseCase>()
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
@@ -218,7 +219,7 @@ class SwapSupportVMTest {
 
     @Test
     fun pendingGenericReportRequiresTheOriginalGrantAccountAndWallet() = runTest {
-        for (revoke in listOf("relock", "account", "wallet")) assertRevokedReport(revoke)
+        for (revoke in listOf("relock", "account", "wallet", "entry", "background")) assertRevokedReport(revoke)
     }
 
     private suspend fun TestScope.assertRevokedReport(revoke: String) {
@@ -242,7 +243,8 @@ class SwapSupportVMTest {
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
         }
-        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("support", null))
+        val navigation = reportNavigation(entry)
         val session = AppAccessSession().apply { unlock() }
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
@@ -267,6 +269,8 @@ class SwapSupportVMTest {
                 }
                 "account" -> selection.value = reportOwner(1)
                 "wallet" -> writeAccess.beginReset()
+                "entry" -> entry.value = ActiveNavigationEntry("another-screen", null)
+                "background" -> entry.value = entry.value?.copy(hostResumed = false)
             }
             runCurrent()
             releaseDiagnostics.complete(Unit)
@@ -291,7 +295,7 @@ class SwapSupportVMTest {
             }
         }
         val session = AppAccessSession().apply { unlock() }
-        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val navigation = reportNavigation()
         val vm = SwapQuoteMismatchVM(
             SwapQuoteMismatchArgs(
                 provider = "near", mode = SwapMode.FLEX_INPUT,
@@ -372,7 +376,7 @@ class SwapSupportVMTest {
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
             GetReloadableSwapQuoteUseCase(getStatus),
-            mockk(relaxed = true),
+            reportNavigation(),
             share,
             metadata,
             session,
@@ -389,6 +393,12 @@ class SwapSupportVMTest {
             subscription.cancel()
             vm.viewModelScope.cancel()
         }
+    }
+
+    private fun reportNavigation(
+        entry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(ActiveNavigationEntry("support", null)),
+    ) = mockk<NavigationRouter>(relaxed = true) {
+        every { activeEntry } returns entry
     }
 
     private fun reportOwner(id: Byte) = mockk<ZodlAccount> {
@@ -420,7 +430,7 @@ class SwapSupportVMTest {
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns statusFlow
         }
-        val navigation = mockk<NavigationRouter>()
+        val navigation = reportNavigation()
         var launchedOnBack: Intent? = null
         every { navigation.back() } answers {
             launchedOnBack = shadowOf(application).nextStartedActivity

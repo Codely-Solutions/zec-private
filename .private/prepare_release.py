@@ -8,7 +8,7 @@ import shutil
 import sys
 from acceptance_policy import input_fingerprint
 from acceptance_planning import plan_execution
-from release_inputs import git, selected_baseline, version_code
+from release_inputs import git, require_local_upgrade_pair, selected_baseline, version_code
 from release_metadata import Metadata, require
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -41,6 +41,11 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
     if 'core' in profiles:
         _, core, core_proof = metadata.producer(core_run, sha, 'core-validation.yml', 'testnet', 'core-testnet-candidate')
     baseline = selected_baseline(source, sha, baseline_path)
+    if 'core' in profiles:
+        from hosted_release import require_current_hosted_upgrade
+
+        fixture = require_current_hosted_upgrade(source, metadata)
+        require_local_upgrade_pair(baseline, fixture)
     bridge = json.loads(git(source, 'show', sha + ':.private/maintenance-assets.json'))['ui_bridge']
     for asset in (baseline['artifact'], baseline['instrumentation']['artifact'], bridge):
         metadata.verify_asset(asset)
@@ -60,7 +65,8 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
         candidate_version_code=version, baseline_version_code=baseline['version_code'],
         baseline_source_sha=baseline['source_sha'], input_fingerprint=fp['core-testnet'],
         runtime_input_fingerprint=fp['core-runtime'], build_input_fingerprint=fp['core-build'],
-        upgradeBaseline=dict(baseline['artifact'], source_sha=baseline['source_sha']),
+        upgradeBaseline=dict(baseline['artifact'], source_sha=baseline['source_sha'],
+            apk_sha256=baseline.get('apk_sha256')),
         upgradeBaselineInstrumentation=dict(baseline['instrumentation']['artifact'],
             source_sha=baseline['source_sha'], apk_sha256=baseline['instrumentation']['apk_sha256']))
     recipes = ['.github/workflows/build-release.yml', '.private/emulator_checks.sh', '.private/gradle_resolution.py',

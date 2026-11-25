@@ -98,53 +98,90 @@ def retained_hosted_pair(tag, core, archive, root=ROOT):
     return verify_pair(archive, core, prepared=True), selected['reference']
 
 
+def maintenance_draft(release_id):
+    draft = api('releases/' + str(release_id))
+    if draft['id'] != release_id or draft['draft'] is not True or draft['tag_name'] != 'maintenance-fixtures':
+        raise ValueError('Authenticated maintenance draft required')
+    return draft
+
+
+def fixture_asset(draft, name):
+    matches = [asset for asset in draft['assets'] if asset['name'] == name]
+    if len(matches) > 1:
+        raise ValueError('Duplicate maintenance fixture asset: ' + name)
+    return matches[0] if matches else None
+
+
+def download_fixture_asset(asset, limit):
+    size, asset_id = asset['size'], asset['id']
+    if (asset.get('state') != 'uploaded' or type(asset_id) is not int or asset_id <= 0
+            or type(size) is not int or not 0 < size <= limit):
+        raise ValueError('Invalid existing fixture asset identity')
+    raw = gh('api', '-H', 'Accept: application/octet-stream',
+             'repos/' + REPO + '/releases/assets/' + str(asset_id))
+    if len(raw) != size or 'sha256:' + hashlib.sha256(raw).hexdigest() != asset['digest']:
+        raise ValueError('Independent fixture download mismatch')
+    return raw
+
+
+def preserved_index_entry(asset, tag):
+    return dict(release_asset_id=asset['id'], size_in_bytes=asset['size'],
+                digest=asset['digest'], source_release=tag)
+
+
 def preserve(tag, hosted_archive=None):
-    from hosted_fixture import recorded_pair
+    from hosted_fixture import MAX_ARCHIVE, recorded_pair, verify_pair
 
     out = Path(os.environ['CODEX_GUARD_OUTPUT']).resolve()
     evidence, core = recorded_pair(tag, ROOT)
     release = api('releases/tags/' + tag)
     require_recorded_public_release(release, evidence, api, ROOT)
-    registry_reference = None
-    if hosted_archive is None:
-        payloads = original_pair(core)
-    else:
-        payloads, registry_reference = retained_hosted_pair(tag, core, hosted_archive, ROOT)
+    policy = json.loads((ROOT / '.private/maintenance-assets.json').read_text())
+    release_id = policy['draft_release_id']
+    draft = maintenance_draft(release_id)
     fixture = out / (tag + '-TESTNET_UPGRADE_FIXTURE.zip')
-    with zipfile.ZipFile(fixture, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-        for name,data in payloads.items():
-            archive.writestr(name,data)
-        archive.writestr('source-sha.txt', core['build_source_sha'] + '\n')
-        archive.writestr('SHA256SUMS',''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n'
-                                           for name,data in payloads.items()))
+    metadata = out / (tag + '-TESTNET_UPGRADE_FIXTURE.json')
+    existing_fixture = fixture_asset(draft, fixture.name)
+    existing_metadata = fixture_asset(draft, metadata.name)
+    registry_reference = None
+    if existing_fixture:
+        fixture.write_bytes(download_fixture_asset(existing_fixture, MAX_ARCHIVE))
+        verify_pair(fixture, core, prepared=True)
+    else:
+        if hosted_archive is None:
+            payloads = original_pair(core)
+        else:
+            payloads, registry_reference = retained_hosted_pair(tag, core, hosted_archive, ROOT)
+        write_seedless_pair(fixture, payloads, core['build_source_sha'])
     provenance = dict(release=tag, production_source=evidence['source_sha'], build_source=core['build_source_sha'],
         version_code=core['candidate_version_code'], package='com.personal.zecprivate.testnet.foss.debug',
         original_artifact_id=core['artifact_id'], workflow_run_id=core.get('artifact_run_id', core['workflow_run_id']),
         original_apk_sha256=core['candidate_apk_sha256'],
         original_instrumentation_apk_sha256=core['instrumentation_apk_sha256'], fixture_digest=digest(fixture), fixture_bytes=fixture.stat().st_size,
         purpose='Next installed-update baseline; version-matched original app and instrumentation APKs, no wallet data or keys')
+    if existing_metadata:
+        raw = download_fixture_asset(existing_metadata, 64 * 1024)
+        if json.loads(raw) != provenance:
+            raise ValueError('Existing fixture metadata differs from verified provenance')
+        metadata.write_bytes(raw)
+    else:
+        metadata.write_bytes((json.dumps(provenance, indent=2) + '\n').encode())
+    for file, existing in ((fixture, existing_fixture), (metadata, existing_metadata)):
+        if existing is None:
+            gh('release', 'upload', 'maintenance-fixtures', '--repo', REPO, str(file))
+    final = maintenance_draft(release_id)
+    index = {}
+    for file, existing, limit in ((fixture, existing_fixture, MAX_ARCHIVE),
+                                  (metadata, existing_metadata, 64 * 1024)):
+        asset = fixture_asset(final, file.name)
+        if (not asset or asset['digest'] != digest(file) or asset['size'] != file.stat().st_size
+                or (existing is not None and asset['id'] != existing['id'])):
+            raise ValueError('Uploaded fixture metadata mismatch')
+        if existing is None:
+            download_fixture_asset(asset, limit)
+        index[file.name.removeprefix(tag + '-')] = preserved_index_entry(asset, tag)
     if registry_reference:
         provenance['recovered_from_registry'] = registry_reference
-    metadata = out / (tag + '-TESTNET_UPGRADE_FIXTURE.json')
-    metadata.write_text(json.dumps(provenance, indent=2) + '\n')
-    policy = json.loads((ROOT / '.private/maintenance-assets.json').read_text())
-    draft = api('releases/' + str(policy['draft_release_id']))
-    if not draft['draft'] or draft['tag_name'] != 'maintenance-fixtures':
-        raise ValueError('Authenticated maintenance draft required')
-    if {fixture.name, metadata.name} & {a['name'] for a in draft['assets']}:
-        raise ValueError('Existing fixture requires provenance reconciliation; replacement refused')
-    gh('release', 'upload', 'maintenance-fixtures', '--repo', REPO, str(fixture), str(metadata))
-    assets = {a['name']: a for a in api('releases/' + str(policy['draft_release_id']))['assets']}
-    index = {}
-    for file in (fixture, metadata):
-        asset = assets[file.name]
-        if asset['digest'] != digest(file) or asset['size'] != file.stat().st_size:
-            raise ValueError('Uploaded fixture metadata mismatch')
-        downloaded = gh('api', '-H', 'Accept: application/octet-stream', 'repos/' + REPO + '/releases/assets/' + str(asset['id']))
-        if len(downloaded) != file.stat().st_size or 'sha256:' + hashlib.sha256(downloaded).hexdigest() != digest(file):
-            raise ValueError('Independent fixture download mismatch')
-        index[file.name.removeprefix(tag + '-')] = dict(release_asset_id=asset['id'], size_in_bytes=asset['size'],
-            digest=asset['digest'], source_release=tag)
     policy['fixtures'][tag] = index
     (out / 'maintenance-assets-next.json').write_text(json.dumps(policy, indent=2) + '\n')
     (out / 'fixture-preservation.json').write_text(json.dumps(dict(passed=True, **provenance, assets=index), indent=2) + '\n')

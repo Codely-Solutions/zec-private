@@ -5120,7 +5120,7 @@ index c2045aa9b..eb3451c3b 100644
 +        sdk.lockRemainingOrchardBalance()
 +        return true
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
-index b76ce6c65..503f8c313 100644
+index b76ce6c65..ec7fc746b 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 @@ -16,0 +17 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
@@ -5293,12 +5293,12 @@ index b76ce6c65..503f8c313 100644
 +            // Kris Nuttycombe's per-note dust total (Slack, MOB-1750 follow-up): sum of each
 +            // spendable Orchard note's value net of MARGINAL_FEE, not the raw aggregate
 +            // balance — a wallet can hold a raw balance above dustThreshold made up entirely
-+            // of notes too small individually to be worth spending. Falls back to the raw
-+            // balance (old behavior) if the SDK call fails, same guard shape as dustThreshold.
++            // of notes too small individually to be worth spending. A failed read
++            // leaves eligibility unknown, so the balance-driven prompts wait.
 +            val orchardBalanceZatoshi = orchardBalance?.value
 +            val migratableOrchardTotal =
 +                runCatching { getOrchardMigrationSdk(accountKeyId)?.migratableOrchardTotal() }
-+                    .getOrNull() ?: (orchardBalanceZatoshi ?: 0L)
++                    .getOrNull()
 +            migrationMessageFor(
 +                sdkState = sdkState,
 +                snapshot = snapshot,
@@ -5382,9 +5382,14 @@ index b76ce6c65..503f8c313 100644
 @@ -294 +360 @@ class MigrationHomeMessageSourceImpl(
 -            isRunActive -> navigationRouter.forward(MigrationProgressArgs)
 +            isRunActive -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
+@@ -364 +430 @@ internal fun migrationMessageFor(
+-    migratableOrchardTotalZatoshi: Long = orchardBalanceZatoshi ?: 0L,
++    migratableOrchardTotalZatoshi: Long? = orchardBalanceZatoshi,
 @@ -372,0 +439 @@ internal fun migrationMessageFor(
 +    supportsNewMigration: Boolean = true,
-@@ -380,12 +447,2 @@ internal fun migrationMessageFor(
+@@ -374,0 +442 @@ internal fun migrationMessageFor(
++    val eligible = migratableOrchardTotalZatoshi ?: 0L
+@@ -380,12 +448,2 @@ internal fun migrationMessageFor(
 -    // A committed schedule that never received its external (Keystone) signature can NEVER
 -    // self-resolve — unlike SCHEDULE/ANCHOR_BOUNDARY/DEPENDENCIES, which clear as blocks mine,
 -    // SIGNATURE only clears when a human hands the device a QR to sign. There is no "wait longer"
@@ -5399,29 +5404,32 @@ index b76ce6c65..503f8c313 100644
 -    // leaving a schedule permanently stuck exactly like this.
 +    // An unsigned committed step needs user action. The banner uses the retained reviewed
 +    // plan when available and offers explicit recovery if this process no longer has it.
-@@ -410 +467 @@ internal fun migrationMessageFor(
+@@ -410 +468 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot.completedCount,
 +                completedCount = snapshot.minedCount,
-@@ -425 +482 @@ internal fun migrationMessageFor(
+@@ -425 +483 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot.completedCount,
 +                completedCount = snapshot.minedCount,
-@@ -427,0 +485 @@ internal fun migrationMessageFor(
+@@ -427,0 +486 @@ internal fun migrationMessageFor(
 +                nextTransferIndex = next.index,
-@@ -433,2 +491,3 @@ internal fun migrationMessageFor(
+@@ -433,2 +492,3 @@ internal fun migrationMessageFor(
 -                isRunActive = !hasSignatureBlock,
 -                completedCount = snapshot?.completedCount ?: 0,
 +                isRunActive = true,
 +                isAwaitingSignatures = hasSignatureBlock,
 +                completedCount = snapshot?.minedCount ?: 0,
-@@ -448 +507 @@ internal fun migrationMessageFor(
+@@ -448 +508 @@ internal fun migrationMessageFor(
 -                completedCount = snapshot?.completedCount ?: 0,
 +                completedCount = snapshot?.minedCount ?: 0,
-@@ -483,0 +543 @@ internal fun migrationMessageFor(
+@@ -470 +530 @@ internal fun migrationMessageFor(
+-            migratableOrchardTotalZatoshi > dustThresholdZatoshi &&
++            eligible > dustThresholdZatoshi &&
+@@ -483,0 +544 @@ internal fun migrationMessageFor(
 +            supportsNewMigration &&
-@@ -485 +545,2 @@ internal fun migrationMessageFor(
+@@ -485 +546,2 @@ internal fun migrationMessageFor(
 -            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI -> {
 +            orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI &&
-+            migratableOrchardTotalZatoshi > 0L -> {
++            eligible > 0L -> {
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
 index 7c9893c8a..ebeb5198b 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCase.kt
@@ -5545,7 +5553,7 @@ index 3c54b5657..ec4662494 100644
 +
 +    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
-index 8d9ded4e7..d7453d7d3 100644
+index 8d9ded4e7..aa28416fd 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 @@ -32,0 +33 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -5567,6 +5575,9 @@ index 8d9ded4e7..d7453d7d3 100644
 +    val canMigrateResidue: Boolean = true,
 @@ -73 +74,0 @@ data class MigrationCompleteState(
 -    val failureSheet: co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState? = null,
+@@ -75 +76 @@ data class MigrationCompleteState(
+-    // celebration ("You've moved to Ironwood" copy, no Transfers/Duration rows) — false for the
++    // celebration (no Transfers/Duration rows) — false for the
 @@ -82 +83,2 @@ data class MigrationCompleteArgs(
 -    val isResidueOnly: Boolean = false
 +    val isResidueOnly: Boolean = false,
@@ -10005,10 +10016,10 @@ index 85531a7b8..bc5936fe7 100644
 +            result,
 +        )
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
-index 72c0afaaa..73c1e9f5f 100644
+index 72c0afaaa..37149e174 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceViewOnlyTest.kt
-@@ -2,0 +3,13 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,15 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 +import co.electriccoin.zcash.ui.common.repository.MigrationHomeMessageData
@@ -10022,7 +10033,41 @@ index 72c0afaaa..73c1e9f5f 100644
 +import kotlin.test.assertIs
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -50,0 +64,51 @@ class MigrationHomeMessageSourceViewOnlyTest {
++import cash.z.ecc.android.sdk.OrchardMigrationSdk
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -3,0 +19,10 @@ import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSource
++import co.electriccoin.zcash.ui.common.model.WalletSnapshot
++import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_DUST_THRESHOLD_ZATOSHI
++import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZATOSHI
++import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
++import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStorageProvider
++import io.mockk.coEvery
++import kotlinx.coroutines.flow.flowOf
++import kotlin.test.assertNull
+@@ -50,0 +76,72 @@ class MigrationHomeMessageSourceViewOnlyTest {
++    @Test
++    fun unavailableEligibilityDoesNotBecomeAnInvitationFromThePublishedBalance() = runTest {
++        val native = mockk<OrchardMigrationSdk> {
++            coEvery { migrationDustThresholdZatoshi() } returns MIGRATION_DUST_THRESHOLD_ZATOSHI
++        }
++        val sdk = mockk<GetOrchardMigrationSdkUseCase>()
++        every { observeMigrationLiveReadout(any()) } returns flowOf(null)
++
++        for (balance in listOf(MIGRATION_RESIDUAL_MIN_ZATOSHI + 1, MIGRATION_RESIDUAL_MIN_ZATOSHI - 1)) {
++            val home = source(zodl(), sdk = sdk, balance = balance)
++            coEvery { sdk(any<String>()) } returns null
++            assertNull(home.observe().first())
++            coEvery { sdk(any<String>()) } returns native
++            coEvery { native.migratableOrchardTotal() } throws IllegalStateException("synthetic unavailable read")
++            assertNull(home.observe().first())
++            coEvery { native.migratableOrchardTotal() } returns balance
++            val current = assertIs<MigrationHomeMessageData>(home.observe().first())
++            assertEquals(balance < MIGRATION_RESIDUAL_MIN_ZATOSHI, current.isResidueOnly)
++        }
++    }
++
 +    @Test
 +    fun homeResumesASignedHandoffForItsOwnerWithoutReopeningAScanner() = runTest {
 +        val owner = zodl()
@@ -10074,17 +10119,40 @@ index 72c0afaaa..73c1e9f5f 100644
 +        assertEquals("Transfer 2 is ready to send", message.progressLabel)
 +    }
 +
-@@ -58 +122,5 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -58 +155,7 @@ class MigrationHomeMessageSourceViewOnlyTest {
 -    private fun source(account: WalletAccount) =
 +    private fun source(
 +        account: WalletAccount,
 +        pending: PendingKeystoneMigrationPcztsRepositoryImpl = PendingKeystoneMigrationPcztsRepositoryImpl(),
 +        router: NavigationRouter = mockk(relaxed = true),
++        sdk: GetOrchardMigrationSdkUseCase = mockk(relaxed = true),
++        balance: Long = 0L,
 +    ) =
-@@ -71 +139 @@ class MigrationHomeMessageSourceViewOnlyTest {
+@@ -65 +168 @@ class MigrationHomeMessageSourceViewOnlyTest {
+-            getOrchardMigrationSdk = mockk(relaxed = true),
++            getOrchardMigrationSdk = sdk,
+@@ -67,3 +170,11 @@ class MigrationHomeMessageSourceViewOnlyTest {
+-            getOrchardBalance = mockk(relaxed = true),
+-            walletSnapshotDataSource = mockk(relaxed = true),
+-            hasSeenMigrationCompleteStorageProvider = mockk(relaxed = true),
++            getOrchardBalance = mockk<GetOrchardBalanceUseCase> {
++                every { observe(any()) } returns flowOf(Zatoshi(balance))
++            },
++            walletSnapshotDataSource = mockk<WalletSnapshotDataSource> {
++                every { observe() } returns MutableStateFlow(mockk<WalletSnapshot> {
++                    every { status } returns Synchronizer.Status.SYNCED
++                })
++            },
++            hasSeenMigrationCompleteStorageProvider = mockk<HasSeenMigrationCompleteStorageProvider> {
++                every { observe(any()) } returns flowOf(false)
++            },
+@@ -71,2 +182,6 @@ class MigrationHomeMessageSourceViewOnlyTest {
 -            navigationRouter = mockk(relaxed = true),
+-            migrationUpgradeNoticeStorageProvider = mockk(relaxed = true),
 +            navigationRouter = router,
-@@ -72,0 +141,2 @@ class MigrationHomeMessageSourceViewOnlyTest {
++            migrationUpgradeNoticeStorageProvider = mockk<MigrationUpgradeNoticeStorageProvider> {
++                every { observePendingForSelected() } returns flowOf(false)
++            },
 +            pendingKeystone = pending,
 +            pendingSchedule = PendingMigrationScheduleRepositoryImpl(),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveMigrationLiveReadoutUseCaseTest.kt
@@ -32140,7 +32208,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..5875e2065 100644
+index 7b9af8bf7..ad26c88c9 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -32219,21 +32287,23 @@ index 7b9af8bf7..5875e2065 100644
 -    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de Zodl.</string>
 +    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
-@@ -282 +286 @@
+@@ -282,3 +286,3 @@
 -    <string name="deleteWallet_title">Restablecer Zodl</string>
-+    <string name="deleteWallet_title">Restablecer ZEC Private</string>
-@@ -284 +288 @@
+-    <string name="deleteWallet_message2">Asegúrate de haber guardado tanto tu frase de recuperación secreta como la altura de cumpleaños de la billetera antes de continuar.</string>
 -    <string name="delete_wallet_text_2">Restablecer la aplicación Zodl eliminará la base de datos y los datos en
++    <string name="deleteWallet_title">Restablecer ZEC Private</string>
++    <string name="deleteWallet_message2">Guarda la frase secreta de recuperación de tu billetera de software. Si conoces su altura de cumpleaños, guárdala también.</string>
 +    <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
-@@ -286,3 +290,3 @@
+@@ -286,5 +290,5 @@
 -    <string name="deleteWallet_message4">Una vez que restablezcas Zodl, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de Zodl y la Altura de Cumpleaños de la Billetera.</string>
 -    <string name="deleteWallet_metadataWarn1">Conserva la copia de seguridad cifrada de los metadatos, que incluye contactos, notas, marcadores y detalles de intercambios/pagos.</string>
 -    <string name="deleteWallet_metadataWarn2">Estos datos no se podrán recuperar durante la restauración.</string>
-+    <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
+-    <string name="deleteWallet_sheet_msg">Restablecer la app no se puede deshacer. Necesitarás restaurar tu billetera usando tu frase secreta de recuperación.</string>
+-    <string name="deleteWallet_actionButtonTitle">Restablecer Zodl</string>
++    <string name="deleteWallet_message4">Restaura las billeteras de software con sus frases de recuperación. Vuelve a conectar las billeteras de hardware con sus dispositivos.</string>
 +    <string name="deleteWallet_metadataWarn1">Conserva en este dispositivo los contactos, notas, marcadores y detalles de intercambios y pagos cifrados.</string>
 +    <string name="deleteWallet_metadataWarn2">Desactivar esta opción elimina las copias de seguridad locales de todas las billeteras. El restablecimiento no afecta las copias guardadas por Android.</string>
-@@ -290 +294 @@
--    <string name="deleteWallet_actionButtonTitle">Restablecer Zodl</string>
++    <string name="deleteWallet_sheet_msg">El restablecimiento es irreversible. Asegúrate de tener lo necesario para restaurar tus billeteras.</string>
 +    <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
 @@ -295 +299 @@
 -    <string name="error_general_message">Causa desconocida. Por favor, contacta a nuestro equipo de soporte si el problema persiste.\n\n%s</string>
@@ -32500,6 +32570,9 @@ index 7b9af8bf7..5875e2065 100644
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s ahora está bloqueado en Orchard. El bloqueo hace que este monto no se pueda gastar para proteger tu privacidad.</string>
 +    <string name="migrationComplete_lockRequestFailed">No se pudieron bloquear los fondos de Orchard. Inténtalo de nuevo.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Solicitud de bloqueo completada.</string>
+@@ -1172 +1178 @@
+-    <string name="migrationComplete_residueTitle">Te has movido a Ironwood</string>
++    <string name="migrationComplete_residueTitle">Saldo pequeño en Orchard</string>
 @@ -1176 +1182 @@
 -    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
@@ -32587,7 +32660,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..20c291a0b 100644
+index f41234151..8dd3902b5 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -32669,20 +32742,22 @@ index f41234151..20c291a0b 100644
 @@ -291 +296 @@
 -    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with Zodl developers.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with ZEC Private developers.</string>
-@@ -294 +299 @@
+@@ -294,8 +299,8 @@
 -    <string name="deleteWallet_title">Reset Zodl</string>
-+    <string name="deleteWallet_title">Reset ZEC Private</string>
-@@ -296,4 +301,4 @@
+-    <string name="deleteWallet_message2">Make sure you have both your secret recovery phrase and wallet birthday height saved before you proceed.</string>
 -    <string name="delete_wallet_text_2">Resetting the Zodl app will delete the Zodl database and cache, and will disconnect all connected hardware wallets.</string>
 -    <string name="deleteWallet_message4">Once you Reset Zodl, the only way to access your funds is through a wallet restore process that requires your Zodl Recovery Phrase and Wallet Birthday Height.</string>
 -    <string name="deleteWallet_metadataWarn1">Keep encrypted metadata backup - which includes contacts, notes, bookmarks, and swap/payment details.</string>
 -    <string name="deleteWallet_metadataWarn2">This data cannot be recovered during Restore.</string>
+-    <string name="deleteWallet_sheet_msg">Resetting the app cannot be undone. You will need to restore your wallet using your secret recovery phrase.</string>
+-    <string name="deleteWallet_actionButtonTitle">Reset Zodl</string>
++    <string name="deleteWallet_title">Reset ZEC Private</string>
++    <string name="deleteWallet_message2">Save your software wallet’s secret recovery phrase. If you know its birthday height, save that too.</string>
 +    <string name="delete_wallet_text_2">Resetting the ZEC Private app will delete the ZEC Private database and cache, and will disconnect all connected hardware wallets.</string>
-+    <string name="deleteWallet_message4">Once you Reset ZEC Private, the only way to access your funds is through a wallet restore process that requires your ZEC Private Recovery Phrase and Wallet Birthday Height.</string>
++    <string name="deleteWallet_message4">Restore software wallets with their recovery phrases. Reconnect hardware wallets with their devices.</string>
 +    <string name="deleteWallet_metadataWarn1">Keep encrypted contacts, notes, bookmarks and swap/payment details on this device.</string>
 +    <string name="deleteWallet_metadataWarn2">Turning this off removes local backups for all wallets. Copies held by Android backup services are outside this reset.</string>
-@@ -301 +306 @@
--    <string name="deleteWallet_actionButtonTitle">Reset Zodl</string>
++    <string name="deleteWallet_sheet_msg">Resetting the app cannot be undone. Make sure you have what you need to restore your wallets.</string>
 +    <string name="deleteWallet_actionButtonTitle">Reset ZEC Private</string>
 @@ -306 +311 @@
 -    <string name="error_general_message">Unknown cause. Please contact our support team if the problem persists
@@ -33156,13 +33231,15 @@ index f41234151..20c291a0b 100644
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
 +    <string name="migrationComplete_lockRequestFailed">Couldn\'t lock Orchard funds. Try again.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Lock request completed.</string>
-@@ -1462,3 +1312,3 @@ Your vote can no longer be submitted.</string>
+@@ -1462,4 +1312,4 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
+-    <string name="migrationComplete_residueTitle">You’ve moved to Ironwood</string>
 +    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
++    <string name="migrationComplete_residueTitle">Small Orchard balance</string>
 @@ -1469 +1319 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving an amount this specific would link your Ironwood funds back to your Orchard history. We recommend locking it instead.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
@@ -34551,12 +34628,13 @@ index 000000000..61358bc6b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..47c12409a
+index 000000000..5ed8785ff
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,174 @@
 +package co.electriccoin.zcash.ui
 +
++import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 +import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -34577,6 +34655,13 @@ index 000000000..47c12409a
 +
 +    internal fun requestThirdPartyScan() =
 +        offer(Kind.THIRD_PARTY_SCAN, NavigationCommand.Forward(listOf(ThirdPartyScan)))
++
++    internal fun requestSeedRecoveryError(route: ErrorRoute, stillApplies: () -> Boolean) =
++        offer(Kind.SEED_RECOVERY_ERROR, NavigationCommand.Forward(listOf(route)), stillApplies = stillApplies)
++
++    internal fun clearSeedRecoveryError() {
++        pending.update { queue -> queue.filterNot { it.kind == Kind.SEED_RECOVERY_ERROR } }
++    }
 +
 +    internal fun saveExternalScans(): ArrayList<String> = pending.value.mapNotNullTo(ArrayList()) { request ->
 +        when (request.kind) {
@@ -34697,7 +34782,13 @@ index 000000000..47c12409a
 +        val stillApplies: () -> Boolean = { true },
 +    )
 +
-+    internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }
++    internal enum class Kind {
++        THIRD_PARTY_SCAN,
++        GIFT_SCAN,
++        MIGRATION_PROGRESS,
++        MIGRATION_RECOVERY,
++        SEED_RECOVERY_ERROR,
++    }
 +}
 +
 +private fun List<LaunchNavigationRequests.Request>.admits(
@@ -34822,7 +34913,7 @@ index d3bb1ef01..7441e84b5 100644
 @@ -24 +23,0 @@ object NavigationTargets {
 -    const val WHATS_NEW = "whats_new"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
-index 67c1e883c..9d7acffa2 100644
+index 67c1e883c..2d33702c5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/NavigationRouter.kt
 @@ -3,0 +4,3 @@ import androidx.navigation.NavBackStackEntry
@@ -34850,7 +34941,7 @@ index 67c1e883c..9d7acffa2 100644
 +        override fun close() = Unit
 +    }
 +
-@@ -52,0 +73,77 @@ interface NavigationRouter {
+@@ -52,0 +73,171 @@ interface NavigationRouter {
 +
 +    val pendingNavigation: PendingNavigation? get() = null
 +}
@@ -34861,7 +34952,16 @@ index 67c1e883c..9d7acffa2 100644
 +    val refundWarningRequestId: String? = null,
 +    val genericScanRequestId: String? = null,
 +    val contentEntryId: String? = id,
++    val hostResumed: Boolean = true,
 +)
++
++internal fun NavigationRouter.bindReportHandoff(allowed: () -> Boolean): () -> Boolean {
++    val owner = activeEntry.value?.takeIf { it.hostResumed }?.id
++    return {
++        val current = activeEntry.value
++        owner != null && current != null && current.id == owner && current.hostResumed && allowed()
++    }
++}
 +
 +interface ActiveNavigationEntryObserver {
 +    fun update(entry: ActiveNavigationEntry?)
@@ -34928,7 +35028,8 @@ index 67c1e883c..9d7acffa2 100644
 +        )
 +        pendingNavigation?.offer(command) ?: custom { command }
 +    }
-@@ -54,0 +152,86 @@ interface NavigationRouter {
++}
++
 +fun NavigationRouter.discardResultFrom(sourceEntryId: String?, retainedContentEntryId: String? = null) {
 +    if (sourceEntryId != null) {
 +        if (retainedContentEntryId != null && retainedContentEntryId != sourceEntryId) {
@@ -35012,10 +35113,9 @@ index 67c1e883c..9d7acffa2 100644
 +            monitor.cancel()
 +        }
 +    }
-+}
-+
+@@ -54,0 +246 @@ interface NavigationRouter {
 +@Suppress("TooManyFunctions") // The router implements the individual navigation commands.
-@@ -62,0 +246,22 @@ class NavigationRouterImpl : NavigationRouter {
+@@ -62,0 +255,22 @@ class NavigationRouterImpl : NavigationRouter {
 +    private val entryState = MutableStateFlow<ActiveNavigationEntry?>(null)
 +    private var entryObserver: ActiveNavigationEntryObserver? = null
 +
@@ -35038,7 +35138,7 @@ index 67c1e883c..9d7acffa2 100644
 +            entryObserver = it
 +            entryState.value = null
 +        }
-@@ -103,0 +309,8 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -103,0 +318,8 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 +    data class ForEntry(
 +        val sourceEntryId: String,
 +        val isStillAllowed: () -> Boolean,
@@ -35047,7 +35147,7 @@ index 67c1e883c..9d7acffa2 100644
 +        val acknowledge: (Boolean) -> Unit,
 +    ) : NavigationCommand
 +
-@@ -105 +318 @@ sealed interface NavigationCommand : BaseNavigationCommand {
+@@ -105 +327 @@ sealed interface NavigationCommand : BaseNavigationCommand {
 -        val routes: List<Any>
 +        val routes: List<Any>,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/Navigator.kt
@@ -35267,7 +35367,7 @@ index 36840dcc5..cf4afa9ba 100644
 +    if (!popBackStack(RestoreSeedArgs, inclusive = false)) {
 +        navigate(RestoreSeedArgs) { popUpTo<Onboarding>() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
-index a93926c57..f9cf75f93 100644
+index a93926c57..b6cb7f3fd 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 @@ -4,0 +5 @@ import androidx.compose.runtime.Composable
@@ -35276,8 +35376,9 @@ index a93926c57..f9cf75f93 100644
 +import androidx.compose.runtime.getValue
 @@ -6,0 +9 @@ import androidx.compose.runtime.remember
 +import androidx.compose.runtime.rememberUpdatedState
-@@ -7,0 +11,8 @@ import androidx.compose.ui.Modifier
+@@ -7,0 +11,9 @@ import androidx.compose.ui.Modifier
 +import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.LifecycleEventObserver
 +import androidx.lifecycle.compose.LocalLifecycleOwner
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import androidx.lifecycle.repeatOnLifecycle
@@ -35285,31 +35386,31 @@ index a93926c57..f9cf75f93 100644
 +import androidx.navigation.FloatingWindow
 +import androidx.navigation.NavBackStackEntry
 +import androidx.navigation.NavDestination.Companion.hasRoute
-@@ -8,0 +20 @@ import androidx.navigation.compose.NavHost
+@@ -8,0 +21 @@ import androidx.navigation.compose.NavHost
 +import androidx.navigation.toRoute
-@@ -14,2 +25,0 @@ import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
+@@ -14,2 +26,0 @@ import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 -import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStore
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
-@@ -24 +34,5 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
+@@ -24 +35,5 @@ import co.electriccoin.zcash.ui.design.util.LocalNavController
 -import co.electriccoin.zcash.ui.screen.flexa.FlexaViewModel
 +import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 +import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
-@@ -26 +40 @@ import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
+@@ -26 +41 @@ import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 -import kotlinx.coroutines.flow.filter
 +import kotlinx.coroutines.flow.combine
-@@ -32,6 +45,0 @@ import org.koin.compose.koinInject
+@@ -32,6 +46,0 @@ import org.koin.compose.koinInject
 -/**
 - * Also opens the gift card scanner for a gift card link that arrived from outside the app. Such a link can arrive
 - * before there is a wallet, or before the wallet graph is shown (cold start, onboarding); MainActivity only records
 - * that one arrived (the link itself is discarded), and the scanner opens once the wallet graph is up, so the user
 - * scans the card with the app.
 - */
-@@ -42,0 +51 @@ fun RootNavGraph(
+@@ -42,0 +52 @@ fun RootNavGraph(
 +    hasAppAccess: () -> Boolean,
-@@ -43,0 +53,7 @@ fun RootNavGraph(
+@@ -43,0 +54,7 @@ fun RootNavGraph(
 +    val resetProgress = koinInject<ResetProgressStore>()
 +    val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
 +    if (isResetPending) {
@@ -35317,35 +35418,35 @@ index a93926c57..f9cf75f93 100644
 +        return
 +    }
 +
-@@ -45 +60,0 @@ fun RootNavGraph(
+@@ -45 +61,0 @@ fun RootNavGraph(
 -    val flexaViewModel = koinViewModel<FlexaViewModel>()
-@@ -51,2 +66 @@ fun RootNavGraph(
+@@ -51,2 +67 @@ fun RootNavGraph(
 -    val giftCardLinkStore = koinInject<GiftCardLinkStore>()
 -    val navigateToRedeemGiftCard = koinInject<NavigateToRedeemGiftCardUseCase>()
 +    val launchNavigation = koinInject<LaunchNavigationRequests>()
-@@ -55 +69,3 @@ fun RootNavGraph(
+@@ -55 +70,3 @@ fun RootNavGraph(
 -    val navigator: Navigator =
 +    val lifecycle = LocalLifecycleOwner.current.lifecycle
 +    val currentAccess = rememberUpdatedState(hasAppAccess)
 +    val navigator =
-@@ -57,0 +74 @@ fun RootNavGraph(
+@@ -57,0 +75 @@ fun RootNavGraph(
 +            lifecycle,
-@@ -59 +75,0 @@ fun RootNavGraph(
+@@ -59 +76,0 @@ fun RootNavGraph(
 -            flexaViewModel,
-@@ -68 +83,0 @@ fun RootNavGraph(
+@@ -68 +84,0 @@ fun RootNavGraph(
 -                flexaViewModel = flexaViewModel,
-@@ -72 +87,4 @@ fun RootNavGraph(
+@@ -72 +88,4 @@ fun RootNavGraph(
 -                isOledEnabledStorageProvider = isOledEnabledStorageProvider
 +                isOledEnabledStorageProvider = isOledEnabledStorageProvider,
 +                canCommitOwnedNavigation = {
 +                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
 +                }
-@@ -75,0 +94,2 @@ fun RootNavGraph(
+@@ -75,0 +95,2 @@ fun RootNavGraph(
 +    TrackActiveNavigationEntry(navController, navigationRouter)
 +
-@@ -77,0 +98 @@ fun RootNavGraph(
+@@ -77,0 +99 @@ fun RootNavGraph(
 +            if (!currentAccess.value()) return@collect
-@@ -84,0 +106,8 @@ fun RootNavGraph(
+@@ -84,0 +107,8 @@ fun RootNavGraph(
 +    LaunchedEffect(navigationRouter, navigator, lifecycle) {
 +        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
 +            navigationRouter.collectPendingForwards(navigator) {
@@ -35354,20 +35455,20 @@ index a93926c57..f9cf75f93 100644
 +        }
 +    }
 +
-@@ -107,0 +137 @@ fun RootNavGraph(
+@@ -107,0 +138 @@ fun RootNavGraph(
 +        if (!currentAccess.value()) return@LaunchedEffect
-@@ -117,5 +146,0 @@ fun RootNavGraph(
+@@ -117,5 +147,0 @@ fun RootNavGraph(
 -            // Same pattern as MainActivity.handleMigrationIntent — Home always lands on the
 -            // back stack first, then we redirect on top of it if a migration transfer needs
 -            // attention. isSyncBlocked() (fed into the synchronizer directly) already stopped
 -            // sync regardless of whether this redirect lands — this is routing only.
 -            migrationAppHooks.checkRecovery()
-@@ -123 +148 @@ fun RootNavGraph(
+@@ -123 +149 @@ fun RootNavGraph(
 -            secretState == SecretState.NONE &&
 +            (secretState == SecretState.NONE || secretState == SecretState.INCOMPLETE) &&
-@@ -132,0 +158 @@ fun RootNavGraph(
+@@ -132,0 +159 @@ fun RootNavGraph(
 +        if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
-@@ -135,7 +161,27 @@ fun RootNavGraph(
+@@ -135,7 +162,27 @@ fun RootNavGraph(
 -    LaunchedEffect(secretState, navController) {
 -        if (secretState != SecretState.READY) return@LaunchedEffect
 -        navController.currentBackStackEntryFlow.first {
@@ -35402,7 +35503,7 @@ index a93926c57..f9cf75f93 100644
 +                hasAppAccess = { lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && appAccess.value() },
 +                navigate = navigator::executeLaunchCommand
 +            )
-@@ -145,0 +192,50 @@ fun RootNavGraph(
+@@ -145,0 +193,59 @@ fun RootNavGraph(
 +internal suspend fun LaunchNavigationRequests.deliverOnChanges(
 +    navController: NavController,
 +    walletReady: Boolean,
@@ -35420,22 +35521,31 @@ index a93926c57..f9cf75f93 100644
 +
 +@Composable
 +private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
-+    DisposableEffect(navController, navigationRouter) {
-+        val stopTracking = navController.trackActiveEntry(navigationRouter)
++    val lifecycle = LocalLifecycleOwner.current.lifecycle
++    DisposableEffect(navController, navigationRouter, lifecycle) {
++        val stopTracking = navController.trackActiveEntry(navigationRouter, lifecycle)
 +        onDispose(stopTracking)
 +    }
 +}
 +
-+internal fun NavController.trackActiveEntry(navigationRouter: NavigationRouter): () -> Unit {
++internal fun NavController.trackActiveEntry(
++    navigationRouter: NavigationRouter,
++    lifecycle: Lifecycle? = null,
++): () -> Unit {
 +    val observer = navigationRouter.registerEntryObserver()
 +    var contentEntryId: String? = null
-+    val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
-+        val entry = controller.currentBackStackEntry
++    fun update() {
++        val entry = currentBackStackEntry
 +        if (entry?.destination !is FloatingWindow) contentEntryId = entry?.id
-+        observer.update(entry?.toActiveNavigationEntry(contentEntryId))
++        val resumed = lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) ?: true
++        observer.update(entry?.toActiveNavigationEntry(contentEntryId)?.copy(hostResumed = resumed))
 +    }
++    val listener = NavController.OnDestinationChangedListener { _, _, _ -> update() }
++    val lifecycleObserver = LifecycleEventObserver { _, _ -> update() }
 +    addOnDestinationChangedListener(listener)
++    lifecycle?.addObserver(lifecycleObserver)
 +    return {
++        lifecycle?.removeObserver(lifecycleObserver)
 +        removeOnDestinationChangedListener(listener)
 +        observer.close()
 +    }
@@ -46545,18 +46655,36 @@ index e9705b8e7..c1f3fdc00 100644
 +
 +    internal fun observeSendReview() = observeNullable().map { it as? SendTransactionProposal }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
-index 546900ef8..1338c437c 100644
+index 546900ef8..598dc8273 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
-@@ -8 +8 @@ import kotlinx.coroutines.CancellationException
+@@ -3,0 +4 @@ import co.electriccoin.zcash.spackle.Twig
++import co.electriccoin.zcash.ui.LaunchNavigationRequests
+@@ -4,0 +6 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -8 +10 @@ import kotlinx.coroutines.CancellationException
 -import kotlinx.coroutines.flow.filter
 +import kotlinx.coroutines.flow.collect
-@@ -21,0 +22 @@ class ObserveSeedMismatchUseCase(
+@@ -19,0 +22,2 @@ class ObserveSeedMismatchUseCase(
++    private val launchNavigation: LaunchNavigationRequests,
++    private val walletWriteAccess: WalletWriteAccess,
+@@ -21,0 +26 @@ class ObserveSeedMismatchUseCase(
 +        // The SDK clears the flag as it enters the recovery lockout.
-@@ -23,2 +24 @@ class ObserveSeedMismatchUseCase(
+@@ -23,2 +28 @@ class ObserveSeedMismatchUseCase(
 -            .filter { it }
 -            .collect { runRecovery() }
 +            .collect { if (it) runRecovery() }
+@@ -28,0 +33,3 @@ class ObserveSeedMismatchUseCase(
++        val token = walletWriteAccess.token()
++        val stillApplies = { walletWriteAccess.permits(token) }
++        if (!stillApplies()) return
+@@ -30,0 +38 @@ class ObserveSeedMismatchUseCase(
++            if (stillApplies()) launchNavigation.clearSeedRecoveryError()
+@@ -35 +43,3 @@ class ObserveSeedMismatchUseCase(
+-            navigateToError(ErrorArgs.General(e))
++            if (stillApplies()) {
++                launchNavigation.requestSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
++            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
 index e9a9371db..abb4df855 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
@@ -46635,7 +46763,7 @@ index 9afb3168c..c008bcf6e 100644
 -        navigationRouter.backToRoot()
 +        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
-index eab9cf9da..9d1bee9f1 100644
+index eab9cf9da..14360adb6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -46804,14 +46932,14 @@ index eab9cf9da..9d1bee9f1 100644
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
-+            owner.permits() && editUnpreparedPayment(zip321, sourceEntryId, fromHome)
++            editUnpreparedPayment(zip321, sourceEntryId, fromHome, owner.permits)
 +        } catch (error: CancellationException) {
 +            throw error
 +        } catch (error: Exception) {
-+            owner.permits() && showError(
-+                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome,
++            showError(
++                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome, isStillAllowed = owner.permits,
 +            ) && !fromHome
-@@ -130,53 +104,7 @@ class OnZip321ScannedUseCase(
+@@ -130,53 +104,8 @@ class OnZip321ScannedUseCase(
 -    @Suppress("TooGenericExceptionCaught")
 -    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid) {
 -        try {
@@ -46869,10 +46997,11 @@ index eab9cf9da..9d1bee9f1 100644
 +        zip321: Zip321ParseUriValidation.Valid,
 +        sourceEntryId: String?,
 +        fromHome: Boolean,
++        isStillAllowed: () -> Boolean,
 +    ): Boolean {
-+        if (!canEdit(zip321, sourceEntryId)) return false
-+        return navigationRouter.commitFrom(sourceEntryId) {
-@@ -184,6 +112,10 @@ class OnZip321ScannedUseCase(
++        if (!isStillAllowed() || !canEdit(zip321, sourceEntryId, isStillAllowed)) return false
++        return navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
+@@ -184,6 +113 @@ class OnZip321ScannedUseCase(
 -            navigationRouter.back()
 -        } catch (e: Exception) {
 -            zashiProposalRepository.clear()
@@ -46880,16 +47009,7 @@ index eab9cf9da..9d1bee9f1 100644
 -            ledgerProposalPipeline.clear()
 -            navigateToErrorUseCase(ErrorArgs.General(e)) { replace(it) }
 +            if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
-+        }
-+    }
-+
-+    private suspend fun sendAddressOnly(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
-+        if (!canEdit(zip321, sourceEntryId)) return false
-+        return navigationRouter.commitFrom(sourceEntryId) {
-+            val address = zip321.payment.payments.single().recipientAddress.value
-+            prefillSend.request(PrefillSendData.FromAddressScan(address))
-+            NavigationCommand.Back
-@@ -193,9 +125,19 @@ class OnZip321ScannedUseCase(
+@@ -193,9 +117,28 @@ class OnZip321ScannedUseCase(
 -    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid) {
 -        prefillSend.request(
 -            PrefillSendData.FromAddressScan(
@@ -46899,10 +47019,23 @@ index eab9cf9da..9d1bee9f1 100644
 -            )
 -        )
 -        navigationRouter.back()
-+    private suspend fun canEdit(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
++    private suspend fun sendAddressOnly(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
++        if (!canEdit(zip321, sourceEntryId)) return false
++        return navigationRouter.commitFrom(sourceEntryId) {
++            val address = zip321.payment.payments.single().recipientAddress.value
++            prefillSend.request(PrefillSendData.FromAddressScan(address))
++            NavigationCommand.Back
++        }
++    }
++
++    private suspend fun canEdit(
++        zip321: Zip321ParseUriValidation.Valid,
++        sourceEntryId: String?,
++        isStillAllowed: () -> Boolean = { true },
++    ): Boolean {
 +        val memo = zip321.payment.payments.single().memo
 +        if (memo == null || memo.data.zip321MemoTextOrNull() != null) return true
-+        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()))
++        showError(sourceEntryId, ErrorArgs.General(UneditableZip321MemoException()), isStillAllowed = isStillAllowed)
 +        return false
 +    }
 +
@@ -46910,14 +47043,10 @@ index eab9cf9da..9d1bee9f1 100644
 +        sourceEntryId: String?,
 +        args: ErrorArgs,
 +        replaceScanner: Boolean = false,
-+    ): Boolean = if (sourceEntryId == null) {
-+        if (replaceScanner) navigateToErrorUseCase(args) { replace(it) } else navigateToErrorUseCase(args)
-+        true
-+    } else {
-+        navigationRouter.commitFrom(sourceEntryId) {
-+            val routes = listOf(navigateToErrorUseCase.stage(args))
-+            if (replaceScanner) NavigationCommand.Replace(routes) else NavigationCommand.Forward(routes)
-+        }
++        isStillAllowed: () -> Boolean = { true },
++    ): Boolean = navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
++        val routes = listOf(navigateToErrorUseCase.stage(args))
++        if (replaceScanner) NavigationCommand.Replace(routes) else NavigationCommand.Forward(routes)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateAndTorUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateAndTorUseCase.kt
 index 35702138a..18c21907f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateAndTorUseCase.kt
@@ -49628,13 +49757,14 @@ index 9ef0dd1bf..dea6e60fa 100644
 +        navigationRouter.replaceAll(route)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt
 new file mode 100644
-index 000000000..ef0f46366
+index 000000000..f21706b49
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/WalletReportAccess.kt
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,47 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.bindReportHandoff
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import kotlinx.coroutines.CoroutineScope
@@ -49657,10 +49787,8 @@ index 000000000..ef0f46366
 +        return { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
 +    }
 +
-+    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean {
-+        val source = navigationRouter.activeEntry.value?.id
-+        return { source != null && navigationRouter.activeEntry.value?.id == source && allowed() }
-+    }
++    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean =
++        navigationRouter.bindReportHandoff(allowed)
 +
 +    internal fun bind(scope: CoroutineScope): () -> (() -> Boolean) {
 +        val token = walletWriteAccess.token()
@@ -56860,7 +56988,7 @@ index 225b37df9..ef023c73d 100644
 +fun ResyncDateScreen(args: ResyncDateArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<ResyncDateVM> { parametersOf(args, sourceEntryId) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/date/ResyncDateVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/date/ResyncDateVM.kt
-index d54443e9d..7f5edb923 100644
+index d54443e9d..ee7501fb8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/date/ResyncDateVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/date/ResyncDateVM.kt
 @@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.BlockHeight
@@ -56868,30 +56996,44 @@ index d54443e9d..7f5edb923 100644
 @@ -7,0 +9,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.discardResultFrom
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -35,0 +39 @@ class ResyncDateVM(
+@@ -8,0 +12 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.R as DesignR
+@@ -35,0 +40 @@ class ResyncDateVM(
 +    private val sourceEntryId: String? = null,
-@@ -36,0 +41,5 @@ class ResyncDateVM(
+@@ -36,0 +42,5 @@ class ResyncDateVM(
 +    override fun onCleared() {
 +        navigationRouter.discardResultFrom(sourceEntryId)
 +        super.onCleared()
 +    }
 +
-@@ -101 +110,3 @@ class ResyncDateVM(
+@@ -78,0 +89 @@ class ResyncDateVM(
++                contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
+@@ -101 +112,3 @@ class ResyncDateVM(
 -            navigationRouter.forward(ResyncEstimationArgs(uuid = args.uuid, blockHeight = height.value))
 +            navigationRouter.stageResultFrom(sourceEntryId) {
 +                NavigationCommand.Forward(listOf(ResyncEstimationArgs(uuid = args.uuid, blockHeight = height.value)))
 +            }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/estimation/ResyncEstimationVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/estimation/ResyncEstimationVM.kt
+index 5d712be93..0ac0228bb 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/estimation/ResyncEstimationVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/estimation/ResyncEstimationVM.kt
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.R as DesignR
+@@ -84,0 +86 @@ class ResyncEstimationVM(
++                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/height/ResyncHeightVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/height/ResyncHeightVM.kt
-index 47e73ee03..ecb46d18f 100644
+index 47e73ee03..84b1c2eae 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/height/ResyncHeightVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/resync/height/ResyncHeightVM.kt
 @@ -5 +4,0 @@ import androidx.lifecycle.ViewModel
 -import cash.z.ecc.android.sdk.model.BlockHeight
-@@ -9 +7,0 @@ import co.electriccoin.zcash.ui.common.model.LceState
+@@ -7,0 +7 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.R as DesignR
+@@ -9 +8,0 @@ import co.electriccoin.zcash.ui.common.model.LceState
 -import co.electriccoin.zcash.ui.common.model.VersionInfo
-@@ -20,0 +19 @@ import co.electriccoin.zcash.ui.screen.common.BlockHeightState
+@@ -20,0 +20 @@ import co.electriccoin.zcash.ui.screen.common.BlockHeightState
 +import co.electriccoin.zcash.ui.screen.common.birthdayHeightOrNull
-@@ -44,8 +43,2 @@ class ResyncHeightVM(
+@@ -44,8 +44,2 @@ class ResyncHeightVM(
 -    ): BlockHeightState {
 -        val isHigherThanSaplingActivationHeight =
 -            blockHeight.amount
@@ -56902,15 +57044,17 @@ index 47e73ee03..ecb46d18f 100644
 -        return BlockHeightState(
 +    ) =
 +        BlockHeightState(
-@@ -64 +57 @@ class ResyncHeightVM(
+@@ -57,0 +52 @@ class ResyncHeightVM(
++                    contentDescription = stringRes(DesignR.string.accessibility_wallet_birthday_help),
+@@ -64 +59 @@ class ResyncHeightVM(
 -                    isEnabled = isValid && !isConfirming,
 +                    isEnabled = blockHeight.birthdayHeightOrNull() != null && !isConfirming,
-@@ -71 +63,0 @@ class ResyncHeightVM(
+@@ -71 +65,0 @@ class ResyncHeightVM(
 -    }
-@@ -74 +66 @@ class ResyncHeightVM(
+@@ -74 +68 @@ class ResyncHeightVM(
 -        val heightValue = blockHeightText.value.amount?.toLong() ?: return
 +        val height = blockHeightText.value.birthdayHeightOrNull() ?: return
-@@ -76 +68 @@ class ResyncHeightVM(
+@@ -76 +70 @@ class ResyncHeightVM(
 -            confirmResync(BlockHeight.new(heightValue))
 +            confirmResync(height)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt
@@ -59897,29 +60041,30 @@ index 202849dc7..3b0e96ebb 100644
 @@ -11,0 +12 @@ data class SwapSupportState(
 +    val shareQuoteButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
-index 7d4aa2a1c..7c13c2769 100644
+index 7d4aa2a1c..07bf0d4c9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
 @@ -3,0 +4 @@ import androidx.lifecycle.ViewModel
 +import cash.z.ecc.android.sdk.model.AccountUuid
-@@ -7,0 +9,6 @@ import co.electriccoin.zcash.ui.R
+@@ -7,0 +9,7 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.bindReportHandoff
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -11,0 +19 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
+@@ -11,0 +20 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
-@@ -15,0 +24,2 @@ import kotlinx.coroutines.flow.WhileSubscribed
+@@ -15,0 +25,2 @@ import kotlinx.coroutines.flow.WhileSubscribed
 +import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.distinctUntilChanged
-@@ -24,0 +35,4 @@ class SwapSupportVM(
+@@ -24,0 +36,4 @@ class SwapSupportVM(
 +    private val metadataRepository: MetadataRepository,
 +    private val appAccessSession: AppAccessSession,
 +    accountDataSource: AccountDataSource,
 +    private val walletWriteAccess: WalletWriteAccess,
-@@ -25,0 +40,8 @@ class SwapSupportVM(
+@@ -25,0 +41,8 @@ class SwapSupportVM(
 +    private class Selection(val account: AccountUuid?)
 +
 +    private val selectedAccount = accountDataSource.selectedAccount
@@ -59928,7 +60073,7 @@ index 7d4aa2a1c..7c13c2769 100644
 +        .map(::Selection)
 +        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 +
-@@ -29 +51,10 @@ class SwapSupportVM(
+@@ -29 +52,10 @@ class SwapSupportVM(
 -            .map { swapData ->
 +            .combine(appAccessSession.grant) { swapData, grant -> swapData to grant }
 +            .combine(selectedAccount) { (swapData, grant), selection ->
@@ -59940,11 +60085,11 @@ index 7d4aa2a1c..7c13c2769 100644
 +                        selectedAccount.value === selection && walletWriteAccess.permits(token) &&
 +                        appAccessSession.permits(grant)
 +                }
-@@ -36 +67,2 @@ class SwapSupportVM(
+@@ -36 +68,2 @@ class SwapSupportVM(
 -                            onClick = { onReportIssue(swapData) }
 +                            isEnabled = isAllowed(),
 +                            onClick = { onReportIssue(swapData, isAllowed) }
-@@ -38 +70,11 @@ class SwapSupportVM(
+@@ -38 +71,11 @@ class SwapSupportVM(
 -                    onBack = ::onBack
 +                    onBack = ::onBack,
 +                    shareQuoteButton = swapData.savedMetadata
@@ -59957,29 +60102,31 @@ index 7d4aa2a1c..7c13c2769 100644
 +                                onClick = { onShareOriginalQuote(saved, isAllowed) },
 +                            )
 +                        }
-@@ -48 +90,8 @@ class SwapSupportVM(
+@@ -48 +91,10 @@ class SwapSupportVM(
 -    private fun onReportIssue(swapData: SwapData) {
 +    private fun onReportIssue(swapData: SwapData, isAllowed: () -> Boolean) {
++        val canShare = navigationRouter.bindReportHandoff(isAllowed)
 +        viewModelScope.launch {
-+            if (isAllowed() && sendEmailUseCase(swapData, isAllowed)) onBack()
++            if (canShare() && sendEmailUseCase(swapData, canShare) && canShare()) onBack()
 +        }
 +    }
 +
 +    private fun onShareOriginalQuote(expected: TransactionSwapMetadata, isAllowed: () -> Boolean) {
 +        val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
-@@ -50,2 +99,10 @@ class SwapSupportVM(
++        val canShare = navigationRouter.bindReportHandoff(isAllowed)
+@@ -50,2 +102,10 @@ class SwapSupportVM(
 -            sendEmailUseCase.invoke(swapData)
 -            onBack()
-+            if (!isAllowed()) return@launch
++            if (!canShare()) return@launch
 +            val evidence = runCatchingRecoverable {
 +                metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
 +            }.getOrNull() ?: return@launch
-+            if (!isAllowed()) return@launch
++            if (!canShare()) return@launch
 +            val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
 +            if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
 +                selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
 +            ) return@launch
-+            if (isAllowed()) sendEmailUseCase.shareOriginalQuote(evidence)
++            if (canShare()) sendEmailUseCase.shareOriginalQuote(evidence)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
 index f790b0ce7..0d5a4d9ad 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
@@ -60030,40 +60177,42 @@ index 3341e70f0..649f37619 100644
 +                        "If too many " +
 +                        "remain unused, ZEC Private hits a limit and can’t create new ones.",
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVM.kt
-index 727fbbc9a..3b27bdf00 100644
+index 727fbbc9a..33fbe26e4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVM.kt
-@@ -6,0 +7,2 @@ import co.electriccoin.zcash.ui.R
+@@ -6,0 +7,3 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.bindReportHandoff
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -10 +12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -10 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.SharingStarted
-@@ -12 +14,2 @@ import kotlinx.coroutines.flow.StateFlow
+@@ -12 +15,2 @@ import kotlinx.coroutines.flow.StateFlow
 -import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.stateIn
-@@ -18,0 +22,2 @@ class SwapQuoteMismatchVM(
+@@ -18,0 +23,2 @@ class SwapQuoteMismatchVM(
 +    private val appAccessSession: AppAccessSession,
 +    private val walletWriteAccess: WalletWriteAccess,
-@@ -21 +26,2 @@ class SwapQuoteMismatchVM(
+@@ -21 +27,2 @@ class SwapQuoteMismatchVM(
 -        MutableStateFlow<SwapQuoteMismatchState?>(
 +        combine(appAccessSession.grant, walletWriteAccess.version) { grant, token ->
 +            val isAllowed = { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
-@@ -38 +44,2 @@ class SwapQuoteMismatchVM(
+@@ -38 +45,2 @@ class SwapQuoteMismatchVM(
 -                        onClick = ::onReport
 +                        isEnabled = isAllowed(),
 +                        onClick = { onReport(isAllowed) }
-@@ -42 +49 @@ class SwapQuoteMismatchVM(
+@@ -42 +50 @@ class SwapQuoteMismatchVM(
 -        ).asStateFlow()
 +        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-@@ -46 +53 @@ class SwapQuoteMismatchVM(
+@@ -46 +54,2 @@ class SwapQuoteMismatchVM(
 -    private fun onReport() {
 +    private fun onReport(isAllowed: () -> Boolean) {
-@@ -48,2 +55 @@ class SwapQuoteMismatchVM(
++        val canShare = navigationRouter.bindReportHandoff(isAllowed)
+@@ -48,2 +57 @@ class SwapQuoteMismatchVM(
 -            sendEmailUseCase(args)
 -            onBack()
-+            if (isAllowed() && sendEmailUseCase(args, isAllowed)) onBack()
++            if (canShare() && sendEmailUseCase(args, canShare) && canShare()) onBack()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationScreen.kt
 index d0c5cb12f..846a0ab01 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationScreen.kt
@@ -83547,10 +83696,10 @@ index 5479877f8..893932864 100644
 +        }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-index 638b04663..3d56ce6a0 100644
+index 638b04663..1343bf28a 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-@@ -2,0 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,11 @@ package co.electriccoin.zcash.ui.common.usecase
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
 +import cash.z.ecc.android.sdk.model.PersistableWallet
 +import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -83558,19 +83707,102 @@ index 638b04663..3d56ce6a0 100644
 +import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.WalletInitMode
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.ui.LaunchNavigationRequests
++import co.electriccoin.zcash.ui.NavigationCommand
++import co.electriccoin.zcash.ui.NavigationRouterImpl
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-@@ -10,0 +19,3 @@ import io.mockk.verify
+@@ -3,0 +15 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -4,0 +17 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
++import co.electriccoin.zcash.ui.screen.error.ErrorRoute
+@@ -10 +23,5 @@ import io.mockk.mockk
+-import io.mockk.verify
++import kotlin.test.assertFalse
++import kotlin.test.assertIs
 +import kotlin.test.assertEquals
 +import kotlin.test.assertTrue
 +import kotlin.test.Test
-@@ -11,0 +23 @@ import kotlinx.coroutines.CancellationException
+@@ -11,0 +29 @@ import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -12,0 +25 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -12,0 +31 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.flow
-@@ -17,2 +29,0 @@ import kotlinx.coroutines.test.runTest
+@@ -17,2 +35,0 @@ import kotlinx.coroutines.test.runTest
 -import kotlin.test.Test
 -import kotlin.test.assertTrue
-@@ -108,0 +120,59 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -33 +50,3 @@ class ObserveSeedMismatchUseCaseTest {
+-    private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
++    private val navigateToError = NavigateToErrorUseCase(NavigationRouterImpl())
++    private val launchNavigation = LaunchNavigationRequests()
++    private val walletWriteAccess = WalletWriteAccess()
+@@ -39,0 +59,2 @@ class ObserveSeedMismatchUseCaseTest {
++            launchNavigation = launchNavigation,
++            walletWriteAccess = walletWriteAccess,
+@@ -70 +91 @@ class ObserveSeedMismatchUseCaseTest {
+-            verify(exactly = 0) { navigateToError(any(), any()) }
++            assertTrue(launchNavigation.changes.value.isEmpty())
+@@ -74,6 +95,5 @@ class ObserveSeedMismatchUseCaseTest {
+-    fun terminalFailureRoutesToNavigateToError() =
+-        runTest {
+-            val exception = SeedMismatchRecoveryException(3)
+-            coEvery { recoverFromSeedMismatch() } throws exception
+-            backgroundScope.launch { useCase() }
+-            runCurrent()
++    fun terminalFailureWaitsForWalletAccessAndSuccessfulNavigation() = runTest {
++        val exception = SeedMismatchRecoveryException(3)
++        coEvery { recoverFromSeedMismatch() } throws exception
++        backgroundScope.launch { useCase() }
++        runCurrent()
+@@ -81,2 +101,27 @@ class ObserveSeedMismatchUseCaseTest {
+-            isSeedMismatchState.value = true
+-            runCurrent()
++        isSeedMismatchState.value = true
++        runCurrent()
++        isSeedMismatchState.value = false
++        var unlocked = false
++        var attempts = 0
++        var accepts = false
++        suspend fun tryDelivery() = launchNavigation.deliver(
++            walletReady = true, hasAppAccess = { unlocked },
++        ) { command, current ->
++            assertTrue(current())
++            val error = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
++            assertEquals(ErrorArgs.General(exception), navigateToError.argsFor(error))
++            attempts++
++            accepts
++        }
++
++        tryDelivery()
++        assertEquals(0, attempts)
++        unlocked = true
++        tryDelivery()
++        assertFalse(launchNavigation.changes.value.isEmpty())
++        accepts = true
++        tryDelivery()
++        tryDelivery()
++        assertEquals(2, attempts)
++        assertTrue(launchNavigation.changes.value.isEmpty())
++    }
+@@ -84 +129,12 @@ class ObserveSeedMismatchUseCaseTest {
+-            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
++    @Test
++    fun resetInvalidatesARecoveryErrorThatHasNotReachedTheWallet() = runTest {
++        coEvery { recoverFromSeedMismatch() } throws SeedMismatchRecoveryException(3)
++        backgroundScope.launch { useCase() }
++        runCurrent()
++        isSeedMismatchState.value = true
++        runCurrent()
++        assertFalse(launchNavigation.changes.value.isEmpty())
++        walletWriteAccess.beginReset()
++
++        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
++            error("A previous wallet's failure must not be presented")
+@@ -85,0 +142,2 @@ class ObserveSeedMismatchUseCaseTest {
++        assertTrue(launchNavigation.changes.value.isEmpty())
++    }
+@@ -107 +165 @@ class ObserveSeedMismatchUseCaseTest {
+-            verify(exactly = 0) { navigateToError(any(), any()) }
++            assertTrue(launchNavigation.changes.value.isEmpty())
+@@ -108,0 +167,61 @@ class ObserveSeedMismatchUseCaseTest {
 +
 +    @Test
 +    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
@@ -83597,7 +83829,9 @@ index 638b04663..3d56ce6a0 100644
 +        )
 +        val wallet = RecoveryWallet(initial)
 +        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator)
-+        val observe = ObserveSeedMismatchUseCase(synchronizer, recover, mockk())
++        val observe = ObserveSeedMismatchUseCase(
++            synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
++        )
 +        backgroundScope.launch { observe() }
 +        runCurrent()
 +
@@ -87054,14 +87288,15 @@ index 1d445dd11..61c8436c5 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..124a426b4
+index 000000000..c8fe989ff
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,534 @@
+@@ -0,0 +1,575 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
 +import androidx.lifecycle.ViewModelStore
++import androidx.navigation.NavBackStackEntry
 +import androidx.navigation.NavHostController
 +import androidx.navigation.compose.ComposeNavigator
 +import androidx.navigation.compose.composable
@@ -87075,6 +87310,8 @@ index 000000000..124a426b4
 +import cash.z.ecc.android.sdk.model.ZecSend
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.type.AddressType
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
++import co.electriccoin.zcash.ui.NavigationCommand
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -87085,6 +87322,7 @@ index 000000000..124a426b4
 +import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
@@ -87146,6 +87384,7 @@ index 000000000..124a426b4
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
 +import kotlin.test.assertSame
++import kotlin.test.assertTrue
 +
 +@RunWith(RobolectricTestRunner::class)
 +@Config(sdk = [34])
@@ -87403,6 +87642,42 @@ index 000000000..124a426b4
 +        for (entry in logs) {
 +            assertFalse(request.zip321Uri in entry.msg)
 +            assertFalse(sentinel in entry.throwable?.stackTraceToString().orEmpty())
++        }
++    }
++
++    @Test
++    fun deferredZip321FallbackRechecksTheWalletBeforePrefillingOrShowingAnError() = runTest {
++        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws
++            IllegalStateException("synthetic proposal failure")
++        for (memo in listOf(fixture.TEXT.encodeToByteArray(), fixture.binary)) {
++            val wallet = WalletWriteAccess()
++            val entry = mockk<NavBackStackEntry> { every { id } returns "scanner" }
++            var queued: NavigationCommand.ForEntry? = null
++            val guarded = mockk<NavigationRouter>(relaxed = true) {
++                every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("scanner", null))
++                every { custom(any()) } answers {
++                    val createCommand = firstArg<(NavBackStackEntry?) -> NavigationCommand?>()
++                    queued = createCommand(entry) as? NavigationCommand.ForEntry
++                }
++            }
++            val fallback = OnZip321ScannedUseCase(
++                review = paymentReviewFixture(accounts, guarded, repository, wallet = wallet),
++                navigationRouter = guarded,
++                prefillSend = prefill,
++                navigateToErrorUseCase = NavigateToErrorUseCase(guarded),
++            )
++            var delivered: Boolean? = null
++            val operation = launch {
++                delivered = fallback(parse(memo), ScanArgs(ScanFlow.HOMEPAGE), "scanner")
++            }
++            runCurrent()
++            val command = assertNotNull(queued)
++            assertTrue(command.isStillAllowed())
++            wallet.beginReset()
++            assertFalse(command.isStillAllowed())
++            command.acknowledge(false)
++            operation.join()
++            assertEquals(false, delivered)
 +        }
 +    }
 +
@@ -89448,10 +89723,10 @@ index 000000000..12197a153
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
 new file mode 100644
-index 000000000..f107f2a63
+index 000000000..fa729da2e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,344 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -89549,7 +89824,10 @@ index 000000000..f107f2a63
 +    @Test
 +    fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
 +        createViewModel()
-+        val checkbox = assertNotNull(vm.state.value.content).checkboxState
++        val state = assertNotNull(vm.state.value.content)
++        state.buttonState.onClick()
++        val confirmation = assertNotNull(vm.state.value.content?.confirmationDialog)
++        val checkbox = state.checkboxState
 +        val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
 +        val context = RuntimeEnvironment.getApplication()
 +
@@ -89557,8 +89835,15 @@ index 000000000..f107f2a63
 +            val configuration = Configuration(context.resources.configuration).apply {
 +                setLocale(Locale.forLanguageTag(language))
 +            }
-+            val text = context.createConfigurationContext(configuration).getString(warning.resource)
++            val localized = context.createConfigurationContext(configuration)
++            val text = localized.getString(warning.resource)
 +            assertTrue(text.contains(allWallets) && text.contains("Android"))
++            val advice = localized.getString(R.string.deleteWallet_message2)
++            val restore = localized.getString(R.string.deleteWallet_message4)
++            val final = localized.getString(assertIs<StringResource.ByResource>(confirmation.message).resource)
++            assertTrue(advice.contains(if (language == "en") "If you know" else "Si conoces"))
++            assertTrue(restore.contains("software") && restore.contains("hardware"))
++            assertTrue(final.contains(if (language == "en") "restore your wallets" else "restaurar tus billeteras"))
 +        }
 +    }
 +
@@ -93852,12 +94137,13 @@ index 8a8f44aa3..a9696976f 100644
 +        return vm
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
 new file mode 100644
-index 000000000..a21b992a7
+index 000000000..9b68949e5
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/height/RestoreHeightBoundaryReviewTest.kt
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,292 @@
 +package co.electriccoin.zcash.ui.screen.restore.height
 +
++import android.app.Application
 +import androidx.lifecycle.ViewModel
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -93872,6 +94158,14 @@ index 000000000..a21b992a7
 +import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
++import co.electriccoin.zcash.ui.common.usecase.GetResyncDataFromHeightUseCase
++import co.electriccoin.zcash.ui.design.R as DesignR
++import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
++import co.electriccoin.zcash.ui.screen.resync.date.ResyncDateArgs
++import co.electriccoin.zcash.ui.screen.resync.date.ResyncDateVM
++import co.electriccoin.zcash.ui.screen.resync.estimation.ResyncEstimationArgs
++import co.electriccoin.zcash.ui.screen.resync.estimation.ResyncEstimationVM
++import java.time.YearMonth
 +import co.electriccoin.zcash.ui.common.usecase.ResyncErrorMapperUseCase
 +import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 +import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
@@ -93982,6 +94276,36 @@ index 000000000..a21b992a7
 +                coVerify(exactly = 1) { synchronizer.rewindToNearestHeight(BlockHeight.new(expected)) }
 +            }
 +        }
++    }
++
++    @Test
++    fun resyncBirthdayStepsNameAndOpenTheSameHelpAction() = runTest {
++        val resyncDate = mockk<GetResyncDataFromHeightUseCase> {
++            coEvery { this@mockk(any<BlockHeight>()) } returns YearMonth.of(2020, 4)
++        }
++        val errors = ResyncErrorMapperUseCase(errorMapper)
++        val date = ResyncDateVM(ResyncDateArgs("resync", target), router, mockk<Application>(), resyncDate, errors)
++        val estimate = ResyncEstimationVM(
++            ResyncEstimationArgs("resync", target), router, mockk(), resyncDate, mockk(), errors,
++        )
++        val height = ResyncHeightVM(router, mockk(), errors)
++        val name = stringRes(DesignR.string.accessibility_wallet_birthday_help)
++        observe(date, date.state) {
++            val button = assertNotNull(date.state.value.content).dialogButton
++            assertEquals(name, button.contentDescription)
++            button.onClick()
++        }
++        observe(estimate, estimate.state) {
++            val button = assertNotNull(estimate.state.value.content).dialogButton
++            assertEquals(name, button.contentDescription)
++            button.onClick()
++        }
++        observe(height, height.state) {
++            val button = assertNotNull(height.state.value.content).dialogButton
++            assertEquals(name, button.contentDescription)
++            button.onClick()
++        }
++        verify(exactly = 3) { router.forward(HeightInfoArgs) }
 +    }
 +
 +    @Test
@@ -97944,10 +98268,10 @@ index 000000000..38487460e
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
 new file mode 100644
-index 000000000..9b874a5b0
+index 000000000..af7d3c555
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,499 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail.support
 +
 +import android.content.Intent
@@ -97955,6 +98279,7 @@ index 000000000..9b874a5b0
 +import cash.z.ecc.android.sdk.model.Account
 +import cash.z.ecc.android.sdk.model.AccountUuid
 +import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -98064,7 +98389,7 @@ index 000000000..9b874a5b0
 +        val getStatus = mockk<GetSwapStatusUseCase> {
 +            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData())
 +        }
-+        val navigation = mockk<NavigationRouter>()
++        val navigation = reportNavigation()
 +        val share = mockk<SendEmailUseCase>()
 +        val vm = SwapSupportVM(
 +            SwapSupportArgs(saved.depositAddress),
@@ -98168,7 +98493,7 @@ index 000000000..9b874a5b0
 +
 +    @Test
 +    fun pendingGenericReportRequiresTheOriginalGrantAccountAndWallet() = runTest {
-+        for (revoke in listOf("relock", "account", "wallet")) assertRevokedReport(revoke)
++        for (revoke in listOf("relock", "account", "wallet", "entry", "background")) assertRevokedReport(revoke)
 +    }
 +
 +    private suspend fun TestScope.assertRevokedReport(revoke: String) {
@@ -98192,7 +98517,8 @@ index 000000000..9b874a5b0
 +        val getStatus = mockk<GetSwapStatusUseCase> {
 +            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
 +        }
-+        val navigation = mockk<NavigationRouter>(relaxed = true)
++        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("support", null))
++        val navigation = reportNavigation(entry)
 +        val session = AppAccessSession().apply { unlock() }
 +        val vm = SwapSupportVM(
 +            SwapSupportArgs(saved.depositAddress),
@@ -98217,6 +98543,8 @@ index 000000000..9b874a5b0
 +                }
 +                "account" -> selection.value = reportOwner(1)
 +                "wallet" -> writeAccess.beginReset()
++                "entry" -> entry.value = ActiveNavigationEntry("another-screen", null)
++                "background" -> entry.value = entry.value?.copy(hostResumed = false)
 +            }
 +            runCurrent()
 +            releaseDiagnostics.complete(Unit)
@@ -98241,7 +98569,7 @@ index 000000000..9b874a5b0
 +            }
 +        }
 +        val session = AppAccessSession().apply { unlock() }
-+        val navigation = mockk<NavigationRouter>(relaxed = true)
++        val navigation = reportNavigation()
 +        val vm = SwapQuoteMismatchVM(
 +            SwapQuoteMismatchArgs(
 +                provider = "near", mode = SwapMode.FLEX_INPUT,
@@ -98322,7 +98650,7 @@ index 000000000..9b874a5b0
 +        val vm = SwapSupportVM(
 +            SwapSupportArgs(saved.depositAddress),
 +            GetReloadableSwapQuoteUseCase(getStatus),
-+            mockk(relaxed = true),
++            reportNavigation(),
 +            share,
 +            metadata,
 +            session,
@@ -98339,6 +98667,12 @@ index 000000000..9b874a5b0
 +            subscription.cancel()
 +            vm.viewModelScope.cancel()
 +        }
++    }
++
++    private fun reportNavigation(
++        entry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(ActiveNavigationEntry("support", null)),
++    ) = mockk<NavigationRouter>(relaxed = true) {
++        every { activeEntry } returns entry
 +    }
 +
 +    private fun reportOwner(id: Byte) = mockk<ZodlAccount> {
@@ -98370,7 +98704,7 @@ index 000000000..9b874a5b0
 +        val getStatus = mockk<GetSwapStatusUseCase> {
 +            every { observe(saved.depositAddress) } returns statusFlow
 +        }
-+        val navigation = mockk<NavigationRouter>()
++        val navigation = reportNavigation()
 +        var launchedOnBack: Intent? = null
 +        every { navigation.back() } answers {
 +            launchedOnBack = shadowOf(application).nextStartedActivity
@@ -98444,23 +98778,34 @@ index 0a332b470..4f80b80ae 100644
 @@ -98,0 +99 @@ class EphemeralLockVMTest {
 +                    keystoneProposalRepository = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVMTest.kt
-index c7e01026d..88e5e6ebe 100644
+index c7e01026d..71c5cd849 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/mismatch/SwapQuoteMismatchVMTest.kt
-@@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.R
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.swap.mismatch
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
+@@ -4,0 +6,2 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -8,0 +11 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -8,0 +12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import io.mockk.coEvery
-@@ -81 +84 @@ class SwapQuoteMismatchVMTest {
+@@ -9,0 +14 @@ import io.mockk.coVerify
++import io.mockk.every
+@@ -13,0 +19 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -30 +36,3 @@ class SwapQuoteMismatchVMTest {
+-    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
++    private val navigationRouter = mockk<NavigationRouter>(relaxed = true) {
++        every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("mismatch", null))
++    }
+@@ -81 +89 @@ class SwapQuoteMismatchVMTest {
 -        coVerify(exactly = 0) { sendEmailUseCase(ofType<SwapQuoteMismatchArgs>()) }
 +        coVerify(exactly = 0) { sendEmailUseCase(ofType<SwapQuoteMismatchArgs>(), any()) }
-@@ -93,0 +97 @@ class SwapQuoteMismatchVMTest {
+@@ -93,0 +102 @@ class SwapQuoteMismatchVMTest {
 +            coEvery { sendEmailUseCase(args, any()) } returns true
-@@ -99 +103 @@ class SwapQuoteMismatchVMTest {
+@@ -99 +108 @@ class SwapQuoteMismatchVMTest {
 -            coVerify(exactly = 1) { sendEmailUseCase(args) }
 +            coVerify(exactly = 1) { sendEmailUseCase(args, any()) }
-@@ -107 +111,3 @@ class SwapQuoteMismatchVMTest {
+@@ -107 +116,3 @@ class SwapQuoteMismatchVMTest {
 -            sendEmailUseCase = sendEmailUseCase
 +            sendEmailUseCase = sendEmailUseCase,
 +            appAccessSession = AppAccessSession().apply { unlock() },

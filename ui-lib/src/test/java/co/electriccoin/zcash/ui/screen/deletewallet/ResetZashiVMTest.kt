@@ -95,7 +95,10 @@ class ResetZashiVMTest {
     @Test
     fun spanishAndEnglishResetConsentBothNameAllWalletsAndAndroidBackups() {
         createViewModel()
-        val checkbox = assertNotNull(vm.state.value.content).checkboxState
+        val state = assertNotNull(vm.state.value.content)
+        state.buttonState.onClick()
+        val confirmation = assertNotNull(vm.state.value.content?.confirmationDialog)
+        val checkbox = state.checkboxState
         val warning = assertIs<StringResource.ByResource>(checkbox.subtitle)
         val context = RuntimeEnvironment.getApplication()
 
@@ -103,8 +106,15 @@ class ResetZashiVMTest {
             val configuration = Configuration(context.resources.configuration).apply {
                 setLocale(Locale.forLanguageTag(language))
             }
-            val text = context.createConfigurationContext(configuration).getString(warning.resource)
+            val localized = context.createConfigurationContext(configuration)
+            val text = localized.getString(warning.resource)
             assertTrue(text.contains(allWallets) && text.contains("Android"))
+            val advice = localized.getString(R.string.deleteWallet_message2)
+            val restore = localized.getString(R.string.deleteWallet_message4)
+            val final = localized.getString(assertIs<StringResource.ByResource>(confirmation.message).resource)
+            assertTrue(advice.contains(if (language == "en") "If you know" else "Si conoces"))
+            assertTrue(restore.contains("software") && restore.contains("hardware"))
+            assertTrue(final.contains(if (language == "en") "restore your wallets" else "restaurar tus billeteras"))
         }
     }
 

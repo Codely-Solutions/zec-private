@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.spackle.Twig
+import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import kotlinx.coroutines.CancellationException
@@ -17,6 +19,8 @@ class ObserveSeedMismatchUseCase(
     private val synchronizerProvider: SynchronizerProvider,
     private val recoverFromSeedMismatch: RecoverFromSeedMismatchUseCase,
     private val navigateToError: NavigateToErrorUseCase,
+    private val launchNavigation: LaunchNavigationRequests,
+    private val walletWriteAccess: WalletWriteAccess,
 ) {
     suspend operator fun invoke() {
         // The SDK clears the flag as it enters the recovery lockout.
@@ -26,13 +30,19 @@ class ObserveSeedMismatchUseCase(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun runRecovery() {
+        val token = walletWriteAccess.token()
+        val stillApplies = { walletWriteAccess.permits(token) }
+        if (!stillApplies()) return
         try {
             recoverFromSeedMismatch()
+            if (stillApplies()) launchNavigation.clearSeedRecoveryError()
         } catch (e: CancellationException) {
             throw e
         } catch (e: SeedMismatchRecoveryException) {
             Twig.error(e) { "Seed-mismatch recovery failed, retries exhausted" }
-            navigateToError(ErrorArgs.General(e))
+            if (stillApplies()) {
+                launchNavigation.requestSeedRecoveryError(navigateToError.stage(ErrorArgs.General(e)), stillApplies)
+            }
         } catch (e: Exception) {
             Twig.error(e) { "Seed-mismatch recovery failed" }
         }

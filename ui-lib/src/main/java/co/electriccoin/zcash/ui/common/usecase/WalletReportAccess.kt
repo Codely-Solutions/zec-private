@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.bindReportHandoff
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import kotlinx.coroutines.CoroutineScope
@@ -23,10 +24,8 @@ class WalletReportAccess(
         return { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
     }
 
-    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean {
-        val source = navigationRouter.activeEntry.value?.id
-        return { source != null && navigationRouter.activeEntry.value?.id == source && allowed() }
-    }
+    internal fun bindToCurrentEntry(allowed: () -> Boolean): () -> Boolean =
+        navigationRouter.bindReportHandoff(allowed)
 
     internal fun bind(scope: CoroutineScope): () -> (() -> Boolean) {
         val token = walletWriteAccess.token()

@@ -80,7 +80,16 @@ data class ActiveNavigationEntry(
     val refundWarningRequestId: String? = null,
     val genericScanRequestId: String? = null,
     val contentEntryId: String? = id,
+    val hostResumed: Boolean = true,
 )
+
+internal fun NavigationRouter.bindReportHandoff(allowed: () -> Boolean): () -> Boolean {
+    val owner = activeEntry.value?.takeIf { it.hostResumed }?.id
+    return {
+        val current = activeEntry.value
+        owner != null && current != null && current.id == owner && current.hostResumed && allowed()
+    }
+}
 
 interface ActiveNavigationEntryObserver {
     fun update(entry: ActiveNavigationEntry?)

@@ -7,15 +7,21 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+import co.electriccoin.zcash.ui.LaunchNavigationRequests
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.NavigationRouterImpl
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.Test
@@ -41,13 +47,17 @@ class ObserveSeedMismatchUseCaseTest {
             every { isSeedMismatch } returns isSeedMismatchState
         }
     private val recoverFromSeedMismatch = mockk<RecoverFromSeedMismatchUseCase>()
-    private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
+    private val navigateToError = NavigateToErrorUseCase(NavigationRouterImpl())
+    private val launchNavigation = LaunchNavigationRequests()
+    private val walletWriteAccess = WalletWriteAccess()
 
     private val useCase =
         ObserveSeedMismatchUseCase(
             synchronizerProvider = synchronizerProvider,
             recoverFromSeedMismatch = recoverFromSeedMismatch,
             navigateToError = navigateToError,
+            launchNavigation = launchNavigation,
+            walletWriteAccess = walletWriteAccess,
         )
 
     @Test
@@ -78,22 +88,59 @@ class ObserveSeedMismatchUseCaseTest {
             runCurrent()
 
             coVerify(exactly = 2) { recoverFromSeedMismatch() }
-            verify(exactly = 0) { navigateToError(any(), any()) }
+            assertTrue(launchNavigation.changes.value.isEmpty())
         }
 
     @Test
-    fun terminalFailureRoutesToNavigateToError() =
-        runTest {
-            val exception = SeedMismatchRecoveryException(3)
-            coEvery { recoverFromSeedMismatch() } throws exception
-            backgroundScope.launch { useCase() }
-            runCurrent()
+    fun terminalFailureWaitsForWalletAccessAndSuccessfulNavigation() = runTest {
+        val exception = SeedMismatchRecoveryException(3)
+        coEvery { recoverFromSeedMismatch() } throws exception
+        backgroundScope.launch { useCase() }
+        runCurrent()
 
-            isSeedMismatchState.value = true
-            runCurrent()
-
-            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
+        isSeedMismatchState.value = true
+        runCurrent()
+        isSeedMismatchState.value = false
+        var unlocked = false
+        var attempts = 0
+        var accepts = false
+        suspend fun tryDelivery() = launchNavigation.deliver(
+            walletReady = true, hasAppAccess = { unlocked },
+        ) { command, current ->
+            assertTrue(current())
+            val error = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
+            assertEquals(ErrorArgs.General(exception), navigateToError.argsFor(error))
+            attempts++
+            accepts
         }
+
+        tryDelivery()
+        assertEquals(0, attempts)
+        unlocked = true
+        tryDelivery()
+        assertFalse(launchNavigation.changes.value.isEmpty())
+        accepts = true
+        tryDelivery()
+        tryDelivery()
+        assertEquals(2, attempts)
+        assertTrue(launchNavigation.changes.value.isEmpty())
+    }
+
+    @Test
+    fun resetInvalidatesARecoveryErrorThatHasNotReachedTheWallet() = runTest {
+        coEvery { recoverFromSeedMismatch() } throws SeedMismatchRecoveryException(3)
+        backgroundScope.launch { useCase() }
+        runCurrent()
+        isSeedMismatchState.value = true
+        runCurrent()
+        assertFalse(launchNavigation.changes.value.isEmpty())
+        walletWriteAccess.beginReset()
+
+        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
+            error("A previous wallet's failure must not be presented")
+        }
+        assertTrue(launchNavigation.changes.value.isEmpty())
+    }
 
     /**
      * The collector's coroutine is cancelled by the propagated [CancellationException], so unlike
@@ -115,7 +162,7 @@ class ObserveSeedMismatchUseCaseTest {
 
             assertTrue(job.isCancelled)
             coVerify(exactly = 1) { recoverFromSeedMismatch() }
-            verify(exactly = 0) { navigateToError(any(), any()) }
+            assertTrue(launchNavigation.changes.value.isEmpty())
         }
 
     @Test
@@ -143,7 +190,9 @@ class ObserveSeedMismatchUseCaseTest {
         )
         val wallet = RecoveryWallet(initial)
         val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator)
-        val observe = ObserveSeedMismatchUseCase(synchronizer, recover, mockk())
+        val observe = ObserveSeedMismatchUseCase(
+            synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
+        )
         backgroundScope.launch { observe() }
         runCurrent()
 

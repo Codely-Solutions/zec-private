@@ -297,12 +297,12 @@
 
     <!-- ===== delete_wallet ===== -->
     <string name="deleteWallet_title">Reset ZEC Private</string>
-    <string name="deleteWallet_message2">Make sure you have both your secret recovery phrase and wallet birthday height saved before you proceed.</string>
+    <string name="deleteWallet_message2">Save your software wallet’s secret recovery phrase. If you know its birthday height, save that too.</string>
     <string name="delete_wallet_text_2">Resetting the ZEC Private app will delete the ZEC Private database and cache, and will disconnect all connected hardware wallets.</string>
-    <string name="deleteWallet_message4">Once you Reset ZEC Private, the only way to access your funds is through a wallet restore process that requires your ZEC Private Recovery Phrase and Wallet Birthday Height.</string>
+    <string name="deleteWallet_message4">Restore software wallets with their recovery phrases. Reconnect hardware wallets with their devices.</string>
     <string name="deleteWallet_metadataWarn1">Keep encrypted contacts, notes, bookmarks and swap/payment details on this device.</string>
     <string name="deleteWallet_metadataWarn2">Turning this off removes local backups for all wallets. Copies held by Android backup services are outside this reset.</string>
-    <string name="deleteWallet_sheet_msg">Resetting the app cannot be undone. You will need to restore your wallet using your secret recovery phrase.</string>
+    <string name="deleteWallet_sheet_msg">Resetting the app cannot be undone. Make sure you have what you need to restore your wallets.</string>
     <string name="deleteWallet_actionButtonTitle">Reset ZEC Private</string>
     <string name="delete_wallet_failed">Wallet deletion failed. Try it again, please.</string>
 
@@ -1312,7 +1312,7 @@
     <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
     <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
     <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
-    <string name="migrationComplete_residueTitle">You’ve moved to Ironwood</string>
+    <string name="migrationComplete_residueTitle">Small Orchard balance</string>
     <string name="migrationComplete_residueSubtitle">A small balance is still sitting in Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">In Ironwood</string>
     <string name="migrationComplete_leftInOrchardLabel">Left in Orchard</string>

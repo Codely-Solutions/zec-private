@@ -73,7 +73,7 @@ data class MigrationCompleteState(
     val isMigrating: Boolean = false,
     val isLocking: Boolean = false,
     // MOB-1750: true for a small leftover Orchard balance not tied to an unseen in-app migration
-    // celebration ("You've moved to Ironwood" copy, no Transfers/Duration rows) — false for the
+    // celebration (no Transfers/Duration rows) — false for the
     // original post-migration celebration variant ("Migration Complete"), unchanged.
     val isResidueOnly: Boolean = false,
 )

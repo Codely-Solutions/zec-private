@@ -141,6 +141,74 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'exact recorded pair'):
                 retained_hosted_pair(tag, core, archive, root)
 
+    def test_local_fixture_preservation_resumes_after_upload_acknowledgment_is_lost(self):
+        import subprocess
+        from preserve_upgrade_fixture import preserve
+        from test_support import patch_environment
+
+        tag, source = 'v3.19.0-private.30', 'a' * 40
+        payloads = {'app.apk': b'accepted app', 'app-androidTest.apk': b'accepted test'}
+        core = dict(build_source_sha=source, candidate_version_code=330, artifact_id=5, workflow_run_id=7,
+                    candidate_apk_sha256=hashlib.sha256(payloads['app.apk']).hexdigest(),
+                    instrumentation_apk_sha256=hashlib.sha256(payloads['app-androidTest.apk']).hexdigest())
+        assets = {}
+        uploads = []
+        downloads = []
+        draft_id = 10
+
+        def gh(*args):
+            if args[0] == 'release':
+                file = Path(args[-1])
+                self.assertNotIn(file.name, assets)
+                raw = file.read_bytes()
+                assets[file.name] = (dict(name=file.name, id=len(assets) + 1, state='uploaded', size=len(raw),
+                                          digest='sha256:' + hashlib.sha256(raw).hexdigest()), raw)
+                uploads.append(file.name)
+                if len(uploads) == 1:
+                    raise subprocess.CalledProcessError(1, ['gh', 'release', 'upload'])
+                return b''
+            requested = int(args[-1].split('/')[-1])
+            downloads.append(requested)
+            return next(raw for details, raw in assets.values() if details['id'] == requested)
+
+        def api(path):
+            if path == 'releases/' + str(draft_id):
+                return dict(id=draft_id, draft=True, tag_name='maintenance-fixtures',
+                            assets=[details for details, _ in assets.values()])
+            self.assertEqual(path, 'releases/tags/' + tag)
+            return {'tag_name': tag}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/maintenance-assets.json').write_text(json.dumps(dict(draft_release_id=draft_id, fixtures={})))
+            with patch('preserve_upgrade_fixture.ROOT', root), \
+                    patch('hosted_fixture.recorded_pair', return_value=({'source_sha': source}, core)), \
+                    patch('preserve_upgrade_fixture.require_recorded_public_release'), \
+                    patch('preserve_upgrade_fixture.api', side_effect=api), \
+                    patch('preserve_upgrade_fixture.gh', side_effect=gh), \
+                    patch('preserve_upgrade_fixture.original_pair', return_value=payloads) as original:
+                for attempt in range(4):
+                    output = root / str(attempt)
+                    output.mkdir()
+                    with patch_environment({'CODEX_GUARD_OUTPUT': str(output)}):
+                        if attempt == 0:
+                            with self.assertRaises(subprocess.CalledProcessError):
+                                preserve(tag)
+                        elif attempt == 3:
+                            details, raw = assets[uploads[1]]
+                            changed = raw.replace(b'"version_code": 330', b'"version_code": 331')
+                            assets[uploads[1]] = (dict(details, digest='sha256:' + hashlib.sha256(changed).hexdigest()), changed)
+                            with self.assertRaisesRegex(ValueError, 'differs from verified provenance'):
+                                preserve(tag)
+                        else:
+                            preserve(tag)
+                            receipt = json.loads((output / 'fixture-preservation.json').read_text())
+                            self.assertEqual({1, 2}, {item['release_asset_id'] for item in receipt['assets'].values()})
+                original.assert_called_once_with(core)
+        self.assertEqual(2, len(uploads))
+        self.assertEqual([1, 2, 1, 2, 1, 2], downloads)
+
     def test_hosted_pair_is_deterministic_and_rejects_unexpected_contents(self):
         from hosted_fixture import verify_pair
         from preserve_upgrade_fixture import write_seedless_pair

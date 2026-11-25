@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.swap.mismatch
 
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -10,10 +11,12 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -30,7 +33,9 @@ import kotlin.test.assertNotNull
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwapQuoteMismatchVMTest {
-    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+    private val navigationRouter = mockk<NavigationRouter>(relaxed = true) {
+        every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("mismatch", null))
+    }
     private val sendEmailUseCase = mockk<SendEmailUseCase>(relaxed = true)
 
     private val args =

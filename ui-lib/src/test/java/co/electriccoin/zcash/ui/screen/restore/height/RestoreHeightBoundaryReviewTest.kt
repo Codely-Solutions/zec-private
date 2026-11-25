@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.restore.height
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.Synchronizer
@@ -14,6 +15,14 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetResyncDataFromHeightUseCase
+import co.electriccoin.zcash.ui.design.R as DesignR
+import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
+import co.electriccoin.zcash.ui.screen.resync.date.ResyncDateArgs
+import co.electriccoin.zcash.ui.screen.resync.date.ResyncDateVM
+import co.electriccoin.zcash.ui.screen.resync.estimation.ResyncEstimationArgs
+import co.electriccoin.zcash.ui.screen.resync.estimation.ResyncEstimationVM
+import java.time.YearMonth
 import co.electriccoin.zcash.ui.common.usecase.ResyncErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
@@ -124,6 +133,36 @@ class RestoreHeightBoundaryReviewTest {
                 coVerify(exactly = 1) { synchronizer.rewindToNearestHeight(BlockHeight.new(expected)) }
             }
         }
+    }
+
+    @Test
+    fun resyncBirthdayStepsNameAndOpenTheSameHelpAction() = runTest {
+        val resyncDate = mockk<GetResyncDataFromHeightUseCase> {
+            coEvery { this@mockk(any<BlockHeight>()) } returns YearMonth.of(2020, 4)
+        }
+        val errors = ResyncErrorMapperUseCase(errorMapper)
+        val date = ResyncDateVM(ResyncDateArgs("resync", target), router, mockk<Application>(), resyncDate, errors)
+        val estimate = ResyncEstimationVM(
+            ResyncEstimationArgs("resync", target), router, mockk(), resyncDate, mockk(), errors,
+        )
+        val height = ResyncHeightVM(router, mockk(), errors)
+        val name = stringRes(DesignR.string.accessibility_wallet_birthday_help)
+        observe(date, date.state) {
+            val button = assertNotNull(date.state.value.content).dialogButton
+            assertEquals(name, button.contentDescription)
+            button.onClick()
+        }
+        observe(estimate, estimate.state) {
+            val button = assertNotNull(estimate.state.value.content).dialogButton
+            assertEquals(name, button.contentDescription)
+            button.onClick()
+        }
+        observe(height, height.state) {
+            val button = assertNotNull(height.state.value.content).dialogButton
+            assertEquals(name, button.contentDescription)
+            button.onClick()
+        }
+        verify(exactly = 3) { router.forward(HeightInfoArgs) }
     }
 
     @Test

@@ -162,12 +162,12 @@ class MigrationHomeMessageSourceImpl(
             // Kris Nuttycombe's per-note dust total (Slack, MOB-1750 follow-up): sum of each
             // spendable Orchard note's value net of MARGINAL_FEE, not the raw aggregate
             // balance — a wallet can hold a raw balance above dustThreshold made up entirely
-            // of notes too small individually to be worth spending. Falls back to the raw
-            // balance (old behavior) if the SDK call fails, same guard shape as dustThreshold.
+            // of notes too small individually to be worth spending. A failed read
+            // leaves eligibility unknown, so the balance-driven prompts wait.
             val orchardBalanceZatoshi = orchardBalance?.value
             val migratableOrchardTotal =
                 runCatching { getOrchardMigrationSdk(accountKeyId)?.migratableOrchardTotal() }
-                    .getOrNull() ?: (orchardBalanceZatoshi ?: 0L)
+                    .getOrNull()
             migrationMessageFor(
                 sdkState = sdkState,
                 snapshot = snapshot,
@@ -427,7 +427,7 @@ internal fun migrationMessageFor(
     snapshot: LiveMigrationSnapshot?,
     hasSeenComplete: Boolean,
     orchardBalanceZatoshi: Long?,
-    migratableOrchardTotalZatoshi: Long = orchardBalanceZatoshi ?: 0L,
+    migratableOrchardTotalZatoshi: Long? = orchardBalanceZatoshi,
     dustThresholdZatoshi: Long = MIGRATION_DUST_THRESHOLD_ZATOSHI,
     isFullySynced: Boolean = true,
     isBackgroundExecutionAvailable: Boolean = true,
@@ -439,6 +439,7 @@ internal fun migrationMessageFor(
     supportsNewMigration: Boolean = true,
 ): MigrationHomeMessageData? {
     val next = snapshot?.nextPending
+    val eligible = migratableOrchardTotalZatoshi ?: 0L
     // A RequiresAttention state WITH live run statuses is still a mid-run condition (e.g. the
     // transient SyncRequiredBeforeNext) — the balance-driven residue/required branches below must
     // not fire over it (the old plan-cache equivalent was their `plan == null` guard). With no
@@ -526,7 +527,7 @@ internal fun migrationMessageFor(
         !midRunAttention &&
             isFullySynced &&
             orchardBalanceZatoshi != null &&
-            migratableOrchardTotalZatoshi > dustThresholdZatoshi &&
+            eligible > dustThresholdZatoshi &&
             orchardBalanceZatoshi < MIGRATION_RESIDUAL_MIN_ZATOSHI -> {
             MigrationHomeMessageData(
                 isRunActive = false,
@@ -543,7 +544,7 @@ internal fun migrationMessageFor(
             supportsNewMigration &&
             orchardBalanceZatoshi != null &&
             orchardBalanceZatoshi >= MIGRATION_RESIDUAL_MIN_ZATOSHI &&
-            migratableOrchardTotalZatoshi > 0L -> {
+            eligible > 0L -> {
             MigrationHomeMessageData(isRunActive = false)
         }
 

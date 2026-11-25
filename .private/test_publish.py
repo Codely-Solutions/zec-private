@@ -45,6 +45,28 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
             self.assertEqual(verify_latest.call_count, 6)
             verify_latest.assert_called_with(root, metadata)
 
+    def test_hosted_preparation_and_retained_instrumentation_have_distinct_bindings(self):
+        source, version, app, original, compiled = 'a' * 40, 330, 'd' * 64, 'e' * 64, 'f' * 64
+        fixture = dict(source_sha=source, version_code=version, candidate_apk_sha256=app,
+                       instrumentation_apk_sha256=original, reference='registry-original')
+        receipt = dict(baseline_source_sha=source, baseline_version_code=version, baseline_apk_sha256=app,
+                       baseline_instrumentation_apk_sha256=compiled, hosted_fixture=fixture,
+                       direct_preparation=dict(baseline_source=source, baseline_apk_sha256=app,
+                                               baseline_instrumentation_sha256=compiled),
+                       instrumentation_pairing={'baseline': dict(original_sha256=compiled,
+                                                                 source_sha=source, app_version_code=version)})
+        with patch('hosted_release.require_current_hosted_upgrade', return_value=fixture):
+            publish.require_publication_baseline({'core': receipt})
+            publish.require_publication_baseline({'funded_reuse': {}, 'installed_upgrade': receipt})
+        for changes in ({'hosted_fixture': None},
+                        {'hosted_fixture': dict(fixture, instrumentation_apk_sha256=compiled)},
+                        {'direct_preparation': None},
+                        {'instrumentation_pairing': {}},
+                        {'baseline_instrumentation_apk_sha256': original},
+                        {'baseline_apk_sha256': '0' * 64}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'attested upgrade baseline'):
+                publish.require_attested_upgrade(dict(receipt, **changes), fixture)
+
     def test_direct_receipt_must_name_the_same_candidate_source_and_version(self):
         source = 'a' * 40
         receipt = dict(build_source_sha=source, candidate_version_code=331)
@@ -54,8 +76,9 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'exact candidate source and version'):
                     publish.validate_direct_core_candidate(receipt, expected, version)
 
-    def test_direct_publication_requires_the_same_live_release_and_source_as_hosted(self):
-        hosted = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330)
+    def test_direct_publication_requires_the_exact_live_pair(self):
+        hosted = dict(release='v3.19.0-private.30', source_sha='a' * 40, version_code=330,
+                      candidate_apk_sha256='c' * 64, instrumentation_apk_sha256='d' * 64)
         legacy = dict(release='v3.19.0-private.21', source_sha='b' * 40, version_code=321)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -68,8 +91,15 @@ class DirectUpgradeBaselineTest(unittest.TestCase):
                 publish.require_current_local_upgrade(root, metadata)
             metadata.api.assert_not_called()
 
-            local.write_text(json.dumps(hosted))
+            paired = dict(hosted, apk_sha256=hosted['candidate_apk_sha256'],
+                          instrumentation={'apk_sha256': hosted['instrumentation_apk_sha256']})
             with patch('hosted_release.require_current_hosted_upgrade', return_value=hosted) as verify_latest:
+                for changes in ({'apk_sha256': '0' * 64}, {'instrumentation': {'apk_sha256': '0' * 64}}):
+                    local.write_text(json.dumps(dict(paired, **changes)))
+                    with self.assertRaisesRegex(ValueError, 'paired fixture'):
+                        publish.require_current_local_upgrade(root, metadata)
+                verify_latest.assert_not_called()
+                local.write_text(json.dumps(paired))
                 publish.require_current_local_upgrade(root, metadata)
                 verify_latest.assert_called_once_with(root, metadata)
 

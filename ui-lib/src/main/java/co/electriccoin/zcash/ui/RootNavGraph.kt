@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -206,22 +207,31 @@ internal suspend fun LaunchNavigationRequests.deliverOnChanges(
 
 @Composable
 private fun TrackActiveNavigationEntry(navController: NavController, navigationRouter: NavigationRouter) {
-    DisposableEffect(navController, navigationRouter) {
-        val stopTracking = navController.trackActiveEntry(navigationRouter)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(navController, navigationRouter, lifecycle) {
+        val stopTracking = navController.trackActiveEntry(navigationRouter, lifecycle)
         onDispose(stopTracking)
     }
 }
 
-internal fun NavController.trackActiveEntry(navigationRouter: NavigationRouter): () -> Unit {
+internal fun NavController.trackActiveEntry(
+    navigationRouter: NavigationRouter,
+    lifecycle: Lifecycle? = null,
+): () -> Unit {
     val observer = navigationRouter.registerEntryObserver()
     var contentEntryId: String? = null
-    val listener = NavController.OnDestinationChangedListener { controller, _, _ ->
-        val entry = controller.currentBackStackEntry
+    fun update() {
+        val entry = currentBackStackEntry
         if (entry?.destination !is FloatingWindow) contentEntryId = entry?.id
-        observer.update(entry?.toActiveNavigationEntry(contentEntryId))
+        val resumed = lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) ?: true
+        observer.update(entry?.toActiveNavigationEntry(contentEntryId)?.copy(hostResumed = resumed))
     }
+    val listener = NavController.OnDestinationChangedListener { _, _, _ -> update() }
+    val lifecycleObserver = LifecycleEventObserver { _, _ -> update() }
     addOnDestinationChangedListener(listener)
+    lifecycle?.addObserver(lifecycleObserver)
     return {
+        lifecycle?.removeObserver(lifecycleObserver)
         removeOnDestinationChangedListener(listener)
         observer.close()
     }
