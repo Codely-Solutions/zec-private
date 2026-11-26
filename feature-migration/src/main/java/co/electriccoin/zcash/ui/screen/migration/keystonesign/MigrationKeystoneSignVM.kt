@@ -72,7 +72,22 @@ class MigrationKeystoneSignVM(
         val split: ByteArray?,
         val preparations: List<Pair<Long, ByteArray>>,
         val transfers: List<Pair<Long, ByteArray>>,
-    )
+    ) {
+        fun request(
+            requestId: ByteArray,
+            existing: PendingKeystoneMigrationPczts?,
+            roundIndex: Int,
+        ) = PendingKeystoneMigrationPczts(
+            requestId = requestId,
+            splitUnsignedPczt = split,
+            prepUnsignedPczts = preparations,
+            transferUnsignedPczts = transfers,
+            roundIndex = roundIndex,
+            accumulatedSplitSigned = existing?.accumulatedSplitSigned,
+            accumulatedPrepSigned = existing?.accumulatedPrepSigned.orEmpty(),
+            accumulatedTransferSigned = existing?.accumulatedTransferSigned.orEmpty(),
+        )
+    }
 
     private val qrParts = MutableStateFlow<List<String>?>(null)
     private val qrFrameIndex = MutableStateFlow(0)
@@ -172,7 +187,7 @@ class MigrationKeystoneSignVM(
             maxFragmentLen = MAX_FRAGMENT_LEN,
         )
         return if (canPrepare()) {
-            val pending = pendingRequest(requestId, batch, existing, roundIndex)
+            val pending = batch.request(requestId, existing, roundIndex)
             pendingKeystonePczts.set(accountKeyId, pending)
             qrAuthorization.value = {
                 canOperate() && pendingSchedule.review(accountKeyId) === approved.reviewed &&
@@ -189,22 +204,6 @@ class MigrationKeystoneSignVM(
             null
         }
     }
-
-    private fun pendingRequest(
-        requestId: ByteArray,
-        batch: UnsignedBatch,
-        existing: PendingKeystoneMigrationPczts?,
-        roundIndex: Int,
-    ) = PendingKeystoneMigrationPczts(
-        requestId = requestId,
-        splitUnsignedPczt = batch.split,
-        prepUnsignedPczts = batch.preparations,
-        transferUnsignedPczts = batch.transfers,
-        roundIndex = roundIndex,
-        accumulatedSplitSigned = existing?.accumulatedSplitSigned,
-        accumulatedPrepSigned = existing?.accumulatedPrepSigned.orEmpty(),
-        accumulatedTransferSigned = existing?.accumulatedTransferSigned.orEmpty(),
-    )
 
     private val mayDisplayQr = combine(walletActionAccess.changes, navigationRouter.activeEntry, qrAuthorization) {
         _, _, authority ->

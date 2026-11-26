@@ -596,7 +596,7 @@
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt": "742bfd648002a7b6f7903c94da96b52b5d34187d23c9698b71ea3a043d85e362",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/KeystoneBatchRoundSlice.kt": "ae7a014c16b53fbfe76e3efbe690f2b6098bab6fc709d4e248e72baff695c934",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt": "35a3a7a505f6c7e0eba8ba240592829679277e42c0e76f68e8f3a82723ff8fec",
-  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt": "c2044b4eee443007389c065639ae665423a1a1795409acbc23c65decf6ebbb11",
+  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignVM.kt": "04b08df5dab1eb67b5fcde143447be4379e5a3037858ee4f6fa2719c57f96b18",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/lockexplainer/MigrationLockExplainerArgs.kt": "d978bf1e4df6f130a99d26b58f5194d889320dd058a07066b220bef995d49a68",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/lockexplainer/MigrationLockExplainerState.kt": "783289395c01cabaaaf06ac04e41fb2c7433ee5c1f110ac4f0139d36387d5a63",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/lockexplainer/MigrationLockExplainerVM.kt": "11700ffe3bf7905363c4903a26bfde8a93eef77aa3de34bd0757e6a74c009419",
