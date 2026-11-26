@@ -349,7 +349,7 @@
     <string name="privateDataConsent_screenTitle">Exportar Datos</string>
     <string name="privateDataConsent_title">Consentimiento para Exportar Datos Privados</string>
     <string name="export_data_text">
-        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con ZEC Private.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
+        Esta base de datos contiene el historial completo de sus cuentas, incluidas las cuentas de hardware conectadas, así como los montos, las direcciones y las notas de la actividad protegida.\n\nTambién contiene claves de visualización. Quien tenga una copia puede usar esas claves para ver la actividad pasada y futura. Las claves solo permiten ver la actividad. Compartir la base de datos es irreversible.
     </string>
     <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de ZEC Private</string>
     <string name="export_data_export_data_chooser_title">Compartir datos internos de ZEC Private con:</string>

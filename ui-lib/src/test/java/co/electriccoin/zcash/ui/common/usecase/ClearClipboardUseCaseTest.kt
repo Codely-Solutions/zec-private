@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import co.electriccoin.zcash.spackle.AndroidApiVersion
@@ -20,6 +21,7 @@ import kotlin.test.Test
  */
 class ClearClipboardUseCaseTest {
     private val clipboard = mockk<ClipboardManager>(relaxUnitFun = true)
+    private val owned = ClipboardTextIdentity(10, "fixture", "sample")
 
     private val context =
         mockk<Context> {
@@ -30,6 +32,22 @@ class ClearClipboardUseCaseTest {
     fun setUp() {
         mockkObject(AndroidApiVersion)
         every { AndroidApiVersion.isAtLeastP } returns true
+        val clip = mockk<ClipData> {
+            every { itemCount } returns 1
+            every { description } returns mockk {
+                every { timestamp } returns 10
+                every { label } returns "fixture"
+                every { mimeTypeCount } returns 1
+                every { hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) } returns true
+            }
+            every { getItemAt(0) } returns mockk {
+                every { intent } returns null
+                every { uri } returns null
+                every { htmlText } returns null
+                every { text } returns "sample"
+            }
+        }
+        every { clipboard.primaryClip } returns clip
     }
 
     @AfterTest
@@ -39,7 +57,7 @@ class ClearClipboardUseCaseTest {
 
     @Test
     fun clearsThePrimaryClip() {
-        ClearClipboardUseCase(context)()
+        ClearClipboardUseCase(context)(owned)
 
         verify(exactly = 1) { clipboard.clearPrimaryClip() }
     }
@@ -48,7 +66,7 @@ class ClearClipboardUseCaseTest {
     fun aClipboardThatRefusesToBeClearedDoesNotFailTheCaller() {
         every { clipboard.clearPrimaryClip() } throws SecurityException("not the foreground app")
 
-        ClearClipboardUseCase(context)()
+        ClearClipboardUseCase(context)(owned)
 
         verify(exactly = 1) { clipboard.clearPrimaryClip() }
     }
@@ -60,7 +78,7 @@ class ClearClipboardUseCaseTest {
         mockkStatic(ClipData::class)
         every { ClipData.newPlainText("", "") } returns empty
 
-        ClearClipboardUseCase(context)()
+        ClearClipboardUseCase(context)(owned)
 
         verify(exactly = 1) { clipboard.setPrimaryClip(empty) }
         verify(exactly = 0) { clipboard.clearPrimaryClip() }

@@ -5,6 +5,8 @@ import cash.z.ecc.android.bip39.Mnemonics
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextIdentity
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextSample
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.ValidateSeedUseCase
 import co.electriccoin.zcash.ui.design.component.SeedWordInnerTextFieldState
@@ -66,27 +68,27 @@ class RestoreSeedPasteTest {
     @Test
     fun explicitPasteNormalizesWhitespaceAndCaseThenClearsUnchangedClip() = runVmTest {
         val pasted = " \n" + words.joinToString("\t\n\u00a0") { it.uppercase() } + " \r\n"
-        every { readClipboard() } returns pasted
+        every { readClipboard() } returns sample(pasted)
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val changed = vm.state.first { it?.nextButton != null }!!
         assertEquals(words, changed.seed.values.map { it.innerState.value })
         assertFalse(changed.isPasteError)
-        verify(exactly = 1) { clearClipboard() }
+        verify(exactly = 1) { clearClipboard(any()) }
     }
 
     @Test
-    fun newerClipboardIsPreserved() = runVmTest {
-        every { readClipboard() } returnsMany listOf(words.joinToString(" "), "newer text")
+    fun aClipWithoutOwnershipIsPreserved() = runVmTest {
+        every { readClipboard() } returns ClipboardTextSample(words.joinToString(" "), ownership = null)
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         vm.state.first { it?.nextButton != null }
-        verify(exactly = 0) { clearClipboard() }
+        verify(exactly = 0) { clearClipboard(any()) }
     }
 
     @Test
     fun enteringBirthdayCreatesAnOpaqueSessionAndCompletionClearsThePhrase() = runVmTest {
-        every { readClipboard() } returns words.joinToString(" ")
+        every { readClipboard() } returns sample(words.joinToString(" "))
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val entered = vm.state.first { it?.nextButton != null }!!
@@ -110,7 +112,7 @@ class RestoreSeedPasteTest {
 
     @Test
     fun returningToSeedEntryRevokesBirthdaySessionWhileKeepingEditableWords() = runVmTest {
-        every { readClipboard() } returns words.joinToString(" ")
+        every { readClipboard() } returns sample(words.joinToString(" "))
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val entered = vm.state.first { it?.nextButton != null }!!
@@ -127,43 +129,43 @@ class RestoreSeedPasteTest {
 
     @Test
     fun invalidPasteKeepsManualWordsAndClipboard() = runVmTest {
-        every { readClipboard() } returns List(24) { "invalid" }.joinToString(" ")
+        every { readClipboard() } returns sample(List(24) { "invalid" }.joinToString(" "))
         val vm = vm()
         vm.state.first { it != null }!!.seed.values.first().onValueChange(SeedWordInnerTextFieldState("manual"))
         vm.state.first { it?.seed?.values?.first()?.innerState?.value == "manual" }!!.pasteButton!!.onClick()
         val rejected = vm.state.first { it?.isPasteError == true }!!
         assertEquals("manual", rejected.seed.values.first().innerState.value)
-        verify(exactly = 0) { clearClipboard() }
+        verify(exactly = 0) { clearClipboard(any()) }
     }
 
     @Test
     fun supportedBip39ShortPhraseCannotFillTwentyFourFields() = runVmTest {
         val shortPhrase = Mnemonics.MnemonicCode(ByteArray(16)).words.map { it.concatToString() }
-        every { readClipboard() } returns shortPhrase.joinToString(" ")
+        every { readClipboard() } returns sample(shortPhrase.joinToString(" "))
         val vm = vm(ValidateSeedUseCase())
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val rejected = vm.state.first { it?.isPasteError == true }!!
         assertTrue(rejected.seed.values.all { it.innerState.value.isEmpty() })
-        verify(exactly = 0) { clearClipboard() }
+        verify(exactly = 0) { clearClipboard(any()) }
     }
 
     @Test
     fun deniedClipboardReadLeavesFieldsUntouched() = runVmTest {
-        every { readClipboard() } throws SecurityException()
+        every { readClipboard() } returns null
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val rejected = vm.state.first { it?.isPasteError == true }!!
         assertTrue(rejected.seed.values.all { it.innerState.value.isEmpty() })
-        verify(exactly = 0) { clearClipboard() }
+        verify(exactly = 0) { clearClipboard(any()) }
     }
 
     @Test
     fun aRetainedContinueActionCannotAcceptThePriorPhraseAfterInvalidPaste() = runVmTest {
-        every { readClipboard() } returns words.joinToString(" ")
+        every { readClipboard() } returns sample(words.joinToString(" "))
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val accepted = vm.state.first { it?.nextButton != null }!!
-        every { readClipboard() } returns "invalid clipboard content"
+        every { readClipboard() } returns sample("invalid clipboard content")
         accepted.pasteButton!!.onClick()
         vm.state.first { it?.isPasteError == true }
 
@@ -177,17 +179,19 @@ class RestoreSeedPasteTest {
     fun actualBip39ChecksumIsRequired() = runVmTest {
         // Generate a public test vector in memory; assertions never print phrase contents.
         val generated = Mnemonics.MnemonicCode(ByteArray(32)).words.map { it.concatToString() }
-        every { readClipboard() } returns generated.joinToString(" ")
+        every { readClipboard() } returns sample(generated.joinToString(" "))
         val vm = vm(ValidateSeedUseCase())
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         val accepted = vm.state.first { it?.nextButton != null }!!
         assertTrue(accepted.seed.values.map { it.innerState.value } == generated)
-        every { readClipboard() } returns List(24) { generated.first() }.joinToString(" ")
+        every { readClipboard() } returns sample(List(24) { generated.first() }.joinToString(" "))
         accepted.pasteButton!!.onClick()
         val rejected = vm.state.first { it?.isPasteError == true }!!
         assertTrue(rejected.seed.values.map { it.innerState.value } == generated)
         assertNull(rejected.nextButton)
     }
+
+    private fun sample(text: String) = ClipboardTextSample(text, ClipboardTextIdentity(1, "fixture", text))
 
     private fun runVmTest(block: suspend TestScope.() -> Unit) = runTest {
         try {

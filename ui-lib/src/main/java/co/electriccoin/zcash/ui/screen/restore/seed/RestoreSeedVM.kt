@@ -193,24 +193,13 @@ class RestoreSeedVM(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private fun onPasteClicked() {
-        val text =
-            try {
-                readClipboardText()
-            } catch (_: RuntimeException) {
-                null
-            }
-        if (text == null || !pasteSeed(text)) {
+        val sample = readClipboardText()
+        if (sample == null || !pasteSeed(sample.text)) {
             pasteError.value = true
             return
         }
-        // Clear only the clip that supplied this phrase; a newer clip belongs to the user.
-        try {
-            if (readClipboardText() == text) clearClipboard()
-        } catch (_: RuntimeException) {
-            // Android can deny a second clipboard read. Keep the accepted phrase and newer clipboard content.
-        }
+        sample.ownership?.let { clearClipboard(it) }
     }
 
     private fun pasteSeed(text: String): Boolean {

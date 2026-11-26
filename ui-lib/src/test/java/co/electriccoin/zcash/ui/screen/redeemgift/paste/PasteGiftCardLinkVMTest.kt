@@ -3,6 +3,8 @@ package co.electriccoin.zcash.ui.screen.redeemgift.paste
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextIdentity
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextSample
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.redeemgift.RecordingNavigationRouter
@@ -100,7 +102,7 @@ class PasteGiftCardLinkVMTest {
             state.continueButton.onClick()
             runCurrent()
             assertTrue(env.router.replacedFrom.isEmpty())
-            verify(exactly = 0) { env.clearClipboard() }
+            verify(exactly = 0) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -175,7 +177,7 @@ class PasteGiftCardLinkVMTest {
 
             val args = env.router.redeemReplacingGiftCardScan().single()
             assertEquals(LINK, env.store.take(args.linkId))
-            verify(exactly = 1) { env.clearClipboard() }
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -192,7 +194,7 @@ class PasteGiftCardLinkVMTest {
 
             val args = env.router.redeemReplacingGiftCardScan().single()
             assertEquals(LINK, env.store.take(args.linkId))
-            verify(exactly = 1) { env.clearClipboard() }
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -220,7 +222,7 @@ class PasteGiftCardLinkVMTest {
 
             val args = env.router.redeemReplacingGiftCardScan().single()
             assertEquals(LINK, env.store.take(args.linkId))
-            verify(exactly = 0) { env.clearClipboard() }
+            verify(exactly = 0) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -248,7 +250,7 @@ class PasteGiftCardLinkVMTest {
 
             assertEquals(1, env.router.backCount)
             assertTrue(env.router.replacedFrom.isEmpty())
-            verify(exactly = 0) { env.clearClipboard() }
+            verify(exactly = 0) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -263,11 +265,11 @@ class PasteGiftCardLinkVMTest {
 
             assertEquals(1, env.router.backCount)
             assertTrue(env.router.redeemReplacingGiftCardScan().isEmpty())
-            verify(exactly = 1) { env.clearClipboard() }
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     @Test
-    fun backAfterPastingSomethingElseAndClearingTheFieldStillClearsTheClipboard() =
+    fun backAfterPastingUnrelatedTextLeavesTheClipboardAlone() =
         runTest(dispatcher) {
             val env = Env(this, clipboard = "not a link")
             env.state.fieldButton.onClick()
@@ -278,7 +280,7 @@ class PasteGiftCardLinkVMTest {
             env.state.onBack()
             runCurrent()
 
-            verify(exactly = 1) { env.clearClipboard() }
+            verify(exactly = 0) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -292,7 +294,7 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             assertEquals(1, env.router.backCount)
-            verify(exactly = 0) { env.clearClipboard() }
+            verify(exactly = 0) { env.clearClipboard(any()) }
         }
 
     @Test
@@ -322,14 +324,13 @@ class PasteGiftCardLinkVMTest {
             env.state.onBack()
             runCurrent()
 
-            verify(exactly = 1) { env.clearClipboard() }
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     @Test
     fun backPreservesAReplacementClipboardItem() =
         runTest(dispatcher) {
             val env = Env(this, clipboard = LINK)
-            every { env.clearClipboard() } answers { env.clipboard = null }
             env.state.fieldButton.onClick()
             runCurrent()
 
@@ -338,36 +339,51 @@ class PasteGiftCardLinkVMTest {
             runCurrent()
 
             assertEquals("unrelated copied text", env.clipboard)
-            verify(exactly = 0) { env.clearClipboard() }
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     @Test
-    fun continuePreservesAReplacementClipboardItem() =
+    fun continuePreservesALaterCopyWithTheSameText() =
         runTest(dispatcher) {
             val env = Env(this, clipboard = LINK)
-            every { env.clearClipboard() } answers { env.clipboard = null }
             env.state.fieldButton.onClick()
             runCurrent()
 
-            env.clipboard = "unrelated copied text"
+            env.clipboard = LINK
             env.state.continueButton.onClick()
+            runCurrent()
 
-            assertEquals("unrelated copied text", env.clipboard)
-            verify(exactly = 0) { env.clearClipboard() }
+            assertEquals(LINK, env.clipboard)
+            verify(exactly = 1) { env.clearClipboard(any()) }
         }
 
     private class Env(
         scope: TestScope,
-        var clipboard: String? = null,
+        clipboard: String? = null,
     ) {
+        private var clipboardWrite = 1L
+        var clipboard = clipboard
+            set(value) {
+                field = value
+                clipboardWrite++
+            }
+
+        private val sample: ClipboardTextSample?
+            get() = clipboard?.let { ClipboardTextSample(it, ClipboardTextIdentity(clipboardWrite, "fixture", it)) }
+
         val store = GiftCardLinkStoreImpl()
         val router = RecordingNavigationRouter()
-        val clearClipboard = mockk<ClearClipboardUseCase>(relaxed = true)
+        val clearClipboard = mockk<ClearClipboardUseCase> {
+            every { this@mockk.invoke(any()) } answers {
+                val current = sample?.ownership
+                if (current != null && firstArg<ClipboardTextIdentity>().matches(current)) this@Env.clipboard = null
+            }
+        }
         val vm =
             PasteGiftCardLinkVM(
                 navigateToRedeemGiftCard = navigateToRedeemGiftCard(store, router),
                 readClipboardText =
-                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
+                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { sample } },
                 clearClipboard = clearClipboard,
                 navigationRouter = router
             )

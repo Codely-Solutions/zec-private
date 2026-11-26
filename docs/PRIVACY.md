@@ -18,4 +18,6 @@ Fiat conversion uses CoinMarketCap where enabled. Opening a browser or sharing d
 
 ## Sharing diagnostics
 
-Exports may contain wallet history, addresses, amounts, notes and device details. Inspect them before sharing. Never include a recovery phrase, viewing key or gift secret. Exports are not sent automatically to Zodl or a support service.
+Inspect diagnostic reports before sharing. Keep recovery phrases, viewing keys and gift secrets out of ordinary support messages. Choose your own sharing recipient.
+
+**Export Private Data** shares the full wallet database, including the history and viewing keys of the accounts it holds. A recipient can use those keys to see past and future wallet activity. Share this file only with someone you trust with that access.

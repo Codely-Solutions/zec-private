@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.isAtEntry
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextIdentity
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +31,7 @@ class PasteGiftCardLinkVM(
     /** The field's text as entered. */
     private val text = MutableStateFlow("")
 
-    private var pastedClipboardText: String? = null
+    private var pastedGift: ClipboardTextIdentity? = null
 
     private var hasContinued = false
     private var isContinuing = false
@@ -61,8 +62,8 @@ class PasteGiftCardLinkVM(
 
     private fun onPasteClick() {
         val pasted = readClipboardText() ?: return
-        pastedClipboardText = pasted
-        text.update { pasted.trim() }
+        pastedGift = pasted.ownership?.takeIf { linkIn(pasted.text) != null }
+        text.update { pasted.text.trim() }
     }
 
     private fun onClearClick() = text.update { "" }
@@ -94,8 +95,8 @@ class PasteGiftCardLinkVM(
     }
 
     private fun clearPasted() {
-        val pasted = pastedClipboardText ?: return
-        pastedClipboardText = null
-        if (readClipboardText() == pasted) clearClipboard()
+        val ownership = pastedGift ?: return
+        pastedGift = null
+        clearClipboard(ownership)
     }
 }

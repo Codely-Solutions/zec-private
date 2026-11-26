@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.LceError
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.repository.WalletInitializationConflictException
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.common.usecase.ClipboardTextSample
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.usecase.ValidateSeedUseCase
@@ -258,7 +259,9 @@ class RestoreTorVMTest {
     private fun enteredSeed() = RestoreSeedVM(
         navigationRouter = navigation,
         validateSeed = ValidateSeedUseCase(),
-        readClipboardText = mockk { every { this@mockk() } returns words.joinToString(" ") },
+        readClipboardText = mockk {
+            every { this@mockk() } returns ClipboardTextSample(words.joinToString(" "), ownership = null)
+        },
         clearClipboard = mockk(relaxed = true),
     ).also { viewModels += it }
 

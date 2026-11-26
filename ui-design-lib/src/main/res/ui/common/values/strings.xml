@@ -367,13 +367,9 @@
     <string name="privateDataConsent_screenTitle">Data Export</string>
     <string name="privateDataConsent_title">Consent for Exporting Private Data</string>
     <string name="export_data_text">
-        By clicking “I Agree” below, you give your consent to export all of your wallets’ private data such as the
-        entire history of your wallet(s), including any connected hardware wallets. All private information, memos,
-        amounts, and recipient addresses, even for your shielded activity will be exported.*\n\nThe private data also
-        gives the ability to see certain future actions you take with ZEC Private.\n\nSharing this private data is
-        irrevocable - once you have shared this private data with someone, there is no way to revoke their
-        access.\n\n*Note that this private data does not give them the ability to spend your funds, only the ability
-        to see what you do with your funds.
+        This database contains the full history for its accounts, including connected hardware accounts and
+        shielded amounts, addresses, and memos.\n\nIt also contains viewing keys. Anyone with a copy can use those
+        keys to see past and future wallet activity. The keys grant viewing access only, and sharing is irreversible.
     </string>
     <string name="privateDataConsent_confirmation">I agree to ZEC Private\'s Export Private Data Policies and Privacy Policy</string>
     <string name="export_data_export_data_chooser_title">Share internal ZEC Private data with:</string>
