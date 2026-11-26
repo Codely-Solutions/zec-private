@@ -156,8 +156,8 @@ class MigrationReviewVMTest {
                         coEvery { this@mockk(any<String>()) } returns sdk
                     },
                     keystoneProposalRepository = keystoneProposalRepository,
-                    walletActionAccess = mockk {
-                        coEvery { capture(any()) } returns { authorityCurrent }
+                    walletActionAccess = mockk<WalletActionAccess> {
+                        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
                     },
                     getSelectedWalletAccount =
                         mockk {
@@ -771,8 +771,8 @@ private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
 
 private inline fun <reified T : WalletAccount> spendable(): T =
     mockk<T>(relaxed = true) { every { isSpendable } returns true }
-}
 
 private fun selectedAccount(account: WalletAccount): GetSelectedWalletAccountUseCase = mockk {
-coEvery { this@mockk() } returns account
-every { observe() } returns flowOf(account)
+    coEvery { this@mockk() } returns account
+    every { observe() } returns flowOf(account)
+}

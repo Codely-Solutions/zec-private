@@ -12640,7 +12640,7 @@ index 20a8edf27..441f08bf0 100644
 @@ -395,0 +394 @@ class MigrationReviewPlanShapeTest {
 +            walletActionAccess = mockk(),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..e0cbdd4ad 100644
+index d0838db0c..27c258480 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 @@ -13,0 +14 @@ import cash.z.ecc.android.sdk.model.Zatoshi
@@ -12712,8 +12712,8 @@ index d0838db0c..e0cbdd4ad 100644
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
 @@ -118,0 +159,3 @@ class MigrationReviewVMTest {
-+                    walletActionAccess = mockk {
-+                        coEvery { capture(any()) } returns { authorityCurrent }
++                    walletActionAccess = mockk<WalletActionAccess> {
++                        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
 +                    },
 @@ -127 +170 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
@@ -13153,21 +13153,20 @@ index d0838db0c..e0cbdd4ad 100644
 @@ -475 +767 @@ class MigrationReviewVMTest {
 -        override fun backToRoot() = Unit
 +    override fun backToRoot() = Unit
-@@ -477,2 +769,2 @@ class MigrationReviewVMTest {
+@@ -477,2 +769,5 @@ class MigrationReviewVMTest {
 -        override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
 -    }
 +    override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
 +}
-@@ -480,2 +772,2 @@ class MigrationReviewVMTest {
--    private inline fun <reified T : WalletAccount> spendable(): T =
--        mockk<T>(relaxed = true) { every { isSpendable } returns true }
++
 +private inline fun <reified T : WalletAccount> spendable(): T =
 +    mockk<T>(relaxed = true) { every { isSpendable } returns true }
-@@ -482,0 +775,4 @@ class MigrationReviewVMTest {
-+
+@@ -480,2 +775,3 @@ class MigrationReviewVMTest {
+-    private inline fun <reified T : WalletAccount> spendable(): T =
+-        mockk<T>(relaxed = true) { every { isSpendable } returns true }
 +private fun selectedAccount(account: WalletAccount): GetSelectedWalletAccountUseCase = mockk {
-+coEvery { this@mockk() } returns account
-+every { observe() } returns flowOf(account)
++    coEvery { this@mockk() } returns account
++    every { observe() } returns flowOf(account)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 index a914d8998..da1aba40b 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
