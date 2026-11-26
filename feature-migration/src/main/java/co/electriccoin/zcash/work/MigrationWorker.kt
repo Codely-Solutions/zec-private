@@ -93,25 +93,14 @@ class MigrationWorker(
             MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
             migrationNotifier.cancelStepDue(accountKeyId)
         }
-        when (val result = migrationDriveOnce.run(sdk, accountKeyId)) {
-            is DriveOnceResult.ReArmed -> {
-                // Already re-armed the WorkManager chain inside run() — nothing more to do.
-            }
-
-            is DriveOnceResult.LockBusy -> {
-                // No step ran, so nothing re-armed the chain — this call must, or a lost lock
-                // race silently kills the durable background path.
-                if (!resetProgress.isPending.value) {
-                    MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
-                }
-            }
-
+        val nextDelay = when (val result = migrationDriveOnce.run(sdk, accountKeyId)) {
+            is DriveOnceResult.NextWake -> result.delay
+            is DriveOnceResult.LockBusy -> result.retryDelay
             DriveOnceResult.RemovalManaged -> return retryWhileRemoving(accountKeyId)
-
-            DriveOnceResult.Terminal -> {
-                // Complete, or a terminal-until-user-acts state — the chain intentionally ends
-                // here, matching today's behavior exactly.
-            }
+            DriveOnceResult.Terminal -> null
+        }
+        if (nextDelay != null && !resetProgress.isPending.value) {
+            MigrationScheduler(applicationContext).scheduleSuccessorAndAwait(accountKeyId, nextDelay)
         }
         return Result.success()
     }

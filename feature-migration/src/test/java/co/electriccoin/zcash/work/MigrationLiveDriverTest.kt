@@ -27,7 +27,7 @@ class MigrationLiveDriverTest {
     fun aTransientSdkOpenFailureDuringPrimingDoesNotStopTheFirstDrive() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
         val driveOnce = mockk<MigrationDriveOnce> {
-            coEvery { run(sdk, "priming-owner", true, true) } returns DriveOnceResult.Terminal
+            coEvery { run(sdk, "priming-owner", true) } returns DriveOnceResult.Terminal
         }
         var opens = 0
         val driver = MigrationLiveDriverImpl(
@@ -44,7 +44,7 @@ class MigrationLiveDriverTest {
         advanceUntilIdle()
 
         assertEquals(2, opens)
-        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner", true, true) }
+        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner", true) }
     }
 
     @Test
@@ -53,7 +53,7 @@ class MigrationLiveDriverTest {
         var pendingReset = false
         var starts = 0
         val driveOnce = mockk<MigrationDriveOnce> {
-            coEvery { run(any(), any(), any(), any()) } coAnswers {
+            coEvery { run(any(), any(), any()) } coAnswers {
                 starts++
                 withContext(NonCancellable) { finish.await() }
                 DriveOnceResult.Terminal
@@ -85,7 +85,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         DriveOnceResult.Terminal // stops the loop on the very first call
                     }
@@ -111,14 +111,14 @@ class MigrationLiveDriverTest {
         }
 
     @Test
-    fun `the loop re-arms using the ReArmed delay, and stops on Terminal`() =
+    fun `the loop re-arms using the next wake delay, and stops on Terminal`() =
         runTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
-                        if (runCallCount < 3) DriveOnceResult.ReArmed(90.seconds) else DriveOnceResult.Terminal
+                        if (runCallCount < 3) DriveOnceResult.NextWake(90.seconds) else DriveOnceResult.Terminal
                     }
                 }
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
@@ -141,17 +141,17 @@ class MigrationLiveDriverTest {
         }
 
     @Test
-    fun `a floorless ReArmed delay is floored, not spun on tightly`() =
+    fun `a floorless next wake delay is floored, not spun on tightly`() =
         runTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         // 0 seconds is exactly what nextWake's floorless privacy-gap term can
                         // return — the loop must not spin on this.
                         if (runCallCount < 3) {
-                            DriveOnceResult.ReArmed(kotlin.time.Duration.ZERO)
+                            DriveOnceResult.NextWake(kotlin.time.Duration.ZERO)
                         } else {
                             DriveOnceResult.Terminal
                         }
@@ -171,23 +171,23 @@ class MigrationLiveDriverTest {
             // already be done; if it IS flooring at 60s, at most one call should have happened by
             // t=1s.
             advanceTimeBy(1_000)
-            assertEquals(1, runCallCount, "the loop must floor a zero/near-zero ReArmed delay, not spin")
+            assertEquals(1, runCallCount, "the loop must floor a zero/near-zero next wake delay, not spin")
             advanceUntilIdle()
             assertEquals(3, runCallCount)
         }
 
     @Test
-    fun `an unfloored ReArmed delay (respectAntiSpinFloor=false) is NOT floored, chains back-to-back`() =
+    fun `an unfloored next wake delay (respectAntiSpinFloor=false) is NOT floored, chains back-to-back`() =
         runTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         // A deliberate short constant (e.g. PREP_FAST_TRACK_REARM) opts out of the
                         // anti-spin floor — the loop must honor that and chain back-to-back.
                         if (runCallCount < 3) {
-                            DriveOnceResult.ReArmed(1.seconds, respectAntiSpinFloor = false)
+                            DriveOnceResult.NextWake(1.seconds, respectAntiSpinFloor = false)
                         } else {
                             DriveOnceResult.Terminal
                         }
@@ -221,7 +221,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         if (runCallCount < 2) DriveOnceResult.LockBusy(5.seconds) else DriveOnceResult.Terminal
                     }
@@ -238,7 +238,7 @@ class MigrationLiveDriverTest {
             driver.startIfNotRunning("account-1")
             advanceUntilIdle()
 
-            assertEquals(2, runCallCount, "LockBusy must retry using its own retryDelay, not the floored ReArmed floor")
+            assertEquals(2, runCallCount, "LockBusy must retry using its own retryDelay, not the NextWake floor")
         }
 
     @Test
@@ -247,13 +247,13 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         when (runCallCount) {
                             1 -> DriveOnceResult.LockBusy(5.seconds)
 
                             // must NOT publish
-                            2 -> DriveOnceResult.ReArmed(1.seconds)
+                            2 -> DriveOnceResult.NextWake(1.seconds)
 
                             // must publish
                             else -> DriveOnceResult.Terminal // must also publish
@@ -274,7 +274,7 @@ class MigrationLiveDriverTest {
             advanceUntilIdle()
 
             // +1 for the priming publish at loop start (before the first driveOnce.run() call,
-            // 2026-08-0X) on top of the 2 step-driven publishes (ReArmed, Terminal — LockBusy still
+            // 2026-08-0X) on top of the 2 step-driven publishes (NextWake, Terminal — LockBusy still
             // does not publish).
             verify(exactly = 3) { repository.publish("account-1", any()) }
         }
@@ -289,7 +289,7 @@ class MigrationLiveDriverTest {
             val callOrder = mutableListOf<String>()
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         callOrder.add("run")
                         DriveOnceResult.Terminal
                     }
@@ -323,9 +323,9 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
-                        if (runCallCount < 3) DriveOnceResult.ReArmed(1.seconds) else DriveOnceResult.Terminal
+                        if (runCallCount < 3) DriveOnceResult.NextWake(1.seconds) else DriveOnceResult.Terminal
                     }
                 }
             // Every read throws — mirrors a "database is locked" failure outlasting the SDK's own
@@ -360,12 +360,12 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any(), any()) } coAnswers {
                         runCallCount++
                         // 250s is comfortably more than 4x the 60s staleness-refresh interval, and
                         // ends the loop right after — Terminal itself never triggers a periodic
                         // refresh (there's no wait to refresh during).
-                        if (runCallCount < 2) DriveOnceResult.ReArmed(250.seconds) else DriveOnceResult.Terminal
+                        if (runCallCount < 2) DriveOnceResult.NextWake(250.seconds) else DriveOnceResult.Terminal
                     }
                 }
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
@@ -382,7 +382,7 @@ class MigrationLiveDriverTest {
             advanceUntilIdle()
 
             // One priming publish at loop start (2026-08-0X, before the first driveOnce.run()),
-            // one publish for the ReArmed call itself, then one more every 60s across the 250s
+            // one publish for the NextWake call itself, then one more every 60s across the 250s
             // wait (at 60/120/180/240s — 4 periodic refreshes), then one for the Terminal call:
             // 1 + 1 + 4 + 1 = 7. The old single delay() would have left the repository stale for
             // the whole 250s span instead.

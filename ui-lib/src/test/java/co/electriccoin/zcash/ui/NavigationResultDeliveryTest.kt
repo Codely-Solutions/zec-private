@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
@@ -16,6 +18,7 @@ import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
+import co.electriccoin.zcash.ui.common.provider.ApplicationStateProviderImpl
 import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.colors.BrowserChromeColors
@@ -29,7 +32,10 @@ import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import io.mockk.mockk
+import io.mockk.every
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -66,8 +72,10 @@ class NavigationResultDeliveryTest {
                 runTest {
                     val activity = host.get()
                     var renderedTheme = AppearanceMode.SYSTEM to false
+                    val application = ApplicationStateProviderImpl()
+                    application.onApplicationLifecycleChanged(Lifecycle.Event.ON_START)
                     val navigator = NavigatorImpl(
-                        activity, controller, KeyboardManager(false, null), mockk(relaxed = true),
+                        activity, controller, KeyboardManager(false, null), application,
                         browserAppearance = { renderedTheme },
                     )
                     val url = ExternalUrl("https://example.invalid/releases")
@@ -93,9 +101,30 @@ class NavigationResultDeliveryTest {
 
                     navigator.executeCommand(NavigationCommand.Forward(listOf(ActivityHistoryArgs)))
                     assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                    application.onApplicationLifecycleChanged(Lifecycle.Event.ON_STOP)
+                    assertTrue(application.isInForeground.first())
                 }
             } finally {
                 host.pause().stop().destroy()
+            }
+        }
+    }
+
+    @Test
+    fun aRefusedBrowserLaunchDoesNotKeepTheWalletInTheForeground() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val activity = mockk<Activity>()
+                every { activity.startActivity(any<Intent>(), any()) } throws ActivityNotFoundException()
+                val application = ApplicationStateProviderImpl()
+                application.onApplicationLifecycleChanged(Lifecycle.Event.ON_START)
+                val navigator = NavigatorImpl(activity, controller, KeyboardManager(false, null), application)
+
+                navigator.executeCommand(NavigationCommand.Forward(listOf(ExternalUrl("https://example.invalid/"))))
+                verify(exactly = 1) { activity.startActivity(any<Intent>(), any()) }
+                application.onApplicationLifecycleChanged(Lifecycle.Event.ON_STOP)
+                assertFalse(application.isInForeground.first())
             }
         }
     }

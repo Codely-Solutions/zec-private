@@ -76,10 +76,9 @@ class CheckMigrationRecoveryUseCase(
         migrationWorkerRunState(context, it)
     },
     /**
-     * Extracted for testability — production default enqueues an immediate WorkManager run
-     * (`Duration.ZERO`), replacing whatever delay the worker last armed for itself.
+     * Extracted for testability. Production confirms the new wake and preserves work already scheduled for this owner.
      */
-    private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
+    private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).scheduleIfMissing(it) },
     private val resetPending: StateFlow<Boolean> = MutableStateFlow(false),
     private val cancelRemovedWake: (String) -> Unit = { MigrationScheduler(context).cancel(it) },
 ) {

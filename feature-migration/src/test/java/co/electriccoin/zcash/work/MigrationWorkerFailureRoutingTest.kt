@@ -100,8 +100,8 @@ private suspend fun dispatchTransferResultForTest(
         }
 
         TransferResult.InvalidNote -> {
-            // No notify — see the doc comment above. Production re-arms here (DriveOnceResult.ReArmed);
-            // MigrationWorker.doWork() maps both ReArmed and Terminal to Result.success(), so SUCCESS
+            // No notify — see the doc comment above. Production re-arms here (DriveOnceResult.NextWake);
+            // MigrationWorker.doWork() acknowledges NextWake before returning success. SUCCESS
             // still matches this transcription's WorkManager-result-only modeling.
             DispatchResult.SUCCESS
         }

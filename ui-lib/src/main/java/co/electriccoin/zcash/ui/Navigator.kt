@@ -119,7 +119,6 @@ class NavigatorImpl(
                         throw UnsupportedOperationException("External url can be opened as last screen only")
                     }
 
-                    applicationStateProvider.onThirdPartyUiShown()
                     startWebBrowser(route)
                 }
 
@@ -154,7 +153,6 @@ class NavigatorImpl(
                         throw UnsupportedOperationException("External url can be opened as last screen only")
                     }
 
-                    applicationStateProvider.onThirdPartyUiShown()
                     startWebBrowser(route)
                 }
 
@@ -184,7 +182,6 @@ class NavigatorImpl(
                         throw UnsupportedOperationException("External url can be opened as last screen only")
                     }
 
-                    applicationStateProvider.onThirdPartyUiShown()
                     startWebBrowser(route)
                 }
 
@@ -208,20 +205,17 @@ class NavigatorImpl(
                 else -> navController.executeNavigation(route = route)
             }
         }
-
-        if (command.routes.lastOrNull() is ExternalUrl) {
-            applicationStateProvider.onThirdPartyUiShown()
-        }
     }
 
     private fun startWebBrowser(route: ExternalUrl) {
         val (appearanceMode, isOledEnabled) = browserAppearance()
-        WebBrowserUtil.startActivity(
+        val launched = WebBrowserUtil.startActivity(
             activity = activity,
             url = route.url,
             appearanceMode = appearanceMode,
             isOledEnabled = isOledEnabled
         )
+        if (launched) applicationStateProvider.onThirdPartyUiShown()
     }
 
     private fun NavHostController.executeNavigation(

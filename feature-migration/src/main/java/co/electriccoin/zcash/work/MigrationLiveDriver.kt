@@ -128,10 +128,9 @@ class MigrationLiveDriverImpl(
                         // true: the live driver has no execution-time ceiling (unlike the worker),
                         // so it is the only safe caller for a forced-broadcast-window wait that can
                         // run for nearly a full privacy buffer.
-                        driveByLiveLoop = true,
                     )
                 if (result !is DriveOnceResult.LockBusy && result != DriveOnceResult.RemovalManaged) {
-                    // A step actually ran (ReArmed) or the migration reached a terminal state —
+                    // A step actually ran (NextWake) or the migration reached a terminal state —
                     // either way, publish one fresh read for every screen/use-case that used to
                     // poll OrchardMigrationSdk.getMigrationTransferStates()/estimatedChainTip()/
                     // estimatedSecondsPerBlock() on its own: these are reads the driver's loop was
@@ -143,7 +142,7 @@ class MigrationLiveDriverImpl(
                     publishFreshReadout(sdk, accountKeyId)
                 }
                 when (result) {
-                    is DriveOnceResult.ReArmed -> {
+                    is DriveOnceResult.NextWake -> {
                         // Floor a floorless re-arm value (nextWake's privacy-gap term can be
                         // exactly zero) so this in-process loop never spins tightly — WorkManager
                         // dispatch latency is the accidental brake for the worker path; this loop

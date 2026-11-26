@@ -7,12 +7,14 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Operation
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import co.electriccoin.zcash.migration.BuildConfig
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -39,42 +41,60 @@ class MigrationScheduler(
     // AlarmManager alarm instead of relying on the WorkManager job itself.
     private val migrationDueAlarmScheduler = MigrationDueAlarmScheduler(context)
 
-    fun schedule(accountKeyId: String, delay: Duration) {
-        enqueue(accountKeyId, delay)
+    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
+        check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE)) { "Migration scheduling is paused" }
     }
 
-    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
-        val operation = checkNotNull(enqueue(accountKeyId, delay)) { "Migration scheduling is paused" }
-        operation.result.await()
+    internal suspend fun scheduleIfMissing(accountKeyId: String, delay: Duration = Duration.ZERO) {
+        enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.KEEP)
+    }
+
+    internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration) {
+        val existing = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
+        // An interrupted worker may already have committed its child before acknowledging it.
+        if (existing.none { it.state == WorkInfo.State.BLOCKED }) {
+            check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND)) { "Migration scheduling is paused" }
+        }
     }
 
     internal suspend fun runNotificationStep(accountKeyId: String) {
         if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-            enqueue(accountKeyId, Duration.ZERO)?.result?.await()
+            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE)
         }
     }
 
-    private fun enqueue(accountKeyId: String, delay: Duration): Operation? =
-        MigrationAccountRetirement.keepWake(accountKeyId) { enqueueAllowed(accountKeyId, delay) }
+    private suspend fun enqueueConfirmed(accountKeyId: String, delay: Duration, policy: ExistingWorkPolicy): Boolean {
+        val manager = WorkManager.getInstance(context)
+        val request = newWorkRequest(accountKeyId, delay)
+        val requestedAt = System.currentTimeMillis()
+        val operation = MigrationAccountRetirement.keepWake(accountKeyId) {
+            manager.enqueueUniqueWork(workId(accountKeyId), policy, request)
+        } ?: return false
+        operation.result.await()
+        if (policy != ExistingWorkPolicy.KEEP || manager.getWorkInfoById(request.id).await() != null) {
+            MigrationAccountRetirement.keepWake(accountKeyId) { armFallback(accountKeyId, delay, requestedAt, policy) }
+        }
+        return true
+    }
 
-    private fun enqueueAllowed(accountKeyId: String, delay: Duration): Operation {
+    @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
+    private fun armFallback(accountKeyId: String, delay: Duration, requestedAt: Long, policy: ExistingWorkPolicy) {
         migrationLog("MigrationScheduler: scheduling the next migration wake.")
-        val operation = WorkManager.getInstance(context).enqueueUniqueWork(
-            workId(accountKeyId),
-            ExistingWorkPolicy.REPLACE,
-            newWorkRequest(accountKeyId, delay)
-        )
         // Dead-man's switch: record when this run is EXPECTED, and arm the fallback alarm a late
         // margin past it — the alarm firing means the worker had its chance and did not run
         // (Doze/OEM kill/background restriction); MigrationTransferDueReceiver then raises the
         // step-due notification whose tap re-kicks the worker through the app.
-        MigrationWorkerHeartbeat.stampScheduled(
-            context,
-            accountKeyId,
-            System.currentTimeMillis() + delay.inWholeMilliseconds,
-        )
-        migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
-        return operation
+        try {
+            val workerStarted = (MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId) ?: -1L) >= requestedAt
+            if (policy == ExistingWorkPolicy.APPEND || !workerStarted) {
+                MigrationWorkerHeartbeat.stampScheduled(context, accountKeyId, requestedAt + delay.inWholeMilliseconds)
+                migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("MigrationScheduler: fallback alarm unavailable (${e.javaClass.simpleName}).")
+        }
     }
 
     fun cancel(accountKeyId: String) {

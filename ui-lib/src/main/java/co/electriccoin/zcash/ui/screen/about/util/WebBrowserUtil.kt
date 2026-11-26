@@ -15,7 +15,7 @@ object WebBrowserUtil {
         url: String,
         appearanceMode: AppearanceMode,
         isOledEnabled: Boolean
-    ) {
+    ): Boolean {
         val lightParams = colorSchemeParams(BrowserChromeColors.light)
         val darkParams =
             colorSchemeParams(if (isOledEnabled) BrowserChromeColors.oledDark else BrowserChromeColors.dark)
@@ -36,9 +36,9 @@ object WebBrowserUtil {
                 .setDefaultColorSchemeParams(lightParams)
                 .setColorScheme(resolvedScheme)
                 .build()
-        runCatching {
+        return runCatching {
             intent.launchUrl(activity, Uri.parse(url))
-        }
+        }.isSuccess
     }
 
     private fun colorSchemeParams(color: Color) =

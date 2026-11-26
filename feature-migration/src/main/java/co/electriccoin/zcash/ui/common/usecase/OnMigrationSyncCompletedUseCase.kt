@@ -38,6 +38,7 @@ class OnMigrationSyncCompletedUseCase(
             lastNetworkActivity.stampNow()
             return
         }
+        lastNetworkActivity.stampNow()
         // Worker revival: this hook fires exactly when the wallet is provably up and synced — the
         // one moment a dead self-rechaining worker (process killed mid-run, app update consumed
         // the restored job before the SDK was ready) can be safely re-armed. The worker has NO
@@ -53,9 +54,8 @@ class OnMigrationSyncCompletedUseCase(
         if (sdk.getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress) {
             if (!isMigrationWorkerActiveInWorkManager(context, accountKeyId)) {
                 migrationLog("ForegroundHook: migration worker absent with a live plan — re-arming.")
-                migrationScheduler.schedule(accountKeyId, 60.seconds)
+                migrationScheduler.scheduleIfMissing(accountKeyId, 60.seconds)
             }
         }
-        lastNetworkActivity.stampNow()
     }
 }
