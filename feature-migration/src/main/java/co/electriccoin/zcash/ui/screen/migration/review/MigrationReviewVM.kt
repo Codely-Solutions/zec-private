@@ -10,10 +10,12 @@ import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
@@ -69,15 +71,19 @@ import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneS
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.stageResultFrom
+import co.electriccoin.zcash.work.MigrationDriveOnce
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.math.MathContext
-import java.util.concurrent.atomic.AtomicBoolean
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 // Protocol target block interval in seconds, used as the fallback until a measured rate is
@@ -104,6 +110,7 @@ class MigrationReviewVM(
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
     private val walletActionAccess: WalletActionAccess,
+    private val migrationDrive: MigrationDriveOnce,
 ) : ViewModel() {
     override fun onCleared() {
         navigationRouter.discardResultFrom(sourceEntryId)
@@ -152,6 +159,10 @@ class MigrationReviewVM(
     private var committedMigration: CommittedMigration? = null
 
     private data class CommittedMigration(val reviewed: ReviewedMigrationSchedule, val showSchedule: Boolean)
+
+    private class ConfirmationAuthority(private val owner: Job, val canPresent: () -> Boolean) {
+        fun canConfirm() = owner.isActive && canPresent()
+    }
     private val isKeystoneAccount = getSelectedWalletAccount.observe().map { it is KeystoneAccount }
     private val failure = MutableStateFlow<TransferResult?>(null)
 
@@ -391,8 +402,10 @@ class MigrationReviewVM(
             if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
             val account = requireReviewAccount()
             val canOperate = walletActionAccess.capture(account) ?: return@execute
-            val canConfirm = { canOperate() && ownsReviewEntry() && proposeLce.state.value.success === proposal }
-            if (!canConfirm()) return@execute
+            val authority = ConfirmationAuthority(currentCoroutineContext().job) {
+                canOperate() && ownsReviewEntry() && proposeLce.state.value.success === proposal
+            }
+            if (!authority.canConfirm()) return@execute
             try {
                 biometricRepository.requestBiometrics(
                     request =
@@ -409,8 +422,8 @@ class MigrationReviewVM(
             } catch (_: BiometricsCancelledException) {
                 return@execute
             }
-            if (canConfirm()) {
-                confirmAutomatic(proposal.reviewed, account, canConfirm)
+            if (authority.canConfirm()) {
+                confirmAutomatic(proposal.reviewed, account, authority)
             }
         }
 
@@ -435,22 +448,35 @@ class MigrationReviewVM(
     private suspend fun confirmAutomatic(
         reviewed: ReviewedMigrationSchedule,
         account: WalletAccount,
-        canConfirm: () -> Boolean,
+        authority: ConfirmationAuthority,
     ) {
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
+        checkNotNull(migrationDrive.withExclusiveAccess<Unit>(accountKeyId) {
+            if (authority.canConfirm()) confirmAutomaticOnDrive(reviewed, account, accountKeyId, authority)
+        }) { "Another migration step is in progress" }
+    }
+
+    private suspend fun confirmAutomaticOnDrive(
+        reviewed: ReviewedMigrationSchedule,
+        account: WalletAccount,
+        accountKeyId: String,
+        authority: ConfirmationAuthority,
+    ) {
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        if (!canConfirm() || resumeCommittedMigration(sdk, reviewed, accountKeyId)) return
+        if (!authority.canConfirm() || resumeCommittedMigration(sdk, reviewed, accountKeyId, authority.canPresent)) {
+            return
+        }
         val nativePlanActive = sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         val pending = pendingMigrationScheduleRepository.review(accountKeyId)
         check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
             "The migration changed. Return to Home to recover it."
         }
-        if (!canConfirm()) return
+        if (!authority.canConfirm()) return
         val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
         if (account is KeystoneAccount) {
-            confirmKeystone(reviewed, accountKeyId, newTorPreference, canConfirm)
+            confirmKeystone(reviewed, accountKeyId, newTorPreference, authority)
         } else {
-            confirmSoftwareAutomatic(sdk, reviewed, accountKeyId, newTorPreference, canConfirm)
+            confirmSoftwareAutomatic(sdk, reviewed, accountKeyId, newTorPreference, authority)
         }
     }
 
@@ -459,37 +485,50 @@ class MigrationReviewVM(
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
         newTorPreference: Boolean?,
-        canConfirm: () -> Boolean,
+        authority: ConfirmationAuthority,
     ) {
         val split = reviewed.noteSplit
         if (split != null && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
             throw PrivateNoteSplitUnavailable()
         }
-        if (!canConfirm()) return
+        if (!authority.canConfirm()) return
         newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
         try {
             val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
             currentCoroutineContext().ensureActive()
-            if (!canConfirm()) return
-            val splitResult = split?.let { sdk.submitNoteSplit(it, spendingKey) }
-            currentCoroutineContext().ensureActive()
-            if (splitResult != null && splitResult !is TransferResult.Success) {
-                onSplitFailure(splitResult, sdk, reviewed, accountKeyId)
-            } else if (canConfirm()) {
-                sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
-                val saved = CommittedMigration(reviewed, showSchedule = true)
-                committedMigration = saved
-                finishCommittedMigration(saved, accountKeyId)
-                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult as? TransferResult.Success)
+            if (!authority.canConfirm()) return
+            withContext(NonCancellable) {
+                if (authority.canConfirm()) {
+                    commitSoftwareMigration(sdk, reviewed, accountKeyId, spendingKey, authority)
+                }
             }
         } catch (e: RuntimeException) {
             if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
                 // The SDK owns the already-committed plan. Do not draw or sign a replacement.
-                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+                navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) { NavigationCommand.BackToRoot }
             } else {
                 loadProposal()
             }
+        }
+    }
+
+    private suspend fun commitSoftwareMigration(
+        sdk: OrchardMigrationSdk,
+        reviewed: ReviewedMigrationSchedule,
+        accountKeyId: String,
+        spendingKey: UnifiedSpendingKey,
+        authority: ConfirmationAuthority,
+    ) {
+        val splitResult = reviewed.noteSplit?.let { sdk.submitNoteSplit(it, spendingKey) }
+        if (splitResult != null && splitResult !is TransferResult.Success) {
+            onSplitFailure(splitResult, sdk, reviewed, accountKeyId, authority.canPresent)
+        } else if (authority.canConfirm()) {
+            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
+            recordCommittedMigration(reviewed, accountKeyId, showSchedule = true, canPresent = authority.canPresent)
+            synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
+        } else if (splitResult is TransferResult.Success && sdk.hasCommitted(reviewed.schedule)) {
+            recordCommittedMigration(reviewed, accountKeyId, showSchedule = false, canPresent = authority.canPresent)
         }
     }
 
@@ -498,33 +537,48 @@ class MigrationReviewVM(
         sdk: OrchardMigrationSdk,
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
+        canPresent: () -> Boolean,
     ) {
         if (result is TransferResult.NetworkError && result.retryable && sdk.hasCommitted(reviewed.schedule)) {
-            requireReviewAccount()
-            val saved = CommittedMigration(reviewed, showSchedule = false)
-            committedMigration = saved
-            finishCommittedMigration(saved, accountKeyId)
-        } else {
+            recordCommittedMigration(reviewed, accountKeyId, showSchedule = false, canPresent = canPresent)
+        } else if (canPresent()) {
             failure.value = result
         }
+    }
+
+    private suspend fun recordCommittedMigration(
+        reviewed: ReviewedMigrationSchedule,
+        accountKeyId: String,
+        showSchedule: Boolean,
+        canPresent: () -> Boolean,
+    ) {
+        val committed = CommittedMigration(reviewed, showSchedule)
+        committedMigration = committed
+        finishCommittedMigration(committed, accountKeyId, canPresent)
     }
 
     private suspend fun resumeCommittedMigration(
         sdk: OrchardMigrationSdk,
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
+        canPresent: () -> Boolean,
     ): Boolean {
         val committed = committedMigration?.takeIf { it.reviewed === reviewed } ?: return false
         if (sdk.hasCommitted(reviewed.schedule)) {
-            finishCommittedMigration(committed, accountKeyId)
+            finishCommittedMigration(committed, accountKeyId, canPresent)
         } else {
-            navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
+            navigationRouter.stageResultFrom(sourceEntryId, canPresent) { NavigationCommand.BackToRoot }
         }
         return true
     }
 
     @Suppress("TooGenericExceptionCaught") // After native commit, retry only the app's scheduling work.
-    private suspend fun finishCommittedMigration(committed: CommittedMigration, accountKeyId: String) {
+    private suspend fun finishCommittedMigration(
+        committed: CommittedMigration,
+        accountKeyId: String,
+        canPresent: () -> Boolean,
+    ) {
+        if (!migrationDrive.permitsForeground(accountKeyId)) return
         try {
             finalizeMigrationSchedule(committed.reviewed.schedule, args.mode, accountKeyId, false)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -533,7 +587,7 @@ class MigrationReviewVM(
             migrationLog("Migration scheduling follow-up unavailable (${e.javaClass.simpleName}).")
             throw MigrationFinalizationPending()
         }
-        navigationRouter.stageResultFrom(sourceEntryId) {
+        navigationRouter.stageResultFrom(sourceEntryId, canPresent) {
             if (committed.showSchedule) {
                 NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
             } else {
@@ -546,18 +600,18 @@ class MigrationReviewVM(
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
         newTorPreference: Boolean?,
-        canConfirm: () -> Boolean,
+        authority: ConfirmationAuthority,
     ) {
-        if (!canConfirm()) return
+        if (!authority.canConfirm()) return
         newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
         // Keystone can't sign in-process — hand the unsigned schedule off to the QR
         // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
         // instead (MigrationKeystoneScanVM), not here.
-        if (!canConfirm()) return
+        if (!authority.canConfirm()) return
         val existingPlan = pendingMigrationScheduleRepository.review(accountKeyId)
         val existingSignatures = pendingKeystone.peek(accountKeyId)
         if (existingPlan === reviewed && existingSignatures?.isFullySigned == true) {
-            navigationRouter.stageResultFrom(sourceEntryId) {
+            navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) {
                 NavigationCommand.Forward(listOf(MigrationScheduledArgs(accountKeyId)))
             }
         } else {
@@ -565,7 +619,7 @@ class MigrationReviewVM(
                 pendingKeystone.clear(accountKeyId, existingSignatures)
             }
             pendingMigrationScheduleRepository.set(accountKeyId, reviewed)
-            navigationRouter.stageResultFrom(sourceEntryId) {
+            navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) {
                 NavigationCommand.Forward(listOf(MigrationKeystoneSignArgs(args.mode, accountKeyId)))
             }
         }
@@ -618,22 +672,20 @@ class MigrationReviewVM(
         val canPrepare = { canSign() && ownsReviewEntry() && proposeLce.state.value.success === review }
         if (!canPrepare()) return
         val reviewed = keystoneProposalRepository.setMigrationSweepProposal(review.proposal)
-        val handedOff = AtomicBoolean(false)
-        val canProve = { canSign() && (handedOff.get() || canPrepare()) }
-        var staged = false
+        var delivered = false
         try {
-            keystoneProposalRepository.prepareReviewedMigration(reviewed, account, canPrepare, canProve)
-            if (!canPrepare()) return
-            keystoneProposalRepository.approveForSigning(reviewed, canSign = canProve)
-            navigationRouter.stageResultFrom(sourceEntryId, {
+            keystoneProposalRepository.prepareReviewedMigration(reviewed, account, canPrepare)
+            delivered = navigationRouter.commitFrom(sourceEntryId, {
                 canPrepare() && keystoneProposalRepository.transactionProposal.value === reviewed
             }) {
-                handedOff.set(true)
-                NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+                if (keystoneProposalRepository.activateReviewedMigration(reviewed, canSign)) {
+                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+                } else {
+                    null
+                }
             }
-            staged = true
         } finally {
-            if (!staged) keystoneProposalRepository.clear(reviewed)
+            if (!delivered) keystoneProposalRepository.clear(reviewed)
         }
     }
 

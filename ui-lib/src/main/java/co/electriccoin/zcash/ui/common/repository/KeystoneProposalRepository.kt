@@ -121,8 +121,9 @@ interface KeystoneProposalRepository {
         proposal: MigrationSweepTransactionProposal,
         account: WalletAccount,
         canPrepare: () -> Boolean,
-        canProve: () -> Boolean,
     )
+
+    fun activateReviewedMigration(proposal: MigrationSweepTransactionProposal, canSign: () -> Boolean): Boolean
 
     fun approveForSigning(
         expectedProposal: TransactionProposal? = null,
@@ -287,7 +288,6 @@ class KeystoneProposalRepositoryImpl(
         proposal: MigrationSweepTransactionProposal,
         account: WalletAccount,
         canPrepare: () -> Boolean,
-        canProve: () -> Boolean,
     ) {
         fun requireCurrent() {
             check(canPrepare() && transactionProposal.value === proposal) {
@@ -298,7 +298,21 @@ class KeystoneProposalRepositoryImpl(
         val pczt = createReviewPczt(proposal, account, ::requireCurrent)
         currentCoroutineContext().ensureActive()
         requireCurrent()
-        prepareSigning(proposal, pczt, account, canProve)
+        hardwareProposal.prepare(proposal, pczt, account.sdkAccount.accountUuid)
+        pcztWithProofsJob?.cancel()
+        pcztWithProofsJob = null
+    }
+
+    override fun activateReviewedMigration(
+        proposal: MigrationSweepTransactionProposal,
+        canSign: () -> Boolean,
+    ): Boolean = try {
+        approveForSigning(proposal, canSign = canSign)
+        val current = hardwareProposal.requireApproved(transactionProposal.value, proposal)
+        startProofs(current, canSign)
+        true
+    } catch (_: IllegalStateException) {
+        false
     }
 
     private suspend fun createAccountBoundPczt(resolveAccount: suspend () -> WalletAccount) {
@@ -326,13 +340,12 @@ class KeystoneProposalRepositoryImpl(
             if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
         }
 
-    private fun prepareSigning(
-        proposal: TransactionProposal,
-        result: Pczt,
-        owner: WalletAccount,
-        canProve: () -> Boolean = { true },
-    ) {
+    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
         val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
+        startProofs(prepared)
+    }
+
+    private fun startProofs(prepared: PreparedHardwareProposal, canProve: () -> Boolean = { true }) {
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope) { pczt ->
             proposalDataSource.addProofsToPczt(pczt) {

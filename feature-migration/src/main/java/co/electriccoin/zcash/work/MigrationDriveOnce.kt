@@ -95,6 +95,9 @@ class MigrationDriveOnce(
 
     internal suspend fun <T> withIdleDrive(block: suspend () -> T): T = DRIVE_LOCK.withLock { block() }
 
+    internal fun permitsForeground(accountKeyId: String): Boolean =
+        !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
+
     /**
      * @param allowForcedBroadcastWindow Only `true` for [MigrationLiveDriver] — the worker (via
      * [MigrationWorker.doWork]) must NEVER pass `true`: forcing a broadcast window can wait
@@ -189,8 +192,7 @@ class MigrationDriveOnce(
             return null
         }
         try {
-            val canRun = !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
-            return if (canRun) block() else null
+            return if (permitsForeground(accountKeyId)) block() else null
         } finally {
             DRIVE_LOCK.unlock()
         }

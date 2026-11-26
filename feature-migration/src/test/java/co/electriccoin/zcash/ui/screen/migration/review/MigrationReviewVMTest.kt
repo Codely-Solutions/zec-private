@@ -45,6 +45,7 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -144,7 +145,7 @@ class MigrationReviewVMTest {
             val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
                 every { setMigrationSweepProposal(proposal) } returns adopted
                 every { transactionProposal } returns MutableStateFlow(adopted)
-                every { approveForSigning(adopted, null, capture(approval)) } returns Unit
+                every { activateReviewedMigration(adopted, capture(approval)) } returns true
             }
             val vm =
                 vm(
@@ -175,7 +176,7 @@ class MigrationReviewVMTest {
 
             coVerifyOrder {
                 keystoneProposalRepository.setMigrationSweepProposal(proposal)
-                keystoneProposalRepository.prepareReviewedMigration(adopted, any(), any(), any())
+                keystoneProposalRepository.prepareReviewedMigration(adopted, any(), any())
             }
             assertEquals(
                 listOf<Any>(SignKeystoneTransactionArgs),
@@ -696,28 +697,70 @@ class MigrationReviewAuthorityTest {
     }
 
     @Test
-    fun revokedWalletAuthorityAfterEnteredSplitBlocksNewScheduleSigning() = runTest {
+    fun declinedKeystoneNavigationClearsTheExactPreparationBeforeProofsStart() = runTest {
+        val sdkProposal = mockk<Proposal> { coEvery { totalFeeRequired() } returns Zatoshi(1_000L) }
+        val adopted = MigrationSweepTransactionProposal(sdkProposal)
+        val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
+            every { setMigrationSweepProposal(sdkProposal) } returns adopted
+            every { transactionProposal } returns MutableStateFlow(adopted)
+        }
+        val router = FakeNavigationRouter("keystone-review")
+        val sdk = mockk<OrchardMigrationSdk> { coEvery { proposeImmediateMigration() } returns sdkProposal }
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            getSelectedWalletAccount = selectedAccount(spendable<KeystoneAccount>()),
+            keystoneProposalRepository = keystone,
+            sourceEntryId = "keystone-review",
+        )
+
+        vm.currentReview().onConfirm()
+        runCurrent()
+        val handoff = router.scopedCommands.single()
+        assertTrue(handoff.isStillAllowed())
+        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
+        handoff.acknowledge(false)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { keystone.clear(adopted) }
+        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
+    }
+
+    @Test
+    fun revokedWalletAuthorityPreservesTheEnteredSplitWithoutNewScheduleSigning() = runTest {
         val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
         val reviewed = schedule(42L, 100_000L)
         val returned = CompletableDeferred<TransferResult>()
+        var committed = false
+        val savedTransfer = mockk<cash.z.ecc.android.sdk.MigrationTransferState> {
+            every { isTransfer } returns true
+            every { id } returns 42L
+            every { amountZatoshi } returns 100_000L
+        }
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
-            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { getMigrationStateUnreconciled() } coAnswers {
+                if (committed) MigrationState.InProgress(mockk(relaxed = true)) else MigrationState.NotStarted
+            }
             coEvery { isNoteSplitNeeded() } returns true
             coEvery { prepareNoteSplit() } returns split
             coEvery { proposeMigrationTransfersFromSplit(split) } returns reviewed
-            coEvery { submitNoteSplit(split, any()) } coAnswers { returned.await() }
+            coEvery { submitNoteSplit(split, any()) } coAnswers { returned.await().also { committed = true } }
+            coEvery { getMigrationTransferStates() } returns
+                cash.z.ecc.android.sdk.MigrationTransferStates(listOf(savedTransfer), 100L)
         }
         var authorityCurrent = true
         val authority = mockk<WalletActionAccess> {
             coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
         }
         val router = FakeNavigationRouter("automatic-split")
+        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
         val vm = vm(
             router = router,
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
             mode = MigrationMode.AUTOMATIC,
             sourceEntryId = "automatic-split",
             walletActionAccess = authority,
+            finalizeMigrationSchedule = finalize,
         )
 
         vm.currentReview().onConfirm()
@@ -729,6 +772,7 @@ class MigrationReviewAuthorityTest {
 
         coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
         coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        coVerify(exactly = 1) { finalize(reviewed, MigrationMode.AUTOMATIC, any(), false) }
         assertTrue(router.scopedCommands.isEmpty())
     }
 }
@@ -770,6 +814,10 @@ private fun vm(
     walletActionAccess: WalletActionAccess = mockk {
         coEvery { capture(any<WalletAccount>()) } returns { true }
     },
+    migrationDrive: MigrationDriveOnce = mockk {
+        every { permitsForeground(any()) } returns true
+        coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
+    },
 ) = MigrationReviewVM(
     args = MigrationReviewArgs(mode = mode, useTor = draftTor),
     getOrchardMigrationSdk = getOrchardMigrationSdk,
@@ -793,6 +841,7 @@ private fun vm(
     synchronizerProvider = synchronizerProvider,
     sourceEntryId = sourceEntryId,
     walletActionAccess = walletActionAccess,
+    migrationDrive = migrationDrive,
 )
 
 private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
@@ -815,7 +864,8 @@ private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
     override fun backTo(route: KClass<*>) = Unit
 
     override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
-        (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
+        val current = activeEntry.value?.let { entry -> mockk<NavBackStackEntry> { every { id } returns entry.id } }
+        (block(current) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
     }
 
     override fun backToRoot() = Unit

@@ -77,7 +77,7 @@ class KeystoneProposalRepositoryTest {
         }
 
         val staleApproval = assertFailsWith<IllegalStateException> {
-            repository.prepareReviewedMigration(original, owner, { authorized }, { authorized })
+            repository.prepareReviewedMigration(original, owner) { authorized }
         }
         assertEquals("The migration review changed during preparation.", staleApproval.message)
         assertNull(repository.getProposalPCZT())
@@ -85,7 +85,7 @@ class KeystoneProposalRepositoryTest {
 
         val replacement = repository.setMigrationSweepProposal(mockk())
         assertFailsWith<IllegalStateException> {
-            repository.prepareReviewedMigration(original, owner, { true }, { true })
+            repository.prepareReviewedMigration(original, owner) { true }
         }
         assertEquals(replacement, repository.transactionProposal.value)
         coVerify(exactly = 1) { proposalDataSource.createPcztFromProposal(any(), any(), any()) }
