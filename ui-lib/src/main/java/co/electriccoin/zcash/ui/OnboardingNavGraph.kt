@@ -11,7 +11,7 @@ import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
+import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
@@ -48,7 +48,7 @@ fun NavGraphBuilder.onboardingNavGraph(
             Onboarding(
                 initialization = initialization,
                 onImportWallet = {
-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
+                    if (VersionInfo.testLabFixturesEnabled(activity)) {
                         persistExistingWalletWithSeedPhrase(
                             activity.applicationContext,
                             walletViewModel,
@@ -61,7 +61,7 @@ fun NavGraphBuilder.onboardingNavGraph(
                     }
                 },
                 onCreateWallet = {
-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
+                    if (VersionInfo.testLabFixturesEnabled(activity)) {
                         persistExistingWalletWithSeedPhrase(
                             activity.applicationContext,
                             walletViewModel,

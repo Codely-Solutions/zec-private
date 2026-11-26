@@ -123,7 +123,7 @@ internal class ExactOutputVMMapper {
             if (amount == null || asset?.usdPrice == null) {
                 null
             } else {
-                amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
+                amount.multiply(asset.usdPrice)
             }
         return fiatInnerState.copy(
             innerTextFieldState =
@@ -144,10 +144,10 @@ internal class ExactOutputVMMapper {
     ): NumberTextFieldInnerState {
         val fiat = fiatInnerState.amount
         val amount =
-            if (fiat == null || asset?.usdPrice == null) {
-                null
-            } else {
-                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
+            asset?.let { selected ->
+                selected.usdPrice?.takeIf { it.signum() > 0 }?.let { price ->
+                    fiat?.divide(price, selected.decimals, RoundingMode.DOWN)
+                }
             }
         return amountInnerState.copy(
             innerTextFieldState =
@@ -183,7 +183,7 @@ internal class ExactOutputVMMapper {
                     if (amount == null || asset?.usdPrice == null) {
                         null
                     } else {
-                        amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
+                        amount.multiply(asset.usdPrice)
                     }
                 onTextFieldChange(
                     amountInnerState,
@@ -220,29 +220,8 @@ internal class ExactOutputVMMapper {
         NumberTextFieldState(
             innerState = state.fiatAmount,
             onValueChange = { fiatInnerState ->
-                val fiat = fiatInnerState.amount
-                val asset = state.asset
-                val amount =
-                    if (fiat == null || asset?.usdPrice == null) {
-                        null
-                    } else {
-                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
-                    }
-                onTextFieldChange(
-                    state.amount.copy(
-                        innerTextFieldState =
-                            state.amount.innerTextFieldState.copy(
-                                value =
-                                    amount?.let {
-                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
-                                    } ?: stringRes(""),
-                                selection = TextSelection.End
-                            ),
-                        amount = amount,
-                        lastValidAmount = amount ?: state.amount.lastValidAmount
-                    ),
-                    fiatInnerState
-                )
+                val amount = createAmountInnerState(fiatInnerState, state.amount, state.asset)
+                onTextFieldChange(amount, fiatInnerState)
             },
             isEnabled = !state.isRequestingQuote,
             explicitError =
@@ -368,7 +347,7 @@ internal class ExactOutputVMMapper {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedABContact?.address ?: state.address
-                    state.getOriginTokenAmount()?.let {
+                    amount?.takeIf { it.signum() > 0 }?.let {
                         onRequestSwapQuoteClick(it, state.getOriginFiatAmount(), address)
                     }
                 }

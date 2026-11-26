@@ -161,23 +161,29 @@ index 000000000..d6f306286
 +OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 +SOFTWARE.
 diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
-index 6e68fc9c5..574aabbe8 100644
+index 6e68fc9c5..73c3104a6 100644
 --- a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 +++ b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 @@ -26 +25,0 @@ import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-@@ -34 +33 @@ import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
+@@ -31 +29,0 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveKeepScreenOnSyncSessionUse
+-import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
+@@ -34 +32 @@ import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
 -import co.electriccoin.zcash.voting.di.featureVotingModule
 +import co.electriccoin.zcash.di.excludedVotingModule
-@@ -44 +42,0 @@ class ZcashApplication : CoroutineApplication() {
+@@ -44 +41,0 @@ class ZcashApplication : CoroutineApplication() {
 -    private val flexaRepository by inject<FlexaRepository>()
-@@ -80,0 +79 @@ class ZcashApplication : CoroutineApplication() {
+@@ -55 +51,0 @@ class ZcashApplication : CoroutineApplication() {
+-    private val observeSeedMismatch: ObserveSeedMismatchUseCase by inject()
+@@ -80,0 +77 @@ class ZcashApplication : CoroutineApplication() {
 +                zecPrivateProductModule,
-@@ -88 +87 @@ class ZcashApplication : CoroutineApplication() {
+@@ -88 +85 @@ class ZcashApplication : CoroutineApplication() {
 -                featureVotingModule,
 +                excludedVotingModule,
-@@ -99 +97,0 @@ class ZcashApplication : CoroutineApplication() {
+@@ -99 +95,0 @@ class ZcashApplication : CoroutineApplication() {
 -        flexaRepository.init()
+@@ -105 +100,0 @@ class ZcashApplication : CoroutineApplication() {
+-        applicationScope.launch { observeSeedMismatch() }
 diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt b/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt
 new file mode 100644
 index 000000000..6d760951c
@@ -2376,7 +2382,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..293dd093a 100644
+index ec56161b5..9124b73ea 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -21485,7 +21491,7 @@ index 1c2a8787c..9a180202c 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..cbf09a0c3 100644
+index c9262f680..892b88703 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -21496,19 +21502,26 @@ index c9262f680..cbf09a0c3 100644
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
 @@ -75 +73,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
-@@ -137 +134,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -106 +103,0 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
+-import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
+@@ -122 +118,0 @@ import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
+-import co.electriccoin.zcash.ui.common.usecase.RecoverFromSeedMismatchUseCase
+@@ -137 +132,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -188,0 +186 @@ val useCaseModule =
+@@ -188,0 +184 @@ val useCaseModule =
 +        singleOf(::CopyRecoveryToClipboardUseCase)
-@@ -201 +198,0 @@ val useCaseModule =
+@@ -201 +196,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -246 +242,0 @@ val useCaseModule =
+@@ -246 +240,0 @@ val useCaseModule =
 -        factoryOf(::NavigateToAddressBookUseCase)
-@@ -256 +251,0 @@ val useCaseModule =
+@@ -256 +249,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +255,0 @@ val useCaseModule =
+@@ -261 +253,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -325 +319 @@ val useCaseModule =
+@@ -322,2 +313,0 @@ val useCaseModule =
+-        singleOf(::RecoverFromSeedMismatchUseCase)
+-        factoryOf(::ObserveSeedMismatchUseCase)
+@@ -325 +315 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        factory { GetSwapStatusUseCase(get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -21598,16 +21611,25 @@ index 11ab4c65f..5fd28045f 100644
 -            .open(activity)
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
-index 36840dcc5..d40c31535 100644
+index 36840dcc5..f86e6175a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 @@ -3,0 +4,2 @@ import androidx.activity.ComponentActivity
 +import androidx.compose.runtime.getValue
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
+@@ -12 +14 @@ import cash.z.ecc.sdk.type.fromResources
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.common.model.VersionInfo
 @@ -44,0 +47 @@ fun NavGraphBuilder.onboardingNavGraph(
 +            val initialization by walletViewModel.walletInitialization.collectAsStateWithLifecycle()
 @@ -45,0 +49 @@ fun NavGraphBuilder.onboardingNavGraph(
 +                initialization = initialization,
+@@ -47 +51 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
+@@ -60 +64 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 index a93926c57..06dcb276d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
@@ -21661,6 +21683,17 @@ index 5ec410de8..87abe5b0e 100644
 +                supportAction()
 @@ -158,0 +161 @@ private fun AccountNameWithSubtitle(
 +@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+index f441f6847..f6b5418e7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+@@ -10 +9,0 @@ import androidx.navigation.compose.rememberNavController
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
+@@ -11,0 +11 @@ import co.electriccoin.zcash.ui.MainActivity
++import co.electriccoin.zcash.ui.common.model.VersionInfo
+@@ -44 +44 @@ private fun ObserveScreenSecurityFlag() {
+-                        val isTest = FirebaseTestLabUtil.isFirebaseTestLab(context)
++                        val isTest = VersionInfo.testLabFixturesEnabled(context)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
 index a6896cfd7..61a711eb6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
@@ -22708,6 +22741,18 @@ index 000000000..435cd453b
 +}
 +
 +val SwapQuoteStatus.positiveRefund get() = refundedFormatted?.takeIf { it.signum() > 0 }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+index dc70b9506..148174338 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+@@ -41,0 +42,4 @@ data class VersionInfo(
++        internal fun testLabFixturesEnabled(context: Context): Boolean =
++            BuildConfig.DEBUG && NETWORK_DIMENSION == NetworkDimension.TESTNET &&
++                FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext)
++
+@@ -52 +56 @@ data class VersionInfo(
+-                isRunningUnderTestService = FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext),
++                isRunningUnderTestService = testLabFixturesEnabled(context),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
 index 01a2a6fa5..f8d45e6a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
@@ -25591,6 +25636,52 @@ index 80a163cdc..c45553fa7 100644
 @@ -15 +15 @@ class NavigateToSwapAssetPickerUseCase(
 -    suspend operator fun invoke(onlyChainTicker: String?): SwapAsset? {
 +    suspend operator fun invoke(onlyChainTicker: String? = null): SwapAsset? {
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
+deleted file mode 100644
+index 546900ef8..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
++++ /dev/null
+@@ -1,40 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import co.electriccoin.zcash.spackle.Twig
+-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+-import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+-import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+-import kotlinx.coroutines.CancellationException
+-import kotlinx.coroutines.flow.filter
+-
+-/**
+- * Runs [RecoverFromSeedMismatchUseCase] whenever [SynchronizerProvider.isSeedMismatch] flips to `true`.
+- * Collects forever and is launched once from the application class, so recovery does not depend on the
+- * UI lifecycle. A terminal [SeedMismatchRecoveryException] is routed to the error screen; other failures
+- * are logged and the collector keeps running.
+- */
+-class ObserveSeedMismatchUseCase(
+-    private val synchronizerProvider: SynchronizerProvider,
+-    private val recoverFromSeedMismatch: RecoverFromSeedMismatchUseCase,
+-    private val navigateToError: NavigateToErrorUseCase,
+-) {
+-    suspend operator fun invoke() {
+-        synchronizerProvider.isSeedMismatch
+-            .filter { it }
+-            .collect { runRecovery() }
+-    }
+-
+-    @Suppress("TooGenericExceptionCaught")
+-    private suspend fun runRecovery() {
+-        try {
+-            recoverFromSeedMismatch()
+-        } catch (e: CancellationException) {
+-            throw e
+-        } catch (e: SeedMismatchRecoveryException) {
+-            Twig.error(e) { "Seed-mismatch recovery failed, retries exhausted" }
+-            navigateToError(ErrorArgs.General(e))
+-        } catch (e: Exception) {
+-            Twig.error(e) { "Seed-mismatch recovery failed" }
+-        }
+-    }
+-}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
@@ -25618,6 +25709,105 @@ index db95c0420..ae2c4add5 100644
 @@ -45 +46 @@ class ProcessSwapTransactionUseCase(
 -        )
 +        )) { "Unable to save swap tracking before funding" }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
+deleted file mode 100644
+index 4ed2d4b85..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
++++ /dev/null
+@@ -1,93 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import cash.z.ecc.android.sdk.WalletCoordinator
+-import cash.z.ecc.android.sdk.WalletInitMode
+-import cash.z.ecc.android.sdk.model.PersistableWallet
+-import co.electriccoin.zcash.spackle.Twig
+-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+-import kotlinx.coroutines.TimeoutCancellationException
+-import kotlinx.coroutines.flow.first
+-import kotlinx.coroutines.withTimeout
+-import kotlin.time.Duration.Companion.seconds
+-
+-/**
+- * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]) by erasing the SDK
+- * databases through the lockout-aware [WalletCoordinator.deleteSdkDataFlow] (wallet secrets are untouched)
+- * and re-storing the wallet with [WalletInitMode.RestoreWallet] so the next synchronizer build rescans.
+- * A failed or timed-out erase throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
+- * failures no further erase is attempted. The store is skipped when the persisted wallet changed during
+- * the erase (concurrent Reset Zashi or wallet restore).
+- */
+-class RecoverFromSeedMismatchUseCase(
+-    private val persistableWalletProvider: PersistableWalletProvider,
+-    private val walletCoordinator: WalletCoordinator,
+-) {
+-    private var failedAttempts = 0
+-
+-    @Suppress("ThrowsCount")
+-    suspend operator fun invoke() {
+-        val wallet = persistableWalletProvider.getPersistableWallet() ?: return
+-
+-        if (failedAttempts >= MAX_RECOVERY_ATTEMPTS) {
+-            Twig.error {
+-                "Seed-mismatch recovery: giving up after $failedAttempts failed attempt(s), not retrying erase again"
+-            }
+-            throw SeedMismatchRecoveryException(failedAttempts)
+-        }
+-
+-        val recoveryWallet = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
+-
+-        val erased =
+-            try {
+-                withTimeout(ERASE_TIMEOUT) { walletCoordinator.deleteSdkDataFlow().first() }
+-            } catch (e: TimeoutCancellationException) {
+-                failedAttempts += 1
+-                Twig.error(e) {
+-                    "Seed-mismatch recovery: deleteSdkDataFlow timed out after $ERASE_TIMEOUT " +
+-                        "(attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
+-                }
+-                throw SeedMismatchRecoveryException(failedAttempts)
+-            }
+-        if (!erased) {
+-            failedAttempts += 1
+-            Twig.error {
+-                "Seed-mismatch recovery: deleteSdkDataFlow reported failure " +
+-                    "(attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
+-            }
+-            throw SeedMismatchRecoveryException(failedAttempts)
+-        }
+-
+-        failedAttempts = 0
+-
+-        val currentWallet = persistableWalletProvider.getPersistableWallet()
+-        if (currentWallet == null || !currentWallet.identifiesSameWalletAs(wallet)) {
+-            Twig.error {
+-                "Seed-mismatch recovery: skipping store() — the persisted wallet changed during the erase " +
+-                    "(cleared by a concurrent Reset Zashi, or replaced by a concurrent wallet restore)"
+-            }
+-            return
+-        }
+-
+-        persistableWalletProvider.store(recoveryWallet)
+-    }
+-
+-    companion object {
+-        private const val MAX_RECOVERY_ATTEMPTS = 3
+-        private val ERASE_TIMEOUT = 30.seconds
+-    }
+-}
+-
+-/**
+- * Wallet identity is network plus seed phrase. `walletInitMode` is excluded because it is not serialized
+- * and reflects process state rather than identity.
+- */
+-private fun PersistableWallet.identifiesSameWalletAs(other: PersistableWallet) =
+-    network == other.network && seedPhrase == other.seedPhrase
+-
+-/**
+- * Thrown when the SDK erase fails, times out, or [RecoverFromSeedMismatchUseCase.MAX_RECOVERY_ATTEMPTS]
+- * is exhausted.
+- */
+-class SeedMismatchRecoveryException(
+-    val failedAttempts: Int
+-) : Exception("Seed-mismatch recovery failed after $failedAttempts attempt(s)")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 index 76c590a49..6ee4e003f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
@@ -25812,15 +26002,24 @@ index 548d25575..a78227744 100644
 -        }
 +            )) { "Unable to save swap tracking before funding" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
-index 51caa9e19..8e640d823 100644
+index 51caa9e19..4ca0a40a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 @@ -3,0 +4 @@ import android.content.Context
 +import android.content.Intent
-@@ -238 +239 @@ class SendEmailUseCase(
+@@ -24,0 +26,4 @@ class SendEmailUseCase(
++    internal fun sendBlankSupport(isAllowed: () -> Boolean) {
++        sendSupportEmail(context.getString(R.string.app_name), "", isAllowed)
++    }
++
+@@ -238 +243 @@ class SendEmailUseCase(
 -     * Internal method to send support email with fallback to text sharing.
 +     * Export diagnostics through a user-selected share target; no upstream recipient.
-@@ -244,6 +245,5 @@ class SendEmailUseCase(
+@@ -242 +247,2 @@ class SendEmailUseCase(
+-        messageBody: String
++        messageBody: String,
++        isAllowed: () -> Boolean = { true },
+@@ -244,6 +250,5 @@ class SendEmailUseCase(
 -        EmailUtil.sendEmailWithTextFallback(
 -            context = context,
 -            recipientAddress = context.getString(R.string.support_email_address),
@@ -25831,7 +26030,7 @@ index 51caa9e19..8e640d823 100644
 +            EmailUtil.newTextShareIntent(subject = subject, messageBody = messageBody),
 +            null
 +        ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-+        runCatching { context.startActivity(shareIntent) }
++        if (isAllowed()) runCatching { context.startActivity(shareIntent) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendSupportEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendSupportEmailUseCase.kt
 deleted file mode 100644
 index b63a9a929..000000000
@@ -27868,7 +28067,7 @@ index c7a9b6193..000000000
 -        }
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
-index 627591300..51b06186e 100644
+index 627591300..469f35653 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
 @@ -4,0 +5,6 @@ package co.electriccoin.zcash.ui.screen.home
@@ -27878,24 +28077,35 @@ index 627591300..51b06186e 100644
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.screen.donation.DonationArgs
 +import org.koin.compose.koinInject
-@@ -15,0 +22,2 @@ import org.koin.core.parameter.parametersOf
+@@ -9,0 +16 @@ import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
++import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -15,0 +23,2 @@ import org.koin.core.parameter.parametersOf
 +import co.electriccoin.zcash.ui.screen.updates.AndroidAppUpdateNotice
 +import co.electriccoin.zcash.ui.screen.updates.rememberAppUpdateNotice
-@@ -18,0 +27 @@ internal fun AndroidHome() {
+@@ -18,0 +28,3 @@ internal fun AndroidHome() {
 +    val donationRouter = koinInject<NavigationRouter>()
-@@ -39,0 +49,5 @@ internal fun AndroidHome() {
-+        val update = rememberAppUpdateNotice(blocked = it.message != null || !it.isSyncComplete)
++    val synchronizer = koinInject<SynchronizerProvider>()
++    val seedMismatch by synchronizer.isSeedMismatch.collectAsStateWithLifecycle()
+@@ -38,0 +51,6 @@ internal fun AndroidHome() {
++    HomeSeedMismatchNotice(
++        mismatch = seedMismatch,
++        isStillMismatched = { synchronizer.isSeedMismatch.value },
++        canDismiss = state != null,
++    )
++
+@@ -39,0 +58,5 @@ internal fun AndroidHome() {
++        val update = rememberAppUpdateNotice(blocked = seedMismatch || it.message != null || !it.isSyncComplete)
 +        val support = rememberHomeDonationSupport(
-+            blocked = it.message != null || !it.isSyncComplete || update != null,
++            blocked = seedMismatch || it.message != null || !it.isSyncComplete || update != null,
 +            onDonate = { donationRouter.forward(DonationArgs()) },
 +        )
-@@ -44 +58,4 @@ internal fun AndroidHome() {
+@@ -44 +67,4 @@ internal fun AndroidHome() {
 -            transactionWidgetState = transactionWidgetState
 +            transactionWidgetState = transactionWidgetState,
 +            supportAction = { DonationShortcut(support) },
 +            supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
 +            updateNotice = update?.let { release -> { AndroidAppUpdateNotice(release) } },
-@@ -49,0 +67 @@ internal fun AndroidHome() {
+@@ -49,0 +76 @@ internal fun AndroidHome() {
 +@Suppress("MatchingDeclarationName")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt
 index 965e55926..61e4d1950 100644
@@ -27924,6 +28134,91 @@ index 965e55926..61e4d1950 100644
 -                        if (isSystemInDarkTheme()) ZashiLightColors else ZashiDarkColors
 +                        containerColor = MaterialTheme.colorScheme.tertiary,
 +                        contentColor = MaterialTheme.colorScheme.onTertiary
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNotice.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNotice.kt
+new file mode 100644
+index 000000000..41e9b3a2b
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNotice.kt
+@@ -0,0 +1,79 @@
++package co.electriccoin.zcash.ui.screen.home
++
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.res.stringResource
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.compose.LocalLifecycleOwner
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import co.electriccoin.zcash.di.koinActivityViewModel
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
++import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationUIState
++import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationViewModel
++import co.electriccoin.zcash.ui.design.component.AppAlertDialog
++import org.koin.compose.koinInject
++import co.electriccoin.zcash.ui.design.R as DesignR
++
++@Composable
++internal fun HomeSeedMismatchNotice(
++    mismatch: Boolean,
++    isStillMismatched: () -> Boolean,
++    canDismiss: Boolean,
++) {
++    val auth = koinActivityViewModel<AuthenticationViewModel>()
++    val lifecycle = LocalLifecycleOwner.current.lifecycle
++    val support = koinInject<SendEmailUseCase>()
++    val authentication by auth.appAccessAuthenticationResultState.collectAsStateWithLifecycle()
++    val welcome by auth.showWelcomeAnimation.collectAsStateWithLifecycle()
++    val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
++
++    SeedMismatchNotice(
++        mismatch = mismatch,
++        authorized = allowMismatchNotice(authentication, welcome, lifecycleState),
++        canDismiss = canDismiss,
++        onSupport = {
++            support.sendBlankSupport {
++                isStillMismatched() && allowMismatchNotice(
++                    auth.appAccessAuthenticationResultState.value,
++                    auth.showWelcomeAnimation.value,
++                    lifecycle.currentState,
++                )
++            }
++        },
++    )
++}
++
++internal fun allowMismatchNotice(
++    authentication: AuthenticationUIState,
++    welcome: Boolean,
++    lifecycle: Lifecycle.State,
++): Boolean =
++    !welcome && lifecycle == Lifecycle.State.RESUMED &&
++        (authentication == AuthenticationUIState.Successful || authentication == AuthenticationUIState.NotRequired)
++
++@Composable
++internal fun SeedMismatchNotice(
++    mismatch: Boolean,
++    authorized: Boolean,
++    canDismiss: Boolean,
++    onSupport: () -> Unit,
++) {
++    var dismissed by remember(mismatch) { mutableStateOf(false) }
++    if (mismatch && authorized && !dismissed) {
++        val dismiss = if (canDismiss) ({ dismissed = true }) else null
++        AppAlertDialog(
++            onDismissRequest = dismiss,
++            title = stringResource(R.string.private_wallet_local_data_unavailable),
++            text = { Text(stringResource(R.string.private_wallet_reopen_for_data)) },
++            confirmButtonText = stringResource(R.string.private_wallet_contact_support),
++            onConfirmButtonClick = onSupport,
++            dismissButtonText = if (canDismiss) stringResource(DesignR.string.general_close) else null,
++            onDismissButtonClick = dismiss,
++        )
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
 index 34fb7e33b..20e760331 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
@@ -28132,7 +28427,7 @@ index fc469c300..da65e7671 100644
 +                }
 +            ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
-index b6549dd8b..afa009818 100644
+index b6549dd8b..d08b7f433 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 @@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.R
@@ -28142,19 +28437,54 @@ index b6549dd8b..afa009818 100644
 -import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
 @@ -34,0 +36 @@ import java.math.MathContext
 +import java.math.RoundingMode
-@@ -148 +150 @@ internal class ExactOutputVMMapper {
+@@ -124 +126 @@ internal class ExactOutputVMMapper {
+-                amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
++                amount.multiply(asset.usdPrice)
+@@ -145,4 +147,4 @@ internal class ExactOutputVMMapper {
+-            if (fiat == null || asset?.usdPrice == null) {
+-                null
+-            } else {
 -                fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
-+                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
++            asset?.let { selected ->
++                selected.usdPrice?.takeIf { it.signum() > 0 }?.let { price ->
++                    fiat?.divide(price, selected.decimals, RoundingMode.DOWN)
++                }
 @@ -155 +157 @@ internal class ExactOutputVMMapper {
 -                            ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
 +                            ?.let { stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false) }
-@@ -227 +229 @@ internal class ExactOutputVMMapper {
+@@ -184 +186 @@ internal class ExactOutputVMMapper {
+-                        amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
++                        amount.multiply(asset.usdPrice)
+@@ -221,23 +223,2 @@ internal class ExactOutputVMMapper {
+-                val fiat = fiatInnerState.amount
+-                val asset = state.asset
+-                val amount =
+-                    if (fiat == null || asset?.usdPrice == null) {
+-                        null
+-                    } else {
 -                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
-+                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
-@@ -235 +237 @@ internal class ExactOutputVMMapper {
+-                    }
+-                onTextFieldChange(
+-                    state.amount.copy(
+-                        innerTextFieldState =
+-                            state.amount.innerTextFieldState.copy(
+-                                value =
+-                                    amount?.let {
 -                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
-+                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
-@@ -393 +395,6 @@ internal class ExactOutputVMMapper {
+-                                    } ?: stringRes(""),
+-                                selection = TextSelection.End
+-                            ),
+-                        amount = amount,
+-                        lastValidAmount = amount ?: state.amount.lastValidAmount
+-                    ),
+-                    fiatInnerState
+-                )
++                val amount = createAmountInnerState(fiatInnerState, state.amount, state.asset)
++                onTextFieldChange(amount, fiatInnerState)
+@@ -369 +350 @@ internal class ExactOutputVMMapper {
+-                    state.getOriginTokenAmount()?.let {
++                    amount?.takeIf { it.signum() > 0 }?.let {
+@@ -393 +374,6 @@ internal class ExactOutputVMMapper {
 -                            !mayContainGiftCardSecret(state.selectedABContact?.address ?: state.address) &&
 +                            validateSwapRecipient(
 +                                state.selectedABContact?.address ?: state.address,
@@ -28162,7 +28492,7 @@ index b6549dd8b..afa009818 100644
 +                                state.asset.tokenTicker,
 +                                state.selectedABContact?.blockchain?.chainTicker
 +                            ).isValid &&
-@@ -411,6 +418,6 @@ internal class ExactOutputVMMapper {
+@@ -411,6 +397,6 @@ internal class ExactOutputVMMapper {
 -                when {
 -                    text.isEmpty() -> null
 -                    text.isBlank() -> stringRes("")
@@ -28840,7 +29170,7 @@ index 79f574053..390036751 100644
 -                )
 +            val asset = navigateToSwapAssetPicker()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
-index d7080a80c..12946480d 100644
+index d7080a80c..63cf128da 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 @@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
@@ -28848,7 +29178,15 @@ index d7080a80c..12946480d 100644
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 @@ -14 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 -import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
-@@ -501 +502,7 @@ internal class SwapVMMapper {
+@@ -40,0 +42 @@ import java.math.MathContext
++import java.math.RoundingMode
+@@ -448 +450 @@ internal class SwapVMMapper {
+-        val amount = textField.textField.innerState.amount
++        val amount = state.getOriginTokenAmount()
+@@ -477 +479 @@ internal class SwapVMMapper {
+-                    state.getOriginTokenAmount()?.let {
++                    amount?.takeIf { it.signum() > 0 }?.let {
+@@ -501 +503,7 @@ internal class SwapVMMapper {
 -                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
 +                            validateSwapRecipient(
 +                                state.selectedContact?.address ?: state.addressText,
@@ -28857,7 +29195,7 @@ index d7080a80c..12946480d 100644
 +                                state.selectedContact?.blockchain?.chainTicker,
 +                                allowPaymentAmount = false
 +                            ).isValid &&
-@@ -517,6 +524,7 @@ internal class SwapVMMapper {
+@@ -517,6 +525,7 @@ internal class SwapVMMapper {
 -                when {
 -                    text.isEmpty() -> null
 -                    text.isBlank() -> stringRes("")
@@ -28871,6 +29209,16 @@ index d7080a80c..12946480d 100644
 +                    state.selectedContact?.blockchain?.chainTicker,
 +                    allowPaymentAmount = false
 +                ).errorText(state.swapAsset?.chainTicker),
+@@ -616 +625 @@ private data class SwapInternalState(
+-                    tokenAmount.multiply(usdPrice, MathContext.DECIMAL128)
++                    tokenAmount.multiply(usdPrice)
+@@ -633 +642,2 @@ private data class SwapInternalState(
+-                val usdPrice = originAsset?.usdPrice
++                val asset = originAsset ?: return null
++                val usdPrice = asset.usdPrice?.takeIf { it.signum() > 0 }
+@@ -637 +647 @@ private data class SwapInternalState(
+-                    fiatAmount.divide(usdPrice, MathContext.DECIMAL128)
++                    fiatAmount.divide(usdPrice, asset.decimals, RoundingMode.DOWN)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
 index b3aed2335..860b74202 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
@@ -33841,10 +34189,10 @@ index 000000000..49dbfd8e3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..bd3fe04b1
+index 000000000..645b48347
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,15 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">Queda un pequeño saldo transparente sin proteger.</string>
@@ -33855,6 +34203,9 @@ index 000000000..bd3fe04b1
 +    <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
 +    <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
 +    <string name="private_restore_funds_available">Fondos disponibles. Recuperando el historial de transacciones.</string>
++    <string name="private_wallet_local_data_unavailable">Datos de la cartera no disponibles</string>
++    <string name="private_wallet_reopen_for_data">Cierra la aplicación y vuelve a abrirla. Si el problema continúa, contacta con asistencia.</string>
++    <string name="private_wallet_contact_support">Contactar con asistencia</string>
 +    <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/authentication_remedy_strings.xml b/ui-lib/src/main/res/ui/common/values/authentication_remedy_strings.xml
@@ -33880,10 +34231,10 @@ index 000000000..6ef1c29ad
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..235bcd5a6
+index 000000000..45d51ba07
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,15 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">A small transparent balance remains unshielded.</string>
@@ -33894,6 +34245,9 @@ index 000000000..235bcd5a6
 +    <string name="private_balance_not_yet_spendable">Some funds are not yet spendable. Check synchronization and pending transactions.</string>
 +    <string name="private_balance_unavailable_row">Not yet spendable</string>
 +    <string name="private_restore_funds_available">Funds available. Recovering transaction history.</string>
++    <string name="private_wallet_local_data_unavailable">Wallet data unavailable</string>
++    <string name="private_wallet_reopen_for_data">Close and reopen the app. If this continues, contact support.</string>
++    <string name="private_wallet_contact_support">Contact support</string>
 +    <string name="private_insufficient_spendable_balance">Your spendable balance cannot cover the amount and Zcash network fee. Lower the amount and try again.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/connect_ledger/values-es/strings.xml b/ui-lib/src/main/res/ui/connect_ledger/values-es/strings.xml
@@ -37312,6 +37666,44 @@ index 000000000..57ac7cfd6
 +        assertTrue(validateSwapRecipient(request, "btc", "btc", allowPaymentAmount = true).isValid)
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+new file mode 100644
+index 000000000..5c8f76cb1
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+@@ -0,0 +1,32 @@
++package co.electriccoin.zcash.ui.common.model
++
++import android.content.Context
++import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.BuildConfig
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import io.mockk.verify
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class TestLabWalletFixturePolicyTest {
++    @Test
++    fun onlyDebugTestnetUsesTheTestServiceSignal() {
++        val eligible = BuildConfig.DEBUG && BuildConfig.FLAVOR_network == "zcashtestnet"
++        val context = mockk<Context> {
++            every { applicationContext } returns this
++        }
++
++        mockkObject(FirebaseTestLabUtil)
++        try {
++            every { FirebaseTestLabUtil.isFirebaseTestLab(context) } returnsMany listOf(true, false)
++            assertEquals(eligible, VersionInfo.testLabFixturesEnabled(context))
++            assertEquals(false, VersionInfo.testLabFixturesEnabled(context))
++            verify(exactly = if (eligible) 2 else 0) { FirebaseTestLabUtil.isFirebaseTestLab(context) }
++        } finally {
++            unmockkObject(FirebaseTestLabUtil)
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
 new file mode 100644
 index 000000000..0ecbe3d01
@@ -39858,15 +40250,16 @@ index 0a57ab991..000000000
 -}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt
 new file mode 100644
-index 000000000..ef29cc3a1
+index 000000000..95f5b9165
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,68 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Intent
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import io.mockk.mockk
++import io.mockk.coVerify
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertNull
@@ -39880,6 +40273,35 @@ index 000000000..ef29cc3a1
 +@RunWith(RobolectricTestRunner::class)
 +@Config(sdk = [34])
 +class DiagnosticShareTest {
++    @Test
++    fun blankWalletSupportChecksAccessAndSharesNoWalletData() {
++        val context = RuntimeEnvironment.getApplication()
++        val diagnostics = mockk<GetSupportUseCase>()
++        val useCase = SendEmailUseCase(context, diagnostics, mockk())
++        val app = shadowOf(context)
++        useCase.sendBlankSupport { false }
++        assertNull(app.nextStartedActivity)
++
++        useCase.sendBlankSupport { true }
++        val chooser = app.nextStartedActivity
++        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
++        @Suppress("DEPRECATION")
++        val shared = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
++        assertEquals("", shared.getStringExtra(Intent.EXTRA_TEXT))
++        // Android may mirror the empty EXTRA_TEXT in a text-only ClipData item.
++        shared.clipData?.let {
++            assertEquals(1, it.itemCount)
++            val item = it.getItemAt(0)
++            assertEquals("", item.text.toString())
++            assertNull(item.uri)
++            assertNull(item.intent)
++            assertNull(item.htmlText)
++        }
++        assertFalse(shared.hasExtra(Intent.EXTRA_STREAM))
++        assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
++        coVerify(exactly = 0) { diagnostics() }
++    }
++
 +    @Test(timeout = 30_000)
 +    fun diagnosticsRequireRecipientSelectionAndContainNoUpstreamAddress() {
 +        val context = RuntimeEnvironment.getApplication()
@@ -40436,6 +40858,121 @@ index 000000000..7c539b2f2
 +        verify(exactly = 1) { router.forward(SelectABRecipientArgs) }
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
+deleted file mode 100644
+index 638b04663..000000000
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
++++ /dev/null
+@@ -1,109 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+-import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+-import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+-import io.mockk.coEvery
+-import io.mockk.coVerify
+-import io.mockk.every
+-import io.mockk.mockk
+-import io.mockk.verify
+-import kotlinx.coroutines.CancellationException
+-import kotlinx.coroutines.ExperimentalCoroutinesApi
+-import kotlinx.coroutines.flow.MutableStateFlow
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.test.runCurrent
+-import kotlinx.coroutines.test.runTest
+-import kotlin.test.Test
+-import kotlin.test.assertTrue
+-
+-/**
+- * MOB-1397: [ObserveSeedMismatchUseCase] runs recovery on every `true` flip of
+- * [SynchronizerProvider.isSeedMismatch], keeps collecting after a failed recovery, and routes a terminal
+- * [SeedMismatchRecoveryException] to the error screen.
+- */
+-@OptIn(ExperimentalCoroutinesApi::class)
+-class ObserveSeedMismatchUseCaseTest {
+-    private val isSeedMismatchState = MutableStateFlow(false)
+-    private val synchronizerProvider =
+-        mockk<SynchronizerProvider> {
+-            every { isSeedMismatch } returns isSeedMismatchState
+-        }
+-    private val recoverFromSeedMismatch = mockk<RecoverFromSeedMismatchUseCase>()
+-    private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
+-
+-    private val useCase =
+-        ObserveSeedMismatchUseCase(
+-            synchronizerProvider = synchronizerProvider,
+-            recoverFromSeedMismatch = recoverFromSeedMismatch,
+-            navigateToError = navigateToError,
+-        )
+-
+-    @Test
+-    fun seedMismatchTriggersRecovery() =
+-        runTest {
+-            coEvery { recoverFromSeedMismatch() } returns Unit
+-            backgroundScope.launch { useCase() }
+-            runCurrent()
+-
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-
+-            coVerify(exactly = 1) { recoverFromSeedMismatch() }
+-        }
+-
+-    @Test
+-    fun recoveryFailureIsLoggedAndDoesNotCrashTheCollector() =
+-        runTest {
+-            coEvery { recoverFromSeedMismatch() } throws RuntimeException("erase failed")
+-            backgroundScope.launch { useCase() }
+-            runCurrent()
+-
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-            isSeedMismatchState.value = false
+-            runCurrent()
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-
+-            coVerify(exactly = 2) { recoverFromSeedMismatch() }
+-            verify(exactly = 0) { navigateToError(any(), any()) }
+-        }
+-
+-    @Test
+-    fun terminalFailureRoutesToNavigateToError() =
+-        runTest {
+-            val exception = SeedMismatchRecoveryException(3)
+-            coEvery { recoverFromSeedMismatch() } throws exception
+-            backgroundScope.launch { useCase() }
+-            runCurrent()
+-
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-
+-            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
+-        }
+-
+-    /**
+-     * The collector's coroutine is cancelled by the propagated [CancellationException], so unlike
+-     * [recoveryFailureIsLoggedAndDoesNotCrashTheCollector] a further flip must not retrigger recovery.
+-     */
+-    @Test
+-    fun cancellationExceptionIsNotSwallowedAndStopsTheCollector() =
+-        runTest {
+-            coEvery { recoverFromSeedMismatch() } throws CancellationException("cancelled")
+-            val job = backgroundScope.launch { useCase() }
+-            runCurrent()
+-
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-            isSeedMismatchState.value = false
+-            runCurrent()
+-            isSeedMismatchState.value = true
+-            runCurrent()
+-
+-            assertTrue(job.isCancelled)
+-            coVerify(exactly = 1) { recoverFromSeedMismatch() }
+-            verify(exactly = 0) { navigateToError(any(), any()) }
+-        }
+-}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 index 16244cdf4..f7e63cdb8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
@@ -40474,6 +41011,177 @@ index 16244cdf4..f7e63cdb8 100644
 +                metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
 +            } returns true
 +        }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
+deleted file mode 100644
+index 606f64402..000000000
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
++++ /dev/null
+@@ -1,165 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import cash.z.ecc.android.sdk.WalletCoordinator
+-import cash.z.ecc.android.sdk.model.PersistableWallet
+-import cash.z.ecc.android.sdk.model.SeedPhrase
+-import cash.z.ecc.android.sdk.model.ZcashNetwork
+-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+-import io.mockk.coEvery
+-import io.mockk.coVerify
+-import io.mockk.every
+-import io.mockk.mockk
+-import kotlinx.coroutines.delay
+-import kotlinx.coroutines.flow.flow
+-import kotlinx.coroutines.flow.flowOf
+-import kotlinx.coroutines.test.runTest
+-import kotlin.test.Test
+-import kotlin.test.assertFailsWith
+-import kotlin.time.Duration.Companion.days
+-
+-/**
+- * MOB-1397 review coverage: [RecoverFromSeedMismatchUseCase] wipes the SDK database via the
+- * lockout-aware [WalletCoordinator.deleteSdkDataFlow] and only re-persists (flips
+- * [cash.z.ecc.android.sdk.WalletInitMode] to `RestoreWallet`) once that erase actually succeeds.
+- * A failed erase must neither silently proceed to `store()` nor be retried without bound.
+- */
+-class RecoverFromSeedMismatchUseCaseTest {
+-    private val wallet = mockk<PersistableWallet>(relaxed = true)
+-    private val persistableWalletProvider =
+-        mockk<PersistableWalletProvider>(relaxed = true) {
+-            coEvery { getPersistableWallet() } returns wallet
+-        }
+-    private val walletCoordinator = mockk<WalletCoordinator>()
+-
+-    private val useCase = RecoverFromSeedMismatchUseCase(persistableWalletProvider, walletCoordinator)
+-
+-    @Test
+-    fun successfulEraseWipesThenRePersists() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-
+-            useCase()
+-
+-            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    @Test
+-    fun noWalletStoredIsANoOp() =
+-        runTest {
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
+-
+-            useCase()
+-
+-            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    @Test
+-    fun failedEraseDoesNotPersistAndThrowsExplicitError() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    /**
+-     * Simulates the collector re-invoking this use case on every `isSeedMismatch` flip — far more
+-     * than the retry cap. Only [RecoverFromSeedMismatchUseCase]'s `MAX_RECOVERY_ATTEMPTS` (3) real
+-     * erase attempts are made; once exhausted, further invocations fail fast without hammering the
+-     * SDK again — this is the unthrottled wipe-retry loop fix.
+-     */
+-    @Test
+-    fun repeatedFailuresAreCappedAndStopHittingTheSdk() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-
+-            repeat(5) {
+-                assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-            }
+-
+-            coVerify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    /**
+-     * A success resets the failure counter, and a subsequent failure starts a fresh cap rather
+-     * than inheriting the earlier count.
+-     */
+-    @Test
+-    fun successAfterPriorFailuresResetsTheCounter() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-            useCase()
+-
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
+-
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    /**
+-     * A wallet concurrently nulled out (Reset Zashi racing this recovery) leaves
+-     * [WalletCoordinator.deleteSdkDataFlow]'s inner wallet read null, so the flow never emits or
+-     * closes. A bounded timeout must count as a failed attempt exactly like an explicit `false`
+-     * result, rather than hanging this use case (and the collector invoking it) forever.
+-     */
+-    @Test
+-    fun eraseTimeoutCountsAsFailedAttemptAndThrows() =
+-        runTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flow<Boolean> { delay(1.days) }
+-
+-            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+-
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    /**
+-     * If Reset Zashi clears the persisted wallet while the erase is in flight, `store()` must not
+-     * resurrect the deleted wallet's seed.
+-     */
+-    @Test
+-    fun storeIsSkippedWhenWalletWasClearedDuringErase() =
+-        runTest {
+-            every { wallet.network } returns ZcashNetwork.Mainnet
+-            every { wallet.seedPhrase } returns seedPhrase("abandon")
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returnsMany listOf(wallet, null)
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-
+-            useCase()
+-
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    /**
+-     * If the user restores a different wallet while the erase is in flight, `store()` must not
+-     * overwrite it with the stale, now-wiped wallet's recovery copy.
+-     */
+-    @Test
+-    fun storeIsSkippedWhenADifferentWalletWasStoredDuringErase() =
+-        runTest {
+-            every { wallet.network } returns ZcashNetwork.Mainnet
+-            every { wallet.seedPhrase } returns seedPhrase("abandon")
+-            val restoredWallet =
+-                mockk<PersistableWallet>(relaxed = true) {
+-                    every { network } returns ZcashNetwork.Mainnet
+-                    every { seedPhrase } returns seedPhrase("zoo")
+-                }
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returnsMany listOf(wallet, restoredWallet)
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-
+-            useCase()
+-
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
+-
+-    private fun seedPhrase(word: String) = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { word })
+-}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt
 new file mode 100644
 index 000000000..cd0439b55
@@ -42077,6 +42785,98 @@ index dec0b8db0..1f2fb5248 100644
 @@ -11 +11 @@ import androidx.compose.ui.test.assertTextEquals
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNoticeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNoticeTest.kt
+new file mode 100644
+index 000000000..2f89694a2
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/home/HomeSeedMismatchNoticeTest.kt
+@@ -0,0 +1,86 @@
++package co.electriccoin.zcash.ui.screen.home
++
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import androidx.lifecycle.Lifecycle
++import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationUIState
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import kotlin.test.assertEquals
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], qualifiers = "en")
++class HomeSeedMismatchNoticeTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    fun aMismatchWaitsForTheUnlockedResumedHomeAndOffersSupport() {
++        val access = mutableStateOf<AuthenticationUIState>(AuthenticationUIState.Required)
++        val welcome = mutableStateOf(true)
++        val resumed = mutableStateOf(Lifecycle.State.RESUMED)
++        var opened = 0
++        compose.setContent {
++            ZcashTheme {
++                SeedMismatchNotice(
++                    mismatch = true,
++                    authorized = allowMismatchNotice(access.value, welcome.value, resumed.value),
++                    canDismiss = false,
++                    onSupport = { opened++ },
++                )
++            }
++        }
++
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle {
++            access.value = AuthenticationUIState.Successful
++        }
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle {
++            welcome.value = false
++        }
++        compose.onNodeWithText(TITLE).assertIsDisplayed()
++        compose.onNodeWithText("Close").assertDoesNotExist()
++        compose.onNodeWithText("Contact support").performClick()
++        compose.runOnIdle {
++            assertEquals(1, opened)
++            resumed.value = Lifecycle.State.STARTED
++        }
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle {
++            resumed.value = Lifecycle.State.RESUMED
++            access.value = AuthenticationUIState.Initial
++        }
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++    }
++
++    @Test
++    fun theOrdinaryHomeHasNoNoticeAndADismissedMismatchCanResolve() {
++        val mismatch = mutableStateOf(false)
++        compose.setContent {
++            ZcashTheme {
++                SeedMismatchNotice(mismatch.value, authorized = true, canDismiss = true, onSupport = {})
++            }
++        }
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle { mismatch.value = true }
++        compose.onNodeWithText(TITLE).assertIsDisplayed()
++        compose.onNodeWithText("Close").performClick()
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle { mismatch.value = false }
++        compose.onNodeWithText(TITLE).assertDoesNotExist()
++        compose.runOnIdle { mismatch.value = true }
++        compose.onNodeWithText(TITLE).assertIsDisplayed()
++    }
++
++    private companion object {
++        const val TITLE = "Wallet data unavailable"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
 index acc8741c2..430fc754d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
@@ -42121,17 +42921,21 @@ index acc8741c2..430fc754d 100644
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
-index d59e700c3..c246efafa 100644
+index d59e700c3..ef6479a7e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
-@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
+@@ -11,0 +13 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.component.TextSelection
+@@ -12,0 +15 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
-@@ -23,0 +25 @@ import kotlin.test.assertNull
+@@ -23,0 +27 @@ import kotlin.test.assertNull
 +import kotlin.test.assertNotNull
-@@ -64 +66 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -64 +68 @@ class ExactOutputVMMapperGiftCardLinkTest {
 -        GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
 +        listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
-@@ -71,0 +74,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -71,0 +76,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
 +    @Test
 +    fun wrongNetworkShowsInlineErrorAndDisablesReview() {
 +        val state = mapper.createState(
@@ -42142,13 +42946,13 @@ index d59e700c3..c246efafa 100644
 +        assertFalse(state.primaryButton?.isEnabled ?: true)
 +    }
 +
-@@ -92,0 +105,39 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -92,0 +107,94 @@ class ExactOutputVMMapperGiftCardLinkTest {
 +    @Test
 +    fun computedTokenInputMatchesRequestedAtomicAmount() {
-+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
-+        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
++        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 8)
++        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
 +        val computed = mapper.createAmountInnerState(fiat, NumberTextFieldInnerState(), asset)
-+        val expected = BigDecimal("0.12283949")
++        val expected = BigDecimal("0.99999999")
 +        assertEquals(expected, computed.amount)
 +        assertEquals(
 +            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
@@ -42161,25 +42965,80 @@ index d59e700c3..c246efafa 100644
 +                fiatAmount = fiat),
 +            callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
 +        )
-+        assertNotNull(state.primaryButton).onClick()
++        val review = assertNotNull(state.primaryButton)
++        assertTrue(review.isEnabled)
++        review.onClick()
 +        assertEquals(expected, requested)
 +    }
 +
 +    @Test
 +    fun fiatEditUsesExactAtomicTokenAmount() {
-+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
++        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 6)
 +        var updated: NumberTextFieldInnerState? = null
 +        val state = mapper.createState(
 +            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
 +            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
 +        )
-+        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
-+        val expected = BigDecimal("0.122839")
++        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
++        val expected = BigDecimal("0.999999")
 +        assertEquals(expected, assertNotNull(updated).amount)
 +        assertEquals(
 +            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
 +            assertNotNull(updated).innerTextFieldState.value
 +        )
++    }
++
++    @Test
++    fun movingTheDerivedFiatCursorPreservesTheReviewedTokenAmount() {
++        val token = BigDecimal("1.123456789012345678901234")
++        val price = BigDecimal("5.123456789010")
++        val asset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
++            .copy(usdPrice = price)
++        var draft = internalState("fixture.near").copy(
++            asset = asset,
++            swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
++        )
++        var requested: BigDecimal? = null
++        val controls = callbacks.copy(
++            onTextFieldChange = { amount, fiat -> draft = draft.copy(amount = amount, fiatAmount = fiat) },
++            onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
++        )
++        val typed = NumberTextFieldInnerState.fromAmount(token)
++        val recomputed = mapper.createFiatAmountInnerState(typed, NumberTextFieldInnerState(), asset)
++        assertEquals(token.multiply(price), recomputed.amount)
++        mapper.createState(draft, controls).amount.onValueChange(typed)
++        val before = draft.fiatAmount
++        assertEquals(recomputed.amount, before.amount)
++
++        val selectionOnly = before.copy(innerTextFieldState =
++            before.innerTextFieldState.copy(selection = TextSelection.Start))
++        mapper.createState(draft, controls).amountFiat.onValueChange(selectionOnly)
++        assertEquals(TextSelection.Start, draft.fiatAmount.innerTextFieldState.selection)
++        assertEquals(token, draft.amount.amount)
++
++        val review = assertNotNull(mapper.createState(draft, controls).primaryButton)
++        assertTrue(review.isEnabled)
++        review.onClick()
++        assertEquals(token, requested)
++    }
++
++    private val nearBoundaryPrice = BigDecimal("1.00000000000000000000000000000000000001")
++
++    @Test
++    fun invalidFiatEditClearsTheTokenWhileItsPriceIsUnavailable() {
++        val asset = SwapAssetTestFixture.asset(usdPrice = null)
++        var updated: NumberTextFieldInnerState? = null
++        val state = mapper.createState(
++            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
++            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount }),
++        )
++        val invalid = state.amountFiat.innerState.let {
++            it.copy(innerTextFieldState = it.innerTextFieldState.copy(value = stringRes(".")))
++        }
++
++        state.amountFiat.onValueChange(invalid)
++
++        assertNull(assertNotNull(updated).amount)
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt
@@ -42763,6 +43622,106 @@ index 000000000..5ea41a2da
 +        assertEquals("Report date (UTC): 2026-11-10\n", report)
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
+index 35abdfd66..3e0d04f5f 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
+@@ -5,0 +6 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
+@@ -18,0 +20 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
+@@ -20,0 +23 @@ import kotlin.test.assertNull
++import kotlin.test.assertTrue
+@@ -62,0 +66,89 @@ class SwapVMMapperChangeModeTest {
++    @Test
++    fun fiatQuoteFloorsExactTokenAmountInBothDirections() {
++        val price = BigDecimal("1.00000000000000000000000000000000000001")
++        val asset = SwapAssetTestFixture.asset(usdPrice = price, decimals = 8)
++        val zec = SwapAssetTestFixture.asset(tokenTicker = "zec", chainTicker = "zec", usdPrice = price)
++        val requested = mutableListOf<BigDecimal>()
++        val quoteCallbacks = callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested += amount })
++        SwapDirection.entries.forEach { direction ->
++            val input = internalState(account(isSpendable = true)).copy(
++                swapAsset = asset,
++                swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset), zecAsset = zec),
++                currencyType = CurrencyType.FIAT,
++                swapDirection = direction,
++                addressText = btcAddress,
++            )
++            val button = assertNotNull(mapper.createState(input, quoteCallbacks).primaryButton)
++            assertTrue(button.isEnabled, direction.name)
++            button.onClick()
++        }
++        assertEquals(listOf(BigDecimal("0.99999999"), BigDecimal("0.99999999")), requested)
++    }
++
++    @Test
++    fun switchingToFiatWithoutEditingPreservesTheQuotedTokenAmount() {
++        val token = BigDecimal("1.123456789012345678901234")
++        val exactAsset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
++        for (price in listOf(BigDecimal("5.123456789010"), BigDecimal("9.123456789064"))) {
++            val asset = exactAsset.copy(usdPrice = price)
++            val tokenDraft = internalState(account(isSpendable = true)).copy(
++                swapAsset = asset,
++                swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
++                amountTextState = NumberTextFieldInnerState.fromAmount(token),
++                addressText = "fixture.near",
++            )
++            var switchedAmount: BigDecimal? = null
++            var requested: BigDecimal? = null
++            val controls = callbacks.copy(
++                onSwapCurrencyTypeClick = { switchedAmount = it },
++                onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
++            )
++            mapper.createState(tokenDraft, controls).amountTextField.onSwapChange()
++            val fiatDraft = tokenDraft.copy(
++                currencyType = CurrencyType.FIAT,
++                amountTextState = NumberTextFieldInnerState.fromAmount(assertNotNull(switchedAmount)),
++            )
++            val fiatView = mapper.createState(fiatDraft, controls)
++            val quote = assertNotNull(fiatView.primaryButton)
++            assertTrue(quote.isEnabled)
++            quote.onClick()
++            assertEquals(token, requested)
++            fiatView.amountTextField.onSwapChange()
++            assertEquals(token, switchedAmount)
++        }
++    }
++
++    @Test
++    fun fiatBelowOneAtomicUnitCannotRequestAQuote() {
++        val input = internalState(account(isSpendable = true)).copy(
++            currencyType = CurrencyType.FIAT,
++            amountTextState = NumberTextFieldInnerState.fromAmount(BigDecimal("0.00001")),
++            addressText = btcAddress,
++        )
++        val screen = mapper.createState(input, callbacks.copy(
++            onRequestSwapQuoteClick = { _, _, _ -> error("Sub-atomic fiat requested a quote") }
++        ))
++        val button = assertNotNull(screen.primaryButton)
++        assertFalse(button.isEnabled)
++        button.onClick()
++    }
++
++    @Test
++    fun tokenInputKeepsItsExactAmount() {
++        val amount = BigDecimal("0.01234567")
++        val input = internalState(account(isSpendable = true)).copy(
++            amountTextState = NumberTextFieldInnerState.fromAmount(amount),
++            addressText = btcAddress,
++        )
++        var requested: BigDecimal? = null
++        val screen = mapper.createState(input, callbacks.copy(
++            onRequestSwapQuoteClick = { value, _, _ -> requested = value }
++        ))
++        val button = assertNotNull(screen.primaryButton)
++        assertTrue(button.isEnabled)
++        button.onClick()
++        assertEquals(amount, requested)
++    }
++
++    private val btcAddress = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
 index 23393674d..6c082a48b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt

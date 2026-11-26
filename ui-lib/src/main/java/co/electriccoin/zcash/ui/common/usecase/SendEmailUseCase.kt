@@ -23,6 +23,10 @@ class SendEmailUseCase(
     private val getSupport: GetSupportUseCase,
     private val blockchainProvider: BlockchainProvider,
 ) {
+    internal fun sendBlankSupport(isAllowed: () -> Boolean) {
+        sendSupportEmail(context.getString(R.string.app_name), "", isAllowed)
+    }
+
     /**
      * Sends a generic email with custom recipient, subject and message.
      */
@@ -240,13 +244,14 @@ class SendEmailUseCase(
      */
     private fun sendSupportEmail(
         subject: String,
-        messageBody: String
+        messageBody: String,
+        isAllowed: () -> Boolean = { true },
     ) {
         val shareIntent = Intent.createChooser(
             EmailUtil.newTextShareIntent(subject = subject, messageBody = messageBody),
             null
         ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        runCatching { context.startActivity(shareIntent) }
+        if (isAllowed()) runCatching { context.startActivity(shareIntent) }
     }
 
     private fun SwapAsset.value() =
