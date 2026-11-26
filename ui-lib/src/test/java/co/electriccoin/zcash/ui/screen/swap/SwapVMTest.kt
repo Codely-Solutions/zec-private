@@ -566,6 +566,26 @@ class SwapVMTest {
         }
 
     @Test
+    fun switchingToFiatKeepsTheExactEditableAmountInBothSwapDirections() = runTest {
+        val harness = harness()
+        harness.collectState(this)
+        val fiat = BigDecimal("100.49")
+        repeat(2) {
+            assertEquals(CurrencyType.TOKEN, harness.capturedState.currencyType)
+            harness.onSwapCurrencyTypeClick(fiat)
+            val amountState = harness.capturedState.amountTextState
+            assertEquals(fiat, amountState.amount)
+            assertEquals(fiat, amountState.lastValidAmount)
+            assertEquals(
+                co.electriccoin.zcash.ui.design.util.stringResByNumber(fiat, 2, includeGroupingSeparator = false),
+                amountState.innerTextFieldState.value,
+            )
+            harness.onSwapCurrencyTypeClick(BigDecimal.ONE)
+            harness.onChangeButtonClick()
+        }
+    }
+
+    @Test
     fun computedTokenInputKeepsDisplayedAndStoredAmountIdentical() =
         runTest {
             val harness = harness()

@@ -427,18 +427,19 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
     wallet = history.job(wallet_name, 1)['id']
     log = subprocess.check_output([metadata.gh, 'api', '--allow-escape-sequences',
                                    metadata.repo + f'/actions/jobs/{int(wallet)}/logs'], timeout=30)
-    startup_failed = (b'Hosted lifecycle failed at networkTargets, claim state no-POST' in log
-                      and b'CORE_STAGE recipient passed' not in log and b'CORE_STAGE sender passed' not in log)
-    readiness_failed = (b'Hosted lifecycle failed at preclaim_readiness, claim state no-POST' in log
-                        and b'CORE_STAGE sender passed' in log)
     failure_lines = re.findall(rb'(?m)^(?:[0-9][0-9T:.-]+Z )?Hosted lifecycle failed at ([^\r\n]+)\r?$', log)
-    mode_probe_failed = (len(failure_lines) == 1
-                         and failure_lines[0] in (b'torModeSave, claim state no-POST',
-                                                  b'torModeResume, claim state no-POST')
-                         and b'CORE_STAGE recipient passed' not in log and b'CORE_STAGE sender passed' not in log)
+    startup_failed = (len(failure_lines) == 1
+                      and failure_lines[0] in (b'networkTargets, claim state no-POST',
+                                               b'receiptProbe, claim state no-POST',
+                                               b'rpcProbe, claim state no-POST',
+                                               b'torModeSave, claim state no-POST',
+                                               b'torModeResume, claim state no-POST')
+                      and b'CORE_STAGE recipient passed' not in log and b'CORE_STAGE sender passed' not in log)
+    readiness_failed = (failure_lines == [b'preclaim_readiness, claim state no-POST']
+                        and b'CORE_STAGE sender passed' in log)
     budget_closed = (failure_lines == [b'funding_time_budget, claim state no-POST']
                      and b'CORE_STAGE sender passed' in log)
-    require(len(log) <= 1024**2 and (startup_failed or readiness_failed or budget_closed or mode_probe_failed)
+    require(len(log) <= 1024**2 and (startup_failed or readiness_failed or budget_closed)
             and b'CORE_STAGE fund passed' not in log,
             'Prior wallet did not prove failure before any funding request')
     value = binding(source, prior, version_code(root, source), int(prior_run), False)

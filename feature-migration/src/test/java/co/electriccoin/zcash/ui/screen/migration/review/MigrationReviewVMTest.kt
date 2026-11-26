@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -49,6 +50,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,6 +71,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -136,9 +139,12 @@ class MigrationReviewVMTest {
                 }
             val router = FakeNavigationRouter()
             val adopted = MigrationSweepTransactionProposal(proposal)
+            var authorityCurrent = true
+            val approval = slot<() -> Boolean>()
             val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true) {
                 every { setMigrationSweepProposal(proposal) } returns adopted
                 every { transactionProposal } returns MutableStateFlow(adopted)
+                every { approveForSigning(adopted, null, capture(approval)) } returns Unit
             }
             val vm =
                 vm(
@@ -150,6 +156,9 @@ class MigrationReviewVMTest {
                         coEvery { this@mockk(any<String>()) } returns sdk
                     },
                     keystoneProposalRepository = keystoneProposalRepository,
+                    walletActionAccess = mockk {
+                        coEvery { capture(any()) } returns { authorityCurrent }
+                    },
                     getSelectedWalletAccount =
                         mockk {
                             coEvery { this@mockk() } returns spendable<KeystoneAccount>()
@@ -172,6 +181,9 @@ class MigrationReviewVMTest {
                 listOf<Any>(SignKeystoneTransactionArgs),
                 router.forwardedRoutes,
             )
+            assertTrue(approval.captured())
+            authorityCurrent = false
+            assertFalse(approval.captured())
         }
 
     // Covers item 5 of the plan-update/expired-transfer fixes: restartCurrentMigrationStep()'s own
@@ -702,6 +714,7 @@ class MigrationReviewVMTest {
             mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
         synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
         sourceEntryId: String? = null,
+        walletActionAccess: WalletActionAccess = mockk(),
     ) = MigrationReviewVM(
         args = MigrationReviewArgs(mode = mode, useTor = draftTor),
         getOrchardMigrationSdk = getOrchardMigrationSdk,
@@ -724,41 +737,42 @@ class MigrationReviewVMTest {
         submitProposal = submitProposal,
         synchronizerProvider = synchronizerProvider,
         sourceEntryId = sourceEntryId,
+        walletActionAccess = walletActionAccess,
     )
+}
 
-    private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
-        override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
-        val forwardedRoutes = mutableListOf<Any>()
-        val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
+private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
+    override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
+    val forwardedRoutes = mutableListOf<Any>()
+    val scopedCommands = mutableListOf<NavigationCommand.ForEntry>()
 
-        override fun forward(vararg routes: Any) {
-            forwardedRoutes.addAll(routes)
-        }
-
-        override fun replace(vararg routes: Any) = Unit
-
-        override fun replaceAll(vararg routes: Any) = Unit
-
-        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
-
-        override fun back() = Unit
-
-        override fun backTo(route: KClass<*>) = Unit
-
-        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
-            (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
-        }
-
-        override fun backToRoot() = Unit
-
-        override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
+    override fun forward(vararg routes: Any) {
+        forwardedRoutes.addAll(routes)
     }
 
-    private inline fun <reified T : WalletAccount> spendable(): T =
-        mockk<T>(relaxed = true) { every { isSpendable } returns true }
+    override fun replace(vararg routes: Any) = Unit
+
+    override fun replaceAll(vararg routes: Any) = Unit
+
+    override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
+
+    override fun back() = Unit
+
+    override fun backTo(route: KClass<*>) = Unit
+
+    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
+        (block(null) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
+    }
+
+    override fun backToRoot() = Unit
+
+    override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
+}
+
+private inline fun <reified T : WalletAccount> spendable(): T =
+    mockk<T>(relaxed = true) { every { isSpendable } returns true }
 }
 
 private fun selectedAccount(account: WalletAccount): GetSelectedWalletAccountUseCase = mockk {
-    coEvery { this@mockk() } returns account
-    every { observe() } returns flowOf(account)
-}
+coEvery { this@mockk() } returns account
+every { observe() } returns flowOf(account)

@@ -10,7 +10,6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 import co.electriccoin.zcash.ui.common.mapper.savedSwapSupportButton
-import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -19,6 +18,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
@@ -266,12 +266,8 @@ class TransactionDetailVM(
                                     value = transaction.transaction.id.txIdString(),
                                     abbreviated = true
                                 ),
-                            refundedAmount =
-                                transaction.swap.status
-                                    ?.positiveRefund
-                                    ?.let {
-                                        stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER)
-                                    },
+                            refundedAmount = (saved?.observedRefundAmount ?: transaction.swap.status?.positiveRefund)
+                                ?.let { stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER) },
                             onTransactionIdClick = {
                                 onCopyToClipboard(transaction.transaction.id.txIdString())
                             },

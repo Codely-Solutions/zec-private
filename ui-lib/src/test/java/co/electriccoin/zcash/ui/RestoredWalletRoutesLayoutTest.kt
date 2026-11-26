@@ -659,6 +659,7 @@ class RestoredWalletRoutesLayoutTest {
     private fun emptyAccounts() = mockk<AccountDataSource> {
         every { selectedAccount } returns flowOf(null)
         every { allAccounts } returns MutableStateFlow(null)
+        every { signingAuthorityChanges } returns flowOf(Unit)
     }
 
     private fun emptySwaps() = mockk<SwapRepository> {

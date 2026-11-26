@@ -321,6 +321,20 @@ class TransactionDetailVMTest {
     }
 
     @Test
+    fun outgoingPaymentShowsTheSavedPartialRefundDuringAnOutage() = runTest(dispatcher) {
+        val refund = BigDecimal("0.01002345")
+        val metadata = swapMetadata(SwapStatus.SUCCESS).copy(
+            mode = SwapMode.EXACT_OUTPUT,
+            observedRefundAmount = refund,
+        )
+        val result = SwapQuoteStatusData(
+            isLoading = false, error = IllegalStateException("fixture-provider-unavailable"),
+        )
+        val info = assertIs<SendSwapState>(state(data(sent, metadata, result)).info)
+        assertEquals(stringResByCurrencyNumber(refund, "ZEC"), info.refundedAmount)
+    }
+
+    @Test
     fun failedPollKeepsTheLastAcceptedStatusAndRetry() = runTest(dispatcher) {
         val zec = SwapCatalogTestFixture.nativeZec
         val destination = SwapCatalogTestFixture.externalAssets.first()

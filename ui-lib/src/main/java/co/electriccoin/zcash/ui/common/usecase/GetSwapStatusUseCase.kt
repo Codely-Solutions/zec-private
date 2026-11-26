@@ -165,7 +165,8 @@ class GetSwapStatusUseCase(
     private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
         this === saved || (statusUpdatedAt == saved.statusUpdatedAt && status == saved.status &&
             (executedAmountOut == null) == (saved.executedAmountOut == null) &&
-            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0)
+            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0 &&
+            observedRefundAmount == saved.observedRefundAmount)
 
     private suspend fun refresh(
         depositAddress: String,
@@ -231,5 +232,6 @@ data class SwapQuoteStatusData(
 
     private fun TransactionSwapMetadata.matchesDisplayStatus(other: TransactionSwapMetadata): Boolean =
         recordedStatus == other.recordedStatus && mode == other.mode &&
-            executedAmountOut == other.executedAmountOut && quotedAmountOut == other.quotedAmountOut
+            executedAmountOut == other.executedAmountOut && quotedAmountOut == other.quotedAmountOut &&
+            observedRefundAmount == other.observedRefundAmount
 }

@@ -125,6 +125,17 @@ class ExactOutputVMMapperGiftCardLinkTest {
     }
 
     @Test
+    fun computedFiatInputDisplaysItsExactValueForEditing() {
+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal("100.49"), decimals = 8)
+        val amount = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
+        val computed = mapper.createFiatAmountInnerState(amount, NumberTextFieldInnerState(), asset)
+        val expected = BigDecimal("100.49")
+        assertEquals(expected, computed.amount)
+        assertEquals(expected, computed.lastValidAmount)
+        assertEquals(stringResByNumber(expected, includeGroupingSeparator = false), computed.innerTextFieldState.value)
+    }
+
+    @Test
     fun fiatEditForwardsTheTypedFiatState() {
         val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
         var updated: NumberTextFieldInnerState? = null

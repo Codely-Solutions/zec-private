@@ -42,6 +42,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
@@ -98,6 +99,7 @@ class MigrationReviewVM(
     private val sourceEntryId: String? = null,
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
+    private val walletActionAccess: WalletActionAccess,
 ) : ViewModel() {
     override fun onCleared() {
         navigationRouter.discardResultFrom(sourceEntryId)
@@ -574,6 +576,7 @@ class MigrationReviewVM(
                 // send does (one ordinary PCZT, same as any regular Keystone send). Biometrics are
                 // requested here because the Keystone branch skips SubmitProposalUseCase (which owns
                 // biometrics for the Zashi path) in favour of the QR sign/scan detour.
+                val canSign = walletActionAccess.capture(account) ?: return@execute
                 try {
                     biometricRepository.requestBiometrics(
                         request =
@@ -591,20 +594,20 @@ class MigrationReviewVM(
                     return@execute
                 }
                 requireReviewAccount()
-                if (!ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
+                if (!canSign() || !ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
                 val reviewed = keystoneProposalRepository.setMigrationSweepProposal(review.proposal)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
                 keystoneProposalRepository.createPCZTFromProposal(account)
                 requireReviewAccount()
-                if (!ownsReviewEntry() || proposeLce.state.value.success !== review) {
+                if (!canSign() || !ownsReviewEntry() || proposeLce.state.value.success !== review) {
                     keystoneProposalRepository.clear(reviewed)
                     return@execute
                 }
-                keystoneProposalRepository.approveForSigning(reviewed)
+                keystoneProposalRepository.approveForSigning(reviewed, canSign = canSign)
                 navigationRouter.stageResultFrom(sourceEntryId, {
-                    keystoneProposalRepository.transactionProposal.value === reviewed
+                    canSign() && keystoneProposalRepository.transactionProposal.value === reviewed
                 }) {
                     NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
                 }

@@ -142,6 +142,8 @@ data class SwapMetadataV3(
     @Serializable(BigDecimalSerializer::class)
     val executedAmountOut: BigDecimal? = null,
     val fundingNotSubmitted: Boolean = false,
+    @Serializable(BigDecimalSerializer::class)
+    val observedRefundAmount: BigDecimal? = null,
 ) {
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)
@@ -154,7 +156,12 @@ data class SwapMetadataV3(
             }
         }
 
-    internal fun acceptsStatus(status: SwapStatus, updatedAt: kotlin.time.Instant?, executed: BigDecimal?): Boolean {
+    internal fun acceptsStatus(
+        status: SwapStatus,
+        updatedAt: kotlin.time.Instant?,
+        executed: BigDecimal?,
+        observedRefund: BigDecimal? = null,
+    ): Boolean {
         // Settlement and a completed refund keep their outcome. FAILED and EXPIRED can precede later recovery.
         val sameStatus = this.status == status
         if ((this.status == SwapStatus.SUCCESS || this.status == SwapStatus.REFUNDED) && !sameStatus) {
@@ -163,9 +170,10 @@ data class SwapMetadataV3(
         val previous = statusUpdatedAt
         return when {
             previous == null -> true
-            updatedAt == previous -> sameStatus && (
-                executed == null || executedAmountOut == null || executedAmountOut.compareTo(executed) == 0
-            )
+            updatedAt == previous -> sameStatus &&
+                (executed == null || executedAmountOut == null || executedAmountOut.compareTo(executed) == 0) &&
+                (observedRefund == null || observedRefundAmount == null ||
+                    observedRefundAmount.compareTo(observedRefund) == 0)
             else -> updatedAt != null && updatedAt > previous
         }
     }

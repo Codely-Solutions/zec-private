@@ -41,7 +41,6 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.component.TextSelection
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
 import kotlinx.coroutines.Job
@@ -383,12 +382,8 @@ internal class SwapVM(
                     newTextFieldAmount
                 }
             val value =
-                amount?.let { number ->
-                    if (isTokenInput) {
-                        stringResByNumber(number, minDecimals = 0, includeGroupingSeparator = false)
-                    } else {
-                        stringResByDynamicNumber(number, includeGroupingSeparator = false)
-                    }
+                amount?.let {
+                    stringResByNumber(it, minDecimals = if (isTokenInput) 0 else 2, includeGroupingSeparator = false)
                 } ?: stringRes("")
             it.copy(
                 amountTextState =

@@ -391,6 +391,7 @@ class MigrationReviewPlanShapeTest {
             keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true),
             submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
             synchronizerProvider = mockk<SynchronizerProvider>(relaxed = true),
+            walletActionAccess = mockk(),
         )
     }
 

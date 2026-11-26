@@ -25,7 +25,6 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.SwapErrorFooterState
@@ -130,7 +129,7 @@ internal class ExactOutputVMMapper {
         return fiatInnerState.copy(
             innerTextFieldState =
                 fiatInnerState.innerTextFieldState.copy(
-                    value = fiat?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
+                    value = fiat?.let { stringResByNumber(it, includeGroupingSeparator = false) }
                         ?: stringRes(""),
                     selection = TextSelection.End
                 ),

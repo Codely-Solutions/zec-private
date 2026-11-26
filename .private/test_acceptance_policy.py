@@ -498,6 +498,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                                       'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt': 'changed'}, True),
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'settings.gradle.kts': 'changed'}, True),
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
+                                      'ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
                                       'ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt': 'changed'}, True),
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
                                       'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt':

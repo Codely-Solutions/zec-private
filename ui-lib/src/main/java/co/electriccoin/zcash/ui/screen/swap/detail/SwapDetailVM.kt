@@ -7,7 +7,6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 import co.electriccoin.zcash.ui.common.mapper.savedSwapSupportButton
-import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
@@ -18,6 +17,7 @@ import co.electriccoin.zcash.ui.common.model.settlementStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
@@ -148,14 +148,15 @@ class SwapDetailVM(
                             router = navigationRouter
                         )
                     }.orEmpty(),
-                    refundedAmount = swapData.status?.positiveRefund?.let { refund ->
-                        TransactionDetailInfoRowState(
-                            title = stringRes(R.string.swapAndPay_refundedAmount),
-                            message = stringResByCurrencyNumber(
-                                amount = refund, ticker = swapData.status.originAsset.tokenTicker
-                            ).withStyle(),
-                        )
-                    },
+                    refundedAmount = (swapData.savedMetadata?.observedRefundAmount ?: swapData.status?.positiveRefund)
+                        ?.let { refund ->
+                            val ticker = swapData.savedMetadata?.origin?.tokenTicker
+                                ?: checkNotNull(swapData.status).originAsset.tokenTicker
+                            TransactionDetailInfoRowState(
+                                title = stringRes(R.string.swapAndPay_refundedAmount),
+                                message = stringResByCurrencyNumber(amount = refund, ticker = ticker).withStyle(),
+                            )
+                        },
                     donationBasisZec = swapData.status?.takeIf {
                         !swapData.isOutgoing && it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
                     }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),

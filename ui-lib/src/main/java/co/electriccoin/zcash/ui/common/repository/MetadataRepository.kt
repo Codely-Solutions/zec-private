@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
@@ -303,6 +304,7 @@ class MetadataRepositoryImpl(
                     depositAddress = expected.depositAddress,
                     amountOutFormatted = result.quotedAmountOut,
                     executedAmountOut = result.executedAmountOut,
+                    observedRefundAmount = result.positiveRefund,
                     status = result.status,
                     mode = result.mode,
                     origin = expected.origin,
@@ -559,6 +561,7 @@ data class TransactionSwapMetadata(
     val executedAmountOut: BigDecimal? = null,
     internal val statusUpdatedAt: Instant? = null,
     val fundingNotSubmitted: Boolean = false,
+    val observedRefundAmount: BigDecimal? = null,
 ) {
     val status: SwapStatus
         get() = (recordedStatus ?: SwapStatus.SUCCESS).withPaymentOutcome(mode, quotedAmountOut, executedAmountOut)
@@ -617,6 +620,7 @@ internal fun SwapMetadataV3.toBusinessObject(
         executedAmountOut = executedAmountOut,
         statusUpdatedAt = statusUpdatedAt?.toJavaInstant(),
         fundingNotSubmitted = fundingNotSubmitted,
+        observedRefundAmount = observedRefundAmount,
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,

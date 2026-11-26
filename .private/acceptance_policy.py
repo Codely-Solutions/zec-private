@@ -29,6 +29,7 @@ TOR_MODE_INPUTS = {
     'ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsTorEnabledStorageProvider.kt',

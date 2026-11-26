@@ -272,6 +272,29 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun verifiedPartialRefundSurvivesSparseStatusConflictsAndRepositoryRestart() = runTest {
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        SaveORSwapUseCase(mockk(), repository(metadataProvider), mockk()).persistBeforeFunding(quote)
+        val first = "2026-11-22T12:01:00Z"
+        val second = "2026-11-22T12:02:00Z"
+        val amount = BigDecimal("0.00001234")
+        val accepted = lookupSuccessfulStatus(quote, first, ", \"refundedAmount\":\"1234\"")
+        assertNull(accepted.error)
+        assertEquals(amount, accepted.savedMetadata?.observedRefundAmount)
+
+        val conflict = lookupSuccessfulStatus(quote, first, ", \"refundedAmountFormatted\":\"0.01\"")
+        assertNotNull(conflict.error)
+        assertEquals(amount, conflict.savedMetadata?.observedRefundAmount)
+
+        val sparse = lookupSuccessfulStatus(quote, second)
+        assertNull(sparse.error)
+        assertNull(sparse.status?.refundedFormatted)
+        assertEquals(amount, sparse.savedMetadata?.observedRefundAmount)
+        assertEquals(amount, repository(metadataProvider).getSwapMetadata("deposit")?.observedRefundAmount)
+        assertEquals(amount, storedSwaps().swapIds.single().observedRefundAmount)
+    }
+
+    @Test
     fun mergingNewerProviderStatusPreservesTheVerifiedNoSubmissionFact() = runTest {
         val quote = fundingQuote(SwapType.EXACT_INPUT)
         SaveORSwapUseCase(mockk(), repository(metadataProvider), mockk()).persistBeforeFunding(quote)

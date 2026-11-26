@@ -273,7 +273,13 @@ class QuoteRecoveryTests(unittest.TestCase):
         budget = b'CORE_STAGE sender passed\nHosted lifecycle failed at funding_time_budget, claim state no-POST'
         saving = b'Hosted lifecycle failed at torModeSave, claim state no-POST'
         reopening = b'CORE_STAGE torModeSave passed\nHosted lifecycle failed at torModeResume, claim state no-POST'
+        receipt_probe = b'Hosted lifecycle failed at receiptProbe, claim state no-POST'
+        rpc_probe = b'2026-01-01T12:00:00Z Hosted lifecycle failed at rpcProbe, claim state no-POST'
         for log, error in ((safe, None), (preclaim, None), (budget, None), (saving, None), (reopening, None),
+                           (receipt_probe, None), (rpc_probe, None),
+                           (rpc_probe.replace(b'no-POST', b'uncertain'), 'did not prove'),
+                           (rpc_probe + b'\nCORE_STAGE recipient passed', 'did not prove'),
+                           (receipt_probe + b'\n' + rpc_probe, 'did not prove'),
                            (b'no-POST', 'did not prove'),
                            (saving.replace(b'no-POST', b'uncertain'), 'did not prove'),
                            (saving + b'\nCORE_STAGE sender passed', 'did not prove'),

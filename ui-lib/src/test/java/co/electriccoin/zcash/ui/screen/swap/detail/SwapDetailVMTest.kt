@@ -462,6 +462,11 @@ class SwapDetailVMTest {
         assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
         assertFalse(harness.state().transactionHeader.showAmount)
         assertNotNull(harness.state().quotedOutput.message)
+
+        harness.emit(SwapQuoteStatusData(isLoading = false, error = unavailable(),
+            savedMetadata = saved.copy(observedRefundAmount = amount)))
+        runCurrent()
+        assertEquals(refund.message, harness.state().refundedAmount?.message)
     }
 
     @Test
