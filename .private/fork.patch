@@ -44507,7 +44507,7 @@ index 000000000..85f546267
 +        BigInteger(1, bytes.copyOfRange(start, end).reversedArray())
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-index c85256529..ec7937abd 100644
+index c85256529..370e1b965 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.provider
@@ -44650,7 +44650,7 @@ index c85256529..ec7937abd 100644
 +    }
 +
 +    override suspend fun getServerSelection() = currentRecord()?.serverSelection()
-@@ -37 +145,17 @@ class PersistableWalletProviderImpl(
+@@ -37 +145,19 @@ class PersistableWalletProviderImpl(
 -        persistableWalletStorageProvider.store(persistableWallet)
 +        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
 +    }
@@ -44662,14 +44662,16 @@ index c85256529..ec7937abd 100644
 +    ): Boolean {
 +        return walletWriteAccess.write(version) {
 +            val current = persistableWalletStorageProvider.get()
-+            if (current == null || !current.wallet.matchesPersistedSnapshot(expected)) {
++            if (current == null || current.wallet.walletInitMode != expected.walletInitMode ||
++                !current.wallet.matchesPersistedSnapshot(expected)
++            ) {
 +                false
 +            } else {
 +                persistableWalletStorageProvider.store(current.copy(wallet = replacement))
 +                true
 +            }
 +        } ?: false
-@@ -40 +164,49 @@ class PersistableWalletProviderImpl(
+@@ -40 +166,49 @@ class PersistableWalletProviderImpl(
 -    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
 +    override suspend fun storeServerSelection(
 +        selection: WalletServerSelection,
@@ -44720,7 +44722,7 @@ index c85256529..ec7937abd 100644
 +    override suspend fun getPersistableWallet() = currentRecord()?.wallet
 +
 +    override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
-@@ -42 +214,8 @@ class PersistableWalletProviderImpl(
+@@ -42 +216,8 @@ class PersistableWalletProviderImpl(
 -    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
 +    private suspend fun currentRecord() =
 +        if (readsSuppressed?.value == true) null else persistableWalletStorageProvider.get()
@@ -44730,7 +44732,7 @@ index c85256529..ec7937abd 100644
 +            endpoint = wallet.endpoint,
 +            isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
 +        )
-@@ -45 +224,22 @@ class PersistableWalletProviderImpl(
+@@ -45 +226,22 @@ class PersistableWalletProviderImpl(
 -private interface PersistableWalletStorageProvider : NullableStorageProvider<PersistableWallet>
 +private fun PersistableWalletStorageProviderImpl.observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
 +    if (suppressed) {
@@ -44754,14 +44756,14 @@ index c85256529..ec7937abd 100644
 +private const val APP_WALLET_PROVISIONING = "app_wallet_provisioning"
 +
 +private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
-@@ -49,2 +249 @@ private class PersistableWalletStorageProviderImpl(
+@@ -49,2 +251 @@ private class PersistableWalletStorageProviderImpl(
 -) : BaseNullableStorageProvider<PersistableWallet>(),
 -    PersistableWalletStorageProvider {
 +) : BaseNullableStorageProvider<WalletRecord>() {
-@@ -56 +255 @@ private class PersistableWalletPreferenceDefault(
+@@ -56 +257 @@ private class PersistableWalletPreferenceDefault(
 -) : PreferenceDefault<PersistableWallet?> {
 +) : PreferenceDefault<WalletRecord?> {
-@@ -58 +257,18 @@ private class PersistableWalletPreferenceDefault(
+@@ -58 +259,18 @@ private class PersistableWalletPreferenceDefault(
 -        preferenceProvider.getString(key)?.let { PersistableWallet.from(JSONObject(it)) }
 +        preferenceProvider.getString(key)?.let { serialized ->
 +            runCatchingRecoverable {
@@ -44781,7 +44783,7 @@ index c85256529..ec7937abd 100644
 +                throw StoredWalletDecodeException()
 +            }
 +        }
-@@ -62,2 +278,17 @@ private class PersistableWalletPreferenceDefault(
+@@ -62,2 +280,17 @@ private class PersistableWalletPreferenceDefault(
 -        newValue: PersistableWallet?
 -    ) = preferenceProvider.putString(key, newValue?.toJson()?.toString())
 +        newValue: WalletRecord?
@@ -44801,7 +44803,7 @@ index c85256529..ec7937abd 100644
 +        }
 +        preferenceProvider.putStringWithRollback(key, value)
 +    }
-@@ -64,0 +296,2 @@ private class PersistableWalletPreferenceDefault(
+@@ -64,0 +298,2 @@ private class PersistableWalletPreferenceDefault(
 +
 +internal class StoredWalletDecodeException : IllegalStateException("Could not read the stored wallet record")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt
@@ -48464,7 +48466,7 @@ index 26bf877f4..d7cb1f713 100644
 +    } == true
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..2f5566b2e 100644
+index fa652b038..e20e385e7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -6 +5,0 @@ import androidx.annotation.VisibleForTesting
@@ -48578,10 +48580,10 @@ index fa652b038..2f5566b2e 100644
 +        ) { state, wallet, transport, account ->
 +            val generation = if (wallet.generation != null || account.generation != null || transportGate != null) {
 +                persistableWalletProvider.readGeneration.value
-@@ -142 +188 @@ class WalletRepositoryImpl(
+@@ -142 +188,12 @@ class WalletRepositoryImpl(
 -                flowOf(state to false)
 +                null
-@@ -143,0 +190,12 @@ class WalletRepositoryImpl(
++            }
 +            val walletAvailability = when {
 +                wallet.generation != null && wallet.generation != generation -> StoredWalletAvailability.CHECKING
 +                wallet.availability != StoredWalletAvailability.PRESENT -> wallet.availability
@@ -48592,7 +48594,7 @@ index fa652b038..2f5566b2e 100644
 +                account.state == AccountSelectionReadState.UNAVAILABLE -> StoredWalletAvailability.UNAVAILABLE
 +                account.state == AccountSelectionReadState.CHECKING -> StoredWalletAvailability.CHECKING
 +                else -> StoredWalletAvailability.PRESENT
-+            }
+@@ -143,0 +201 @@ class WalletRepositoryImpl(
 +            state to walletAvailability
 @@ -145,0 +204,18 @@ class WalletRepositoryImpl(
 +    override val walletInitialization =
@@ -48671,21 +48673,24 @@ index fa652b038..2f5566b2e 100644
 @@ -269 +361 @@ class WalletRepositoryImpl(
 -    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?) {
 +    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?, version: Long) {
-@@ -272 +364,12 @@ class WalletRepositoryImpl(
+@@ -272 +364,15 @@ class WalletRepositoryImpl(
 -            persistWalletInternal(wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint()))
-+            val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
 +            walletTransport.switchWhenIdle {
 +                walletWriteAccess.withSdkRecovery(version) {
++                    val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
++                        it.endpoint == wallet.endpoint
++                    } ?: return@withSdkRecovery
++                    val replacement = current.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
 +                    val previous = synchronizerProvider.synchronizer.value
 +                    currentCoroutineContext().ensureActive()
 +                    withContext(NonCancellable) {
-+                        if (persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
++                        if (persistableWalletProvider.storeIfCurrent(current, replacement, version)) {
 +                            walletTransport.retire(previous)
 +                        }
 +                    }
 +                }
 +            }
-@@ -276,22 +379,3 @@ class WalletRepositoryImpl(
+@@ -276,22 +382,3 @@ class WalletRepositoryImpl(
 -    /**
 -     * Self-heals a wallet-less READY state (MOB-1836): the onboarding flag and the encrypted
 -     * wallet store live in separate preference files and can diverge when the encrypted store is
@@ -48711,7 +48716,7 @@ index fa652b038..2f5566b2e 100644
 +    /** Called under [walletMutation] before setup can store a replacement wallet. */
 +    @Suppress("TooGenericExceptionCaught")
 +    private suspend fun recoverMissingWalletIfNeeded(
-@@ -301,17 +385,8 @@ class WalletRepositoryImpl(
+@@ -301,17 +388,8 @@ class WalletRepositoryImpl(
 -        if (wallet != null || onboardingState != OnboardingState.READY) return
 -
 -        Twig.warn { "Onboarding state is READY but no wallet is stored; returning to onboarding" }
@@ -48737,7 +48742,7 @@ index fa652b038..2f5566b2e 100644
 +        try {
 +            if (onboardingState != OnboardingState.CLEARING_STALE_DATA) {
 +                persistOnboardingStateInternal(OnboardingState.CLEARING_STALE_DATA)
-@@ -319,7 +394,18 @@ class WalletRepositoryImpl(
+@@ -319,7 +397,18 @@ class WalletRepositoryImpl(
 -    }
 -
 -    override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
@@ -48763,9 +48768,9 @@ index fa652b038..2f5566b2e 100644
 +            GlobalCrashReporter.reportCaughtException(IllegalStateException("Wallet data recovery failed"))
 +            throw e
 +        }
-@@ -328,0 +415 @@ class WalletRepositoryImpl(
+@@ -328,0 +418 @@ class WalletRepositoryImpl(
 +        storedByCurrentSetup.value = true
-@@ -333,10 +420,18 @@ class WalletRepositoryImpl(
+@@ -333,10 +423,18 @@ class WalletRepositoryImpl(
 -        scope.launch {
 -            walletMutation.withLock {
 -                val zcashNetwork = ZcashNetwork.fromResources(application)
@@ -48794,7 +48799,7 @@ index fa652b038..2f5566b2e 100644
 +            val mode = transportGate?.let { isTorEnabledStorageProvider.getStoredMode() == true }
 +            mode?.let { transportGate.requireWalletMode(it) }
 +            try {
-@@ -345,0 +441,20 @@ class WalletRepositoryImpl(
+@@ -345,0 +444,20 @@ class WalletRepositoryImpl(
 +            } finally {
 +                mode?.let { transportGate.recordCommittedMode(it) }
 +            }
@@ -48815,22 +48820,22 @@ index fa652b038..2f5566b2e 100644
 +                startWalletInitialization(accepted)
 +            } else if (startupRecovery.value == WalletInitializationState.FAILED) {
 +                init()
-@@ -354,0 +470,6 @@ class WalletRepositoryImpl(
+@@ -354,0 +473,6 @@ class WalletRepositoryImpl(
 +        onboardingStateBeforeCommit.value = when (onboardingState) {
 +            OnboardingState.READY -> OnboardingState.NONE
 +            OnboardingState.NONE -> OnboardingState.CLEARING_STALE_DATA
 +            OnboardingState.CLEARING_STALE_DATA -> OnboardingState.READY
 +            else -> null
 +        }
-@@ -358,0 +480 @@ class WalletRepositoryImpl(
+@@ -358,0 +483 @@ class WalletRepositoryImpl(
 +        onboardingStateBeforeCommit.value = null
-@@ -360,0 +483,5 @@ class WalletRepositoryImpl(
+@@ -360,0 +486,5 @@ class WalletRepositoryImpl(
 +    private suspend fun readOnboardingState(): OnboardingState =
 +        onboardingStateBeforeCommit.value ?: OnboardingState.fromNumber(
 +            StandardPreferenceKeys.ONBOARDING_STATE.getValue(standardPreferenceProvider())
 +        )
 +
-@@ -372,4 +499,13 @@ class WalletRepositoryImpl(
+@@ -372,4 +502,13 @@ class WalletRepositoryImpl(
 -        birthday: BlockHeight
 -    ) {
 -        scope.launch {
@@ -48848,12 +48853,12 @@ index fa652b038..2f5566b2e 100644
 +            isTorEnabledStorageProvider.store(request.enableTor)
 +            transportGate?.requireWalletMode(request.enableTor)
 +            try {
-@@ -377 +513 @@ class WalletRepositoryImpl(
+@@ -377 +516 @@ class WalletRepositoryImpl(
 -                    PersistableWallet(
 +                    stored ?: candidate ?: PersistableWallet(
-@@ -383,0 +520 @@ class WalletRepositoryImpl(
+@@ -383,0 +523 @@ class WalletRepositoryImpl(
 +                candidate = restoredWallet
-@@ -388,0 +526,37 @@ class WalletRepositoryImpl(
+@@ -388,0 +529,40 @@ class WalletRepositoryImpl(
 +            } finally {
 +                transportGate?.recordCommittedMode(request.enableTor)
 +            }
@@ -48861,19 +48866,22 @@ index fa652b038..2f5566b2e 100644
 +    }
 +
 +    private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
-+        // Keep the accepted provisioning mode when the seed commit reached disk before onboarding metadata.
-+        // Older records omit that mode. Continue from a supported restore height in that case.
-+        val replacement = if (wallet.walletInitMode == WalletInitMode.ExistingWallet) {
-+            wallet.copy(
-+                birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
-+                walletInitMode = WalletInitMode.RestoreWallet,
-+            )
-+        } else {
-+            wallet
++        val committed = walletWriteAccess.withSdkRecovery(version) {
++            val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
++                it.network == wallet.network && it.seedPhrase == wallet.seedPhrase
++            } ?: return@withSdkRecovery false
++            // Keep the durably accepted provisioning mode. Older records need a supported restore height.
++            val replacement = if (current.walletInitMode == WalletInitMode.ExistingWallet) {
++                current.copy(
++                    birthday = current.birthday ?: current.network.saplingActivationHeight,
++                    walletInitMode = WalletInitMode.RestoreWallet,
++                )
++            } else {
++                current
++            }
++            persistableWalletProvider.storeIfCurrent(current, replacement, version)
 +        }
-+        if (!persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
-+            throw WalletInitializationConflictException()
-+        }
++        if (committed != true) throw WalletInitializationConflictException()
 +        walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
 +        restoreTimestampDataSource.getOrCreate()
 +        persistOnboardingStateInternal(OnboardingState.READY)
@@ -48891,7 +48899,7 @@ index fa652b038..2f5566b2e 100644
 +                activeInitialization ?: startWalletInitialization(
 +                    accepted ?: WalletInitializationOperation(request, operation)
 +                )
-@@ -390,0 +565,45 @@ class WalletRepositoryImpl(
+@@ -390,0 +571,45 @@ class WalletRepositoryImpl(
 +
 +    @Suppress("TooGenericExceptionCaught")
 +    private fun startWalletInitialization(accepted: WalletInitializationOperation): Deferred<Unit> {
@@ -48937,7 +48945,7 @@ index fa652b038..2f5566b2e 100644
 +            if (error == null) result.complete(Unit) else result.completeExceptionally(error)
 +        }
 +        return result
-@@ -391,0 +611,37 @@ class WalletRepositoryImpl(
+@@ -391,0 +617,37 @@ class WalletRepositoryImpl(
 +
 +    private class WalletInitializationOperation(
 +        val request: WalletInitializationRequest,
@@ -48975,7 +48983,7 @@ index fa652b038..2f5566b2e 100644
 +    INCOMPLETE,
 +    RUNNING,
 +    FAILED
-@@ -399,5 +655,2 @@ class WalletRepositoryImpl(
+@@ -399,5 +661,2 @@ class WalletRepositoryImpl(
 - * Every other [OnboardingState] resolves to [SecretState.NONE], a stored wallet notwithstanding.
 - * [OnboardingState.NEEDS_WARN] and [OnboardingState.NEEDS_BACKUP] are ordinals of an earlier
 - * onboarding flow that nothing writes any more — [WalletRepositoryImpl] only ever persists
@@ -48983,11 +48991,11 @@ index fa652b038..2f5566b2e 100644
 - * completion, so routing a wallet found under them back to onboarding is the intended outcome.
 + * A stored wallet from an earlier setup must pass app-access authentication before onboarding
 + * continues. A wallet stored by the current setup retains the first-run onboarding grant.
-@@ -408,0 +662 @@ internal fun resolveSecretState(
+@@ -408,0 +668 @@ internal fun resolveSecretState(
 +    storedByCurrentSetup: Boolean = false,
-@@ -412,0 +667 @@ internal fun resolveSecretState(
+@@ -412,0 +673 @@ internal fun resolveSecretState(
 +        hasWallet && !storedByCurrentSetup -> SecretState.INCOMPLETE
-@@ -414,0 +670,3 @@ internal fun resolveSecretState(
+@@ -414,0 +676,3 @@ internal fun resolveSecretState(
 +
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
@@ -90195,7 +90203,7 @@ index 70f0929ad..1cc4daef3 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..4f6f37e32 100644
+index 0bc7a1124..40a884746 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,3 @@ import android.app.Application
@@ -91008,7 +91016,7 @@ index 0bc7a1124..4f6f37e32 100644
 -     * "The erase failed and we carried on anyway" is the half-reset state MOB-1836 was reported
 -     * for, so it has to reach crash reporting rather than only a log line on the user's device.
 -     */
-@@ -228 +976,152 @@ class WalletRepositoryImplTest {
+@@ -228 +976,154 @@ class WalletRepositoryImplTest {
 -    fun initReportsAFailedEraseToCrashReporting() =
 +    fun storedWalletWithUnreadableTransportShowsRecoveryInsteadOfSetup() = runTest {
 +        val transportGate = WalletSdkTransportGate()
@@ -91153,16 +91161,18 @@ index 0bc7a1124..4f6f37e32 100644
 +        assertEquals(wallet, harness.walletProvider.requirePersistableWallet())
 +        assertTrue(harness.events.isEmpty())
 +
++        val provisioning = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
++        assertTrue(harness.walletProvider.storeIfCurrent(wallet, provisioning, harness.walletProvider.writeVersion))
 +        release.complete(Unit)
 +        ongoing.join()
 +        advanceUntilIdle()
-+        assertEquals(wallet.copy(endpoint = LightWalletEndpoint("zec.rocks", 443, true)),
++        assertEquals(provisioning.copy(endpoint = LightWalletEndpoint("zec.rocks", 443, true)),
 +                     harness.walletProvider.requirePersistableWallet())
 +    }
 +
 +    @Test
 +    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
-@@ -230,2 +1129,40 @@ class WalletRepositoryImplTest {
+@@ -230,2 +1131,40 @@ class WalletRepositoryImplTest {
 -            mockkObject(GlobalCrashReporter)
 -            every { GlobalCrashReporter.reportCaughtException(any()) } returns Unit
 +            val torPreferences = RecordingPreferenceProvider(mutableListOf())
@@ -91205,7 +91215,7 @@ index 0bc7a1124..4f6f37e32 100644
 +            assertEquals(false, reopenedTor.get())
 +            assertEquals(false, IsTorEnabledUseCase(reopenedTor).observe().first())
 +        }
-@@ -232,0 +1170,30 @@ class WalletRepositoryImplTest {
+@@ -232,0 +1172,30 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun failedTorCommitBlocksRestoreUntilTheAcceptedChoiceIsRetried() =
 +        runTest {
@@ -91236,7 +91246,7 @@ index 0bc7a1124..4f6f37e32 100644
 +    @Test
 +    fun initReportsAFailedEraseWithoutExposingSdkErrorDetails() =
 +        runTest {
-@@ -241,2 +1208,6 @@ class WalletRepositoryImplTest {
+@@ -241,2 +1210,6 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair"), harness.events)
 -            verify(exactly = 1) { GlobalCrashReporter.reportCaughtException(eraseFailure) }
 +            assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream"), harness.events)
@@ -91245,7 +91255,7 @@ index 0bc7a1124..4f6f37e32 100644
 +                    it.message == "Wallet data recovery failed" && it.cause == null
 +                })
 +            }
-@@ -256,0 +1228,7 @@ class WalletRepositoryImplTest {
+@@ -256,0 +1230,7 @@ class WalletRepositoryImplTest {
 +        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
 +        resetPending: Boolean = false,
 +        transportGate: WalletSdkTransportGate? = null,
@@ -91253,49 +91263,49 @@ index 0bc7a1124..4f6f37e32 100644
 +        decommissionedHosts: Set<String> = emptySet(),
 +        walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 +        walletTransport: WalletTransportAccess = WalletTransportAccess(),
-@@ -259,0 +1238,4 @@ class WalletRepositoryImplTest {
+@@ -259,0 +1240,4 @@ class WalletRepositoryImplTest {
 +        coEvery { SlipstreamSynchronizer.erase(any(), any(), any()) } coAnswers {
 +            events += "eraseSlipstream"
 +            true
 +        }
-@@ -270 +1252,5 @@ class WalletRepositoryImplTest {
+@@ -270 +1254,5 @@ class WalletRepositoryImplTest {
 -        val application = mockk<Application>(relaxed = true)
 +        val application = mockk<Application>(relaxed = true) {
 +            every { noBackupFilesDir } returns directory.root
 +            every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
 +            every { resources.getBoolean(any()) } returns true
 +        }
-@@ -275 +1261 @@ class WalletRepositoryImplTest {
+@@ -275 +1263 @@ class WalletRepositoryImplTest {
 -                every { getDecommissionedHosts() } returns emptySet()
 +                every { getDecommissionedHosts() } returns decommissionedHosts
-@@ -286,0 +1273 @@ class WalletRepositoryImplTest {
+@@ -286,0 +1275 @@ class WalletRepositoryImplTest {
 +        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
-@@ -303 +1290,2 @@ class WalletRepositoryImplTest {
+@@ -303 +1292,2 @@ class WalletRepositoryImplTest {
 -        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
 +        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
 +        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-@@ -317,0 +1306,6 @@ class WalletRepositoryImplTest {
+@@ -317,0 +1308,6 @@ class WalletRepositoryImplTest {
 +                isTorEnabledStorageProvider = torPreference,
 +                resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
 +                transportGate = transportGate,
 +                accountDataSource = accountDataSource,
 +                walletWriteAccess = walletWriteAccess,
 +                walletTransport = walletTransport,
-@@ -320,2 +1313,0 @@ class WalletRepositoryImplTest {
+@@ -320,2 +1315,0 @@ class WalletRepositoryImplTest {
 -        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 -
-@@ -325 +1317,4 @@ class WalletRepositoryImplTest {
+@@ -325 +1319,4 @@ class WalletRepositoryImplTest {
 -        return repository to TestHarness(events, fakePrefs)
 +        return repository to TestHarness(
 +            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
 +            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
 +        )
-@@ -330,0 +1326,4 @@ class WalletRepositoryImplTest {
+@@ -330,0 +1328,4 @@ class WalletRepositoryImplTest {
 +        val walletProvider: PersistableWalletProvider,
 +        val restoringProvider: WalletRestoringStateProvider,
 +        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
 +        val backupProvider: WalletBackupFlagStorageProvider,
-@@ -334,12 +1332,0 @@ class WalletRepositoryImplTest {
+@@ -334,12 +1334,0 @@ class WalletRepositoryImplTest {
 -/**
 - * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
 - * store repair lands relative to the onboarding-flag write and the SDK data erase.
@@ -91308,21 +91318,21 @@ index 0bc7a1124..4f6f37e32 100644
 -    }
 -}
 -
-@@ -356,0 +1344,5 @@ private class FakePersistableWalletProvider(
+@@ -356,0 +1346,5 @@ private class FakePersistableWalletProvider(
 +    private val writeAccess = WalletWriteAccess()
 +    var failWrites = false
 +    var failWritesBeforePublishing = false
 +    var readRetries = 0
 +        private set
-@@ -358,0 +1351 @@ private class FakePersistableWalletProvider(
+@@ -358,0 +1353 @@ private class FakePersistableWalletProvider(
 +    override val writeVersion get() = writeAccess.token()
-@@ -360,3 +1353,2 @@ private class FakePersistableWalletProvider(
+@@ -360,3 +1355,2 @@ private class FakePersistableWalletProvider(
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
 -        events += "wallet"
 +    override fun retryRead() {
 +        readRetries++
-@@ -364,0 +1357,17 @@ private class FakePersistableWalletProvider(
+@@ -364,0 +1359,17 @@ private class FakePersistableWalletProvider(
 +    override suspend fun store(persistableWallet: PersistableWallet) =
 +        writeAccess.replaceWallet { write(persistableWallet) }
 +
@@ -91340,7 +91350,7 @@ index 0bc7a1124..4f6f37e32 100644
 +        }
 +    } ?: false
 +
-@@ -367,0 +1377,8 @@ private class FakePersistableWalletProvider(
+@@ -367,0 +1379,8 @@ private class FakePersistableWalletProvider(
 +
 +    private fun write(wallet: PersistableWallet) {
 +        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
@@ -91349,19 +91359,19 @@ index 0bc7a1124..4f6f37e32 100644
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 +        events += "wallet"
 +    }
-@@ -385,0 +1403,6 @@ private class WalletStoredAfterFirstReadProvider(
+@@ -385,0 +1405,6 @@ private class WalletStoredAfterFirstReadProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
 +        version: Long,
 +    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 +
-@@ -402,0 +1426,2 @@ private class RecordingPreferenceProvider(
+@@ -402,0 +1428,2 @@ private class RecordingPreferenceProvider(
 +    private val committedValues = mutableMapOf<String, String?>()
 +    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
-@@ -416,0 +1442 @@ private class RecordingPreferenceProvider(
+@@ -416,0 +1444 @@ private class RecordingPreferenceProvider(
 +        committedValues[key.key] = value
-@@ -418,0 +1445,7 @@ private class RecordingPreferenceProvider(
+@@ -418,0 +1447,7 @@ private class RecordingPreferenceProvider(
 +    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
 +
 +    fun reopen(): RecordingPreferenceProvider =
@@ -91369,12 +91379,12 @@ index 0bc7a1124..4f6f37e32 100644
 +            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
 +        }
 +
-@@ -429,0 +1463,2 @@ private class RecordingPreferenceProvider(
+@@ -429,0 +1465,2 @@ private class RecordingPreferenceProvider(
 +        beforeStringCommit(key, value)
 +        committedValues[key.key] = value
-@@ -451,0 +1487 @@ private class RecordingPreferenceProvider(
+@@ -451,0 +1489 @@ private class RecordingPreferenceProvider(
 +        committedValues.remove(key.key)
-@@ -455,0 +1492 @@ private class RecordingPreferenceProvider(
+@@ -455,0 +1494 @@ private class RecordingPreferenceProvider(
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
@@ -102018,10 +102028,10 @@ index 000000000..e00d0f4a5
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
 new file mode 100644
-index 000000000..27f94b596
+index 000000000..94073cc50
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,300 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -102062,6 +102072,7 @@ index 000000000..27f94b596
 +import java.io.IOException
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
++import kotlin.test.assertFalse
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
 +
@@ -102220,12 +102231,12 @@ index 000000000..27f94b596
 +        val provisioning = WalletProvisioning(walletProvider, transport)
 +        val engine = mockk<Synchronizer> { every { network } returns candidate.network }
 +        val wrongAccount = mockk<Account> {
-+            every { hdAccountIndex } returns Zip32AccountIndex(0)
++            every { hdAccountIndex } returns Zip32AccountIndex.new(0)
 +            every { keySource } returns "zashi"
 +            every { ufvk } returns "different-test-key"
 +        }
 +        val account = mockk<Account> {
-+            every { hdAccountIndex } returns Zip32AccountIndex(0)
++            every { hdAccountIndex } returns Zip32AccountIndex.new(0)
 +            every { keySource } returns "zashi"
 +            every { ufvk } returns "matching-test-key"
 +        }
@@ -102245,6 +102256,9 @@ index 000000000..27f94b596
 +        runCurrent()
 +        assertEquals(listOf(null, WalletInitMode.NewWallet), sdkWallets.map { it?.walletInitMode })
 +        assertEquals(WalletInitMode.ExistingWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
++        val staleUpdate = candidate.copy(endpoint = LightWalletEndpoint("other.fixture.invalid", 443, true))
++        assertFalse(walletProvider.storeIfCurrent(candidate, staleUpdate, walletProvider.writeVersion))
++        assertEquals(candidate.endpoint, coldStore().sdkWalletReads.first().wallet?.endpoint)
 +    }
 +
 +    private suspend fun TestScope.assertUncommitted(

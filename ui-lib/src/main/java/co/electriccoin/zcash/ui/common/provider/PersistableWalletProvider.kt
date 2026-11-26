@@ -152,7 +152,9 @@ class PersistableWalletProviderImpl(
     ): Boolean {
         return walletWriteAccess.write(version) {
             val current = persistableWalletStorageProvider.get()
-            if (current == null || !current.wallet.matchesPersistedSnapshot(expected)) {
+            if (current == null || current.wallet.walletInitMode != expected.walletInitMode ||
+                !current.wallet.matchesPersistedSnapshot(expected)
+            ) {
                 false
             } else {
                 persistableWalletStorageProvider.store(current.copy(wallet = replacement))

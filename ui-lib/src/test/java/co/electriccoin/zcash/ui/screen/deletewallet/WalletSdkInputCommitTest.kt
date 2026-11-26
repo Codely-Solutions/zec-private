@@ -38,6 +38,7 @@ import org.robolectric.annotation.Config
 import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -196,12 +197,12 @@ class WalletSdkInputCommitTest {
         val provisioning = WalletProvisioning(walletProvider, transport)
         val engine = mockk<Synchronizer> { every { network } returns candidate.network }
         val wrongAccount = mockk<Account> {
-            every { hdAccountIndex } returns Zip32AccountIndex(0)
+            every { hdAccountIndex } returns Zip32AccountIndex.new(0)
             every { keySource } returns "zashi"
             every { ufvk } returns "different-test-key"
         }
         val account = mockk<Account> {
-            every { hdAccountIndex } returns Zip32AccountIndex(0)
+            every { hdAccountIndex } returns Zip32AccountIndex.new(0)
             every { keySource } returns "zashi"
             every { ufvk } returns "matching-test-key"
         }
@@ -221,6 +222,9 @@ class WalletSdkInputCommitTest {
         runCurrent()
         assertEquals(listOf(null, WalletInitMode.NewWallet), sdkWallets.map { it?.walletInitMode })
         assertEquals(WalletInitMode.ExistingWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
+        val staleUpdate = candidate.copy(endpoint = LightWalletEndpoint("other.fixture.invalid", 443, true))
+        assertFalse(walletProvider.storeIfCurrent(candidate, staleUpdate, walletProvider.writeVersion))
+        assertEquals(candidate.endpoint, coldStore().sdkWalletReads.first().wallet?.endpoint)
     }
 
     private suspend fun TestScope.assertUncommitted(

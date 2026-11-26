@@ -361,13 +361,16 @@ class WalletRepositoryImpl(
     private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?, version: Long) {
         if (wallet == null) return
         if (wallet.endpoint.host in lightWalletEndpointProvider.getDecommissionedHosts()) {
-            val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
             walletTransport.switchWhenIdle {
                 walletWriteAccess.withSdkRecovery(version) {
+                    val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
+                        it.endpoint == wallet.endpoint
+                    } ?: return@withSdkRecovery
+                    val replacement = current.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
                     val previous = synchronizerProvider.synchronizer.value
                     currentCoroutineContext().ensureActive()
                     withContext(NonCancellable) {
-                        if (persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
+                        if (persistableWalletProvider.storeIfCurrent(current, replacement, version)) {
                             walletTransport.retire(previous)
                         }
                     }
@@ -530,19 +533,22 @@ class WalletRepositoryImpl(
     }
 
     private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
-        // Keep the accepted provisioning mode when the seed commit reached disk before onboarding metadata.
-        // Older records omit that mode. Continue from a supported restore height in that case.
-        val replacement = if (wallet.walletInitMode == WalletInitMode.ExistingWallet) {
-            wallet.copy(
-                birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
-                walletInitMode = WalletInitMode.RestoreWallet,
-            )
-        } else {
-            wallet
+        val committed = walletWriteAccess.withSdkRecovery(version) {
+            val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
+                it.network == wallet.network && it.seedPhrase == wallet.seedPhrase
+            } ?: return@withSdkRecovery false
+            // Keep the durably accepted provisioning mode. Older records need a supported restore height.
+            val replacement = if (current.walletInitMode == WalletInitMode.ExistingWallet) {
+                current.copy(
+                    birthday = current.birthday ?: current.network.saplingActivationHeight,
+                    walletInitMode = WalletInitMode.RestoreWallet,
+                )
+            } else {
+                current
+            }
+            persistableWalletProvider.storeIfCurrent(current, replacement, version)
         }
-        if (!persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
-            throw WalletInitializationConflictException()
-        }
+        if (committed != true) throw WalletInitializationConflictException()
         walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
         restoreTimestampDataSource.getOrCreate()
         persistOnboardingStateInternal(OnboardingState.READY)

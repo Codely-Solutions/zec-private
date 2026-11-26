@@ -1116,10 +1116,12 @@ class WalletRepositoryImplTest {
         assertEquals(wallet, harness.walletProvider.requirePersistableWallet())
         assertTrue(harness.events.isEmpty())
 
+        val provisioning = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
+        assertTrue(harness.walletProvider.storeIfCurrent(wallet, provisioning, harness.walletProvider.writeVersion))
         release.complete(Unit)
         ongoing.join()
         advanceUntilIdle()
-        assertEquals(wallet.copy(endpoint = LightWalletEndpoint("zec.rocks", 443, true)),
+        assertEquals(provisioning.copy(endpoint = LightWalletEndpoint("zec.rocks", 443, true)),
                      harness.walletProvider.requirePersistableWallet())
     }
 
