@@ -12,8 +12,8 @@ import unittest
 from unittest.mock import patch
 from test_support import patch_environment, public_baseline_metadata
 
-from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, open_proposals, pending_recovery, trusted_proposal,
-                               verified_wrapper, wrapper_patch)
+from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, proposal_inventory,
+                               trusted_proposal, verified_wrapper, wrapper_patch)
 
 
 def workflow_text(workflow):
@@ -695,7 +695,7 @@ class MaintenanceWatchTest(unittest.TestCase):
             f'{prefix}/actions/workflows/sync-upstream.yml/runs?event=schedule&per_page=1': {'workflow_runs': []},
             f'{prefix}/commits/main': {'sha': base},
         }
-        query = f'{prefix}/pulls?state=open&base=main&sort=created&direction=asc&per_page=100&page='
+        query = f'{prefix}/pulls?state=all&sort=created&direction=asc&per_page=100&page='
         paths.update({query + '1': [proposals[1]] + drafts, query + '2': [proposals[101]]})
         for number, head in heads.items():
             paths[f'{prefix}/pulls/{number}'] = proposals[number]
@@ -720,11 +720,32 @@ class MaintenanceWatchTest(unittest.TestCase):
         pages = [[{'number': n} for n in range(start, start + 100)] for start in range(1, 1001, 100)]
         with patch('maintenance_watch.api', side_effect=[pages[0], [{'number': 1}]]):
             with self.assertRaisesRegex(RuntimeError, 'inventory changed'):
-                open_proposals('repos/fork/wallet')
+                proposal_inventory('repos/fork/wallet')
         with patch('maintenance_watch.api', side_effect=pages) as api:
             with self.assertRaisesRegex(RuntimeError, 'bounded discovery window'):
-                open_proposals('repos/fork/wallet')
+                proposal_inventory('repos/fork/wallet')
             self.assertEqual(10, api.call_count)
+
+    def test_proposal_listing_preserves_offsets_when_prior_items_close_or_change_base(self):
+        rows = [
+            {'number': number, 'state': 'open', 'base': {'ref': 'main'}}
+            for number in range(1, 102)
+        ]
+        def response(path):
+            page = int(path.rsplit('page=', 1)[1])
+            eligible_rows = rows
+            if 'state=open' in path:
+                eligible_rows = [row for row in eligible_rows if row['state'] == 'open']
+            if 'base=main' in path:
+                eligible_rows = [row for row in eligible_rows if row['base']['ref'] == 'main']
+            result = eligible_rows[(page - 1) * 100:page * 100]
+            if page == 1:
+                rows[0] = dict(rows[0], state='closed')
+                rows[1] = dict(rows[1], base={'ref': 'review/internal'})
+            return result
+
+        with patch('maintenance_watch.api', side_effect=response):
+            self.assertEqual(list(range(1, 102)), [p['number'] for p in proposal_inventory('repos/fork/wallet')])
 
     def test_verified_wrapper_rechecks_the_proposal_after_resolving_the_checksum(self):
         base, head = 'a'*40, 'b'*40

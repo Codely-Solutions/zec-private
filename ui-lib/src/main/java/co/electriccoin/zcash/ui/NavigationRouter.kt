@@ -81,6 +81,7 @@ data class ActiveNavigationEntry(
     val genericScanRequestId: String? = null,
     val contentEntryId: String? = id,
     val hostResumed: Boolean = true,
+    val submissionProgressId: String? = null,
 )
 
 internal fun NavigationRouter.bindReportHandoff(allowed: () -> Boolean): () -> Boolean {
@@ -224,9 +225,6 @@ suspend fun NavigationRouter.commitFrom(
 
 internal fun NavigationRouter.isAtEntry(sourceEntryId: String?) =
     sourceEntryId == null || activeEntry.value?.id == sourceEntryId
-
-fun NavigationRouter.isForegroundAtEntry(sourceEntryId: String?): Boolean =
-    sourceEntryId == null || activeEntry.value?.let { it.id == sourceEntryId && it.hostResumed } == true
 
 internal suspend fun <T> NavigationRouter.whileAtEntry(
     sourceEntryId: String?,

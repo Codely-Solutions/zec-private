@@ -99,10 +99,12 @@ def api(path, *options):
     return json.loads(subprocess.check_output(['gh', 'api', path, *options], text=True, timeout=30))
 
 
-def open_proposals(prefix):
+def proposal_inventory(prefix):
     proposals = {}
     for page in range(1, PROPOSAL_PAGE_LIMIT + 1):
-        batch = api(f'{prefix}/pulls?state=open&base=main&sort=created&direction=asc'
+        # Leave mutable state and base filters out of the page offsets. Trust and current-state
+        # checks still select only open main proposals after the full inventory is available.
+        batch = api(f'{prefix}/pulls?state=all&sort=created&direction=asc'
                     f'&per_page={PROPOSAL_PAGE_SIZE}&page={page}')
         for proposal in batch:
             number = proposal['number']
@@ -217,7 +219,7 @@ def main():
             stream.write(f"Reconcile the public release using publisher run {recovery['reconciliation_run']}.\n")
         return
     eligible = []
-    for pr in open_proposals(prefix):
+    for pr in proposal_inventory(prefix):
         if not trusted_proposal(pr, repository['id']):
             continue
         number = pr['number']

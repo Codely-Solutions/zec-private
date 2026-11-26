@@ -15,6 +15,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.awaitForegroundAtEntry
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.isForegroundAtEntry
@@ -161,8 +162,12 @@ class MigrationReviewVM(
 
     private data class CommittedMigration(val reviewed: ReviewedMigrationSchedule, val showSchedule: Boolean)
 
-    private class ConfirmationAuthority(private val owner: Job, val canPresent: () -> Boolean) {
-        fun canConfirm() = owner.isActive && canPresent()
+    private class ConfirmationAuthority(
+        private val owner: Job,
+        private val isForeground: () -> Boolean,
+        val canPresent: () -> Boolean,
+    ) {
+        fun canConfirm() = owner.isActive && isForeground() && canPresent()
     }
     private val isKeystoneAccount = getSelectedWalletAccount.observe().map { it is KeystoneAccount }
     private val failure = MutableStateFlow<TransferResult?>(null)
@@ -403,8 +408,9 @@ class MigrationReviewVM(
             if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
             val account = requireReviewAccount()
             val canOperate = walletActionAccess.capture(account) ?: return@execute
-            val authority = ConfirmationAuthority(currentCoroutineContext().job) {
-                canOperate() && ownsReviewEntry() && proposeLce.state.value.success === proposal
+            val authority = ConfirmationAuthority(currentCoroutineContext().job, ::ownsReviewEntry) {
+                val originalEntry = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
+                canOperate() && originalEntry && proposeLce.state.value.success === proposal
             }
             if (!authority.canConfirm()) return@execute
             try {
@@ -423,7 +429,7 @@ class MigrationReviewVM(
             } catch (_: BiometricsCancelledException) {
                 return@execute
             }
-            if (authority.canConfirm()) {
+            if (navigationRouter.awaitForegroundAtEntry(sourceEntryId) && authority.canConfirm()) {
                 confirmAutomatic(proposal.reviewed, account, authority)
             }
         }
@@ -658,7 +664,9 @@ class MigrationReviewVM(
                 } catch (_: BiometricsCancelledException) {
                     return@execute
                 }
-                prepareImmediateKeystone(review, account, canSign)
+                if (navigationRouter.awaitForegroundAtEntry(sourceEntryId)) {
+                    prepareImmediateKeystone(review, account, canSign)
+                }
             } else {
                 val reviewed = zashiProposalRepository.setMigrationSweepProposal(review.proposal)
                 submitProposal(reviewed, sourceEntryId = sourceEntryId, reviewedOwner = account.sdkAccount.accountUuid)

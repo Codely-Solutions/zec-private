@@ -1,5 +1,9 @@
 package co.electriccoin.zcash.ui.screen.settings
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -14,6 +18,8 @@ import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerState
 import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerListState
+import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookState
+import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookView
 import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsState
 import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsView
 import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsLoadView
@@ -89,22 +95,45 @@ class SettingsRecoveryLayoutTest {
 
     @Test
     fun aFailedAppearanceSaveShowsAnErrorWithSaveStillAvailable() {
+        assertAnnouncedAppearanceFailure { failed, save ->
+            ThemeSettingsView(
+                ThemeSettingsState(
+                    options = emptyList(),
+                    saveButton = ButtonState(stringRes("Save"), onClick = save),
+                    onBack = {},
+                    hasSaveError = failed,
+                )
+            )
+        }
+    }
+
+    @Test
+    fun aFailedDarkLookSaveAnnouncesTheFailureAndKeepsSaveAvailable() {
+        assertAnnouncedAppearanceFailure { failed, save ->
+            ThemeDarkLookView(
+                ThemeDarkLookState(
+                    options = emptyList(),
+                    saveButton = ButtonState(stringRes("Save"), onClick = save),
+                    onBack = {},
+                    hasSaveError = failed,
+                )
+            )
+        }
+    }
+
+    private fun assertAnnouncedAppearanceFailure(view: @Composable (Boolean, () -> Unit) -> Unit) {
         val resources = RuntimeEnvironment.getApplication().resources
+        val failed = mutableStateOf(false)
         var saves = 0
         compose.setContent {
-            ZcashTheme {
-                ThemeSettingsView(
-                    ThemeSettingsState(
-                        options = emptyList(),
-                        saveButton = ButtonState(stringRes("Save"), onClick = { saves++ }),
-                        onBack = {},
-                        hasSaveError = true,
-                    ),
-                )
-            }
+            ZcashTheme { view(failed.value) { saves++ } }
         }
 
-        compose.onNodeWithText(resources.getString(R.string.appearance_save_failed)).assertIsDisplayed()
+        val error = compose.onNodeWithText(resources.getString(R.string.appearance_save_failed))
+        error.assertDoesNotExist()
+        compose.runOnIdle { failed.value = true }
+        error.assertIsDisplayed()
+        assertEquals(LiveRegionMode.Polite, error.fetchSemanticsNode().config[SemanticsProperties.LiveRegion])
         compose.onNodeWithText("Save").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, saves) }
     }

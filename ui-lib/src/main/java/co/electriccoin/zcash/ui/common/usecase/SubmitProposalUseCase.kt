@@ -5,11 +5,14 @@ import androidx.annotation.VisibleForTesting
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.awaitForegroundAtEntry
 import co.electriccoin.zcash.ui.isAtEntry
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
@@ -87,12 +90,13 @@ class SubmitProposalUseCase(
         val walletToken = wallet.token()
         val sameSession = { appAccess.permits(grant) && wallet.permits(walletToken) }
         try {
+            val requiresForeground = reviewedProposal is MigrationSweepTransactionProposal
             val account = navigationRouter.whileAtEntry(sourceEntryId) {
                 if (sameSession()) authenticate() else null
-            } ?: return
+            }?.takeIf { awaitSubmissionEntry(sourceEntryId, requiresForeground) } ?: return
             val selection = accountDataSource.confirmSelection(account)
             val canSubmit = { sameSession() && selection?.canOperate() == true }
-            if (canSubmit() && navigationRouter.isAtEntry(sourceEntryId)) {
+            if (canSubmit() && ownsSubmissionEntry(sourceEntryId, requiresForeground)) {
                 approveSubmission(account, reviewedProposal, reviewedQuote, sourceEntryId, reviewedOwner, canSubmit)
             }
         } catch (_: BiometricsFailureException) {
@@ -105,6 +109,16 @@ class SubmitProposalUseCase(
             submissionMutex.unlock()
         }
     }
+
+    private suspend fun awaitSubmissionEntry(sourceEntryId: String?, requiresForeground: Boolean): Boolean =
+        !requiresForeground || navigationRouter.awaitForegroundAtEntry(sourceEntryId)
+
+    private fun ownsSubmissionEntry(sourceEntryId: String?, requiresForeground: Boolean): Boolean =
+        if (requiresForeground) {
+            navigationRouter.isForegroundAtEntry(sourceEntryId)
+        } else {
+            navigationRouter.isAtEntry(sourceEntryId)
+        }
 
     private suspend fun authenticate(): WalletAccount {
         biometricRepository.requestBiometrics(
@@ -193,10 +207,19 @@ class SubmitProposalUseCase(
             submittedSoftwareProposal = WeakReference(proposal)
             val progress = owner?.let { submissionProgress?.begin(proposal, it) }
             submittedProgressId = progress?.id
-            submitZashiProposal(proposal, reviewedQuote, progress, canSubmit)
+            submitZashiProposal(proposal, reviewedQuote, progress) {
+                canSubmit() && (proposal !is MigrationSweepTransactionProposal ||
+                    isForegroundForMigrationSweep(sourceEntryId, progress?.id))
+            }
         }
         navigationRouter.showTransactionProgress(sourceEntryId, submittedProgressId)
     }
+
+    private fun isForegroundForMigrationSweep(sourceEntryId: String?, progressId: String?): Boolean =
+        sourceEntryId == null || navigationRouter.activeEntry.value?.let { active ->
+            active.hostResumed &&
+                (active.id == sourceEntryId || progressId != null && active.submissionProgressId == progressId)
+        } == true
 
     @Suppress("TooGenericExceptionCaught") // Retain the SDK result or a typed failure for its original review.
     private fun submitZashiProposal(

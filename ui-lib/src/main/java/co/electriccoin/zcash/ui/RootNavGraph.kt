@@ -44,6 +44,7 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.StoredWalletUnavailableView
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
+import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import co.electriccoin.zcash.ui.screen.tor.settings.TorRestartRequiredView
 import co.electriccoin.zcash.ui.util.SettingsUtil
@@ -324,6 +325,9 @@ internal fun NavBackStackEntry.toActiveNavigationEntry(contentEntryId: String? =
     } else null,
     genericScanRequestId = if (destination.hasRoute<ScanGenericAddressArgs>()) {
         toRoute<ScanGenericAddressArgs>().requestId
+    } else null,
+    submissionProgressId = if (destination.hasRoute<BoundTransactionProgressArgs>()) {
+        toRoute<BoundTransactionProgressArgs>().submissionId
     } else null,
 )
 

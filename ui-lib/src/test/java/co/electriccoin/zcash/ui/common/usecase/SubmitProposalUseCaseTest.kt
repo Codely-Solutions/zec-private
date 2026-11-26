@@ -3,9 +3,12 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.model.WalletAddress
 
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.PendingNavigation
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
+import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
@@ -24,6 +27,7 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
+import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -39,8 +43,12 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -321,6 +329,47 @@ class SubmitProposalUseCaseTest {
     }
 
     @Test
+    fun aSoftwareMigrationWaitsForAuthenticationAndRequiresItsResumedProgressAtSdkEntry() = runTest {
+        for ((foreground, correctProgress) in listOf(true to true, false to true, true to false)) {
+            val fx = useCase(withProgress = true)
+            val proposal = MigrationSweepTransactionProposal(mockk())
+            fx.givenZashi(proposal)
+            val pending = PendingNavigation()
+            val review = ActiveNavigationEntry("review", null)
+            val active = MutableStateFlow(review)
+            every { fx.navigationRouter.activeEntry } returns active
+            every { fx.navigationRouter.pendingNavigation } returns pending
+            coEvery { fx.biometricRepository.requestBiometrics(any()) } coAnswers {
+                active.value = review.copy(hostResumed = false)
+            }
+            val keyReady = CompletableDeferred<Unit>()
+            var entered = 0
+            coEvery { fx.zashiProposalRepository.submit(proposal, null, any()) } coAnswers {
+                keyReady.await()
+                thirdArg<() -> Unit>().invoke()
+                entered++
+                mockk()
+            }
+            val approval = launch { fx.useCase(proposal, sourceEntryId = review.id) }
+            runCurrent()
+            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(proposal, null, any()) }
+
+            active.value = review
+            approval.join()
+            val command = assertNotNull(pending.commands.value[review.id])
+            val replacement = assertIs<NavigationCommand.Replace>(command.buildCommand())
+            val progress = assertIs<BoundTransactionProgressArgs>(replacement.routes.single())
+            active.value = ActiveNavigationEntry(
+                "progress", null, hostResumed = foreground,
+                submissionProgressId = if (correctProgress) progress.submissionId else "unrelated",
+            )
+            keyReady.complete(Unit)
+            runCurrent()
+            assertEquals(if (foreground && correctProgress) 1 else 0, entered)
+        }
+    }
+
+    @Test
     fun anAdmittedSubmissionRetainsItsOriginalAppAccessUntilTheFirstSendBoundary() = runTest {
         val fx = useCase()
         val proposal = mockk<TransactionProposal>()
@@ -402,14 +451,14 @@ class SubmitProposalUseCaseTest {
     }
 
     /** Builds the use case with the off-thread submit scope pinned to the test scheduler. */
-    private fun TestScope.useCase(): Fixtures {
-        val fx = Fixtures()
+    private fun TestScope.useCase(withProgress: Boolean = false): Fixtures {
+        val fx = Fixtures(withProgress)
         // The use case launches submission on its own scope; run it eagerly on the test scheduler.
         fx.useCase.scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         return fx
     }
 
-    private class Fixtures {
+    private class Fixtures(withProgress: Boolean) {
         val zashiProposal = MutableStateFlow<TransactionProposal?>(null)
         val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true) {
             every { transactionProposal } returns zashiProposal
@@ -436,6 +485,7 @@ class SubmitProposalUseCaseTest {
         val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
         val access = AppAccessSession().apply { unlock() }
+        private val wallet = WalletWriteAccess()
         val useCase =
             SubmitProposalUseCase(
                 navigationRouter = navigationRouter,
@@ -450,7 +500,8 @@ class SubmitProposalUseCaseTest {
                 prefillSend = prefillSend,
                 navigateToError = navigateToError,
                 appAccess = access,
-                wallet = WalletWriteAccess(),
+                wallet = wallet,
+                submissionProgress = if (withProgress) SubmissionProgressStore(accountDataSource, wallet) else null,
             )
     }
 

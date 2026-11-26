@@ -491,6 +491,49 @@ class MigrationReviewVMTest {
             assertConfirmationNeedsForeground(ActiveNavigationEntry("automatic-review", null, hostResumed = false))
         }
 
+    @Test
+    fun automaticConfirmationWaitsForItsReviewAfterAuthenticationAndRetainsAnAdmittedResult() = runTest {
+        val owner = ActiveNavigationEntry("automatic-review", null)
+        val router = FakeNavigationRouter(owner.id)
+        val signFinished = CompletableDeferred<Unit>()
+        val plan = schedule(8L, 100_000L)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { proposeMigrationTransfers() } returns plan
+            coEvery { signAndStoreMigrationSchedule(plan, any()) } coAnswers { signFinished.await() }
+        }
+        val authentication = mockk<BiometricRepository> {
+            coEvery { requestBiometrics(any()) } coAnswers {
+                router.activeEntry.value = owner.copy(hostResumed = false)
+            }
+        }
+        val finalized = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+            sourceEntryId = owner.id,
+            biometricRepository = authentication,
+            finalizeMigrationSchedule = finalized,
+        )
+        vm.currentReview().onConfirm()
+        runCurrent()
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+
+        router.activeEntry.value = owner
+        runCurrent()
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
+        router.activeEntry.value = owner.copy(hostResumed = false)
+        signFinished.complete(Unit)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { finalized(plan, MigrationMode.AUTOMATIC, any(), false) }
+        val handoff = router.scopedCommands.single()
+        assertEquals(owner.id, handoff.sourceEntryId)
+        assertTrue(handoff.isStillAllowed())
+        assertIs<NavigationCommand.Forward>(handoff.buildCommand())
+    }
+
     private suspend fun TestScope.assertConfirmationNeedsForeground(afterKeyRequest: ActiveNavigationEntry) {
         val review = "automatic-review"
         val router = FakeNavigationRouter(review)
@@ -717,6 +760,11 @@ class MigrationReviewAuthorityTest {
             every { transactionProposal } returns MutableStateFlow(adopted)
         }
         val router = FakeNavigationRouter("keystone-review")
+        val biometric = mockk<BiometricRepository>(relaxed = true) {
+            coEvery { requestBiometrics(any()) } coAnswers {
+                router.activeEntry.value = ActiveNavigationEntry("keystone-review", null, hostResumed = false)
+            }
+        }
         val sdk = mockk<OrchardMigrationSdk> { coEvery { proposeImmediateMigration() } returns sdkProposal }
         val vm = vm(
             router = router,
@@ -724,9 +772,14 @@ class MigrationReviewAuthorityTest {
             getSelectedWalletAccount = selectedAccount(spendable<KeystoneAccount>()),
             keystoneProposalRepository = keystone,
             sourceEntryId = "keystone-review",
+            biometricRepository = biometric,
         )
 
         vm.currentReview().onConfirm()
+        runCurrent()
+        assertTrue(router.scopedCommands.isEmpty())
+        verify(exactly = 0) { keystone.setMigrationSweepProposal(any()) }
+        router.activeEntry.value = ActiveNavigationEntry("keystone-review", null)
         runCurrent()
         val handoff = router.scopedCommands.single()
         assertTrue(handoff.isStillAllowed())
@@ -826,6 +879,7 @@ private fun vm(
     walletActionAccess: WalletActionAccess = mockk {
         coEvery { capture(any<WalletAccount>()) } returns { true }
     },
+    biometricRepository: BiometricRepository = mockk(relaxed = true),
     migrationDrive: MigrationDriveOnce = mockk {
         every { permitsForeground(any()) } returns true
         coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
@@ -846,7 +900,7 @@ private fun vm(
     getSelectedWalletAccount = getSelectedWalletAccount,
     errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
     zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
-    biometricRepository = mockk<BiometricRepository>(relaxed = true),
+    biometricRepository = biometricRepository,
     zashiProposalRepository = zashiProposalRepository,
     keystoneProposalRepository = keystoneProposalRepository,
     submitProposal = submitProposal,
