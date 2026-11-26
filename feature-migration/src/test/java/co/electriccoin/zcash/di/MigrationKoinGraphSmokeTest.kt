@@ -34,6 +34,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenMigrationCompleteStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
@@ -42,6 +43,8 @@ import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvid
 import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -176,6 +179,7 @@ class MigrationKoinGraphSmokeTest {
 
                 // Providers
                 single<SynchronizerProvider> { mockk(relaxed = true) }
+                single { WalletActionAccess(AppAccessSession(), WalletWriteAccess(), get()) }
                 single<LastNetworkActivityStorageProvider> { mockk(relaxed = true) }
                 single<IsMigrationTorEnabledStorageProvider> { mockk(relaxed = true) }
                 single<PendingMigrationTorFailureStorageProvider> { mockk(relaxed = true) }

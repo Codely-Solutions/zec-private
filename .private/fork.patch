@@ -10224,91 +10224,98 @@ index 5a7def039..212c61948 100644
 @@ -44,0 +69 @@ object MigrationWorkerHeartbeat {
 +    private const val KEY_REMOVAL_PENDING = "removal_pending_"
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
-index 698a60fbd..6d6d1a63d 100644
+index 698a60fbd..49655008f 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 @@ -32,0 +33 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -37 +37,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
+@@ -35,0 +37 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
+@@ -37 +38,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 -import co.electriccoin.zcash.ui.common.provider.HasLockedOrchardDustStorageProvider
-@@ -50 +49,0 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
+@@ -44,0 +46,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -50 +52,0 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
 -import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
-@@ -64,0 +64,2 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccess
+@@ -64,0 +67,2 @@ import co.electriccoin.zcash.ui.common.usecase.ViewTransactionDetailAfterSuccess
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import co.electriccoin.zcash.ui.screen.migration.battery.MigrationBatteryArgs
-@@ -70,0 +72 @@ import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksV
+@@ -70,0 +75 @@ import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksV
 +import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
-@@ -76,0 +79 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
+@@ -76,0 +82 @@ import co.electriccoin.zcash.ui.screen.migration.lockexplainer.MigrationLockExpl
 +import co.electriccoin.zcash.ui.screen.migration.notification.MigrationNotificationArgs
-@@ -79,0 +83 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
+@@ -79,0 +86 @@ import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyVM
 +import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
-@@ -82,0 +87 @@ import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
+@@ -82,0 +90 @@ import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
-@@ -83,0 +89 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
+@@ -83,0 +92 @@ import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
 +import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
-@@ -87,0 +94 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
+@@ -87,0 +97 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessVM
 +import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
-@@ -89,0 +97 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -89,0 +100 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -96,0 +105 @@ import org.koin.core.KoinApplication
+@@ -96,0 +108 @@ import org.koin.core.KoinApplication
 +import org.koin.core.parameter.parametersOf
-@@ -133,0 +143 @@ class MigrationKoinGraphSmokeTest {
+@@ -133,0 +146 @@ class MigrationKoinGraphSmokeTest {
 +                single<ResetProgressStore> { mockk(relaxed = true) }
-@@ -153,0 +164 @@ class MigrationKoinGraphSmokeTest {
+@@ -153,0 +167 @@ class MigrationKoinGraphSmokeTest {
 +                factory { mockk<MigrationDriveOnce>(relaxed = true) }
-@@ -156 +166,0 @@ class MigrationKoinGraphSmokeTest {
+@@ -156 +169,0 @@ class MigrationKoinGraphSmokeTest {
 -                single<PendingMigrationTorFailureDecisionRepository> { mockk(relaxed = true) }
-@@ -162,0 +173 @@ class MigrationKoinGraphSmokeTest {
+@@ -162,0 +176 @@ class MigrationKoinGraphSmokeTest {
 +                single<AccountDataSource> { mockk(relaxed = true) }
-@@ -173 +183,0 @@ class MigrationKoinGraphSmokeTest {
+@@ -167,0 +182 @@ class MigrationKoinGraphSmokeTest {
++                single { WalletActionAccess(AppAccessSession(), WalletWriteAccess(), get()) }
+@@ -173 +187,0 @@ class MigrationKoinGraphSmokeTest {
 -                single<HasLockedOrchardDustStorageProvider> { mockk(relaxed = true) }
-@@ -183 +193 @@ class MigrationKoinGraphSmokeTest {
+@@ -183 +197 @@ class MigrationKoinGraphSmokeTest {
 -                factory { MigrationCustomServerTorArgs(mode = MigrationMode.AUTOMATIC) }
 +                factory { MigrationCustomServerTorArgs(MigrationMode.AUTOMATIC, "review-account") }
-@@ -186 +196,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -186 +200,3 @@ class MigrationKoinGraphSmokeTest {
 -                factory { MigrationPrivacyArgs(mode = MigrationMode.AUTOMATIC) }
 +                factory { MigrationBatteryArgs("review-account", useTor = true) }
 +                factory { MigrationNotificationArgs("review-account", useTor = true) }
 +                factory { MigrationPrivacyArgs(MigrationMode.AUTOMATIC, "review-account") }
-@@ -211 +223 @@ class MigrationKoinGraphSmokeTest {
+@@ -211 +227 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationSetupVM>()
 +        koin.koin.get<MigrationSetupVM> { parametersOf("fixture-entry") }
-@@ -216 +228 @@ class MigrationKoinGraphSmokeTest {
+@@ -216 +232 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationHowItWorksVM>()
 +        koin.koin.get<MigrationHowItWorksVM> { parametersOf("fixture-entry") }
-@@ -227 +239 @@ class MigrationKoinGraphSmokeTest {
+@@ -227 +243 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationProgressVM>()
 +        koin.koin.get<MigrationProgressVM> { parametersOf(MigrationProgressArgs("fixture-owner"), "fixture-entry") }
-@@ -232 +244,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -232 +248,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationReviewVM>()
 +        koin.koin.get<MigrationReviewVM> {
 +            parametersOf(MigrationReviewArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
 +        }
-@@ -237 +251,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -237 +255,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationKeystoneSignVM>()
 +        koin.koin.get<MigrationKeystoneSignVM> {
 +            parametersOf(MigrationKeystoneSignArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
 +        }
-@@ -242 +258,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -242 +262,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationKeystoneScanVM>()
 +        koin.koin.get<MigrationKeystoneScanVM> {
 +            parametersOf(MigrationKeystoneScanArgs(mode = MigrationMode.AUTOMATIC), "fixture-entry")
 +        }
-@@ -247 +265 @@ class MigrationKoinGraphSmokeTest {
+@@ -247 +269 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationSendingVM>()
 +        koin.koin.get<MigrationSendingVM> { parametersOf(MigrationSendingArgs("fixture-owner"), "fixture-entry") }
-@@ -257 +275 @@ class MigrationKoinGraphSmokeTest {
+@@ -257 +279 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationScheduledVM>()
 +        koin.koin.get<MigrationScheduledVM> { parametersOf(MigrationScheduledArgs("fixture-owner")) }
-@@ -262 +280 @@ class MigrationKoinGraphSmokeTest {
+@@ -262 +284 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationCompleteVM>()
 +        koin.koin.get<MigrationCompleteVM> { parametersOf(MigrationCompleteArgs(), "fixture-entry") }
-@@ -292 +310,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -292 +314,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationTorFailureVM>()
 +        koin.koin.get<MigrationTorFailureVM> {
 +            parametersOf(MigrationTorFailureArgs("fixture-owner"), "fixture-entry")
 +        }
-@@ -297 +317,3 @@ class MigrationKoinGraphSmokeTest {
+@@ -297 +321,3 @@ class MigrationKoinGraphSmokeTest {
 -        koin.koin.get<MigrationTransferInvalidVM>()
 +        koin.koin.get<MigrationTransferInvalidVM> {
 +            parametersOf(MigrationTransferInvalidArgs("fixture-owner"), "fixture-entry")
