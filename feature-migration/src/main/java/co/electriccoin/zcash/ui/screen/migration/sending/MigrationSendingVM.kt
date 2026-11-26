@@ -37,7 +37,9 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureA
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -243,8 +245,9 @@ class MigrationSendingVM(
             attempt < SEND_MAX_ATTEMPTS
         ) {
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
-            if (!canRetryTarget(sdk)) break
             if (!args.isRecoveryRetry || migrationDriveOnce.mayBroadcastCrossing(sdk)) {
+                if (!canRetryTarget(sdk) || !migrationDriveOnce.permitsForeground(args.accountKeyId)) break
+                currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
                     outcome = sdk.executeNextPendingTransfer(
                         NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true

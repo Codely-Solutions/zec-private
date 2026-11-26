@@ -298,6 +298,7 @@ class MigrationReviewVMTest {
     @Test
     fun automaticConfirmWithNoteSplitDerivesScheduleFromSplitBeforeSubmittingIt() =
         runTest {
+            val approvedOwner = spendable<ZodlAccount>()
             val usk = mockk<UnifiedSpendingKey>()
             val router = FakeNavigationRouter("scheduled-review")
             val splitProposal =
@@ -338,6 +339,9 @@ class MigrationReviewVMTest {
                     zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
                     finalizeMigrationSchedule = finalizeMigrationSchedule,
                     mode = MigrationMode.AUTOMATIC,
+                    draftTor = false,
+                    draftOwner = approvedOwner.sdkAccount.accountUuid.toStorageKeyId(),
+                    getSelectedWalletAccount = selectedAccount(approvedOwner),
                     sourceEntryId = "scheduled-review",
                 )
 
@@ -396,6 +400,7 @@ class MigrationReviewVMTest {
 
     @Test
     fun uncertainSplitContinuesTheExactCommittedPlanWithoutAnotherBroadcast() = runTest {
+        val approvedOwner = spendable<ZodlAccount>()
         val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
         val expected = schedule(42L, 100_000L)
         val nativeTransfer = mockk<cash.z.ecc.android.sdk.MigrationTransferState> {
@@ -424,6 +429,9 @@ class MigrationReviewVMTest {
             router = FakeNavigationRouter(),
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
             mode = MigrationMode.AUTOMATIC,
+            draftTor = false,
+            draftOwner = approvedOwner.sdkAccount.accountUuid.toStorageKeyId(),
+            getSelectedWalletAccount = selectedAccount(approvedOwner),
             finalizeMigrationSchedule = finalize,
         )
 
@@ -524,13 +532,13 @@ class MigrationReviewVMTest {
     }
 
     @Test
-    fun torProtectedSoftwarePlanStopsBeforeAnUnsupportedSplit() = runTest {
+    fun storedDirectPreferenceCannotAuthorizeAnUnboundSoftwareSplit() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { isNoteSplitNeeded() } returns true
             coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
         }
         val tor = mockk<IsMigrationTorEnabledStorageProvider> {
-            coEvery { this@mockk.get(any<String>()) } returns true
+            coEvery { this@mockk.get(any<String>()) } returns false
         }
         val router = FakeNavigationRouter()
         val vm = vm(
@@ -545,6 +553,7 @@ class MigrationReviewVMTest {
 
         coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
         coVerify(exactly = 1) { sdk.prepareNoteSplit() }
+        coVerify(exactly = 0) { tor.get(any<String>()) }
         coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
         coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
         assertEquals(emptyList(), router.forwardedRoutes)
@@ -820,6 +829,7 @@ class MigrationReviewAuthorityTest {
 
     @Test
     fun revokedWalletAuthorityPreservesTheEnteredSplitWithoutNewScheduleSigning() = runTest {
+        val approvedOwner = spendable<ZodlAccount>()
         val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
         val reviewed = schedule(42L, 100_000L)
         val returned = CompletableDeferred<TransferResult>()
@@ -850,6 +860,9 @@ class MigrationReviewAuthorityTest {
             router = router,
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
             mode = MigrationMode.AUTOMATIC,
+            draftTor = false,
+            draftOwner = approvedOwner.sdkAccount.accountUuid.toStorageKeyId(),
+            getSelectedWalletAccount = selectedAccount(approvedOwner),
             sourceEntryId = "automatic-split",
             walletActionAccess = authority,
             finalizeMigrationSchedule = finalize,
@@ -899,6 +912,7 @@ private fun vm(
     pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
         PendingMigrationScheduleRepositoryImpl(),
     draftTor: Boolean? = null,
+    draftOwner: String? = null,
     restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
         mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
     synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
@@ -912,7 +926,7 @@ private fun vm(
         coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
     },
 ) = MigrationReviewVM(
-    args = MigrationReviewArgs(mode = mode, useTor = draftTor),
+    args = MigrationReviewArgs(mode = mode, accountKeyId = draftOwner, useTor = draftTor),
     getOrchardMigrationSdk = getOrchardMigrationSdk,
     pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
     pendingKeystone = mockk { every { peek(any()) } returns null },

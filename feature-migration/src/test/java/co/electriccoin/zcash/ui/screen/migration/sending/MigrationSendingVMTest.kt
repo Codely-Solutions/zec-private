@@ -34,6 +34,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -419,6 +420,32 @@ class MigrationSendingVMTest {
     }
 
     @Test
+    fun ownerMustStillMatchAfterTheCrossingCheckSuspends() = runTest {
+        val (args, accounts) = recoveryOwner()
+        val sdk = recoverySdk(nextTransferId = 1L)
+        val entered = CompletableDeferred<Unit>()
+        val ready = CompletableDeferred<Boolean>()
+        val drive = mockk<MigrationDriveOnce> {
+            every { permitsForeground(any()) } returns true
+            coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
+                secondArg<suspend () -> Any?>().invoke()
+            }
+            coEvery { mayBroadcastCrossing(sdk) } coAnswers {
+                entered.complete(Unit)
+                ready.await()
+            }
+        }
+
+        vm(sdk, FakeNavigationRouter(), args = args, accounts = accounts, migrationDriveOnce = drive)
+        entered.await()
+        every { accounts.allAccounts } returns MutableStateFlow(emptyList())
+        ready.complete(true)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
+
+    @Test
     fun recoveryRetryLeavesReplacementTransferAndMarkerUntouched() = runTest {
         val (args, accounts) = recoveryOwner()
         val sdk = recoverySdk(nextTransferId = 2L)
@@ -495,6 +522,7 @@ class MigrationSendingVMTest {
         quietWindowReady: Boolean = true,
         migrationDriveOnce: MigrationDriveOnce =
             mockk {
+                every { permitsForeground(any()) } returns true
                 coEvery { mayBroadcastCrossing(sdk) } returns quietWindowReady
                 coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
                     secondArg<suspend () -> Any?>().invoke()

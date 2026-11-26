@@ -40,5 +40,5 @@ class RestoreTimestampDataSourceImpl(
 /** Activity can still show transactions when the optional unread marker is unavailable. */
 internal suspend fun RestoreTimestampDataSource.getForActivity(): Instant? =
     runCatchingRecoverable { getOrCreate() }
-        .onFailure { Twig.warn { "Unread marker unavailable (§{it.javaClass.simpleName})" } }
+        .onFailure { Twig.warn { "Unread marker unavailable (${it.javaClass.simpleName})" } }
         .getOrNull()

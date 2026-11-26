@@ -29,9 +29,10 @@ class GetMigrationPrivacyOrReviewDestinationUseCase(
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val automaticServerRepository: AutomaticServerRepository,
 ) {
-    suspend operator fun invoke(mode: MigrationMode): Any {
+    suspend operator fun invoke(mode: MigrationMode, expectedOwner: String? = null): Any {
         val walletUsesTor = readWalletTorChoice()
         val owner = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+        check(expectedOwner == null || expectedOwner == owner) { "The migration belongs to a different account" }
         return when {
             mode == MigrationMode.IMMEDIATE && walletUsesTor -> MigrationReviewArgs(mode, owner)
             mode == MigrationMode.IMMEDIATE -> MigrationPrivacyArgs(mode, owner)

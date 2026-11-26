@@ -42,6 +42,9 @@ object MigrationWorkerHeartbeat {
         }
     }
 
+    internal fun hasStarted(context: Context, accountKeyId: String, request: UUID): Boolean =
+        prefs(context).getString(KEY_LAST_REQUEST + accountKeyId, null) == request.toString()
+
     internal fun isWakeLate(context: Context, accountKeyId: String, now: Long): Boolean {
         val storage = prefs(context)
         return migrationWorkerIsLate(

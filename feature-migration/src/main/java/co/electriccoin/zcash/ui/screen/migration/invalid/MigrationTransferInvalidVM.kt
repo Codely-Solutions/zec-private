@@ -21,11 +21,11 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetMigrationPrivacyOrReviewDestinationUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import co.electriccoin.zcash.ui.screen.migration.setup.MigrationSetupArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +40,7 @@ class MigrationTransferInvalidVM(
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val restartMigrationScheduleRepository: RestartMigrationScheduleRepository,
+    private val chooseTransport: GetMigrationPrivacyOrReviewDestinationUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val sourceEntryId: String? = null,
@@ -140,8 +141,10 @@ class MigrationTransferInvalidVM(
             when (outcome) {
                 is MigrationRestartOutcome.Replanned -> {
                     restartMigrationScheduleRepository.set(owner, outcome.schedule)
+                    val destination = chooseTransport(MigrationMode.AUTOMATIC, expectedOwner = owner)
+                    check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
                     navigationRouter.stageResultFrom(sourceEntryId) {
-                        NavigationCommand.Replace(listOf(MigrationReviewArgs(MigrationMode.AUTOMATIC, owner)))
+                        NavigationCommand.Replace(listOf(destination))
                     }
                 }
 

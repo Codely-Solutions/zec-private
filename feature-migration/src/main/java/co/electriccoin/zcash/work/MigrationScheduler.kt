@@ -58,8 +58,16 @@ class MigrationScheduler(
         if (existing == null) {
             check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND)) { "Migration scheduling is paused" }
         } else {
-            armFallback(accountKeyId, existing.id, existing.initialDelayMillis.milliseconds) { true }
+            armFallback(accountKeyId, existing.id) { System.currentTimeMillis() + existing.initialDelayMillis }
         }
+    }
+
+    internal suspend fun reconcileScheduledWake(accountKeyId: String) {
+        val manager = WorkManager.getInstance(context)
+        val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
+            .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
+            .minByOrNull { it.nextScheduleTimeMillis }
+        if (pending != null) armFallback(accountKeyId, pending.id) { pending.nextScheduleTimeMillis }
     }
 
     internal suspend fun runNotificationStep(accountKeyId: String) {
@@ -75,30 +83,31 @@ class MigrationScheduler(
             manager.enqueueUniqueWork(workId(accountKeyId), policy, request)
         } ?: return false
         operation.result.await()
-        armFallback(accountKeyId, request.id, delay) {
+        armFallback(accountKeyId, request.id) {
             // KEEP can acknowledge without inserting this request. An older wake or live-driver
             // heartbeat must not stand in for the exact WorkManager request.
-            policy == ExistingWorkPolicy.APPEND ||
-                manager.getWorkInfoById(request.id).await()?.state == WorkInfo.State.ENQUEUED
+            val pendingRequest = if (policy == ExistingWorkPolicy.APPEND) {
+                true
+            } else {
+                val pending = manager.getWorkInfoById(request.id).await()
+                if (pending == null && policy == ExistingWorkPolicy.KEEP) reconcileScheduledWake(accountKeyId)
+                pending?.state == WorkInfo.State.ENQUEUED
+            }
+            if (pendingRequest) System.currentTimeMillis() + delay.inWholeMilliseconds else null
         }
         return true
     }
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
-    private suspend fun armFallback(
-        accountKeyId: String,
-        request: UUID,
-        delay: Duration,
-        isPending: suspend () -> Boolean,
-    ) {
+    private suspend fun armFallback(accountKeyId: String, request: UUID, expectedTime: suspend () -> Long?) {
         try {
-            if (isPending()) {
-                MigrationAccountRetirement.keepWake(accountKeyId) {
+            val dueAt = expectedTime() ?: return
+            MigrationAccountRetirement.keepWake(accountKeyId) {
+                if (!MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, request)) {
                     migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
-                    MigrationWorkerHeartbeat.stampScheduled(
-                        context, accountKeyId, request, System.currentTimeMillis() + delay.inWholeMilliseconds
-                    )
-                    migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
+                    MigrationWorkerHeartbeat.stampScheduled(context, accountKeyId, request, dueAt)
+                    val delay = (dueAt - System.currentTimeMillis()).milliseconds + WORKER_LATE_MARGIN
+                    migrationDueAlarmScheduler.schedule(accountKeyId, delay.coerceAtLeast(Duration.ZERO))
                 }
             }
         } catch (e: CancellationException) {

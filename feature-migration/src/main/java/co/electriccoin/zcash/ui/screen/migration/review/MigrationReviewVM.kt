@@ -495,7 +495,7 @@ class MigrationReviewVM(
         authority: ConfirmationAuthority,
     ) {
         val split = reviewed.noteSplit
-        if (split != null && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
+        if (split != null && (newTorPreference != false || args.accountKeyId != accountKeyId)) {
             throw PrivateNoteSplitUnavailable()
         }
         if (!authority.canConfirm()) return

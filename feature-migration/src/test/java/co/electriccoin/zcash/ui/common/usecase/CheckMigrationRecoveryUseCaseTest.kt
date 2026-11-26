@@ -86,6 +86,7 @@ class CheckMigrationRecoveryUseCaseTest {
         // keeping existing test behaviour unchanged. Override to test reconciliation explicitly.
         getWorkerRunState: suspend (String) -> MigrationWorkerRunState = { MigrationWorkerRunState.RUNNING },
         scheduleNow: suspend (String) -> Unit = {},
+        reconcileScheduledWake: suspend (String) -> Unit = {},
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
         accountsState: MutableStateFlow<List<WalletAccount>?> = MutableStateFlow(accounts),
@@ -119,6 +120,7 @@ class CheckMigrationRecoveryUseCaseTest {
         context = context,
         getWorkerRunState = getWorkerRunState,
         scheduleNow = scheduleNow,
+        reconcileScheduledWake = reconcileScheduledWake,
         migrationLiveDriver = migrationLiveDriver,
         migrationNotifier = migrationNotifier,
         resetPending = resetState,
@@ -135,6 +137,7 @@ class CheckMigrationRecoveryUseCaseTest {
             coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
         }
         val scheduled = mutableListOf<String>()
+        val reconciled = mutableListOf<String>()
         useCase(
             sdk = sdk,
             navigationRouter = mockk(relaxed = true),
@@ -143,8 +146,10 @@ class CheckMigrationRecoveryUseCaseTest {
             cancelRemovedWake = { cancelled += it },
             getWorkerRunState = { MigrationWorkerRunState.SCHEDULED },
             scheduleNow = { scheduled += it },
+            reconcileScheduledWake = { reconciled += it },
         ).invoke()
 
+        assertEquals(listOf(ownerKey), reconciled)
         verify(exactly = 1) { notifier.cancel(goneKey) }
         verify(exactly = 1) { notifier.cancelStepDue(goneKey) }
         verify(exactly = 0) { notifier.cancel(ownerKey) }

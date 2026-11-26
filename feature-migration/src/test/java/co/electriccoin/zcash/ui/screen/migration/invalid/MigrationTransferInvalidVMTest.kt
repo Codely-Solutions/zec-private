@@ -13,9 +13,14 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
+import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
 import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.usecase.GetMigrationPrivacyOrReviewDestinationUseCase
+import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyArgs
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
@@ -188,7 +193,10 @@ class MigrationTransferInvalidVMTest {
             advanceUntilIdle()
 
             coVerify(exactly = 1) { restartRepo.set(any(), restartedSchedule) }
-            assertEquals(1, router.replacedRoutes.size)
+            assertEquals(
+                listOf<Any>(MigrationPrivacyArgs(MigrationMode.AUTOMATIC, "00000000000000000000000000000001")),
+                router.replacedRoutes.toList(),
+            )
             collectJob.cancel()
         }
 
@@ -299,6 +307,11 @@ class MigrationTransferInvalidVMTest {
                     coEvery { this@mockk(any()) } returns snapshot
                 },
             restartMigrationScheduleRepository = restartMigrationScheduleRepository,
+            chooseTransport = GetMigrationPrivacyOrReviewDestinationUseCase(
+                getSelectedWalletAccount,
+                mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns false },
+                mockk<AutomaticServerRepository> { coEvery { isServerCustom() } returns false }
+            ),
             navigationRouter = router,
             errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         )

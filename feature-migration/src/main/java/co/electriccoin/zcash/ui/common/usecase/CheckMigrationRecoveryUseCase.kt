@@ -81,6 +81,9 @@ class CheckMigrationRecoveryUseCase(
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).scheduleIfMissing(it) },
     private val resetPending: StateFlow<Boolean> = MutableStateFlow(false),
     private val cancelRemovedWake: (String) -> Unit = { MigrationScheduler(context).cancel(it) },
+    private val reconcileScheduledWake: suspend (String) -> Unit = {
+        MigrationScheduler(context).reconcileScheduledWake(it)
+    },
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
@@ -164,8 +167,12 @@ class CheckMigrationRecoveryUseCase(
     }
 
     private suspend fun reviveScheduledWorker(accountKey: String) {
-        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending.value) {
-            scheduleNow(accountKey)
+        val state = getWorkerRunState(accountKey)
+        if (resetPending.value) return
+        when (state) {
+            MigrationWorkerRunState.ABSENT -> scheduleNow(accountKey)
+            MigrationWorkerRunState.SCHEDULED -> reconcileScheduledWake(accountKey)
+            MigrationWorkerRunState.RUNNING -> Unit
         }
     }
 
@@ -223,28 +230,11 @@ class CheckMigrationRecoveryUseCase(
 }
 
 /**
- * Production implementation of the migration-worker active check — reads WorkManager unique work
- * state (per-account unique work name). Extracted so [CheckMigrationRecoveryUseCase] tests can
- * supply a lambda stub instead of needing a real WorkManager context (unit tests can't
- * initialise WorkManager).
- */
-internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, accountKeyId: String): Boolean =
-    withContext(Dispatchers.IO) {
-        WorkManager
-            .getInstance(context)
-            .getWorkInfosForUniqueWork(
-                MigrationScheduler.workId(accountKeyId)
-            ).get()
-    }.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
-
-/**
  * What the migration worker's unique work is doing right now, distinguishing [SCHEDULED] (a
  * worker run is already armed for later — nothing to do here; the live driver, started
  * unconditionally whenever a migration is in progress, covers acceleration) from [RUNNING]
  * (already executing — also nothing to do) and [ABSENT] (needs reviving).
- * [isMigrationWorkerActiveInWorkManager] collapses the first two together, which is all
- * [OnMigrationSyncCompletedUseCase] needs; this finer state is what
- * [CheckMigrationRecoveryUseCase]'s app-open trigger needs.
+ * The sync and app-open recovery paths reconcile the fallback of a scheduled worker.
  */
 enum class MigrationWorkerRunState { RUNNING, SCHEDULED, ABSENT }
 

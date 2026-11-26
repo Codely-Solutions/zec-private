@@ -134,24 +134,40 @@ class MigrationWorkerOwnershipTest {
     }
 
     @Test
-    fun anExistingWakeKeepsItsOriginalFallback() = runTest {
+    fun repairingAnInterruptedKeepUsesTheRetainedRequestAndDeadline() = runTest {
         val owner = "kept-fixture-owner"
-        val prefs = mockk<SharedPreferences>()
+        val retainedId = UUID.fromString("00000000-0000-0000-0000-000000000053")
+        val expectedWake = System.currentTimeMillis() + 70_000
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val prefs = mockk<SharedPreferences> {
+            every { edit() } returns editor
+            every { getString(any(), null) } returns null
+        }
         val context = mockk<Context>(relaxed = true) {
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
         val workId = MigrationScheduler.workId(owner)
+        val retained = mockk<WorkInfo> {
+            every { state } returns WorkInfo.State.ENQUEUED
+            every { id } returns retainedId
+            every { nextScheduleTimeMillis } returns expectedWake
+        }
         val manager = mockk<WorkManager> {
             every { enqueueUniqueWork(workId, ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>()) } returns
                 mockk<Operation> { every { result } returns Futures.immediateFuture(Operation.SUCCESS) }
             every { getWorkInfoById(any()) } returns Futures.immediateFuture(null)
+            every { getWorkInfosForUniqueWork(workId) } returns Futures.immediateFuture(listOf(retained))
         }
         mockkObject(WorkManager.Companion)
         try {
             every { WorkManager.getInstance(context) } returns manager
             MigrationScheduler(context).scheduleIfMissing(owner)
-            verify(exactly = 1) { manager.getWorkInfoById(any()) }
-            verify(exactly = 0) { prefs.edit() }
+            verify(exactly = 1) {
+                manager.enqueueUniqueWork(workId, ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>())
+            }
+            verify { editor.putLong("next_wake_at_$owner", expectedWake) }
+            verify { editor.putString("next_wake_request_$owner", retainedId.toString()) }
         } finally {
             unmockkObject(WorkManager.Companion)
         }
@@ -170,6 +186,7 @@ class MigrationWorkerOwnershipTest {
         }
         val prefs = mockk<SharedPreferences> {
             every { edit() } returns editor
+            every { getString(any(), null) } returns null
             every { getLong("last_run_at_$owner", -1L) } answers { otherRunAt }
         }
         val context = mockk<Context>(relaxed = true) {
