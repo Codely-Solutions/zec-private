@@ -37,9 +37,7 @@ class MigrationTransferDueReceiver :
 
         MigrationAccountRetirement.keepWake(accountKeyId) {
             if (resetProgress.isPending.value) return@keepWake
-            val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
-            val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
-            if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
+            if (MigrationWorkerHeartbeat.isWakeLate(context, accountKeyId, System.currentTimeMillis())) {
                 val removalUnresolved = MigrationAccountRetirement.blocks(accountKeyId) ||
                     MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
                 migrationLog("MigrationStepDueReceiver: missed worker run — posting migration fallback.")
@@ -52,7 +50,20 @@ class MigrationTransferDueReceiver :
 
 private const val EARLY_WORKER_TOLERANCE_MILLIS = 30_000L
 
-internal fun migrationWorkerIsLate(now: Long, expectedRunAt: Long?, lastRunAt: Long?): Boolean =
-    expectedRunAt != null &&
-        expectedRunAt <= now - MigrationScheduler.WORKER_LATE_MARGIN.inWholeMilliseconds &&
-        (lastRunAt == null || lastRunAt < expectedRunAt - EARLY_WORKER_TOLERANCE_MILLIS)
+internal fun migrationWorkerIsLate(
+    now: Long,
+    expectedRunAt: Long?,
+    lastRunAt: Long?,
+    expectedRequest: String? = null,
+    startedRequest: String? = null,
+): Boolean {
+    if (expectedRunAt == null || expectedRunAt > now - MigrationScheduler.WORKER_LATE_MARGIN.inWholeMilliseconds) {
+        return false
+    }
+    // An already scheduled alarm from an older install only has account-level timestamps.
+    return if (expectedRequest == null) {
+        lastRunAt == null || lastRunAt < expectedRunAt - EARLY_WORKER_TOLERANCE_MILLIS
+    } else {
+        startedRequest != expectedRequest
+    }
+}

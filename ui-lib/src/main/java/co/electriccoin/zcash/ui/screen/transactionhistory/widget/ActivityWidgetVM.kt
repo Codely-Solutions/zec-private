@@ -6,6 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
+import co.electriccoin.zcash.ui.common.datasource.getForActivity
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
@@ -63,6 +64,7 @@ class ActivityWidgetVM(
                 }
 
                 else -> {
+                    val restoreTimestamp = restoreTimestampDataSource.getForActivity()
                     ActivityWidgetState.Data(
                         header =
                             TransactionHistoryWidgetHeaderState(
@@ -81,7 +83,7 @@ class ActivityWidgetVM(
                                 .map { transaction ->
                                     activityMapper.createTransactionState(
                                         data = transaction,
-                                        restoreTimestamp = restoreTimestampDataSource.getOrCreate(),
+                                        restoreTimestamp = restoreTimestamp,
                                         onTransactionClick = ::onTransactionClick,
                                         onSwapClick = ::onSwapClick,
                                         onDisplayed = ::onActivityDisplayed

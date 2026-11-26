@@ -199,6 +199,26 @@ class MetadataRepositoryMetadataMapTest {
             )
         }
 
+    @Test
+    fun aTemporaryKeyReadRecoversForTheSameOwnerAndSubscription() =
+        runTest {
+            val attempts = AtomicInteger()
+            val keyStorage = storedKeys().also { provider ->
+                coEvery { provider.get(FIRST_UUID) } answers {
+                    if (attempts.incrementAndGet() == 1) throw IOException("Key storage temporarily unavailable")
+                    keys.getValue(FIRST_UUID)
+                }
+            }
+            val repository = repository(keyStorage)
+            accounts.value = listOf(first, second)
+            val recovered = withContext(Dispatchers.Default) {
+                withTimeout(LOCK_FREE_READ_TIMEOUT) { repository.metadata.first { it.size == 2 } }
+            }
+
+            assertEquals(contentsOf(FIRST_UUID, SECOND_UUID), recovered)
+            assertEquals(2, attempts.get())
+        }
+
     private fun TestScope.record(repository: MetadataRepositoryImpl): List<Map<AccountUuid, MetadataV3>> {
         val seen = Collections.synchronizedList(mutableListOf<Map<AccountUuid, MetadataV3>>())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { repository.metadata.collect { seen += it } }

@@ -6,6 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
+import co.electriccoin.zcash.ui.common.datasource.getForActivity
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.Transaction
@@ -103,7 +104,7 @@ class ActivityHistoryVM(
                 else -> {
                     createDataState(
                         transactions = activities,
-                        restoreTimestamp = restoreTimestampDataSource.getOrCreate(),
+                        restoreTimestamp = restoreTimestampDataSource.getForActivity(),
                         filters = filters,
                         searchHash = searchHash
                     )
@@ -123,7 +124,7 @@ class ActivityHistoryVM(
 
     private fun createDataState(
         transactions: List<ActivityData>,
-        restoreTimestamp: Instant,
+        restoreTimestamp: Instant?,
         filters: List<TransactionFilter>,
         searchHash: String
     ): ActivityHistoryState.Data {

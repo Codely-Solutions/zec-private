@@ -22,10 +22,13 @@ class MigrationTransferDueReceiverTest {
         val owner = "fixture-owner"
         val overdue = System.currentTimeMillis() - 300_000L
         var removalPending = true
+        var startedRequest = "previous-worker"
         val preferences = mockk<SharedPreferences> {
             every { getBoolean("removal_pending_$owner", false) } answers { removalPending }
             every { getLong("next_wake_at_$owner", -1L) } returns overdue
-            every { getLong("last_run_at_$owner", -1L) } returns -1L
+            every { getLong("last_run_at_$owner", -1L) } returns overdue - 1
+            every { getString("next_wake_request_$owner", null) } returns "expected-worker"
+            every { getString("last_run_request_$owner", null) } answers { startedRequest }
         }
         val context = mockk<Context> {
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
@@ -64,6 +67,10 @@ class MigrationTransferDueReceiverTest {
             MigrationAccountRetirement.markRemoved(owner)
             MigrationTransferDueReceiver().onReceive(context, intent)
             verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
+            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
+            MigrationAccountRetirement.restore(owner)
+            startedRequest = "expected-worker"
+            MigrationTransferDueReceiver().onReceive(context, intent)
             verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
         } finally {
             MigrationAccountRetirement.restore(owner)

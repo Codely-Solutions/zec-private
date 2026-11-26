@@ -2,12 +2,13 @@ package co.electriccoin.zcash.work
 
 import android.content.Context
 import androidx.core.content.edit
+import java.util.UUID
 
 /**
  * Two plain-SharedPreferences timestamps forming the worker's dead-man's switch (design with
  * the product owner, 2026-07-30 late evening): [stampScheduled] records when the NEXT worker run is
- * expected. [MigrationScheduler] writes it after WorkManager confirms the wake. [stampRun] records when a run
- * actually STARTED. [MigrationTransferDueReceiver]'s alarm fires a late-margin after the expected
+ * expected and which WorkManager request should run. [stampRun] records that actual worker
+ * entry. [MigrationTransferDueReceiver]'s alarm fires a late-margin after the expected
  * time and compares the two — a worker that ran clears the check; one the OS silently killed or
  * deferred (Doze, OEM killers, background restrictions) trips it and raises the fallback
  * "step due" notification whose tap re-kicks the worker through the app.
@@ -27,19 +28,30 @@ object MigrationWorkerHeartbeat {
             }?.takeIf { it.isNotEmpty() }
         }.toSet()
 
-    fun stampScheduled(context: Context, accountKeyId: String, dueAtEpochMillis: Long) {
-        prefs(context).edit { putLong(KEY_NEXT_WAKE + accountKeyId, dueAtEpochMillis) }
+    fun stampScheduled(context: Context, accountKeyId: String, request: UUID, dueAtEpochMillis: Long) {
+        prefs(context).edit {
+            putLong(KEY_NEXT_WAKE + accountKeyId, dueAtEpochMillis)
+            putString(KEY_NEXT_REQUEST + accountKeyId, request.toString())
+        }
     }
 
-    fun stampRun(context: Context, accountKeyId: String) {
-        prefs(context).edit { putLong(KEY_LAST_RUN + accountKeyId, System.currentTimeMillis()) }
+    fun stampRun(context: Context, accountKeyId: String, request: UUID) {
+        prefs(context).edit {
+            putLong(KEY_LAST_RUN + accountKeyId, System.currentTimeMillis())
+            putString(KEY_LAST_REQUEST + accountKeyId, request.toString())
+        }
     }
 
-    fun nextWakeAt(context: Context, accountKeyId: String): Long? =
-        prefs(context).getLong(KEY_NEXT_WAKE + accountKeyId, -1L).takeIf { it >= 0 }
-
-    fun lastRunAt(context: Context, accountKeyId: String): Long? =
-        prefs(context).getLong(KEY_LAST_RUN + accountKeyId, -1L).takeIf { it >= 0 }
+    internal fun isWakeLate(context: Context, accountKeyId: String, now: Long): Boolean {
+        val storage = prefs(context)
+        return migrationWorkerIsLate(
+            now = now,
+            expectedRunAt = storage.getLong(KEY_NEXT_WAKE + accountKeyId, -1L).takeIf { it >= 0 },
+            lastRunAt = storage.getLong(KEY_LAST_RUN + accountKeyId, -1L).takeIf { it >= 0 },
+            expectedRequest = storage.getString(KEY_NEXT_REQUEST + accountKeyId, null),
+            startedRequest = storage.getString(KEY_LAST_REQUEST + accountKeyId, null),
+        )
+    }
 
     internal fun removalPending(context: Context, accountKeyId: String): Boolean =
         prefs(context).getBoolean(KEY_REMOVAL_PENDING + accountKeyId, false)
@@ -58,6 +70,8 @@ object MigrationWorkerHeartbeat {
         prefs(context).edit {
             remove(KEY_NEXT_WAKE + accountKeyId)
             remove(KEY_LAST_RUN + accountKeyId)
+            remove(KEY_NEXT_REQUEST + accountKeyId)
+            remove(KEY_LAST_REQUEST + accountKeyId)
         }
     }
 
@@ -66,5 +80,7 @@ object MigrationWorkerHeartbeat {
 
     private const val KEY_NEXT_WAKE = "next_wake_at_"
     private const val KEY_LAST_RUN = "last_run_at_"
+    private const val KEY_NEXT_REQUEST = "next_wake_request_"
+    private const val KEY_LAST_REQUEST = "last_run_request_"
     private const val KEY_REMOVAL_PENDING = "removal_pending_"
 }

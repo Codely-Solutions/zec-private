@@ -22,6 +22,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 class GetActivitiesUseCase(
@@ -98,4 +99,11 @@ sealed interface ActivityData {
     ) : ActivityData {
         override val timestamp = swap.lastUpdated
     }
+}
+
+internal fun ActivityData.ByTransaction.isUnread(restoreTimestamp: Instant?): Boolean {
+    if (restoreTimestamp == null || transaction.memoCount == 0 || metadata.isRead) return false
+    val zone = ZoneId.systemDefault()
+    val transactionDate = transaction.timestamp?.atZone(zone)?.toLocalDate() ?: LocalDate.now()
+    return transactionDate >= restoreTimestamp.atZone(zone).toLocalDate()
 }

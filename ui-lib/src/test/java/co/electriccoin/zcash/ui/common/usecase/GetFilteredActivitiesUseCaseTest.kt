@@ -5,7 +5,7 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.filterNotNull
@@ -57,12 +57,9 @@ class GetFilteredActivitiesUseCaseTest {
             mockk<TransactionRepository> {
                 every { observeTransactionsByMemo(any()) } returns flowOf(emptyList())
             }
-        val restoreTimestamp =
-            mockk<RestoreTimestampDataSource> {
-                coEvery { getOrCreate() } returns Instant.EPOCH
-            }
+        val restoreTimestamp = mockk<RestoreTimestampDataSource>()
         val filters = TransactionFilterRepositoryImpl().apply { applyFulltext(query) }
-        return GetFilteredActivitiesUseCase(
+        val result = GetFilteredActivitiesUseCase(
             getActivities = getActivities,
             transactionFilterRepository = filters,
             transactionRepository = transactionRepository,
@@ -70,5 +67,7 @@ class GetFilteredActivitiesUseCaseTest {
             addressBookRepository = mockk(),
             context = RuntimeEnvironment.getApplication(),
         ).observe().filterNotNull().first()
+        coVerify(exactly = 0) { restoreTimestamp.getOrCreate() }
+        return result
     }
 }

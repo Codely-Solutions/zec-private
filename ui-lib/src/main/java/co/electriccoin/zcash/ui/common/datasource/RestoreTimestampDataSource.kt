@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.datasource
 
+import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.provider.RestoreTimestampStorageProvider
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -34,3 +36,9 @@ class RestoreTimestampDataSourceImpl(
             restoreTimestampStorageProvider.clear()
         }
 }
+
+/** Activity can still show transactions when the optional unread marker is unavailable. */
+internal suspend fun RestoreTimestampDataSource.getForActivity(): Instant? =
+    runCatchingRecoverable { getOrCreate() }
+        .onFailure { Twig.warn { "Unread marker unavailable (§{it.javaClass.simpleName})" } }
+        .getOrNull()

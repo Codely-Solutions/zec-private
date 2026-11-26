@@ -48,6 +48,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -119,7 +120,7 @@ class ActivityHistoryVMTest {
     }
 
     @Test
-    fun ordinaryOutgoingTransactionKeepsDebitAmountAndOpensTransactionDetails() = runTest(dispatcher) {
+    fun outgoingTransactionRemainsAvailableWhenTheUnreadMarkerCannotBeRead() = runTest(dispatcher) {
         val owner = EditAccountFixtures.zodl().sdkAccount.accountUuid
         val overview = mockk<TransactionOverview> {
             every { zip318Kind } returns Zip318Kind.NOT_CLASSIFIED
@@ -128,15 +129,19 @@ class ActivityHistoryVMTest {
             id = TransactionId.new(ByteArray(32) { 1 }),
             amount = Zatoshi(123_456_789),
             timestamp = Instant.EPOCH,
-            memoCount = 0,
+            memoCount = 1,
             fee = Zatoshi(10_000),
             transactionOutputs = emptyList(),
             overview = overview,
             recipient = "fixture-recipient",
             accountUuid = owner,
         )
-        val activity = ActivityData.ByTransaction(transaction, TransactionMetadata(false, true, null, null))
-        val row = row(activity)
+        val activity = ActivityData.ByTransaction(transaction, TransactionMetadata(false, false, null, null))
+        val restoreTimestamp = mockk<RestoreTimestampDataSource> {
+            coEvery { getOrCreate() } throws IOException("Unread storage temporarily unavailable")
+        }
+        val row = row(activity, restoreTimestamp)
+        assertFalse(row.isUnread)
 
         assertEquals(transaction.id.txIdString(), row.key)
         assertEquals(stringRes(R.string.transaction_sent), row.title)
@@ -189,13 +194,15 @@ class ActivityHistoryVMTest {
         verify(exactly = 1) { updateMetadata(activity) }
     }
 
-    private suspend fun row(activity: ActivityData): ActivityState {
+    private suspend fun row(
+        activity: ActivityData,
+        restoreTimestamp: RestoreTimestampDataSource = mockk {
+            coEvery { getOrCreate() } returns Instant.EPOCH
+        },
+    ): ActivityState {
         val filters = TransactionFilterRepositoryImpl()
         val activities = mockk<GetFilteredActivitiesUseCase> {
             every { observe() } returns flowOf(listOf(activity))
-        }
-        val restoreTimestamp = mockk<RestoreTimestampDataSource> {
-            coEvery { getOrCreate() } returns Instant.EPOCH
         }
         val vm = ActivityHistoryVM(
             getFilteredActivities = activities,

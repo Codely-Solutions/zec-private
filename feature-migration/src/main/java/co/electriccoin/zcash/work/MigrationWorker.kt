@@ -44,6 +44,9 @@ class MigrationWorker(
         if (accountKeyId.isNullOrBlank() || resetProgress.isPending.value) return Result.success()
 
         return try {
+            MigrationAccountRetirement.keepWake(accountKeyId) {
+                MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId, id)
+            }
             runForOwner(accountKeyId)
         } catch (e: CancellationException) {
             throw e
@@ -72,7 +75,6 @@ class MigrationWorker(
             migrationNotifier.cancelStepDue(accountKeyId)
             // A pending retry is still a worker wake for the fallback alarm.
             migrationLog("Worker: SDK not ready — retrying via WorkManager backoff.")
-            MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId)
         } ?: return retryWhileRemoving(accountKeyId)
         return Result.retry()
     }

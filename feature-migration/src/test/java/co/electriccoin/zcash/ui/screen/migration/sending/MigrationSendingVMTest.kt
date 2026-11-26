@@ -401,6 +401,24 @@ class MigrationSendingVMTest {
     }
 
     @Test
+    fun recoveryRetryWaitsWhileTheCrossingQuietWindowIsUnavailable() = runTest {
+        val (args, accounts) = recoveryOwner()
+        val sdk = recoverySdk(nextTransferId = 1L)
+        val pending = mockk<PendingMigrationTorFailureStorageProvider>(relaxed = true)
+        val vm = vm(
+            sdk, FakeNavigationRouter(), args = args, accounts = accounts,
+            quietWindowReady = false, pendingMigrationTorFailureStorageProvider = pending,
+        )
+        val observation = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+        coVerify(exactly = 0) { pending.store(any<String>(), any()) }
+        assertTrue(vm.state.value.content?.canGoBack == true)
+        observation.cancel()
+    }
+
+    @Test
     fun recoveryRetryLeavesReplacementTransferAndMarkerUntouched() = runTest {
         val (args, accounts) = recoveryOwner()
         val sdk = recoverySdk(nextTransferId = 2L)
@@ -474,8 +492,10 @@ class MigrationSendingVMTest {
             },
         pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider = mockk(relaxed = true),
         useTor: Boolean = false,
+        quietWindowReady: Boolean = true,
         migrationDriveOnce: MigrationDriveOnce =
             mockk {
+                coEvery { mayBroadcastCrossing(sdk) } returns quietWindowReady
                 coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
                     secondArg<suspend () -> Any?>().invoke()
                 }

@@ -30,11 +30,13 @@ import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.design.util.combineToFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +51,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -179,7 +183,7 @@ class MetadataRepositoryImpl(
                 accounts
                     .map { account ->
                         val uuid = account.sdkAccount.accountUuid
-                        observeMetadata(account, initial = previous[uuid]).map { uuid to it }
+                        observeMetadata(account, generation, initial = previous[uuid]).map { uuid to it }
                     }.combineToFlow()
                     .map { entries -> entries.mapNotNull { (uuid, content) -> content?.let { uuid to it } }.toMap() }
             }.stateIn(
@@ -421,20 +425,28 @@ class MetadataRepositoryImpl(
     override fun observeColor(accountUuid: AccountUuid): Flow<Color?> =
         metadata.map { it[accountUuid]?.accountMetadata?.appearance?.color }.distinctUntilChanged()
 
-    /**
-     * [account]'s metadata: [initial] first, the content [metadata] already holds or null, so a slow
-     * key never holds back the other accounts and a change of the account set never blanks a known
-     * entry; then the content as it changes, without the data source's leading null. A failure is
-     * logged and keeps the last content.
-     */
-    private fun observeMetadata(account: WalletAccount, initial: MetadataV3?): Flow<MetadataV3?> =
+    /** Retry the same admitted owner's read without clearing the last decrypted content. */
+    private fun observeMetadata(
+        account: WalletAccount,
+        generation: Long,
+        initial: MetadataV3?,
+    ): Flow<MetadataV3?> =
         flow {
-            emit(initial)
-            val token = walletWriteAccess.token()
-            val key = getMetadataKey(account, token)
-            val observations = walletWriteAccess.write(token) { metadataDataSource.observe(key) } ?: return@flow
+            if (!walletWriteAccess.permits(generation)) return@flow
+            val key = getMetadataKey(account, generation)
+            val observations = walletWriteAccess.write(generation) { metadataDataSource.observe(key) } ?: return@flow
             emitAll(observations.dropWhile { it == null })
-        }.catch { e -> Twig.error(e) { "Unable to read Metadata" } }
+        }.retryWhen { failure, attempt ->
+            if (failure !is Exception || failure is CancellationException) throw failure
+            if (!walletWriteAccess.permits(generation)) return@retryWhen false
+            if (attempt == 0L) Twig.warn { "Metadata read unavailable (${failure.javaClass.simpleName})" }
+            delay(METADATA_READ_BACKOFF_MS[attempt.coerceAtMost(METADATA_READ_BACKOFF_MS.lastIndex.toLong()).toInt()])
+            true
+        }.catch { failure ->
+            if (walletWriteAccess.permits(generation) || failure is CancellationException || failure !is Exception) {
+                throw failure
+            }
+        }.onStart { emit(initial) }
 
     override suspend fun setAccountColor(
         account: WalletAccount,
@@ -525,6 +537,10 @@ class MetadataRepositoryImpl(
                 newKey
             }
         }
+
+    private companion object {
+        val METADATA_READ_BACKOFF_MS = longArrayOf(250L, 1_000L, 4_000L, 8_000L)
+    }
 
     private fun Set<String>.toSimpleAssetSet() =
         this

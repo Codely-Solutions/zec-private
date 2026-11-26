@@ -125,12 +125,6 @@ class MigrationDriveOnce(
         accountKeyId: String,
         allowForcedBroadcastWindow: Boolean,
     ): DriveOnceResult {
-        // This IS a run — stamp the heartbeat regardless of which caller drove it, so the
-        // dead-man's-switch alarm (MigrationTransferDueReceiver) never fires a spurious
-        // "step due" notification just because the WORKER specifically didn't fire (the live
-        // driver may have driven this account forward instead).
-        MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId)
-
         val result = sdk.nextStep()
         if (result == null) {
             migrationLog("MigrationDriveOnce: no migration in progress — nothing to do.")
@@ -324,6 +318,28 @@ class MigrationDriveOnce(
         }
     }
 
+    internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean =
+        broadcastPreflight(sdk, isSynchronizerSyncing()) == BroadcastPreflight.BROADCAST
+
+    private suspend fun isSynchronizerSyncing(): Boolean =
+        synchronizerProvider.synchronizer.value?.let { synchronizer ->
+            // A cold status flow cannot establish that the synchronizer is idle.
+            withTimeoutOrNull(STATUS_READ_TIMEOUT) { synchronizer.status.first() } ?: Synchronizer.Status.SYNCING
+        } == Synchronizer.Status.SYNCING
+
+    private suspend fun broadcastPreflight(
+        sdk: OrchardMigrationSdk,
+        syncing: Boolean,
+        prepFastTrack: Boolean = false,
+    ): BroadcastPreflight =
+        decideBroadcastPreflight(
+            synchronizerSyncing = syncing,
+            nowEpochSeconds = nowEpochSeconds(),
+            lastNetworkActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
+            privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
+            prepFastTrack = prepFastTrack,
+        )
+
     @Suppress("ReturnCount", "LongMethod", "CyclomaticComplexMethod")
     private suspend fun broadcastRun(
         sdk: OrchardMigrationSdk,
@@ -343,22 +359,8 @@ class MigrationDriveOnce(
                 nextCandidate.isProved &&
                 nextCandidate.scheduledHeight <= est
 
-        // status is a Flow<Status> — timeout if cold; null synchronizer is non-syncing.
-        // timeout → assume SYNCING → defer (privacy-safe default; production status is a StateFlow
-        // and answers immediately).
-        val syncing =
-            synchronizerProvider.synchronizer.value?.let { synchronizer ->
-                withTimeoutOrNull(STATUS_READ_TIMEOUT) { synchronizer.status.first() } ?: Synchronizer.Status.SYNCING
-            } == Synchronizer.Status.SYNCING
-        val lastActivity = lastNetworkActivity.get()
-        val preflight =
-            decideBroadcastPreflight(
-                synchronizerSyncing = syncing,
-                nowEpochSeconds = nowEpochSeconds(),
-                lastNetworkActivityEpochSeconds = lastActivity?.epochSecond,
-                privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
-                prepFastTrack = prepFastTrack,
-            )
+        val syncing = isSynchronizerSyncing()
+        val preflight = broadcastPreflight(sdk, syncing, prepFastTrack)
         migrationLog(
             "MigrationDriveOnce: broadcast preflight=$preflight " +
                 "(syncing=$syncing, prepFastTrack=$prepFastTrack)"

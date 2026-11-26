@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import android.content.Context
 import cash.z.ecc.android.sdk.model.TransactionId
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
+import co.electriccoin.zcash.ui.common.datasource.getForActivity
 import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
@@ -34,8 +35,6 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 
 @Suppress("TooManyFunctions")
 class GetFilteredActivitiesUseCase(
@@ -132,6 +131,12 @@ class GetFilteredActivitiesUseCase(
                             emitAll(
                                 transactionsFilteredByFulltext
                                     .mapLatest { transactions ->
+                                        val restoreTimestamp =
+                                            if (TransactionFilter.UNREAD in filters && !transactions.isNullOrEmpty()) {
+                                                restoreTimestampDataSource.getForActivity()
+                                            } else {
+                                                null
+                                            }
                                         transactions
                                             ?.filter { transaction ->
                                                 filterBySentReceivedSwap(filters, transaction)
@@ -139,7 +144,7 @@ class GetFilteredActivitiesUseCase(
                                                 filterByGeneralFilters(
                                                     filters = filters,
                                                     activity = transaction,
-                                                    restoreTimestamp = restoreTimestampDataSource.getOrCreate()
+                                                    restoreTimestamp = restoreTimestamp
                                                 )
                                             }?.map { transaction ->
                                                 transaction.activity
@@ -162,7 +167,7 @@ class GetFilteredActivitiesUseCase(
     private fun filterByGeneralFilters(
         filters: List<TransactionFilter>,
         activity: InternalState,
-        restoreTimestamp: Instant,
+        restoreTimestamp: Instant?,
     ): Boolean {
         val memoPass =
             if (filters.contains(TransactionFilter.MEMOS)) {
@@ -213,26 +218,8 @@ class GetFilteredActivitiesUseCase(
             true
         }
 
-    private fun isUnread(activity: InternalState, restoreTimestamp: Instant): Boolean {
-        if (activity !is InternalState.ByTransaction) return false
-
-        val transactionDate =
-            activity.activity.transaction.timestamp
-                ?.atZone(ZoneId.systemDefault())
-                ?.toLocalDate()
-                ?: LocalDate.now()
-
-        val hasMemo = activity.activity.transaction.memoCount > 0
-        val restoreDate = restoreTimestamp.atZone(ZoneId.systemDefault()).toLocalDate()
-
-        return if (hasMemo && transactionDate < restoreDate) {
-            false
-        } else {
-            val transactionMetadata = activity.activity.metadata
-
-            hasMemo && transactionMetadata.isRead.not()
-        }
-    }
+    private fun isUnread(activity: InternalState, restoreTimestamp: Instant?): Boolean =
+        activity is InternalState.ByTransaction && activity.activity.isUnread(restoreTimestamp)
 
     private fun isBookmark(activity: InternalState): Boolean =
         activity is InternalState.ByTransaction && activity.activity.metadata.isBookmarked

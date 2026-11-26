@@ -244,10 +244,14 @@ class MigrationSendingVM(
         ) {
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
             if (!canRetryTarget(sdk)) break
-            withContext(NonCancellable) {
-                outcome = sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
-                val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
-                migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
+            if (!args.isRecoveryRetry || migrationDriveOnce.mayBroadcastCrossing(sdk)) {
+                withContext(NonCancellable) {
+                    outcome = sdk.executeNextPendingTransfer(
+                        NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true
+                    )
+                    val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
+                    migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
+                }
             }
             attempt++
         }

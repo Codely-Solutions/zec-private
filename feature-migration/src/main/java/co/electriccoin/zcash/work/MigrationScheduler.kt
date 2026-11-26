@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
+import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -57,7 +58,7 @@ class MigrationScheduler(
         if (existing == null) {
             check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND)) { "Migration scheduling is paused" }
         } else {
-            armFallback(accountKeyId, existing.initialDelayMillis.milliseconds) { true }
+            armFallback(accountKeyId, existing.id, existing.initialDelayMillis.milliseconds) { true }
         }
     }
 
@@ -74,7 +75,7 @@ class MigrationScheduler(
             manager.enqueueUniqueWork(workId(accountKeyId), policy, request)
         } ?: return false
         operation.result.await()
-        armFallback(accountKeyId, delay) {
+        armFallback(accountKeyId, request.id, delay) {
             // KEEP can acknowledge without inserting this request. An older wake or live-driver
             // heartbeat must not stand in for the exact WorkManager request.
             policy == ExistingWorkPolicy.APPEND ||
@@ -84,13 +85,18 @@ class MigrationScheduler(
     }
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
-    private suspend fun armFallback(accountKeyId: String, delay: Duration, isPending: suspend () -> Boolean) {
+    private suspend fun armFallback(
+        accountKeyId: String,
+        request: UUID,
+        delay: Duration,
+        isPending: suspend () -> Boolean,
+    ) {
         try {
             if (isPending()) {
                 MigrationAccountRetirement.keepWake(accountKeyId) {
                     migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
                     MigrationWorkerHeartbeat.stampScheduled(
-                        context, accountKeyId, System.currentTimeMillis() + delay.inWholeMilliseconds
+                        context, accountKeyId, request, System.currentTimeMillis() + delay.inWholeMilliseconds
                     )
                     migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
                 }

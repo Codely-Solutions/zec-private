@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.repository.Transaction
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityData
+import co.electriccoin.zcash.ui.common.usecase.isUnread
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
@@ -40,7 +41,7 @@ import java.time.temporal.ChronoUnit
 class ActivityMapper {
     fun createTransactionState(
         data: ActivityData,
-        restoreTimestamp: Instant,
+        restoreTimestamp: Instant?,
         onTransactionClick: (Transaction) -> Unit,
         onSwapClick: (TransactionSwapMetadata) -> Unit,
         onDisplayed: (ActivityData) -> Unit
@@ -71,7 +72,7 @@ class ActivityMapper {
                     isShielded = isTransactionShielded(data),
                     value = getTransactionValue(data),
                     onClick = { onTransactionClick(data.transaction) },
-                    isUnread = isTransactionUnread(data, restoreTimestamp),
+                    isUnread = data.isUnread(restoreTimestamp),
                     onDisplayed = { onDisplayed(data) }
                 )
             }
@@ -128,19 +129,6 @@ class ActivityMapper {
             EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_receive_failed
         }
 
-    private fun isTransactionUnread(data: ActivityData.ByTransaction, restoreTimestamp: Instant): Boolean {
-        val transactionDateTime = data.transaction.timestamp?.atZone(ZoneId.systemDefault())
-        val hasMemo = data.transaction.memoCount > 0
-        val transactionDate = transactionDateTime?.toLocalDate() ?: LocalDate.now()
-        val restoreDate = restoreTimestamp.atZone(ZoneId.systemDefault()).toLocalDate()
-
-        return if (hasMemo && transactionDate < restoreDate) {
-            false
-        } else {
-            val transactionMetadata = data.metadata
-            hasMemo && transactionMetadata.isRead.not()
-        }
-    }
 
     @Suppress("CyclomaticComplexMethod", "NestedBlockDepth")
     private fun getTransactionBigIcon(data: ActivityData.ByTransaction) =
