@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.GiftCardHandle
 import co.electriccoin.zcash.ui.common.model.GiftCardPhase
 import co.electriccoin.zcash.ui.common.model.GiftCardSession
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
+import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -82,12 +83,12 @@ interface GiftCardRepository {
     fun checkAgain(linkId: String)
 
     /**
-     * Redeems a [GiftCardPhase.Ready] card to the address [toAddress] returns. Ignored in any other phase, so a
+     * Redeems a [GiftCardPhase.Ready] card to its reviewed [destination]. Ignored in any other phase, so a
      * second tap cannot redeem twice. Once the SDK is called, the redemption is never cancelled by the repository.
      */
     fun redeem(
         linkId: String,
-        toAddress: suspend () -> String
+        destination: suspend () -> GiftRedemptionDestination
     )
 
     /**
@@ -224,7 +225,7 @@ class GiftCardRepositoryImpl(
 
     override fun redeem(
         linkId: String,
-        toAddress: suspend () -> String
+        destination: suspend () -> GiftRedemptionDestination
     ) {
         synchronized(lock) {
             val session =
@@ -232,7 +233,7 @@ class GiftCardRepositoryImpl(
             session.pollJob?.cancel()
             session.update { it.copy(phase = GiftCardPhase.Redeeming) }
             session.redemptionStarted = false
-            session.redeemJob = launchSessionJobLocked { redeem(session, toAddress) }
+            session.redeemJob = launchSessionJobLocked { redeem(session, destination) }
         }
     }
 
@@ -519,16 +520,17 @@ class GiftCardRepositoryImpl(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun redeem(
         session: Session,
-        toAddress: suspend () -> String
+        destination: suspend () -> GiftRedemptionDestination
     ) {
         val handle = session.handle ?: return
         val phase =
             try {
-                withTimeout(TO_ADDRESS_TIMEOUT) { toAddress() }.let { address ->
+                withTimeout(TO_ADDRESS_TIMEOUT) { destination() }.let { target ->
                     GiftCardPhase.Redeemed(
-                        giftCardDataSource.redeem(handle, address) {
+                        giftCardDataSource.redeem(handle, target.address) {
                             synchronized(lock) {
                                 if (session.isClosed) throw GiftCardException.UnknownHandle()
+                                if (!target.permitsSubmission()) throw GiftCardException.SubmitFailed()
                                 session.redemptionStarted = true
                             }
                         }

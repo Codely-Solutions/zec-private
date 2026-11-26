@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.GiftCardHandle
 import co.electriccoin.zcash.ui.common.model.GiftCardPhase
 import co.electriccoin.zcash.ui.common.model.GiftCardRedemption
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
+import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 import co.electriccoin.zcash.ui.fixture.FakeGiftCardDataSource
 import co.electriccoin.zcash.ui.fixture.GiftCardSummaryFixture
 import co.electriccoin.zcash.ui.fixture.GiftCardSummaryFixture.pendingStatus
@@ -251,7 +252,7 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
             assertEquals(GiftCardPhase.Redeeming, observer.latest().phase)
             observer.job.cancel()
@@ -279,8 +280,8 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
             dataSource.redeemGate?.complete(Unit)
             runCurrent()
@@ -298,7 +299,7 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
 
             val redeemed = assertIs<GiftCardPhase.Redeemed>(observer.latest().phase)
@@ -317,7 +318,7 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
             assertEquals(GiftCardPhase.Failed(GiftCardFailure.REDEEM_FAILED), observer.latest().phase)
 
@@ -340,7 +341,7 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
 
             assertEquals(2, dataSource.checkCount)
@@ -357,7 +358,7 @@ class GiftCardRepositoryImplTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
 
             assertEquals(GiftCardPhase.Failed(GiftCardFailure.REDEEM_FAILED), observer.latest().phase)

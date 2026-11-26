@@ -41739,7 +41739,7 @@ index 11ab4c65f..5f51ce515 100644
 -            .open(activity)
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
-index 36840dcc5..cf4afa9ba 100644
+index 36840dcc5..2ef6b35db 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 @@ -3,0 +4,6 @@ import androidx.activity.ComponentActivity
@@ -41751,6 +41751,9 @@ index 36840dcc5..cf4afa9ba 100644
 +import androidx.navigation.NavDestination.Companion.hasRoute
 @@ -4,0 +11 @@ import androidx.navigation.NavGraphBuilder
 +import androidx.navigation.NavHostController
+@@ -12 +19 @@ import cash.z.ecc.sdk.type.fromResources
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.common.model.VersionInfo
 @@ -13,0 +21 @@ import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 +import co.electriccoin.zcash.ui.design.util.LocalNavController
 @@ -30,0 +39 @@ import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedScreen
@@ -41764,6 +41767,12 @@ index 36840dcc5..cf4afa9ba 100644
 +                initialization = initialization,
 +                onContinueWallet = walletViewModel::continueWalletSetup,
 +                onRetrySetup = walletViewModel::retryWalletInitialization,
+@@ -47 +62 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
+@@ -60 +75 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
 @@ -77,9 +92,62 @@ fun NavGraphBuilder.onboardingNavGraph(
 -        composable<RestoreSeedArgs> { RestoreSeedScreen() }
 -        composable<RestoreHeight> { AndroidRestoreHeight(it.toRoute()) }
@@ -42330,6 +42339,17 @@ index 5ec410de8..87abe5b0e 100644
 +                supportAction()
 @@ -158,0 +161 @@ private fun AccountNameWithSubtitle(
 +@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+index f441f6847..f6b5418e7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+@@ -10 +9,0 @@ import androidx.navigation.compose.rememberNavController
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
+@@ -11,0 +11 @@ import co.electriccoin.zcash.ui.MainActivity
++import co.electriccoin.zcash.ui.common.model.VersionInfo
+@@ -44 +44 @@ private fun ObserveScreenSecurityFlag() {
+-                        val isTest = FirebaseTestLabUtil.isFirebaseTestLab(context)
++                        val isTest = VersionInfo.testLabFixturesEnabled(context)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
 index a6896cfd7..61a711eb6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
@@ -44807,6 +44827,16 @@ index 000000000..4c163b6df
 +internal object AndroidElapsedTimeSource : AbstractLongTimeSource(DurationUnit.MILLISECONDS) {
 +    override fun read(): Long = SystemClock.elapsedRealtime()
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/GiftCard.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/GiftCard.kt
+index 1c4960ba2..a210f7443 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/GiftCard.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/GiftCard.kt
+@@ -145,0 +146,5 @@ data class GiftCardRedemption(
++class GiftRedemptionDestination(
++    val address: String,
++    val permitsSubmission: () -> Boolean,
++)
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
 new file mode 100644
 index 000000000..dd46e4268
@@ -45675,6 +45705,18 @@ index 000000000..e5d5271bf
 +package co.electriccoin.zcash.ui.common.model
 +
 +class UneditableZip321MemoException : Exception("A non-text payment memo cannot be edited in Send")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+index dc70b9506..148174338 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+@@ -41,0 +42,4 @@ data class VersionInfo(
++        internal fun testLabFixturesEnabled(context: Context): Boolean =
++            BuildConfig.DEBUG && NETWORK_DIMENSION == NetworkDimension.TESTNET &&
++                FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext)
++
+@@ -52 +56 @@ data class VersionInfo(
+-                isRunningUnderTestService = FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext),
++                isRunningUnderTestService = testLabFixturesEnabled(context),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
 index 01a2a6fa5..f8d45e6a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
@@ -50246,51 +50288,61 @@ index 283e05d16..e05201785 100644
 -
 -    override fun consumeInAppScanRequest(): Boolean = scanRequested.getAndUpdate { false }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepository.kt
-index f1a3fd737..18c717f01 100644
+index f1a3fd737..e8acbf815 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepository.kt
-@@ -13,0 +14,2 @@ import kotlinx.coroutines.CoroutineScope
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.GiftCardStatus
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
+@@ -13,0 +15,2 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.CoroutineStart
 +import kotlinx.coroutines.Deferred
-@@ -18,0 +21 @@ import kotlinx.coroutines.TimeoutCancellationException
+@@ -18,0 +22 @@ import kotlinx.coroutines.TimeoutCancellationException
 +import kotlinx.coroutines.async
-@@ -30,0 +34 @@ import kotlinx.coroutines.flow.update
+@@ -30,0 +35 @@ import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.joinAll
-@@ -82 +86 @@ interface GiftCardRepository {
+@@ -81,2 +86,2 @@ interface GiftCardRepository {
+-     * Redeems a [GiftCardPhase.Ready] card to the address [toAddress] returns. Ignored in any other phase, so a
 -     * second tap cannot redeem twice. Once started, the redemption is never cancelled.
++     * Redeems a [GiftCardPhase.Ready] card to its reviewed [destination]. Ignored in any other phase, so a
 +     * second tap cannot redeem twice. Once the SDK is called, the redemption is never cancelled by the repository.
-@@ -96,2 +100,2 @@ interface GiftCardRepository {
+@@ -86 +91 @@ interface GiftCardRepository {
+-        toAddress: suspend () -> String
++        destination: suspend () -> GiftRedemptionDestination
+@@ -96,2 +101,2 @@ interface GiftCardRepository {
 -     * Ends every session as [dismiss] does, including one being redeemed: its redemption still runs to its end, and
 -     * its card wallet is erased after it. For when the wallet the cards are redeemed into is deleted.
 +     * Blocks new sessions, cancels work before submission, and awaits any redemption already handed to the SDK
 +     * and all queued card-wallet closures. Cancelling the wait leaves shutdown running.
-@@ -99 +103,4 @@ interface GiftCardRepository {
+@@ -99 +104,4 @@ interface GiftCardRepository {
 -    fun closeAllSessions()
 +    suspend fun quiesceForWalletReset()
 +
 +    /** Releases the reset gate. New sessions can start once shutdown has finished. */
 +    fun resumeSessions()
-@@ -173 +180 @@ class GiftCardRepositoryImpl(
+@@ -173 +181 @@ class GiftCardRepositoryImpl(
 -    /** Guards [links], [sweepJob] and the mutable fields of every [Session]. */
 +    /** Guards the session maps, jobs, reset gate and mutable fields of every [Session]. */
-@@ -179,0 +187,6 @@ class GiftCardRepositoryImpl(
+@@ -179,0 +188,6 @@ class GiftCardRepositoryImpl(
 +    private val sessionJobs = mutableSetOf<Job>()
 +    private var shutdownJob: Deferred<Unit>? = null
 +    private var isResetting = false
 +
 +    private val sessionsBlocked
 +        get() = isResetting || shutdownJob?.isCompleted == false
-@@ -202 +215 @@ class GiftCardRepositoryImpl(
+@@ -202 +216 @@ class GiftCardRepositoryImpl(
 -                    session.workJob = scope.launch { check(session, isQuiet = true) }
 +                    session.workJob = launchSessionJobLocked { check(session, isQuiet = true) }
-@@ -206 +219 @@ class GiftCardRepositoryImpl(
+@@ -206 +220 @@ class GiftCardRepositoryImpl(
 -                    session.workJob = scope.launch { start(session) }
 +                    session.workJob = launchSessionJobLocked { start(session) }
-@@ -221 +234,2 @@ class GiftCardRepositoryImpl(
+@@ -214 +228 @@ class GiftCardRepositoryImpl(
+-        toAddress: suspend () -> String
++        destination: suspend () -> GiftRedemptionDestination
+@@ -221 +235,2 @@ class GiftCardRepositoryImpl(
 -            session.redeemJob = scope.launch { redeem(session, toAddress) }
 +            session.redemptionStarted = false
-+            session.redeemJob = launchSessionJobLocked { redeem(session, toAddress) }
-@@ -233 +247,15 @@ class GiftCardRepositoryImpl(
++            session.redeemJob = launchSessionJobLocked { redeem(session, destination) }
+@@ -233 +248,15 @@ class GiftCardRepositoryImpl(
 -    override fun closeAllSessions() {
 +    override suspend fun quiesceForWalletReset() {
 +        val shutdown =
@@ -50307,7 +50359,7 @@ index f1a3fd737..18c717f01 100644
 +    }
 +
 +    override fun resumeSessions() {
-@@ -235,4 +263,28 @@ class GiftCardRepositoryImpl(
+@@ -235,4 +264,28 @@ class GiftCardRepositoryImpl(
 -            links.values
 -                .map { it.value }
 -                .distinct()
@@ -50340,19 +50392,19 @@ index f1a3fd737..18c717f01 100644
 +                    }
 +                }
 +            }
-@@ -244,0 +297 @@ class GiftCardRepositoryImpl(
+@@ -244,0 +298 @@ class GiftCardRepositoryImpl(
 +                if (sessionsBlocked) return
-@@ -257,0 +311,4 @@ class GiftCardRepositoryImpl(
+@@ -257,0 +312,4 @@ class GiftCardRepositoryImpl(
 +            if (sessionsBlocked) {
 +                giftCardLinkStore.take(linkId)
 +                return MutableStateFlow(Session(emptySet()).apply { update { it.copy(phase = LINK_UNAVAILABLE) } })
 +            }
-@@ -261,2 +318,2 @@ class GiftCardRepositoryImpl(
+@@ -261,2 +319,2 @@ class GiftCardRepositoryImpl(
 -                session.workJob = scope.launch { start(session) }
 -                session.idleJob = scope.launch { closeWhenIdle(session) }
 +                session.workJob = launchSessionJobLocked { start(session) }
 +                session.idleJob = launchSessionJobLocked { closeWhenIdle(session) }
-@@ -266,0 +324,8 @@ class GiftCardRepositoryImpl(
+@@ -266,0 +325,8 @@ class GiftCardRepositoryImpl(
 +    /** Tracks work even after its session is closed or a new job replaces it. Call with [lock] held. */
 +    private fun launchSessionJobLocked(block: suspend () -> Unit): Job =
 +        scope.launch(start = CoroutineStart.LAZY) { block() }.also { job ->
@@ -50361,23 +50413,29 @@ index f1a3fd737..18c717f01 100644
 +            job.start()
 +        }
 +
-@@ -361 +426 @@ class GiftCardRepositoryImpl(
+@@ -361 +427 @@ class GiftCardRepositoryImpl(
 -        val handle = session.handle ?: return
 +        val handle = synchronized(lock) { session.handle.takeUnless { session.isClosed } } ?: return
-@@ -380 +445 @@ class GiftCardRepositoryImpl(
+@@ -380 +446 @@ class GiftCardRepositoryImpl(
 -                session.pollJob = scope.launch { pollWhilePending(session) }
 +                session.pollJob = launchSessionJobLocked { pollWhilePending(session) }
-@@ -463 +528,8 @@ class GiftCardRepositoryImpl(
+@@ -457 +523 @@ class GiftCardRepositoryImpl(
+-        toAddress: suspend () -> String
++        destination: suspend () -> GiftRedemptionDestination
+@@ -462,2 +528,10 @@ class GiftCardRepositoryImpl(
+-                withTimeout(TO_ADDRESS_TIMEOUT) { toAddress() }.let { address ->
 -                    GiftCardPhase.Redeemed(giftCardDataSource.redeem(handle, address))
++                withTimeout(TO_ADDRESS_TIMEOUT) { destination() }.let { target ->
 +                    GiftCardPhase.Redeemed(
-+                        giftCardDataSource.redeem(handle, address) {
++                        giftCardDataSource.redeem(handle, target.address) {
 +                            synchronized(lock) {
 +                                if (session.isClosed) throw GiftCardException.UnknownHandle()
++                                if (!target.permitsSubmission()) throw GiftCardException.SubmitFailed()
 +                                session.redemptionStarted = true
 +                            }
 +                        }
 +                    )
-@@ -575,0 +648,7 @@ class GiftCardRepositoryImpl(
+@@ -575,0 +650,7 @@ class GiftCardRepositoryImpl(
 +        stopSessionWorkLocked(session)
 +        session.handle?.let { giftCardDataSource.close(it) }
 +        session.handle = null
@@ -50385,10 +50443,10 @@ index f1a3fd737..18c717f01 100644
 +
 +    /** Stops further check and redemption work without closing the card used by an existing SDK redemption. */
 +    private fun stopSessionWorkLocked(session: Session) {
-@@ -580,2 +658,0 @@ class GiftCardRepositoryImpl(
+@@ -580,2 +660,0 @@ class GiftCardRepositoryImpl(
 -        session.handle?.let { giftCardDataSource.close(it) }
 -        session.handle = null
-@@ -653,0 +731 @@ class GiftCardRepositoryImpl(
+@@ -653,0 +733 @@ class GiftCardRepositoryImpl(
 +        var redemptionStarted = false
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/HardwareProposalBinding.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/HardwareProposalBinding.kt
 new file mode 100644
@@ -54954,25 +55012,47 @@ index 84d9fd0c0..000000000
 -    DISABLED
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
-index cb0d758f8..f71f30ced 100644
+index cb0d758f8..878c0567f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
-@@ -4 +4 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
+@@ -4 +4,4 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
 -import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
++import co.electriccoin.zcash.ui.common.model.GiftCardException
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -8 +8 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -5,0 +9,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -8 +13 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 - * The address a redeemed gift card is swept to: the selected account's Orchard-only unified address.
 + * Resolves the Orchard-only unified address of the account reviewed for gift redemption.
-@@ -11 +10,0 @@ class GetGiftCardDestinationAddressUseCase(
+@@ -11 +15,0 @@ class GetGiftCardDestinationAddressUseCase(
 -    private val accountDataSource: AccountDataSource,
-@@ -14,3 +13,2 @@ class GetGiftCardDestinationAddressUseCase(
+@@ -12,0 +17,3 @@ class GetGiftCardDestinationAddressUseCase(
++    private val appAccess: AppAccessSession,
++    private val walletAccess: WalletWriteAccess,
++    private val walletTransport: WalletTransportAccess,
+@@ -14,5 +21,14 @@ class GetGiftCardDestinationAddressUseCase(
 -    suspend operator fun invoke(): String {
 -        val account = accountDataSource.getSelectedAccount()
 -        return synchronizerProvider
-+    suspend operator fun invoke(account: WalletAccount): String =
-+        synchronizerProvider
-@@ -19 +16,0 @@ class GetGiftCardDestinationAddressUseCase(
--    }
+-            .getSynchronizer()
+-            .getCustomUnifiedAddress(account.sdkAccount, UnifiedAddressRequest.Orchard)
++    operator fun invoke(account: WalletAccount): suspend () -> GiftRedemptionDestination {
++        val grant = appAccess.grant.value
++        val generation = walletAccess.token()
++        val engine = synchronizerProvider.synchronizer.value
++        val permits = {
++            engine != null && appAccess.permits(grant) && walletAccess.permits(generation) &&
++                !walletTransport.isRetired(engine) && synchronizerProvider.synchronizer.value === engine
++        }
++        return {
++            if (engine == null || !permits()) throw GiftCardException.SubmitFailed()
++            val address = engine.getCustomUnifiedAddress(account.sdkAccount, UnifiedAddressRequest.Orchard)
++            if (!permits()) throw GiftCardException.SubmitFailed()
++            GiftRedemptionDestination(address, permits)
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCase.kt
 index 4e62574ff..b003c54de 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCase.kt
@@ -60111,16 +60191,20 @@ index 5144be535..000000000
 -    val VOTING_SERVER_URL = StringConfigurationEntry(ConfigKey("voting_server_url"), "")
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/fixture/FakeGiftCardDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/fixture/FakeGiftCardDataSource.kt
-index 6913f8336..2be825620 100644
+index 6913f8336..d664d4087 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/fixture/FakeGiftCardDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/fixture/FakeGiftCardDataSource.kt
-@@ -66 +66,2 @@ class FakeGiftCardDataSource(
+@@ -46,0 +47,2 @@ class FakeGiftCardDataSource(
++    var admissionGate: CompletableDeferred<Unit>? = null
++
+@@ -66 +68,2 @@ class FakeGiftCardDataSource(
 -        toAddress: String
 +        toAddress: String,
 +        beforeSubmission: () -> Unit,
-@@ -67,0 +69 @@ class FakeGiftCardDataSource(
+@@ -67,0 +71,2 @@ class FakeGiftCardDataSource(
++        admissionGate?.await()
 +        beforeSubmission()
-@@ -77,0 +80,4 @@ class FakeGiftCardDataSource(
+@@ -77,0 +83,4 @@ class FakeGiftCardDataSource(
 +    override suspend fun awaitPendingCloses() = Unit
 +
 +    override suspend fun canChangeTorMode() = true
@@ -66871,13 +66955,13 @@ index 3a2e4768c..e4c852f92 100644
 -                walletName = stringRes("Zodl"),
 +                walletName = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
-index 9a4ecd6d8..b86020637 100644
+index 9a4ecd6d8..e4fc14cc4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
 @@ -69 +69,2 @@ class RedeemGiftVM(
 -    private fun onRedeemClick() = giftCardRepository.redeem(args.linkId) { getDestinationAddress() }
 +    private fun onRedeemClick(account: WalletAccount) =
-+        giftCardRepository.redeem(args.linkId) { getDestinationAddress(account) }
++        giftCardRepository.redeem(args.linkId, getDestinationAddress(account))
 @@ -98 +99 @@ class RedeemGiftVM(
 -                    onRedeem = ::onRedeemClick,
 +                    onRedeem = { account?.let(::onRedeemClick) },
@@ -84828,10 +84912,10 @@ index 000000000..298c9b044
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
 new file mode 100644
-index 000000000..0329fde99
+index 000000000..7b9952491
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/GiftCardResetTest.kt
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,380 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.GiftCardRedeemer
@@ -84851,6 +84935,7 @@ index 000000000..0329fde99
 +import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.OTHER_ALIAS
 +import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.TX_ID
 +import co.electriccoin.zcash.ui.common.model.GiftCardPhase
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 +import co.electriccoin.zcash.ui.common.repository.GiftCardRepositoryImpl
@@ -84895,7 +84980,7 @@ index 000000000..0329fde99
 +        }
 +        coEvery { redeemer.close() } coAnswers { close.await() }
 +        val fixture = resetFixture()
-+        fixture.repository.redeem(fixture.id) { ADDRESS }
++        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
 +        runCurrent()
 +        coVerify(exactly = 1) { redeemer.redeem(recipient, any(), mainSynchronizer) }
 +
@@ -84931,7 +85016,7 @@ index 000000000..0329fde99
 +            recipientReady.await()
 +        }
 +        val fixture = resetFixture()
-+        fixture.repository.redeem(fixture.id) { ADDRESS }
++        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
 +        recipientRequested.await()
 +
 +        fixture.reset(keepFiles = true)
@@ -85046,7 +85131,7 @@ index 000000000..0329fde99
 +            error("Submission outcome unknown")
 +        }
 +        val fixture = resetFixture()
-+        fixture.repository.redeem(fixture.id) { ADDRESS }
++        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
 +        runCurrent()
 +
 +        val first = async { runCatching { fixture.reset(keepFiles = true) } }
@@ -89936,6 +90021,44 @@ index 5e22bc384..adebc9c0d 100644
 +        val expectedTerminal = setOf(
 +            SwapStatus.SUCCESS, SwapStatus.PAYMENT_SHORTFALL, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED
 +        )
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+new file mode 100644
+index 000000000..5c8f76cb1
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+@@ -0,0 +1,32 @@
++package co.electriccoin.zcash.ui.common.model
++
++import android.content.Context
++import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.BuildConfig
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import io.mockk.verify
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class TestLabWalletFixturePolicyTest {
++    @Test
++    fun onlyDebugTestnetUsesTheTestServiceSignal() {
++        val eligible = BuildConfig.DEBUG && BuildConfig.FLAVOR_network == "zcashtestnet"
++        val context = mockk<Context> {
++            every { applicationContext } returns this
++        }
++
++        mockkObject(FirebaseTestLabUtil)
++        try {
++            every { FirebaseTestLabUtil.isFirebaseTestLab(context) } returnsMany listOf(true, false)
++            assertEquals(eligible, VersionInfo.testLabFixturesEnabled(context))
++            assertEquals(false, VersionInfo.testLabFixturesEnabled(context))
++            verify(exactly = if (eligible) 2 else 0) { FirebaseTestLabUtil.isFirebaseTestLab(context) }
++        } finally {
++            unmockkObject(FirebaseTestLabUtil)
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
 new file mode 100644
 index 000000000..0ecbe3d01
@@ -93973,32 +94096,95 @@ index 4678d68ba..830e32f95 100644
 -    }
 -
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryIdlePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryIdlePolicyTest.kt
-index 5333e1415..bcfac2bc7 100644
+index 5333e1415..345e8d095 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryIdlePolicyTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryIdlePolicyTest.kt
-@@ -16,0 +17 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.model.GiftCardStatus
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
+@@ -16,0 +18 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.launch
-@@ -24,0 +26 @@ import kotlin.test.assertEquals
+@@ -24,0 +27 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
-@@ -274 +276 @@ class GiftCardRepositoryIdlePolicyTest {
+@@ -51 +54 @@ class GiftCardRepositoryIdlePolicyTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -78 +81 @@ class GiftCardRepositoryIdlePolicyTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -259 +262 @@ class GiftCardRepositoryIdlePolicyTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -274 +277 @@ class GiftCardRepositoryIdlePolicyTest {
 -    fun closingAllSessionsClosesEveryCardIncludingOneBeingRedeemed() =
 +    fun resetQuiescenceClosesEveryCardAndAllowsNewSessionsAfterRelease() =
-@@ -287,2 +289 @@ class GiftCardRepositoryIdlePolicyTest {
+@@ -281 +284 @@ class GiftCardRepositoryIdlePolicyTest {
+-            repository.redeem(redeemingId) { ADDRESS }
++            repository.redeem(redeemingId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -287,2 +290 @@ class GiftCardRepositoryIdlePolicyTest {
 -            repository.closeAllSessions()
 -            dataSource.redeemGate?.complete(Unit)
 +            val shutdown = launch { repository.quiesceForWalletReset() }
-@@ -289,0 +291,4 @@ class GiftCardRepositoryIdlePolicyTest {
+@@ -289,0 +292,4 @@ class GiftCardRepositoryIdlePolicyTest {
 +            assertFalse(shutdown.isCompleted)
 +            assertEquals(listOf(GiftCardHandle("fixture-2")), dataSource.closed)
 +            dataSource.redeemGate?.complete(Unit)
 +            shutdown.join()
-@@ -292,0 +298,4 @@ class GiftCardRepositoryIdlePolicyTest {
+@@ -292,0 +299,4 @@ class GiftCardRepositoryIdlePolicyTest {
 +            repository.resumeSessions()
 +            val afterReset = observe(repository.observeSession(store.stash(LINK)))
 +            runCurrent()
 +            assertIs<GiftCardPhase.Ready>(afterReset.latest().phase)
-@@ -294,0 +304 @@ class GiftCardRepositoryIdlePolicyTest {
+@@ -294,0 +305 @@ class GiftCardRepositoryIdlePolicyTest {
 +            afterReset.job.cancel()
+@@ -312 +323 @@ class GiftCardRepositoryIdlePolicyTest {
+-                    repository.redeem(linkId) { ADDRESS }
++                    repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -391 +402 @@ class GiftCardRepositoryIdlePolicyTest {
+-            repository.redeem(liveId) { ADDRESS }
++            repository.redeem(liveId) { GiftRedemptionDestination(ADDRESS) { true } }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryImplTest.kt
+index 5eaa9d009..2216edfb1 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryImplTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositoryImplTest.kt
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.model.GiftCardStatus
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
+@@ -254 +255 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -282,2 +283,2 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -301 +302 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -320 +321 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -343 +344 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -360 +361 @@ class GiftCardRepositoryImplTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositorySessionLifecycleTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositorySessionLifecycleTest.kt
+index a03e6bda5..35756f830 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositorySessionLifecycleTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/GiftCardRepositorySessionLifecycleTest.kt
+@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.model.GiftCardStatus
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
+@@ -153 +154 @@ class GiftCardRepositorySessionLifecycleTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -198,2 +199,2 @@ class GiftCardRepositorySessionLifecycleTest {
+-            repository.redeem(linkId) { ADDRESS }
+-            repository.redeem("missing") { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
++            repository.redeem("missing") { GiftRedemptionDestination(ADDRESS) { true } }
+@@ -468 +469 @@ class GiftCardRepositorySessionLifecycleTest {
+-            repository.redeem(linkId) { ADDRESS }
++            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
 index 000ebfa20..3d146f6b7 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
@@ -98623,24 +98809,44 @@ index 000000000..f5205772e
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
-index 1e55b67e9..733aca71f 100644
+index 1e55b67e9..3bed01398 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
-@@ -6 +5,0 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
+@@ -6 +6 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
 -import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -18,2 +17 @@ import kotlin.test.assertEquals
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
+@@ -8,0 +9,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -12,0 +15 @@ import io.mockk.mockk
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -15,0 +19 @@ import kotlin.test.assertEquals
++import kotlin.test.assertTrue
+@@ -18,2 +22 @@ import kotlin.test.assertEquals
 - * [GetGiftCardDestinationAddressUseCase] sweeps a gift card to the selected account's Orchard-only address, never to
 - * a transparent or Sapling receiver.
 + * [GetGiftCardDestinationAddressUseCase] requests an Orchard-only address for the reviewed account.
-@@ -26,2 +23,0 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -26,2 +28,0 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -    private val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns walletAccount }
 -
-@@ -34 +30 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -31 +32 @@ class GetGiftCardDestinationAddressUseCaseTest {
+-        mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns mainSynchronizer }
++        mockk<SynchronizerProvider> { every { synchronizer } returns MutableStateFlow(mainSynchronizer) }
+@@ -34 +35 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -    fun theDestinationIsTheSelectedAccountsOrchardOnlyAddress() =
 +    fun theDestinationIsTheReviewedAccountsOrchardOnlyAddress() =
-@@ -39 +35 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -39 +40,6 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -            val address = GetGiftCardDestinationAddressUseCase(accountDataSource, synchronizerProvider)()
-+            val address = GetGiftCardDestinationAddressUseCase(synchronizerProvider)(walletAccount)
++            val destination = GetGiftCardDestinationAddressUseCase(
++                synchronizerProvider,
++                AppAccessSession().apply { unlock() },
++                WalletWriteAccess(),
++                WalletTransportAccess(),
++            )(walletAccount)()
+@@ -41 +47,2 @@ class GetGiftCardDestinationAddressUseCaseTest {
+-            assertEquals(ORCHARD_ADDRESS, address)
++            assertEquals(ORCHARD_ADDRESS, destination.address)
++            assertTrue(destination.permitsSubmission())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageMigrationFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageMigrationFailureTest.kt
 new file mode 100644
 index 000000000..ef231fd42
@@ -111809,30 +112015,35 @@ index 461fb8fbb..a16681c3d 100644
 +        restored.restoreExternalScans(saved)
 +        assertTrue(restored.changes.value.isEmpty())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
-index 1dec990ab..4804e8d55 100644
+index 1dec990ab..b44ec49b9 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.ViewModelStore
 +import cash.z.ecc.android.sdk.Synchronizer
 @@ -6,0 +8 @@ import cash.z.ecc.android.sdk.model.Account
 +import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
-@@ -9,0 +12 @@ import co.electriccoin.zcash.ui.R
+@@ -9,0 +12,2 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-@@ -14,0 +18 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
+@@ -12,0 +17 @@ import co.electriccoin.zcash.ui.common.model.GiftCardStatus
++import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
+@@ -14,0 +20,3 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-@@ -38 +42 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -38 +46 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 -import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.awaitCancellation
-@@ -70,0 +75 @@ import kotlin.time.Duration.Companion.seconds
+@@ -70,0 +79 @@ import kotlin.time.Duration.Companion.seconds
 +@Suppress("LargeClass") // Keep screen intents, async destination binding and reset on the same session fixture.
-@@ -118 +123 @@ class RedeemGiftVMTest {
+@@ -118 +127 @@ class RedeemGiftVMTest {
 -    fun theDisclaimerNamesNoWalletUntilTheSelectedAccountIsKnown() =
 +    fun redemptionWaitsUntilTheSelectedAccountCanBeDisplayed() =
-@@ -120 +125,2 @@ class RedeemGiftVMTest {
+@@ -120 +129,2 @@ class RedeemGiftVMTest {
 -            val vm = Env(this, account = null).startedVm()
 +            val env = Env(this, account = null)
 +            val vm = env.startedVm()
-@@ -123,0 +130,11 @@ class RedeemGiftVMTest {
+@@ -123,0 +134,11 @@ class RedeemGiftVMTest {
 +            assertFalse(state.redeemButton.isEnabled)
 +            state.redeemButton.onClick()
 +            runCurrent()
@@ -111844,7 +112055,7 @@ index 1dec990ab..4804e8d55 100644
 +            val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
 +            assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, account.name), ready.disclaimer)
 +            assertTrue(ready.redeemButton.isEnabled)
-@@ -202,0 +220,81 @@ class RedeemGiftVMTest {
+@@ -202,0 +224,126 @@ class RedeemGiftVMTest {
 +    @Test
 +    fun redemptionUsesTheAccountNamedByTheTappedReadyStateAcrossSelectionChanges() = runTest(dispatcher) {
 +        val reviewed = zashiAccount()
@@ -111866,11 +112077,13 @@ index 1dec990ab..4804e8d55 100644
 +                address
 +            }
 +        }
-+        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
++        val provider = mockk<SynchronizerProvider> {
++            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
++        }
 +        val env = Env(this)
 +        val vm = env.newVm(
 +            getSelectedWalletAccount = GetSelectedWalletAccountUseCase(accountDataSource),
-+            getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider),
++            getDestinationAddress = giftDestination(provider),
 +        )
 +        backgroundScope.launch { vm.state.collect { } }
 +        runCurrent()
@@ -111897,8 +112110,8 @@ index 1dec990ab..4804e8d55 100644
 +    fun resetCancelsSuspendedGiftAddressResolutionBeforeRedemptionEntersTheDataSource() = runTest(dispatcher) {
 +        val addressResolutionStarted = CompletableDeferred<Unit>()
 +        val addressResolutionCancelled = CompletableDeferred<Unit>()
-+        val provider = mockk<SynchronizerProvider> {
-+            coEvery { getSynchronizer() } coAnswers {
++        val synchronizer = mockk<Synchronizer> {
++            coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } coAnswers {
 +                addressResolutionStarted.complete(Unit)
 +                try {
 +                    awaitCancellation()
@@ -111907,8 +112120,11 @@ index 1dec990ab..4804e8d55 100644
 +                }
 +            }
 +        }
++        val provider = mockk<SynchronizerProvider> {
++            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
++        }
 +        val env = Env(this)
-+        val vm = env.newVm(getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider))
++        val vm = env.newVm(getDestinationAddress = giftDestination(provider))
 +        backgroundScope.launch { vm.state.collect { } }
 +        runCurrent()
 +        try {
@@ -111926,15 +112142,55 @@ index 1dec990ab..4804e8d55 100644
 +        }
 +    }
 +
-@@ -743 +841 @@ class RedeemGiftVMTest {
++    @Test
++    fun aPendingRedemptionRechecksItsOriginalWalletStateAtTheSdkBoundary() = runTest(dispatcher) {
++        for (revocation in listOf("reset", "relock", "engine")) {
++            val appAccess = AppAccessSession().apply { unlock() }
++            val walletAccess = WalletWriteAccess()
++            val engine = MutableStateFlow<Synchronizer?>(mockk {
++                coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } returns ORCHARD_ADDRESS
++            })
++            val provider = mockk<SynchronizerProvider> { every { synchronizer } returns engine }
++            val env = Env(this)
++            val admission = CompletableDeferred<Unit>()
++            env.dataSource.admissionGate = admission
++            val vm = env.newVm(getDestinationAddress = giftDestination(provider, appAccess, walletAccess))
++            backgroundScope.launch { vm.state.collect { } }
++            runCurrent()
++            try {
++                assertIs<RedeemGiftState.Ready>(vm.state.value).redeemButton.onClick()
++                runCurrent()
++                assertEquals(stringRes(R.string.redeemGift_redeeming_title), cardStatusOf(vm).title)
++
++                when (revocation) {
++                    "reset" -> walletAccess.beginReset()
++                    "relock" -> {
++                        appAccess.lock()
++                        appAccess.unlock()
++                    }
++                    "engine" -> engine.value = mockk()
++                }
++                admission.complete(Unit)
++                runCurrent()
++
++                assertTrue(env.dataSource.redeemedTo.isEmpty(), revocation)
++                assertEquals(stringRes(R.string.redeemGift_failure_title), statusOf(vm).title, revocation)
++                assertNotNull(statusOf(vm).primaryButton, revocation)
++            } finally {
++                clear(vm)
++            }
++        }
++    }
++
+@@ -743 +890 @@ class RedeemGiftVMTest {
 -        private val account: WalletAccount? = zashiAccount(),
 +        account: WalletAccount? = zashiAccount(),
-@@ -747,0 +846 @@ class RedeemGiftVMTest {
+@@ -747,0 +895 @@ class RedeemGiftVMTest {
 +        val selectedAccount = MutableStateFlow(account)
-@@ -761,0 +861,2 @@ class RedeemGiftVMTest {
+@@ -761,0 +910,2 @@ class RedeemGiftVMTest {
 +        suspend fun quiesceForWalletReset() = repository.quiesceForWalletReset()
 +
-@@ -766,18 +867,15 @@ class RedeemGiftVMTest {
+@@ -766,18 +916,15 @@ class RedeemGiftVMTest {
 -        fun newVm(linkId: String = this.linkId): RedeemGiftVM {
 -            val accounts: Flow<WalletAccount?> = MutableStateFlow(account)
 -            val getSelectedWalletAccount =
@@ -111959,7 +112215,7 @@ index 1dec990ab..4804e8d55 100644
 +                every { observe() } returns selectedAccount
 +            },
 +            getDestinationAddress: GetGiftCardDestinationAddressUseCase = mockk {
-+                coEvery { this@mockk.invoke(any()) } returns ORCHARD_ADDRESS
++                every { this@mockk.invoke(any()) } returns { GiftRedemptionDestination(ORCHARD_ADDRESS) { true } }
 +            },
 +        ): RedeemGiftVM = RedeemGiftVM(
 +            args = RedeemGiftArgs(linkId),
@@ -111968,6 +112224,13 @@ index 1dec990ab..4804e8d55 100644
 +            navigationRouter = router,
 +            getSelectedWalletAccount = getSelectedWalletAccount,
 +        )
+@@ -785,0 +933,6 @@ class RedeemGiftVMTest {
++    private fun giftDestination(
++        provider: SynchronizerProvider,
++        appAccess: AppAccessSession = AppAccessSession().apply { unlock() },
++        walletAccess: WalletWriteAccess = WalletWriteAccess(),
++    ) = GetGiftCardDestinationAddressUseCase(provider, appAccess, walletAccess, WalletTransportAccess())
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt
 index 4ff11b7a6..68c8ad360 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/ScanGiftCardVMTest.kt

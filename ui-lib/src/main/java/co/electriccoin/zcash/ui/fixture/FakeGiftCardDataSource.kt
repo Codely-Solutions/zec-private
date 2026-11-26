@@ -44,6 +44,8 @@ class FakeGiftCardDataSource(
 
     var checkGate: CompletableDeferred<Unit>? = null
 
+    var admissionGate: CompletableDeferred<Unit>? = null
+
     var redeemGate: CompletableDeferred<Unit>? = null
 
     override suspend fun parse(link: String): ParsedGiftCard {
@@ -66,6 +68,7 @@ class FakeGiftCardDataSource(
         toAddress: String,
         beforeSubmission: () -> Unit,
     ): GiftCardRedemption {
+        admissionGate?.await()
         beforeSubmission()
         redeemedTo += toAddress
         redeemGate?.await()

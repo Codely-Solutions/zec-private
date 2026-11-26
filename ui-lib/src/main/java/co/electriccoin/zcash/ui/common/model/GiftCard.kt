@@ -143,6 +143,11 @@ data class GiftCardRedemption(
     val received: Zatoshi?
 )
 
+class GiftRedemptionDestination(
+    val address: String,
+    val permitsSubmission: () -> Boolean,
+)
+
 /**
  * The state of one gift card redemption, as held by
  * [co.electriccoin.zcash.ui.common.repository.GiftCardRepository] for as long as the redemption lasts, independently

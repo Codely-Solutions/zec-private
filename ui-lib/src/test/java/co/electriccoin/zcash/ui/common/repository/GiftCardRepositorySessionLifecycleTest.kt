@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.model.GiftCardFailure
 import co.electriccoin.zcash.ui.common.model.GiftCardHandle
 import co.electriccoin.zcash.ui.common.model.GiftCardPhase
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
+import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 import co.electriccoin.zcash.ui.fixture.FakeGiftCardDataSource
 import co.electriccoin.zcash.ui.fixture.GiftCardSummaryFixture
 import co.electriccoin.zcash.ui.fixture.GiftCardSummaryFixture.pendingStatus
@@ -150,7 +151,7 @@ class GiftCardRepositorySessionLifecycleTest {
             val linkId = store.stash(LINK)
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
 
             repository.checkAgain(linkId)
@@ -195,8 +196,8 @@ class GiftCardRepositorySessionLifecycleTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
-            repository.redeem("missing") { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
+            repository.redeem("missing") { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
 
             assertTrue(dataSource.redeemedTo.isEmpty())
@@ -465,7 +466,7 @@ class GiftCardRepositorySessionLifecycleTest {
             val observer = observe(repository.observeSession(linkId))
             runCurrent()
 
-            repository.redeem(linkId) { ADDRESS }
+            repository.redeem(linkId) { GiftRedemptionDestination(ADDRESS) { true } }
             runCurrent()
             assertEquals(GiftCardPhase.Empty(isDust = true), observer.latest().phase)
 

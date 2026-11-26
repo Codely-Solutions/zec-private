@@ -10,12 +10,16 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.GiftCardException
 import co.electriccoin.zcash.ui.common.model.GiftCardRedemption
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
+import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.GetGiftCardDestinationAddressUseCase
@@ -238,11 +242,13 @@ class RedeemGiftVMTest {
                 address
             }
         }
-        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
+        val provider = mockk<SynchronizerProvider> {
+            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
+        }
         val env = Env(this)
         val vm = env.newVm(
             getSelectedWalletAccount = GetSelectedWalletAccountUseCase(accountDataSource),
-            getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider),
+            getDestinationAddress = giftDestination(provider),
         )
         backgroundScope.launch { vm.state.collect { } }
         runCurrent()
@@ -269,8 +275,8 @@ class RedeemGiftVMTest {
     fun resetCancelsSuspendedGiftAddressResolutionBeforeRedemptionEntersTheDataSource() = runTest(dispatcher) {
         val addressResolutionStarted = CompletableDeferred<Unit>()
         val addressResolutionCancelled = CompletableDeferred<Unit>()
-        val provider = mockk<SynchronizerProvider> {
-            coEvery { getSynchronizer() } coAnswers {
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } coAnswers {
                 addressResolutionStarted.complete(Unit)
                 try {
                     awaitCancellation()
@@ -279,8 +285,11 @@ class RedeemGiftVMTest {
                 }
             }
         }
+        val provider = mockk<SynchronizerProvider> {
+            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
+        }
         val env = Env(this)
-        val vm = env.newVm(getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider))
+        val vm = env.newVm(getDestinationAddress = giftDestination(provider))
         backgroundScope.launch { vm.state.collect { } }
         runCurrent()
         try {
@@ -295,6 +304,46 @@ class RedeemGiftVMTest {
             assertEquals(1, env.dataSource.closed.size)
         } finally {
             clear(vm)
+        }
+    }
+
+    @Test
+    fun aPendingRedemptionRechecksItsOriginalWalletStateAtTheSdkBoundary() = runTest(dispatcher) {
+        for (revocation in listOf("reset", "relock", "engine")) {
+            val appAccess = AppAccessSession().apply { unlock() }
+            val walletAccess = WalletWriteAccess()
+            val engine = MutableStateFlow<Synchronizer?>(mockk {
+                coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } returns ORCHARD_ADDRESS
+            })
+            val provider = mockk<SynchronizerProvider> { every { synchronizer } returns engine }
+            val env = Env(this)
+            val admission = CompletableDeferred<Unit>()
+            env.dataSource.admissionGate = admission
+            val vm = env.newVm(getDestinationAddress = giftDestination(provider, appAccess, walletAccess))
+            backgroundScope.launch { vm.state.collect { } }
+            runCurrent()
+            try {
+                assertIs<RedeemGiftState.Ready>(vm.state.value).redeemButton.onClick()
+                runCurrent()
+                assertEquals(stringRes(R.string.redeemGift_redeeming_title), cardStatusOf(vm).title)
+
+                when (revocation) {
+                    "reset" -> walletAccess.beginReset()
+                    "relock" -> {
+                        appAccess.lock()
+                        appAccess.unlock()
+                    }
+                    "engine" -> engine.value = mockk()
+                }
+                admission.complete(Unit)
+                runCurrent()
+
+                assertTrue(env.dataSource.redeemedTo.isEmpty(), revocation)
+                assertEquals(stringRes(R.string.redeemGift_failure_title), statusOf(vm).title, revocation)
+                assertNotNull(statusOf(vm).primaryButton, revocation)
+            } finally {
+                clear(vm)
+            }
         }
     }
 
@@ -870,7 +919,7 @@ class RedeemGiftVMTest {
                 every { observe() } returns selectedAccount
             },
             getDestinationAddress: GetGiftCardDestinationAddressUseCase = mockk {
-                coEvery { this@mockk.invoke(any()) } returns ORCHARD_ADDRESS
+                every { this@mockk.invoke(any()) } returns { GiftRedemptionDestination(ORCHARD_ADDRESS) { true } }
             },
         ): RedeemGiftVM = RedeemGiftVM(
             args = RedeemGiftArgs(linkId),
@@ -880,6 +929,12 @@ class RedeemGiftVMTest {
             getSelectedWalletAccount = getSelectedWalletAccount,
         )
     }
+
+    private fun giftDestination(
+        provider: SynchronizerProvider,
+        appAccess: AppAccessSession = AppAccessSession().apply { unlock() },
+        walletAccess: WalletWriteAccess = WalletWriteAccess(),
+    ) = GetGiftCardDestinationAddressUseCase(provider, appAccess, walletAccess, WalletTransportAccess())
 
     private fun zashiAccount() =
         ZodlAccount(

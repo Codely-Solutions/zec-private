@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.L
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.OTHER_ALIAS
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.TX_ID
 import co.electriccoin.zcash.ui.common.model.GiftCardPhase
+import co.electriccoin.zcash.ui.common.model.GiftRedemptionDestination
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepositoryImpl
@@ -61,7 +62,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         }
         coEvery { redeemer.close() } coAnswers { close.await() }
         val fixture = resetFixture()
-        fixture.repository.redeem(fixture.id) { ADDRESS }
+        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
         runCurrent()
         coVerify(exactly = 1) { redeemer.redeem(recipient, any(), mainSynchronizer) }
 
@@ -97,7 +98,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             recipientReady.await()
         }
         val fixture = resetFixture()
-        fixture.repository.redeem(fixture.id) { ADDRESS }
+        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
         recipientRequested.await()
 
         fixture.reset(keepFiles = true)
@@ -212,7 +213,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             error("Submission outcome unknown")
         }
         val fixture = resetFixture()
-        fixture.repository.redeem(fixture.id) { ADDRESS }
+        fixture.repository.redeem(fixture.id) { GiftRedemptionDestination(ADDRESS) { true } }
         runCurrent()
 
         val first = async { runCatching { fixture.reset(keepFiles = true) } }

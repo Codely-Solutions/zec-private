@@ -67,7 +67,7 @@ class RedeemGiftVM(
         )
 
     private fun onRedeemClick(account: WalletAccount) =
-        giftCardRepository.redeem(args.linkId) { getDestinationAddress(account) }
+        giftCardRepository.redeem(args.linkId, getDestinationAddress(account))
 
     private fun onRetryClick() = giftCardRepository.checkAgain(args.linkId)
 

@@ -308,3 +308,5 @@ Migration replan tests cover the hosted origin beneath the custom-server warning
 Real encrypted-file fixtures exercise automatic Swap Details recovery after a temporary directory flush failure. Note editing waits for a complete read before it shows an empty draft.
 
 Migration crossing waits for the current engine to record a completed sync. The sync recorder can continue while the account-specific reconciliation is blocked. Recovery and WorkManager successor checks carry their prior wake version through a completed plan, and all-wallet reset clears notices from its migration channels.
+
+Gift redemption keeps the account shown at confirmation. The production repository rechecks the original app grant, wallet generation and destination engine at the SDK boundary, including when Reset is already pending and gift shutdown is still waiting. A redemption which crossed that boundary still finishes through the existing drain. Test-service fixture onboarding, authentication shortcuts and screen-capture overrides require a debug testnet build.
