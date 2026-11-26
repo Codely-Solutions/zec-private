@@ -114958,7 +114958,7 @@ index e415d74b4..05ef10590 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
-index c923a2c47..ca861e8ee 100644
+index c923a2c47..1694e3ac9 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 @@ -3,0 +4,4 @@ import androidx.navigation.NavBackStackEntry
@@ -115012,7 +115012,7 @@ index c923a2c47..ca861e8ee 100644
 +        val mode = PreferenceKey("appearance_mode")
 +        val oled = PreferenceKey("is_oled_enabled")
 +        val stored = mutableMapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false")
-+        val expected = mapOf(mode to "DARK", oled to "true")
++        val expected = mapOf<PreferenceKey, String?>(mode to "DARK", oled to "true")
 +        var reject = true
 +        val preference = mockk<PreferenceProvider> {
 +            coEvery { getString(any()) } answers { stored[firstArg()] }
@@ -115039,7 +115039,7 @@ index c923a2c47..ca861e8ee 100644
 +        val failed = assertNotNull(vm.state.value)
 +        assertTrue(failed.hasSaveError)
 +        assertTrue(failed.saveButton.isEnabled)
-+        assertEquals(mapOf(mode to "SYSTEM", oled to "false"), stored)
++        assertEquals(mapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false"), stored)
 +        assertEquals(null, router.backToRoute)
 +
 +        reject = false

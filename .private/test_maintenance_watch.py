@@ -377,7 +377,8 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertEqual(selector(notification, **verified), 'publisher:7:1:73')
 
     def test_reconciliation_selector_outcome_controls_publisher_blockers(self):
-        from reconcile_release import main as reconcile
+        with patch_environment(GITHUB_REPOSITORY='Codely-Solutions/zec-private'):
+            from reconcile_release import main as reconcile
         from test_notify import NotifyTest
 
         workflow = 'build-release.yml'

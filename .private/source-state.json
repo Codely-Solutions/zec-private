@@ -3103,7 +3103,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt": "bb7212709d310f2382935d1ad73cbc5409dbf6628316a70b2838ecbe4def9dce",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/texunsupported/TEXUnsupportedVMTest.kt": "f41333f9369e28b6cec81465700c73f98c0724d8f8c11aae0cca8ce9cd09c3f5",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt": "8b00a0a18364d0c19541f06191f07a2058755534ff398fa2045212b2bbdf839c",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt": "22f344b800cae3b78264d50f1af34930d82698f9f5023f80222254820592fd84",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt": "7e550b8f1cfdb59cca9e320656b2f66fb522a7ad57b09d28efc111840f62c744",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt": "c54fb75c65cd518ad129ac98e8eb14c5c2823fa61b3c5f393b9b4d577cfb4518",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt": "4510caca91d25b3a81b882b190b0736a4f28b04243a1a5385550f9f0b2fd1c48",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/SwapAssetIconTest.kt": "3e142f45aa1587a2b35792ab1494aead31a41a8018eb49e475a6ad59cdd8413a",

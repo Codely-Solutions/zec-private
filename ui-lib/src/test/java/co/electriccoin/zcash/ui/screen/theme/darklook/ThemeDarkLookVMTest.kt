@@ -298,7 +298,7 @@ class ThemeDarkLookVMTest {
         val mode = PreferenceKey("appearance_mode")
         val oled = PreferenceKey("is_oled_enabled")
         val stored = mutableMapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false")
-        val expected = mapOf(mode to "DARK", oled to "true")
+        val expected = mapOf<PreferenceKey, String?>(mode to "DARK", oled to "true")
         var reject = true
         val preference = mockk<PreferenceProvider> {
             coEvery { getString(any()) } answers { stored[firstArg()] }
@@ -325,7 +325,7 @@ class ThemeDarkLookVMTest {
         val failed = assertNotNull(vm.state.value)
         assertTrue(failed.hasSaveError)
         assertTrue(failed.saveButton.isEnabled)
-        assertEquals(mapOf(mode to "SYSTEM", oled to "false"), stored)
+        assertEquals(mapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false"), stored)
         assertEquals(null, router.backToRoute)
 
         reject = false
