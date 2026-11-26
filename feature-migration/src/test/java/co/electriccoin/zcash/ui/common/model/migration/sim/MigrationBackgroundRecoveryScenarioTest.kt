@@ -104,7 +104,7 @@ class MigrationBackgroundRecoveryScenarioTest {
         navigationRouter: NavigationRouter,
         pendingMigrationTorFailure: Boolean = false,
         getWorkerRunState: suspend (String) -> MigrationWorkerRunState = { MigrationWorkerRunState.RUNNING },
-        scheduleNow: suspend (String) -> Unit = {},
+        scheduleNow: suspend (String, Long) -> Unit = { _, _ -> },
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
     ) = CheckMigrationRecoveryUseCase(
         getOrchardMigrationSdk =
@@ -206,7 +206,7 @@ class MigrationBackgroundRecoveryScenarioTest {
                 driver = driver,
                 navigationRouter = router,
                 getWorkerRunState = { MigrationWorkerRunState.SCHEDULED },
-                scheduleNow = { scheduled = true },
+                scheduleNow = { _, _ -> scheduled = true },
             ).invoke()
 
             assertFalse(scheduled, "SCHEDULED must not call scheduleNow anymore — the live driver covers acceleration")

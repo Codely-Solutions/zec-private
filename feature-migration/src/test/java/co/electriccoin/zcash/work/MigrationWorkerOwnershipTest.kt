@@ -360,6 +360,23 @@ class MigrationWorkerOwnershipTest {
         verify(exactly = 1) { notifier.cancelStepDue(owner) }
     }
 
+    @Test
+    fun aWorkerDecisionFromBeforeCompletionCannotAppendASuccessor() = runTest {
+        val owner = "finished-during-worker-handoff"
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context> {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+        }
+        val prior = MigrationScheduler.wakeVersion(owner)
+        MigrationScheduler.withdrawCompletedFallback(context, owner, prior) {}
+
+        // No WorkManager instance or request may be created for the stale decision.
+        MigrationScheduler(context).scheduleSuccessorAndAwait(owner, 30.seconds, prior)
+        verify(exactly = 0) { editor.putLong(any(), any()) }
+    }
+
     private fun futureOperation(result: SettableFuture<Operation.State.SUCCESS>): Operation =
         mockk { every { this@mockk.result } returns result }
 

@@ -127,7 +127,10 @@ class MigrationDriveOnceForegroundTest {
             migrationNotifier = mockk(),
             isMigrationTorEnabledStorageProvider = mockk(),
             pendingMigrationTorFailureStorageProvider = mockk(),
-            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(transport) },
+            synchronizerProvider = mockk {
+                every { synchronizer } returns MutableStateFlow(transport)
+                every { hasRecordedSync(transport) } returns true
+            },
             lastNetworkActivity = activity,
             applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
@@ -140,6 +143,37 @@ class MigrationDriveOnceForegroundTest {
         idle.complete(Unit)
 
         assertFalse(admitted.await())
+    }
+
+    @Test
+    fun aSyncedStatusWithoutItsObservationCannotAdmitACrossing() = runTest {
+        val sync = mockk<Synchronizer> { every { status } returns MutableStateFlow(Synchronizer.Status.SYNCED) }
+        val activity = mockk<LastNetworkActivityStorageProvider> {
+            coEvery { get() } returns Instant.EPOCH
+            every { latestObserved } returns null
+        }
+        var recorded = false
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk {
+                every { synchronizer } returns MutableStateFlow(sync)
+                every { hasRecordedSync(sync) } answers { recorded }
+            },
+            lastNetworkActivity = activity,
+            applicationStateProvider = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk(),
+        )
+
+        assertFalse(drive.mayBroadcastCrossing(sdk))
+        recorded = true
+        assertTrue(drive.mayBroadcastCrossing(sdk))
     }
 
     @Test

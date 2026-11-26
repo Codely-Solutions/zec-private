@@ -306,3 +306,5 @@ Temporary encrypted metadata read failures preserve the last complete Activity s
 Migration replan tests cover the hosted origin beneath the custom-server warning and picker, the same retained schedule after a server change, and the exact handoff identity. Retry and completion tests reject stale worker-attempt reads, arm a background retry and withdraw the fallback for an authoritatively completed plan. The manual crossing check combines its last status read with the latest observed sync timestamp.
 
 Real encrypted-file fixtures exercise automatic Swap Details recovery after a temporary directory flush failure. Note editing waits for a complete read before it shows an empty draft.
+
+Migration crossing waits for the current engine to record a completed sync. The sync recorder can continue while the account-specific reconciliation is blocked. Recovery and WorkManager successor checks carry their prior wake version through a completed plan, and all-wallet reset clears notices from its migration channels.

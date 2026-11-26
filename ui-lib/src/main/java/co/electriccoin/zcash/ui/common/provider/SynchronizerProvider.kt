@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,9 @@ interface SynchronizerProvider {
     val synchronizer: StateFlow<Synchronizer?>
 
     val isSeedMismatch: StateFlow<Boolean>
+
+    /** True after wallet-global activity for this engine's observed synced state was recorded. */
+    fun hasRecordedSync(engine: Synchronizer): Boolean = false
 
     /**
      * Get synchronizer and wait for it to be ready.
@@ -77,6 +81,12 @@ class SynchronizerProviderImpl(
     }.stateIn(scope, SharingStarted.Eagerly, null)
 
     override val isSeedMismatch: StateFlow<Boolean> = walletCoordinator.isSeedMismatch
+
+    @Volatile
+    private var recordedSync: Synchronizer? = null
+
+    override fun hasRecordedSync(engine: Synchronizer): Boolean =
+        recordedSync === engine && walletCoordinator.synchronizer.value === engine
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val synchronizer: StateFlow<Synchronizer?> =
@@ -127,20 +137,30 @@ class SynchronizerProviderImpl(
                 }
             }
         }
+        val pendingReconciliation = Channel<Synchronizer>(Channel.CONFLATED)
         scope.launch {
-            synchronizer
+            for (engine in pendingReconciliation) {
+                if (walletCoordinator.synchronizer.value === engine) {
+                    runCatchingRecoverable { migrationSyncedHook.value.onSynced() }.onFailure {
+                        Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
+                    }
+                }
+            }
+        }
+        scope.launch {
+            walletCoordinator.synchronizer
                 .flatMapLatest { engine -> engine?.status?.map { engine to it } ?: emptyFlow() }
                 .distinctUntilChanged()
                 .collect { (engine, status) ->
+                    recordedSync = null
                     if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
-                        // Network activity belongs to the wallet, even if another account's migration is selected.
-                        runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
+                        val outcome = runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
                             Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
                         }
-                        runCatchingRecoverable { migrationSyncedHook.value.onSynced() }
-                            .onFailure {
-                                Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
-                            }
+                        if (outcome.isSuccess || lastNetworkActivity.latestObserved != null) {
+                            recordedSync = engine
+                        }
+                        pendingReconciliation.trySend(engine)
                     }
                 }
         }

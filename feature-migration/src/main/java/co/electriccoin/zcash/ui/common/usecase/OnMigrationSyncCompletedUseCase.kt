@@ -35,10 +35,13 @@ class OnMigrationSyncCompletedUseCase(
             return
         }
         // The worker may have committed just before the scheduling process stopped.
+        val wakeVersion = MigrationScheduler.wakeVersion(accountKeyId)
         if (sdk.getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress) {
             when (migrationWorkerRunState(context, accountKeyId)) {
-                MigrationWorkerRunState.ABSENT -> migrationScheduler.scheduleIfMissing(accountKeyId, 60.seconds)
-                MigrationWorkerRunState.SCHEDULED -> migrationScheduler.reconcileScheduledWake(accountKeyId)
+                MigrationWorkerRunState.ABSENT ->
+                    migrationScheduler.scheduleIfMissing(accountKeyId, 60.seconds, wakeVersion)
+                MigrationWorkerRunState.SCHEDULED ->
+                    migrationScheduler.reconcileScheduledWake(accountKeyId, wakeVersion)
                 MigrationWorkerRunState.RUNNING -> Unit
             }
         }

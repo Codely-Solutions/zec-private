@@ -78,11 +78,13 @@ class CheckMigrationRecoveryUseCase(
     /**
      * Extracted for testability. Production confirms the new wake and preserves work already scheduled for this owner.
      */
-    private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).scheduleIfMissing(it) },
+    private val scheduleNow: suspend (String, Long) -> Unit = { owner, version ->
+        MigrationScheduler(context).scheduleIfMissing(owner, expectedVersion = version)
+    },
     private val resetPending: StateFlow<Boolean> = MutableStateFlow(false),
     private val cancelRemovedWake: (String) -> Unit = { MigrationScheduler(context).cancel(it) },
-    private val reconcileScheduledWake: suspend (String) -> Unit = {
-        MigrationScheduler(context).reconcileScheduledWake(it)
+    private val reconcileScheduledWake: suspend (String, Long) -> Unit = { owner, version ->
+        MigrationScheduler(context).reconcileScheduledWake(owner, version)
     },
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
@@ -151,10 +153,11 @@ class CheckMigrationRecoveryUseCase(
             if (resetPending.value) return false
             try {
                 val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
+                val wakeVersion = MigrationScheduler.wakeVersion(accountKey)
                 val sdk = getOrchardMigrationSdk(accountKey)
                 if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
                     migrationLiveDriver.startIfNotRunning(accountKey)
-                    reviveScheduledWorker(accountKey)
+                    reviveScheduledWorker(accountKey, wakeVersion)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -166,12 +169,12 @@ class CheckMigrationRecoveryUseCase(
         return reconciled
     }
 
-    private suspend fun reviveScheduledWorker(accountKey: String) {
+    private suspend fun reviveScheduledWorker(accountKey: String, wakeVersion: Long) {
         val state = getWorkerRunState(accountKey)
-        if (resetPending.value) return
+        if (resetPending.value || MigrationScheduler.wakeVersion(accountKey) != wakeVersion) return
         when (state) {
-            MigrationWorkerRunState.ABSENT -> scheduleNow(accountKey)
-            MigrationWorkerRunState.SCHEDULED -> reconcileScheduledWake(accountKey)
+            MigrationWorkerRunState.ABSENT -> scheduleNow(accountKey, wakeVersion)
+            MigrationWorkerRunState.SCHEDULED -> reconcileScheduledWake(accountKey, wakeVersion)
             MigrationWorkerRunState.RUNNING -> Unit
         }
     }

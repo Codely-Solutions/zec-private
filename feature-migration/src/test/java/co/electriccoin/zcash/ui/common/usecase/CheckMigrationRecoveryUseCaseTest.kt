@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvali
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
+import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -37,6 +38,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CheckMigrationRecoveryUseCaseTest {
@@ -85,8 +87,8 @@ class CheckMigrationRecoveryUseCaseTest {
         // Default: the worker is already RUNNING in tests so the reconciliation branch is a no-op,
         // keeping existing test behaviour unchanged. Override to test reconciliation explicitly.
         getWorkerRunState: suspend (String) -> MigrationWorkerRunState = { MigrationWorkerRunState.RUNNING },
-        scheduleNow: suspend (String) -> Unit = {},
-        reconcileScheduledWake: suspend (String) -> Unit = {},
+        scheduleNow: suspend (String, Long) -> Unit = { _, _ -> },
+        reconcileScheduledWake: suspend (String, Long) -> Unit = { _, _ -> },
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
         accountsState: MutableStateFlow<List<WalletAccount>?> = MutableStateFlow(accounts),
@@ -145,8 +147,8 @@ class CheckMigrationRecoveryUseCaseTest {
             migrationNotifier = notifier,
             cancelRemovedWake = { cancelled += it },
             getWorkerRunState = { MigrationWorkerRunState.SCHEDULED },
-            scheduleNow = { scheduled += it },
-            reconcileScheduledWake = { reconciled += it },
+            scheduleNow = { owner, _ -> scheduled += owner },
+            reconcileScheduledWake = { owner, _ -> reconciled += owner },
         ).invoke()
 
         assertEquals(listOf(ownerKey), reconciled)
@@ -158,6 +160,31 @@ class CheckMigrationRecoveryUseCaseTest {
         assertEquals(emptyList(), scheduled)
         assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, goneKey))
         assertFalse(MigrationWorkerHeartbeat.removalPending(heartbeat, ownerKey))
+    }
+
+    @Test
+    fun aCompletedPlanCannotRearmWhileItsOlderWorkStateIsBeingRead() = runTest {
+        val context = removalPreferences()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        var withdrawn = false
+        val reconciled = mutableListOf<String>()
+        useCase(
+            sdk = sdk,
+            navigationRouter = mockk(relaxed = true),
+            context = context,
+            getWorkerRunState = { owner ->
+                MigrationScheduler.withdrawCompletedFallback(
+                    context, owner, MigrationScheduler.wakeVersion(owner)
+                ) { withdrawn = true }
+                MigrationWorkerRunState.SCHEDULED
+            },
+            reconcileScheduledWake = { owner, _ -> reconciled += owner },
+        ).invoke()
+
+        assertTrue(withdrawn)
+        assertEquals(emptyList(), reconciled)
     }
 
     @Test
@@ -189,6 +216,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 this@mockk
             }
             every { commit() } returns true
+            every { apply() } returns Unit
         }
         val preferences = mockk<SharedPreferences> {
             every { all } answers { values.toMap() }
@@ -197,6 +225,7 @@ class CheckMigrationRecoveryUseCaseTest {
         }
         return mockk {
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
     }
 
@@ -306,7 +335,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 accounts = listOf(testWalletAccount, other),
                 pendingMigrationTorFailure = true,
                 getWorkerRunState = { MigrationWorkerRunState.ABSENT },
-                scheduleNow = { scheduled += it },
+                scheduleNow = { owner, _ -> scheduled += owner },
                 getOrchardMigrationSdk = resolver,
             ).invoke()
             assertEquals(listOf(otherKey), scheduled)
@@ -557,7 +586,7 @@ class CheckMigrationRecoveryUseCaseTest {
                     asked = true
                     MigrationWorkerRunState.RUNNING
                 },
-                scheduleNow = { scheduled = true },
+                scheduleNow = { _, _ -> scheduled = true },
             ).invoke()
 
             // The check ran and, because the worker is already executing, nothing was scheduled —
@@ -583,7 +612,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 sdk = sdk,
                 navigationRouter = mockk(relaxed = true),
                 getWorkerRunState = { MigrationWorkerRunState.SCHEDULED },
-                scheduleNow = { scheduled = true },
+                scheduleNow = { _, _ -> scheduled = true },
             ).invoke()
 
             kotlin.test.assertFalse(
@@ -635,7 +664,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 sdk = sdk,
                 navigationRouter = mockk(relaxed = true),
                 getWorkerRunState = { MigrationWorkerRunState.ABSENT },
-                scheduleNow = { scheduled = true },
+                scheduleNow = { _, _ -> scheduled = true },
             ).invoke()
 
             // Revival: an absent worker chain (killed process, cleared WorkManager state) is
@@ -674,7 +703,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 sdk = sdk,
                 navigationRouter = mockk(relaxed = true),
                 getWorkerRunState = { MigrationWorkerRunState.ABSENT },
-                scheduleNow = { scheduledAccountKeyIds += it },
+                scheduleNow = { owner, _ -> scheduledAccountKeyIds += owner },
                 migrationLiveDriver = liveDriver,
                 accounts = listOf(testWalletAccount, viewOnly),
                 getOrchardMigrationSdk = getOrchardMigrationSdk,

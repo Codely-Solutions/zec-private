@@ -351,6 +351,7 @@ class MigrationAppHooksImpl(
             migrationNotifier.cancel(key)
             migrationNotifier.cancelStepDue(key)
         }
+        if (accountKeyId == null) migrationNotifier.cancelWalletMigrationNotices()
         migrationLog("AppHooks: cancelled migration work (accounts=${keys.size}, sweep=${accountKeyId == null})")
     }
 

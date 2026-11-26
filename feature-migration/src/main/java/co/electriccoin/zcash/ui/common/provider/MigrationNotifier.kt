@@ -374,6 +374,17 @@ class MigrationNotifier(
         NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_PROGRESS)
     }
 
+    /** Clears migration notices whose owner is absent from both the wallet and its heartbeat. */
+    internal fun cancelWalletMigrationNotices() {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.activeNotifications
+            .filter {
+                it.notification.channelId == CHANNEL_ID ||
+                    it.notification.channelId == LEGACY_DEFAULT_IMPORTANCE_CHANNEL_ID
+            }
+            .forEach { manager.cancel(it.tag, it.id) }
+    }
+
     /**
      * Terminal success notification: the whole migration finished.
      *

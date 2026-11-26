@@ -54,19 +54,22 @@ class MigrationScheduler(
         check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE)) { "Migration scheduling is paused" }
     }
 
-    internal suspend fun scheduleIfMissing(accountKeyId: String, delay: Duration = Duration.ZERO) {
-        enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.KEEP)
+    internal suspend fun scheduleIfMissing(
+        accountKeyId: String,
+        delay: Duration = Duration.ZERO,
+        expectedVersion: Long? = null,
+    ) {
+        enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.KEEP, expectedVersion)
     }
 
-    internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration) {
-        val version = wakeVersion(accountKeyId)
+    internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration, version: Long) {
+        if (wakeVersion(accountKeyId) != version) return
         val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
         // An interrupted worker may already have committed its child before acknowledging it.
         val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
         if (existing == null) {
-            check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND, version)) {
-                "Migration scheduling is paused or changed"
-            }
+            val enqueued = enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND, version)
+            check(enqueued || wakeVersion(accountKeyId) != version) { "Migration scheduling is paused" }
         } else {
             armFallback(accountKeyId, version) {
                 Wake(existing.id, existing.runAttemptCount, System.currentTimeMillis() + existing.initialDelayMillis)
@@ -74,8 +77,7 @@ class MigrationScheduler(
         }
     }
 
-    internal suspend fun reconcileScheduledWake(accountKeyId: String) {
-        val version = wakeVersion(accountKeyId)
+    internal suspend fun reconcileScheduledWake(accountKeyId: String, version: Long = wakeVersion(accountKeyId)) {
         val manager = WorkManager.getInstance(context)
         val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
             .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
@@ -117,7 +119,7 @@ class MigrationScheduler(
                 Wake(request.id, 0, System.currentTimeMillis() + delay.inWholeMilliseconds)
             } else {
                 val pending = manager.getWorkInfoById(request.id).await()
-                if (pending == null && policy == ExistingWorkPolicy.KEEP) reconcileScheduledWake(accountKeyId)
+                if (pending == null && policy == ExistingWorkPolicy.KEEP) reconcileScheduledWake(accountKeyId, version)
                 pending?.takeIf { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
                     ?.let { Wake(request.id, it.runAttemptCount, it.nextScheduleTimeMillis) }
             }

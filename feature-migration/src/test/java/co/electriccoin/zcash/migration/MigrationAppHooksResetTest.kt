@@ -234,8 +234,9 @@ class MigrationAppHooksResetTest {
         }
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), mockk(relaxed = true), accounts, mockk(), context, pendingReset(), driver, driveOnce,
+            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context, pendingReset(), driver, driveOnce,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkObject(WorkManager.Companion)
@@ -255,6 +256,7 @@ class MigrationAppHooksResetTest {
                 workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
                 driver.stopAll()
                 driveOnce.awaitIdle()
+                notifier.cancelWalletMigrationNotices()
             }
         } finally {
             cancellation.cancel(false)

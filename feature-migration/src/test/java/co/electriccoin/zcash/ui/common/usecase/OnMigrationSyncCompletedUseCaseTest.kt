@@ -99,7 +99,9 @@ class OnMigrationSyncCompletedUseCaseTest {
                     Futures.immediateFuture(emptyList<WorkInfo>())
             }
             val scheduler = mockk<MigrationScheduler> {
-                coEvery { scheduleIfMissing(owner, 60.seconds) } throws IOException("Cannot persist migration wake")
+                coEvery {
+                    scheduleIfMissing(owner, 60.seconds, MigrationScheduler.wakeVersion(owner))
+                } throws IOException("Cannot persist migration wake")
             }
             mockkObject(WorkManager.Companion)
             try {
@@ -108,7 +110,7 @@ class OnMigrationSyncCompletedUseCaseTest {
                 assertFailsWith<IOException> { reconcile(owner) }
                 coVerifyOrder {
                     sdk.reconcileInvalidations()
-                    scheduler.scheduleIfMissing(owner, 60.seconds)
+                    scheduler.scheduleIfMissing(owner, 60.seconds, MigrationScheduler.wakeVersion(owner))
                 }
             } finally {
                 unmockkObject(WorkManager.Companion)

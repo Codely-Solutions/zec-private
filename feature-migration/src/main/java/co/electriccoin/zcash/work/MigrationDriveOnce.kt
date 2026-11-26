@@ -359,12 +359,16 @@ class MigrationDriveOnce(
 
     private suspend fun isSynchronizerSyncing(): Boolean =
         synchronizerProvider.synchronizer.value?.let { synchronizer ->
-            // A cold status flow cannot establish that the synchronizer is idle.
+            // A cold status flow or an unrecorded completed sync cannot establish a quiet window.
             val statuses = synchronizer.status
-            (statuses as? StateFlow)?.value
+            val current = (statuses as? StateFlow)?.value
                 ?: withTimeoutOrNull(STATUS_READ_TIMEOUT) { statuses.first() }
-                ?: Synchronizer.Status.SYNCING
-        } == Synchronizer.Status.SYNCING
+            when (current) {
+                null, Synchronizer.Status.SYNCING -> true
+                Synchronizer.Status.SYNCED -> !synchronizerProvider.hasRecordedSync(synchronizer)
+                else -> false
+            }
+        } == true
 
     private suspend fun broadcastPreflight(
         sdk: OrchardMigrationSdk,

@@ -48,7 +48,7 @@ class MigrationWorker(
             wakeAtEntry = MigrationAccountRetirement.keepWake(accountKeyId) {
                 MigrationScheduler.recordWorkerStart(applicationContext, accountKeyId, id, runAttemptCount)
             }
-            runForOwner(accountKeyId)
+            runForOwner(accountKeyId, wakeAtEntry)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -61,13 +61,13 @@ class MigrationWorker(
         return result
     }
 
-    private suspend fun runForOwner(accountKeyId: String): Result {
+    private suspend fun runForOwner(accountKeyId: String, wakeVersion: Long?): Result {
         val lookup = getOrchardMigrationSdk.lookup(accountKeyId)
         return if (resetProgress.isPending.value) {
             Result.success()
         } else {
             when (lookup) {
-                is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId)
+                is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId, wakeVersion)
                 MigrationSdkLookup.RemovalManaged -> retryWhileRemoving(accountKeyId)
                 MigrationSdkLookup.NotReady -> waitForSdk(accountKeyId)
                 MigrationSdkLookup.Gone -> stopMissingAccount(accountKeyId)
@@ -95,7 +95,7 @@ class MigrationWorker(
         return Result.success()
     }
 
-    private suspend fun driveMigration(sdk: OrchardMigrationSdk, accountKeyId: String): Result {
+    private suspend fun driveMigration(sdk: OrchardMigrationSdk, accountKeyId: String, wakeVersion: Long?): Result {
         MigrationAccountRetirement.admit(accountKeyId) {
             MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
             migrationNotifier.cancelStepDue(accountKeyId)
@@ -106,8 +106,8 @@ class MigrationWorker(
             DriveOnceResult.RemovalManaged -> return retryWhileRemoving(accountKeyId)
             DriveOnceResult.Terminal -> null
         }
-        if (nextDelay != null && !resetProgress.isPending.value) {
-            MigrationScheduler(applicationContext).scheduleSuccessorAndAwait(accountKeyId, nextDelay)
+        if (nextDelay != null && wakeVersion != null && !resetProgress.isPending.value) {
+            MigrationScheduler(applicationContext).scheduleSuccessorAndAwait(accountKeyId, nextDelay, wakeVersion)
         }
         return Result.success()
     }
