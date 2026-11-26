@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.migration.keystonesign
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
@@ -10,6 +11,7 @@ import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
@@ -26,15 +28,21 @@ import co.electriccoin.zcash.ui.screen.migration.review.requiresNewMigrationRevi
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionState
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoListItemState
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.util.UUID
 import co.electriccoin.zcash.ui.design.R as DesignR
@@ -47,6 +55,8 @@ class MigrationKeystoneSignVM(
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
     private val navigationRouter: NavigationRouter,
     private val sourceEntryId: String? = null,
+    private val walletActionAccess: WalletActionAccess,
+    private val drive: MigrationDriveOnce,
 ) : ViewModel() {
     override fun onCleared() {
         navigationRouter.discardResultFrom(sourceEntryId)
@@ -58,8 +68,15 @@ class MigrationKeystoneSignVM(
         val existing: PendingKeystoneMigrationPczts?,
     )
 
+    private data class UnsignedBatch(
+        val split: ByteArray?,
+        val preparations: List<Pair<Long, ByteArray>>,
+        val transfers: List<Pair<Long, ByteArray>>,
+    )
+
     private val qrParts = MutableStateFlow<List<String>?>(null)
     private val qrFrameIndex = MutableStateFlow(0)
+    private val qrAuthorization = MutableStateFlow<(() -> Boolean)?>(null)
 
     // (0-based round index, total round count) for the batch currently being signed — null until
     // the first buildBatch() succeeds. totalRounds is always >= 1 once non-null.
@@ -82,97 +99,33 @@ class MigrationKeystoneSignVM(
     // scanned, and so a resumed round never rebuilds (and thereby diverges from) PCZTs an earlier
     // round already got signatures for.
     private fun buildBatch() {
+        qrParts.value = null
+        qrAuthorization.value = null
         viewModelScope.launch {
             var attempt: SigningAttempt? = null
             runCatching {
-                val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+                if (sourceEntryId != null) navigationRouter.activeEntry.first { it?.id == sourceEntryId }
+                val account = getSelectedWalletAccount()
+                val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
                 check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
                     "The signing request belongs to a different account"
                 }
                 val reviewed = pendingSchedule.review(accountKeyId) ?: return@runCatching null
-                val existing = pendingKeystonePczts.get(accountKeyId)
-                val approved = SigningAttempt(accountKeyId, reviewed, existing)
+                val approved = SigningAttempt(accountKeyId, reviewed, pendingKeystonePczts.peek(accountKeyId))
                 attempt = approved
-                if (existing?.isFullySigned == true) {
-                    navigationRouter.stageResultFrom(sourceEntryId) {
+                val canOperate = checkNotNull(walletActionAccess.capture(account)) {
+                    "The migration signing session is unavailable"
+                }
+                val owner = currentCoroutineContext().job
+                val canPrepare = { owner.isActive && canOperate() && ownsEntry() && isCurrent(approved) }
+                if (!canPrepare()) return@runCatching null
+                if (approved.existing?.isFullySigned == true) {
+                    navigationRouter.stageResultFrom(sourceEntryId, { canOperate() && isCurrent(approved) }) {
                         NavigationCommand.Replace(listOf(MigrationScheduledArgs(accountKeyId)))
                     }
                     return@runCatching null
                 }
-                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-                val splitUnsignedPczt: ByteArray?
-                val prepUnsignedPczts: List<Pair<Long, ByteArray>>
-                val transferUnsignedPczts: List<Pair<Long, ByteArray>>
-                val roundIndex: Int
-                val accumulatedSplitSigned: ByteArray?
-                val accumulatedPrepSigned: List<Pair<Long, ByteArray>>
-                val accumulatedTransferSigned: List<Pair<Long, ByteArray>>
-                if (existing != null) {
-                    splitUnsignedPczt = existing.splitUnsignedPczt
-                    prepUnsignedPczts = existing.prepUnsignedPczts
-                    transferUnsignedPczts = existing.transferUnsignedPczts
-                    roundIndex = existing.roundIndex
-                    accumulatedSplitSigned = existing.accumulatedSplitSigned
-                    accumulatedPrepSigned = existing.accumulatedPrepSigned
-                    accumulatedTransferSigned = existing.accumulatedTransferSigned
-                } else {
-                    // Use the SDK plan shown in Review, including the exact split proposal if present.
-                    splitUnsignedPczt = reviewed.noteSplit?.let { sdk.createUnsignedNoteSplitPczt(it).toByteArray() }
-                    prepUnsignedPczts = sdk.createUnsignedPreparationPczts(reviewed.schedule)
-                        .filterNot { splitUnsignedPczt != null && it.layer == 0 && it.index == 0 }
-                        .map { it.id to it.pczt.toByteArray() }
-                    transferUnsignedPczts = sdk.createUnsignedTransferPczts(reviewed.schedule)
-                        .map { it.first to it.second.toByteArray() }
-                    roundIndex = 0
-                    accumulatedSplitSigned = null
-                    accumulatedPrepSigned = emptyList()
-                    accumulatedTransferSigned = emptyList()
-                }
-
-                val roundBudget = sdk.keystoneSigningRoundBudget()
-                val slice =
-                    keystoneBatchRoundSlice(
-                        roundIndex = roundIndex,
-                        hasSplit = splitUnsignedPczt != null,
-                        prepCount = prepUnsignedPczts.size,
-                        transferCount = transferUnsignedPczts.size,
-                        budget = roundBudget,
-                    )
-                val splitForRound = if (slice.includeSplit) splitUnsignedPczt else null
-                val prepsForRound = prepUnsignedPczts.slice(slice.prepRange)
-                val transfersForRound = transferUnsignedPczts.slice(slice.transferRange)
-                val requestId = randomRequestId()
-                val parts =
-                    sdk.buildKeystoneSignBatchQrParts(
-                        requestId = requestId,
-                        splitUnsignedPczt = splitForRound?.let(::Pczt),
-                        // Extra preparations ride ahead of the transfers — the device signs PCZTs
-                        // kind-agnostically; ScanVM splits the response back by the same counts.
-                        transferUnsignedPczts = (prepsForRound + transfersForRound).map { Pczt(it.second) },
-                        maxFragmentLen = MAX_FRAGMENT_LEN,
-                    )
-                if (!isCurrent(approved)) return@runCatching null
-                pendingKeystonePczts.set(
-                    accountKeyId,
-                    PendingKeystoneMigrationPczts(
-                        requestId = requestId,
-                        splitUnsignedPczt = splitUnsignedPczt,
-                        prepUnsignedPczts = prepUnsignedPczts,
-                        transferUnsignedPczts = transferUnsignedPczts,
-                        roundIndex = roundIndex,
-                        accumulatedSplitSigned = accumulatedSplitSigned,
-                        accumulatedPrepSigned = accumulatedPrepSigned,
-                        accumulatedTransferSigned = accumulatedTransferSigned,
-                    )
-                )
-                val totalRounds =
-                    keystoneBatchTotalRounds(
-                        hasSplit = splitUnsignedPczt != null,
-                        prepCount = prepUnsignedPczts.size,
-                        transferCount = transferUnsignedPczts.size,
-                        budget = roundBudget,
-                    )
-                Triple(parts, roundIndex, totalRounds)
+                prepareQr(approved, canPrepare, canOperate)
             }.onSuccess { result ->
                 if (result != null) {
                     val (parts, roundIndex, totalRounds) = result
@@ -181,6 +134,102 @@ class MigrationKeystoneSignVM(
                     roundInfo.value = roundIndex to totalRounds
                 }
             }.onFailure { error -> showPreparationFailure(error, attempt) }
+        }
+    }
+
+    private suspend fun prepareQr(
+        approved: SigningAttempt,
+        canPrepare: () -> Boolean,
+        canOperate: () -> Boolean,
+    ): Triple<List<String>, Int, Int>? {
+        val accountKeyId = approved.accountKeyId
+        val existing = approved.existing
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        val batch = existing?.let {
+            UnsignedBatch(it.splitUnsignedPczt, it.prepUnsignedPczts, it.transferUnsignedPczts)
+        } ?: prepareUnsignedBatch(sdk, approved, canPrepare)
+        if (!canPrepare()) return null
+        checkNotNull(batch) { "Another migration step is in progress" }
+
+        val roundIndex = existing?.roundIndex ?: 0
+        val budget = sdk.keystoneSigningRoundBudget()
+        val slice = keystoneBatchRoundSlice(
+            roundIndex = roundIndex,
+            hasSplit = batch.split != null,
+            prepCount = batch.preparations.size,
+            transferCount = batch.transfers.size,
+            budget = budget,
+        )
+        check(canPrepare()) { "The migration signing session changed before QR preparation" }
+        val requestId = randomRequestId()
+        val parts = sdk.buildKeystoneSignBatchQrParts(
+            requestId = requestId,
+            splitUnsignedPczt = batch.split?.takeIf { slice.includeSplit }?.let(::Pczt),
+            // Preparations precede transfers so the scan screen can split the response by count.
+            transferUnsignedPczts =
+                (batch.preparations.slice(slice.prepRange) + batch.transfers.slice(slice.transferRange))
+                    .map { Pczt(it.second) },
+            maxFragmentLen = MAX_FRAGMENT_LEN,
+        )
+        return if (canPrepare()) {
+            val pending = pendingRequest(requestId, batch, existing, roundIndex)
+            pendingKeystonePczts.set(accountKeyId, pending)
+            qrAuthorization.value = {
+                canOperate() && pendingSchedule.review(accountKeyId) === approved.reviewed &&
+                    pendingKeystonePczts.peek(accountKeyId) === pending
+            }
+            val totalRounds = keystoneBatchTotalRounds(
+                hasSplit = batch.split != null,
+                prepCount = batch.preparations.size,
+                transferCount = batch.transfers.size,
+                budget = budget,
+            )
+            Triple(parts, roundIndex, totalRounds)
+        } else {
+            null
+        }
+    }
+
+    private fun pendingRequest(
+        requestId: ByteArray,
+        batch: UnsignedBatch,
+        existing: PendingKeystoneMigrationPczts?,
+        roundIndex: Int,
+    ) = PendingKeystoneMigrationPczts(
+        requestId = requestId,
+        splitUnsignedPczt = batch.split,
+        prepUnsignedPczts = batch.preparations,
+        transferUnsignedPczts = batch.transfers,
+        roundIndex = roundIndex,
+        accumulatedSplitSigned = existing?.accumulatedSplitSigned,
+        accumulatedPrepSigned = existing?.accumulatedPrepSigned.orEmpty(),
+        accumulatedTransferSigned = existing?.accumulatedTransferSigned.orEmpty(),
+    )
+
+    private val mayDisplayQr = combine(walletActionAccess.changes, navigationRouter.activeEntry, qrAuthorization) {
+        _, _, authority ->
+        ownsEntry() && authority?.invoke() == true
+    }
+
+    private fun ownsEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
+
+    private suspend fun prepareUnsignedBatch(
+        sdk: OrchardMigrationSdk,
+        attempt: SigningAttempt,
+        canPrepare: () -> Boolean,
+    ): UnsignedBatch? = drive.withExclusiveAccess(attempt.accountKeyId) {
+        withContext(NonCancellable) {
+            if (!canPrepare()) return@withContext null
+            val reviewed = attempt.reviewed
+            val split = reviewed.noteSplit?.let { sdk.createUnsignedNoteSplitPczt(it).toByteArray() }
+            if (!canPrepare()) return@withContext null
+            val preparations = sdk.createUnsignedPreparationPczts(reviewed.schedule)
+                .filterNot { split != null && it.layer == 0 && it.index == 0 }
+                .map { it.id to it.pczt.toByteArray() }
+            if (!canPrepare()) return@withContext null
+            val transfers = sdk.createUnsignedTransferPczts(reviewed.schedule)
+                .map { it.first to it.second.toByteArray() }
+            UnsignedBatch(split, preparations, transfers)
         }
     }
 
@@ -220,8 +269,10 @@ class MigrationKeystoneSignVM(
             getSelectedWalletAccount.observe(),
             qrParts,
             qrFrameIndex,
-            roundInfo
-        ) { account, parts, frameIndex, round ->
+            roundInfo,
+            mayDisplayQr,
+        ) { account, allParts, frameIndex, round, allowed ->
+            val parts = allParts.takeIf { allowed }
             val accountKeyId = account?.sdkAccount?.accountUuid?.toStorageKeyId()
             if (account == null || accountKeyId == null || pendingSchedule.peek(accountKeyId) == null) {
                 // Edge case only (e.g. process death mid-flow) — the schedule is proposed
@@ -286,8 +337,11 @@ class MigrationKeystoneSignVM(
         )
 
     private fun onGetSignature(accountKeyId: String) {
+        val authorized = qrAuthorization.value ?: return
         if (qrParts.value.isNullOrEmpty() || pendingKeystonePczts.peek(accountKeyId)?.isFullySigned != false) return
-        navigationRouter.forward(MigrationKeystoneScanArgs(args.mode, accountKeyId))
+        navigationRouter.stageResultFrom(sourceEntryId, { ownsEntry() && authorized() }) {
+            NavigationCommand.Forward(listOf(MigrationKeystoneScanArgs(args.mode, accountKeyId)))
+        }
     }
 
     private fun onReject() {

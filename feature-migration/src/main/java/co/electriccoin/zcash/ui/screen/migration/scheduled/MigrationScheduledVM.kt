@@ -27,6 +27,7 @@ import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
@@ -40,11 +41,15 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Suppress("LongParameterList")
@@ -62,6 +67,7 @@ class MigrationScheduledVM(
     private val synchronizerProvider: SynchronizerProvider,
     private val selectedAccount: GetSelectedWalletAccountUseCase,
     private val drive: MigrationDriveOnce,
+    private val walletActionAccess: WalletActionAccess,
 ) : ViewModel() {
     private val loadLce = mutableLce<LiveMigrationSnapshot?>()
 
@@ -115,25 +121,52 @@ class MigrationScheduledVM(
         pending: PendingKeystoneMigrationPczts,
     ) {
         check(pending.isFullySigned) { "Keystone signatures are incomplete" }
-        check(selectedAccount().sdkAccount.accountUuid.toStorageKeyId() == accountKeyId) {
+        val account = selectedAccount()
+        check(account.sdkAccount.accountUuid.toStorageKeyId() == accountKeyId) {
             "The migration schedule belongs to a different account"
         }
+        val canOperate = checkNotNull(walletActionAccess.capture(account)) { "The migration session is unavailable" }
+        val owner = currentCoroutineContext().job
+        val requireCurrent = {
+            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) &&
+                pendingSchedule.peek(accountKeyId) === schedule && pendingKeystonePczts.peek(accountKeyId) === pending) {
+                "The reviewed migration is no longer current"
+            }
+        }
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        if (sdk.getMigrationStateUnreconciled() !is MigrationState.InProgress) {
+        val migrationState = sdk.getMigrationStateUnreconciled()
+        requireCurrent()
+        if (migrationState !is MigrationState.InProgress) {
             returnToHomeForRecovery(accountKeyId, schedule, pending)
             return
         }
         val states = checkNotNull(sdk.getMigrationTransferStates()) { "Migration state is unavailable" }.transfers
+        requireCurrent()
         if (states.any { it.blocker in RETIRED_SIGNATURE_BLOCKERS }) {
             returnToHomeForRecovery(accountKeyId, schedule, pending)
             return
         }
+        withContext(NonCancellable) {
+            commitSignedBatch(sdk, accountKeyId, schedule, pending, states, requireCurrent)
+        }
+    }
+
+    private suspend fun commitSignedBatch(
+        sdk: OrchardMigrationSdk,
+        accountKeyId: String,
+        schedule: MigrationSchedule,
+        pending: PendingKeystoneMigrationPczts,
+        states: List<MigrationTransferState>,
+        requireCurrent: () -> Unit,
+    ) {
         val remaining = pending.remainingScheduleSignatures(states)
         // Make all later signatures durable before persisting or broadcasting the split.
         // After process loss, the engine can drive a signed split without the in-memory batch.
+        requireCurrent()
         if (remaining.isNotEmpty()) sdk.storeSignedSchedulePczts(remaining)
-        when (val splitResult = submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) {
+        when (val splitResult = submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId, requireCurrent)) {
             null, is TransferResult.Success -> {
+                if (!drive.permitsForeground(accountKeyId)) return
                 // The scheduler drives proof work after the signing ceremony has finished.
                 finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, false)
                 pendingSchedule.clear(accountKeyId, schedule)
@@ -152,6 +185,7 @@ class MigrationScheduledVM(
         pending: PendingKeystoneMigrationPczts,
         states: List<MigrationTransferState>,
         accountKeyId: String,
+        requireCurrent: () -> Unit,
     ): TransferResult? {
         val signedSplit = pending.accumulatedSplitSigned ?: return null
         val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
@@ -159,6 +193,7 @@ class MigrationScheduledVM(
         }
         return if (split.needsSignature()) {
             val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
+            requireCurrent()
             sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
         } else {
             null

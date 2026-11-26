@@ -392,6 +392,7 @@ class MigrationReviewPlanShapeTest {
             submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
             synchronizerProvider = mockk<SynchronizerProvider>(relaxed = true),
             walletActionAccess = mockk(),
+            migrationDrive = mockk(),
         )
     }
 

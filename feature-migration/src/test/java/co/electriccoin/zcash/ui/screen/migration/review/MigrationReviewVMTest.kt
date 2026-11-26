@@ -51,6 +51,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -475,6 +476,7 @@ class MigrationReviewVMTest {
         coVerify(exactly = 2) { finalize(reviewed, MigrationMode.AUTOMATIC, any(), false) }
         val handoff = router.scopedCommands.single()
         assertEquals("automatic-review", handoff.sourceEntryId)
+        assertTrue(handoff.isStillAllowed())
         assertIs<NavigationCommand.Forward>(handoff.buildCommand())
     }
 

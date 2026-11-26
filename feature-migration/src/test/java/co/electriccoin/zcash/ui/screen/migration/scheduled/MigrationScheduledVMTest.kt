@@ -13,11 +13,13 @@ import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
@@ -209,6 +211,41 @@ class MigrationScheduledVMTest {
             assertNotNull(pendingSchedule.get(testAccountKeyId))
             assertNotNull(pendingPczts.get(testAccountKeyId))
         }
+
+    @Test
+    fun authorityLostDuringTorReadCannotStoreOrSubmitTheSignedSplit() = runTest {
+        val pendingSchedule = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, schedule()) }
+        val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl().apply {
+            set(testAccountKeyId, PendingKeystoneMigrationPczts(
+                requestId = byteArrayOf(1), splitUnsignedPczt = byteArrayOf(2), transferUnsignedPczts = emptyList(),
+                roundIndex = 1, isFullySigned = true, accumulatedSplitSigned = byteArrayOf(3),
+            ))
+        }
+        var current = true
+        val authority = mockk<WalletActionAccess> {
+            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { current } }
+        }
+        val route = mockk<IsMigrationTorEnabledStorageProvider> {
+            coEvery { this@mockk.get(testAccountKeyId) } coAnswers {
+                current = false
+                false
+            }
+        }
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+            coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(10L, isTransfer = false))
+        }
+        val vm = vm(
+            pendingSchedule = pendingSchedule, pendingKeystonePczts = pendingPczts,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
+            isMigrationTorEnabledStorageProvider = route, walletActionAccess = authority,
+        )
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.storeSignedNoteSplitPczt(any(), any()) }
+        assertNotNull(vm.failureSheet.value)
+        assertNotNull(pendingPczts.peek(testAccountKeyId))
+    }
 
     @Test
     fun unexpectedThrowDuringFinalizeShowsRetryableFailureSheetAndStaysFinalizing() =
@@ -498,6 +535,9 @@ class MigrationScheduledVMTest {
         finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
         isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
         synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
+        walletActionAccess: WalletActionAccess = mockk {
+            coEvery { this@mockk.capture(any<WalletAccount>()) } returns { true }
+        },
     ) = MigrationScheduledVM(
         args = MigrationScheduledArgs(testAccountKeyId),
         getMigrationSnapshot = getMigrationSnapshot,
@@ -514,8 +554,10 @@ class MigrationScheduledVMTest {
             coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
         },
         drive = mockk<MigrationDriveOnce> {
+            every { permitsForeground(any()) } returns true
             coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
         },
+        walletActionAccess = walletActionAccess,
     )
 
     private fun schedule() =

@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
@@ -20,6 +21,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanArgs
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -28,8 +30,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -96,7 +100,8 @@ class MigrationKeystoneSignVMTest {
                     .apply { set(testAccountKeyId, schedule()) }
             val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
             val router = FakeNavigationRouter()
-            val vm = vm(sdk, pendingSchedule, pendingPczts, router)
+            val permitted = MutableStateFlow(true)
+            val vm = vm(sdk, pendingSchedule, pendingPczts, router, walletActionAccess = authority(permitted))
             val collectJob = launch { vm.state.collect {} }
 
             advanceUntilIdle()
@@ -107,6 +112,13 @@ class MigrationKeystoneSignVMTest {
             assertNull(vm.failureSheet.value)
             // QR parts were stored in PendingKeystoneMigrationPczts so the scan screen can use them.
             assertNotNull(pendingPczts.get(testAccountKeyId))
+            val before = assertNotNull(vm.state.value)
+            assertNotNull(before.qrData)
+            permitted.value = false
+            advanceUntilIdle()
+            assertNull(assertNotNull(vm.state.value).qrData)
+            before.positiveButton.onClick()
+            assertTrue(router.forwardedRoutes.isEmpty())
 
             collectJob.cancel()
         }
@@ -669,6 +681,8 @@ class MigrationKeystoneSignVMTest {
                     pendingSchedule = pendingSchedule,
                     pendingKeystonePczts = pendingPczts,
                     navigationRouter = router,
+                    walletActionAccess = authority(),
+                    drive = drive(),
                 )
 
             advanceUntilIdle()
@@ -713,6 +727,7 @@ class MigrationKeystoneSignVMTest {
         pendingPczts: PendingKeystoneMigrationPcztsRepositoryImpl,
         router: FakeNavigationRouter,
         mode: MigrationMode = MigrationMode.AUTOMATIC,
+        walletActionAccess: WalletActionAccess = authority(),
     ) = MigrationKeystoneSignVM(
         args = MigrationKeystoneSignArgs(mode, testAccountKeyId),
         getSelectedWalletAccount = testGetSelectedWalletAccount,
@@ -723,7 +738,18 @@ class MigrationKeystoneSignVMTest {
         pendingSchedule = pendingSchedule,
         pendingKeystonePczts = pendingPczts,
         navigationRouter = router,
+        walletActionAccess = walletActionAccess,
+        drive = drive(),
     )
+
+    private fun authority(permitted: MutableStateFlow<Boolean> = MutableStateFlow(true)): WalletActionAccess = mockk {
+        every { changes } returns permitted.map { Unit }
+        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { permitted.value } }
+    }
+
+    private fun drive(): MigrationDriveOnce = mockk {
+        coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers { secondArg<suspend () -> Any?>().invoke() }
+    }
 
     private class FakeNavigationRouter : NavigationRouter {
         val forwardedRoutes = mutableListOf<Any>()
