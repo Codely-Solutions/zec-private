@@ -534,7 +534,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                 reservation.assert_called_once_with(SOURCE, OLD, '7', '8', meta)
                 self.assertEqual(delta.call_count, 2)
                 delta.assert_any_call(Path('.'), OLD, signer, 'Wallet')
-                delta.assert_any_call(Path('.'), OLD, signer, 'Quote', preclaim_stage=None)
+                delta.assert_any_call(Path('.'), OLD, signer, 'Quote')
                 if not selector:
                     self.assertIn('/actions/runs/8/attempts/1/jobs', [call.args[0] for call in meta.pages.call_args_list])
                 reservation.side_effect = ValueError('Protected reservation belongs to different inputs')
@@ -958,18 +958,44 @@ class QuoteRecoveryTests(unittest.TestCase):
         self.assertEqual(verify.call_args.args[1], linked)
         proof.assert_called_once_with(Path('.'), SOURCE, MAIN, '7', OLD, '7', metadata)
 
-    def test_verified_diagnostic_repair_can_reuse_quotes_but_requires_a_fresh_wallet_receipt(self):
+    def test_wallet_runner_edits_preserve_quotes_but_require_a_fresh_wallet_receipt(self):
         changed = b'.private/core_testnet_driver.py\0'
         with patch('quote_recovery.git', side_effect=[OLD.encode(), b'.private/hosted_core.py\0']):
             verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote')
         with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
-            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote', preclaim_stage='torModeResume')
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote')
         with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]), \
                 self.assertRaisesRegex(ValueError, 'Wallet execution inputs changed'):
-            verify_receipt_delta(Path('.'), OLD, MAIN, 'Wallet', preclaim_stage='torModeResume')
-        with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]), \
-                self.assertRaisesRegex(ValueError, 'Quote execution inputs changed'):
-            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote')
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Wallet')
+
+    def test_original_passing_quote_survives_wallet_repair_in_admission_and_signing(self):
+        cases = (
+            ('failure', 'skipped', False,
+             b'.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt\0', 'run_missing_core'),
+            ('success', 'failure', True, b'.private/core_testnet_driver.py\0', 'reuse_funded'),
+        )
+        for prepared, wallet, funded, path, expected in cases:
+            states = dict(BUILD_JOBS, publish='skipped', **{
+                QUOTE: 'success', WALLET: wallet, RESERVE: 'skipped', PREPARE: prepared,
+            })
+            names = [*BUILD_ARTIFACTS, 'hosted-quote-receipt']
+            if prepared == 'success':
+                names.append('core-direct-candidate')
+            original = self.recovery_run(7, OLD, states, names)
+            for signing in (False, True):
+                with self.subTest(preparation=prepared, signing=signing), \
+                        patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_build_candidate'), \
+                        patch('quote_recovery.verify_receipt_delta', wraps=verify_receipt_delta), \
+                        patch('release_inputs.version_code', return_value=42), \
+                        patch('funded_reuse.select', return_value={'core': {}} if funded else None), \
+                        patch('acceptance_policy.needs_live_tor_probe', return_value=False), \
+                        patch('quote_recovery.git', side_effect=lambda _root, verb, *_: OLD.encode()
+                              if verb == 'merge-base' else path):
+                    metadata = self.recovery_metadata(original, refs=[])
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, signing=signing)
+                    self.assertEqual(result['quote_receipt_id'], '74')
+                    self.assertEqual(result[expected], 'true')
+                    self.assertNotIn('previous_reservation', result)
 
     def test_direct_recovery_accepts_controller_only_instrumentation_preparation(self):
         with patch('quote_recovery.verify_build_candidate'), \

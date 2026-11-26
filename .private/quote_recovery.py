@@ -363,8 +363,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         require(original_quote, 'Same-controller quote retry requires the original transient quote failure')
     if original_quote:
         require(not quote_run, 'The original run already has a passing quote receipt')
-        verify_receipt_delta(root, original, controller, 'Quote',
-                             preclaim_stage=outputs.get('preclaim_diagnostic'))
+        verify_receipt_delta(root, original, controller, 'Quote')
         outputs.update(quote_receipt_id=history.retained('hosted-quote-receipt', QUOTE_JOBS[0])[0],
                        quote_controller=original, quote_run=int(run_id))
     if quote_run:
@@ -491,7 +490,7 @@ def stopped_recovery(run_id, metadata, *, historical=False):
     return history
 
 
-def verify_receipt_delta(root, producer, controller, stage, *, preclaim_stage=None):
+def verify_receipt_delta(root, producer, controller, stage):
     if producer == controller:
         return
     require(git(root, 'merge-base', producer, controller).decode().strip() == producer,
@@ -501,10 +500,8 @@ def verify_receipt_delta(root, producer, controller, stage, *, preclaim_stage=No
     if stage == 'Quote':
         paths = paths | {
             '.github/workflows/hosted-core.yml', '.private/hosted_core.py', '.private/hosted_claim.py',
-            '.private/prepare_direct_core.py', '.private/core-coverage.md',
-        }
-        if preclaim_stage in PRECLAIM_DIAGNOSTIC_STAGES:
-            paths = paths | PRECLAIM_DIAGNOSTIC_PATHS
+            '.private/prepare_direct_core.py',
+        } | PRECLAIM_DIAGNOSTIC_PATHS
     elif stage == 'Wallet':
         paths = paths | {
             '.private/hosted_quote_probe.py', '.private/tor_resident_ui_driver.py',
@@ -590,5 +587,5 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata, *, o
         history.state('hosted_core / reserve', ('skipped',))
         history.state('hosted_core / wallet', ('skipped',))
         history.state('publish', ('skipped',))
-    verify_receipt_delta(root, quote_controller, controller, 'Quote', preclaim_stage=preclaim_stage)
+    verify_receipt_delta(root, quote_controller, controller, 'Quote')
     return dict(quote_receipt_id=receipt, quote_controller=quote_controller, quote_run=int(quote_run))
