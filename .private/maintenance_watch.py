@@ -202,9 +202,9 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
         from reconcile_release import resolve
     # Attestations survive later attempts of the same workflow run.
     matches = set()
-    for page in range(1, 11):
-        artifacts = api(f'{prefix}/actions/artifacts?per_page=100&page={page}')['artifacts']
-        for artifact in artifacts:
+    pages = api(f'{prefix}/actions/artifacts?per_page=100', '--paginate', '--slurp')
+    for page in pages:
+        for artifact in page['artifacts']:
             match = ATTESTATION_ARTIFACT.fullmatch(artifact['name'])
             if artifact['expired'] or match is None or (match[3] is not None and match[3] != tag):
                 continue
@@ -221,10 +221,6 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
                 continue
             if proof is not None and proof['release_tag'] == tag:
                 matches.add((run_id, attempt, artifact_id))
-        if len(artifacts) < 100:
-            break
-    else:
-        raise ValueError('Publication proof search reached 1000 artifacts; recover the exact publisher run manually')
     if recorded is not None and not matches:
         return None
     if len(matches) != 1:

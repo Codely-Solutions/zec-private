@@ -893,8 +893,9 @@ class MaintenanceWatchTest(unittest.TestCase):
         expired = dict(name='release-attestation-1', expired=True, workflow_run={'id': 6})
         publisher = dict(id=40, name='release-attestation-2', expired=False, workflow_run={'id': 4})
         with tempfile.TemporaryDirectory() as temp:
-            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [ordinary]*99+[expired]},
-                                                            {'artifacts': [publisher]}]) as api:
+            pages = [{'artifacts': [ordinary] * 100} for _ in range(10)]
+            pages.append({'artifacts': [expired, publisher]})
+            with patch('maintenance_watch.api', side_effect=[latest, pages]) as api:
                 resolved = []
                 def resolve(run, attempt, artifact, *, target):
                     resolved.append((run, attempt, artifact))
@@ -903,9 +904,9 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertEqual(dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='40'),
                                  pending_recovery('repos/fork/wallet', Path(temp), resolve))
                 self.assertEqual([('4', '2', '40')], resolved)
-                self.assertIn('page=2', api.call_args.args[0])
-            with patch('maintenance_watch.api', side_effect=[latest]+[{'artifacts': [ordinary]*100}]*10):
-                with self.assertRaisesRegex(ValueError, '1000 artifacts'):
+                self.assertEqual(api.call_args.args[1:], ('--paginate', '--slurp'))
+            with patch('maintenance_watch.api', side_effect=[latest, pages[:-1]]):
+                with self.assertRaisesRegex(ValueError, 'one live matching publication attestation'):
                     pending_recovery('repos/fork/wallet', Path(temp), resolve)
 
     def test_original_publisher_survives_more_than_eight_newer_attestations(self):
@@ -913,7 +914,7 @@ class MaintenanceWatchTest(unittest.TestCase):
         artifacts = [dict(id=run * 10, name='release-attestation-1', expired=False, workflow_run={'id': run})
                      for run in range(20, 10, -1)]
         with tempfile.TemporaryDirectory() as temp:
-            with patch('maintenance_watch.api', side_effect=[{'tag_name': tag}, {'artifacts': artifacts}]):
+            with patch('maintenance_watch.api', side_effect=[{'tag_name': tag}, [{'artifacts': artifacts}]]):
                 def resolve(run, attempt, artifact, *, target):
                     if run == '12':
                         raise ValueError('Untrusted publisher')
@@ -934,11 +935,11 @@ class MaintenanceWatchTest(unittest.TestCase):
         artifact = dict(id=42, name='release-attestation-1', expired=False, workflow_run={'id': 4})
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
-            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
+            with patch('maintenance_watch.api', side_effect=[latest, [{'artifacts': [artifact]}]]):
                 self.assertEqual(dict(reconciliation_run='4', reconciliation_attempt='1', reconciliation_artifact='42'),
                                  pending_recovery('repos/fork/wallet', directory,
                                                   lambda *_args, **_kwargs: {'release_tag': tag}))
-            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
+            with patch('maintenance_watch.api', side_effect=[latest, [{'artifacts': [artifact]}]]):
                 with self.assertRaisesRegex(ValueError, 'one live matching publication attestation'):
                     pending_recovery('repos/fork/wallet', directory,
                                      lambda *_args, **_kwargs: {'release_tag': 'v3.19.0-private.20'})
@@ -986,8 +987,8 @@ class MaintenanceWatchTest(unittest.TestCase):
                      source_sha=fixture['source_sha'], controller_sha='c' * 40,
                      publisher={'run': '4', 'attempt': '2'}, production_job_id=12)
         target = dict(release_tag=tag, attestation_attempt=2, attestation_id=42)
-        archived = {'artifacts': [dict(id=41, name='release-attestation-1', expired=False, workflow_run={'id': 4}),
-                                  dict(id=42, name='release-attestation-2', expired=False, workflow_run={'id': 4})]}
+        archived = [{'artifacts': [dict(id=41, name='release-attestation-1', expired=False, workflow_run={'id': 4}),
+                                   dict(id=42, name='release-attestation-2', expired=False, workflow_run={'id': 4})]}]
         from test_notify import NotifyTest
         notices = NotifyTest()
         notices.setUp()
