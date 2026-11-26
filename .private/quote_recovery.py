@@ -66,6 +66,12 @@ PUBLICATION_PATHS = {
     '.private/test_custom_release.py', '.private/test_hosted_release.py',
     '.private/RELEASE-WORKFLOW.md', '.private/MAINTENANCE.md', '.private/notify.py', '.private/test_notify.py',
 }
+SHARED_ACCEPTANCE_PATHS = {'.private/hosted_release.py', '.private/release_metadata.py'}
+RELEASE_WORKFLOW = '.github/workflows/build-release.yml'
+PUBLICATION_JOBS = {
+    b'publish', b'draft_readiness', b'resume_draft', b'reconcile',
+    b'verify_publication', b'record_integration', b'notify', b'validation_recovered', b'failed',
+}
 
 ARTIFACTS = {
     'production_id': 'validated-unsigned-apk', 'core_id': 'core-testnet-candidate',
@@ -490,16 +496,28 @@ def stopped_recovery(run_id, metadata, *, historical=False):
     return history
 
 
+def acceptance_workflow(root, revision):
+    workflow = git(root, 'show', f'{revision}:{RELEASE_WORKFLOW}')
+    # The canonical workflow places all acceptance and artifact production before publication.
+    acceptance, marker, publication = workflow.partition(b'\n  publish:\n')
+    headers = [line for line in (marker + publication).splitlines()
+               if line.strip() and not line.startswith((b'    ', b'#', b'  #'))]
+    expected = {b'  ' + name + b':' for name in PUBLICATION_JOBS}
+    require(marker and len(headers) == len(expected) and set(headers) == expected,
+            'Cannot establish the shared release workflow acceptance boundary')
+    return acceptance
+
+
 def verify_receipt_delta(root, producer, controller, stage):
     if producer == controller:
         return
     require(git(root, 'merge-base', producer, controller).decode().strip() == producer,
             stage + ' receipt controller is not an ancestor of the signer')
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', producer, controller)
-    paths = PUBLICATION_PATHS
+    paths = PUBLICATION_PATHS - SHARED_ACCEPTANCE_PATHS
     if stage == 'Quote':
         paths = paths | {
-            '.github/workflows/hosted-core.yml', '.private/hosted_core.py', '.private/hosted_claim.py',
+            '.github/workflows/hosted-core.yml', '.private/hosted_core.py',
             '.private/prepare_direct_core.py',
         } | PRECLAIM_DIAGNOSTIC_PATHS
     elif stage == 'Wallet':
@@ -508,8 +526,12 @@ def verify_receipt_delta(root, producer, controller, stage):
             '.private/size_workflow_ui_scenario.py', '.github/workflows/hosted-acceptance-probe.yml',
             '.github/workflows/quote-bridge.yml',
         }
-    require(set(filter(None, delta.decode().split('\0'))) <= paths,
+    changed = set(filter(None, delta.decode().split('\0')))
+    require(changed <= paths,
             stage + ' execution inputs changed after the passing receipt')
+    if RELEASE_WORKFLOW in changed:
+        require(acceptance_workflow(root, producer) == acceptance_workflow(root, controller),
+                stage + ' execution inputs changed in the shared release workflow')
 
 
 def diagnostic_stage_for_linked_wallet(root, source, original, controller, original_run, core_run, metadata):

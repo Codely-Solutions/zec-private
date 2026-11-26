@@ -968,6 +968,36 @@ class QuoteRecoveryTests(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, 'Wallet execution inputs changed'):
             verify_receipt_delta(Path('.'), OLD, MAIN, 'Wallet')
 
+    def test_shared_workflow_reuse_allows_publisher_repairs_and_checks_acceptance_wiring(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / '.github/workflows/build-release.yml').read_bytes().replace(b'\r\n', b'\n')
+        publisher_only = workflow.replace(b'  publish:\n', b'  publish:\n    # Publisher repair\n', 1)
+        quote_change = workflow.replace(b'  hosted_quotes:\n', b'  hosted_quotes:\n    # Quote wiring changed\n', 1)
+        unexpected = publisher_only + b'\n  "unclassified_job":\n    runs-on: ubuntu-24.04\n'
+        self.assertTrue(publisher_only != workflow and quote_change != workflow)
+        for stage in ('Wallet', 'Quote'):
+            for updated, error in ((publisher_only, None), (quote_change, 'execution inputs changed'),
+                                   (unexpected, 'acceptance boundary')):
+                with self.subTest(stage=stage, error=error), patch('quote_recovery.git', side_effect=[
+                    OLD.encode(), b'.github/workflows/build-release.yml\0', workflow, updated
+                ]):
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            verify_receipt_delta(root, OLD, MAIN, stage)
+                    else:
+                        verify_receipt_delta(root, OLD, MAIN, stage)
+
+    def test_shared_acceptance_helpers_require_current_receipts(self):
+        for stage, filenames in (
+            ('Wallet', (b'hosted_release.py', b'release_metadata.py')),
+            ('Quote', (b'hosted_release.py', b'release_metadata.py', b'hosted_claim.py')),
+        ):
+            for filename in filenames:
+                with self.subTest(stage=stage, filename=filename), patch(
+                    'quote_recovery.git', side_effect=[OLD.encode(), b'.private/' + filename + b'\0']
+                ), self.assertRaisesRegex(ValueError, stage + ' execution inputs changed'):
+                    verify_receipt_delta(Path('.'), OLD, MAIN, stage)
+
     def test_original_passing_quote_survives_wallet_repair_in_admission_and_signing(self):
         cases = (
             ('failure', 'skipped', False,
