@@ -8,9 +8,10 @@ from acceptance_policy import (
     validate_direct_core_candidate, validate_direct_quotes, verify_promotion_revision,
 )
 from foundation_architecture import validate_graph_binding
+from publication_attestation import ATTESTATION_ARTIFACT
 from release_changelog import changes_for, hosted_changes
 from release_metadata import (
-    ARCHIVE_LIMITS, ATTESTATION_ARTIFACT, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
+    ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
     require_public_version, verify_direct_assembly, wallet_release_versions,
 )
 

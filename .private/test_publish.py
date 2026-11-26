@@ -674,9 +674,14 @@ class PublishMetadataTest(unittest.TestCase):
                       reconciliation_artifact='53')
         smoke = ['bash', '.private/verify_signing_key.sh']
         for scenario in ('failed-smoke', 'different-digest', 'matching-digest', 'already-uploaded',
-                         'superseded-baseline', 'already-public'):
+                         'superseded-baseline', 'already-public', 'legacy-no-notes', 'wrong-notes-digest'):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as scratch:
+                retained = dict(proof)
                 draft = self.draft(proof)
+                if scenario in ('legacy-no-notes', 'wrong-notes-digest'):
+                    draft = None
+                if scenario == 'wrong-notes-digest':
+                    retained.update(release_notes='synthetic notes', notes_sha256='f' * 64)
                 if scenario == 'already-public':
                     draft['draft'] = False
                 if scenario == 'already-uploaded':
@@ -700,7 +705,7 @@ class PublishMetadataTest(unittest.TestCase):
                         if scenario == 'failed-smoke':
                             raise subprocess.CalledProcessError(1, command)
 
-                with patch_environment(env), patch.object(reconcile, 'lookup', return_value=({}, proof, draft)), \
+                with patch_environment(env), patch.object(reconcile, 'lookup', return_value=({}, retained, draft)), \
                         patch.object(reconcile, 'unsigned_proof', return_value=(unsigned, proof, {}, 11)), \
                         patch.object(reconcile, 'verify_tag'), patch.object(reconcile, 'expose_release') as expose, \
                         patch.object(reconcile.subprocess, 'run', side_effect=run), \
@@ -716,6 +721,11 @@ class PublishMetadataTest(unittest.TestCase):
                         expose.assert_called_once()
                     elif scenario == 'already-public':
                         reconcile.resume_draft('7', '1', '53')
+                        baseline.assert_not_called()
+                        expose.assert_not_called()
+                    elif scenario in ('legacy-no-notes', 'wrong-notes-digest'):
+                        with self.assertRaisesRegex(ValueError, 'Original attested release notes'):
+                            reconcile.resume_draft('7', '1', '53')
                         baseline.assert_not_called()
                         expose.assert_not_called()
                     elif scenario == 'superseded-baseline':
@@ -737,6 +747,8 @@ class PublishMetadataTest(unittest.TestCase):
                     'already-uploaded': [],
                     'superseded-baseline': [],
                     'already-public': [],
+                    'legacy-no-notes': [],
+                    'wrong-notes-digest': [],
                 }
                 self.assertEqual(key_checks, expected[scenario])
 

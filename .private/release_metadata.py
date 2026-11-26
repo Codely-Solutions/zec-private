@@ -20,8 +20,6 @@ PUBLIC_APK_LIMIT = 96 * MIB
 WALLET_APK = 'zec-private-latest.apk'
 APK_PAYLOAD_LIMIT = 256 * MIB
 UPSTREAM_DISCOVERY_WORKFLOW = '.github/workflows/sync-upstream.yml'
-ATTESTATION_ARTIFACT = re.compile(
-    r'release-attestation-([1-9][0-9]*)(?:-([1-9][0-9]*)-(v[0-9]+\.[0-9]+\.[0-9]+-private\.[1-9][0-9]*))?')
 
 
 def hosted_release_job_names(workflow, job):

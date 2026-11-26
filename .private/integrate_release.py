@@ -14,6 +14,7 @@ from publish import (current_main, read_attestation, release_title, require_curr
 RECOVERY_CONTROLS = {
     '.github/workflows/build-release.yml', '.github/workflows/verify-public-release.yml',
     '.private/integrate_release.py', '.private/reconcile_release.py',
+    '.private/publication_attestation.py',
     '.github/workflows/automation-test.yml', '.github/workflows/maintenance-watch.yml',
     '.github/workflows/sync-upstream.yml', '.github/workflows/sync-upstream-main.yml',
     '.private/maintenance_watch.py', '.private/test_maintenance_watch.py',

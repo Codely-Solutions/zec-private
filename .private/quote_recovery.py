@@ -61,6 +61,7 @@ PUBLICATION_PATHS = {
     '.github/workflows/maintenance-watch.yml', '.github/workflows/verify-public-release.yml',
     '.private/custom_release.py', '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
     '.private/release_metadata.py', '.private/signing_wiring.py', '.private/reconcile_release.py', '.private/verify_public_release.py',
+    '.private/publication_attestation.py',
     '.private/integrate_release.py', '.private/maintenance_watch.py', '.private/test_maintenance_watch.py',
     '.private/test_publish.py', '.private/test_packaging.py', '.private/test_quote_recovery.py',
     '.private/test_custom_release.py', '.private/test_hosted_release.py',

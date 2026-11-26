@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 from maintenance_cadence import window
 from notify import PUBLICATION_OPERATIONS, blocker_issues, current_blockers, matches_recovery
-from release_metadata import ATTESTATION_ARTIFACT
+from publication_attestation import ATTESTATION_ARTIFACT
 
 
 REPOSITORY = 'Codely-Solutions/zec-private'

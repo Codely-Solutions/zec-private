@@ -9,7 +9,8 @@ import tempfile
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW as CUSTOM_WORKFLOW
 from publish import (APK, NOTES, exact_assets, expose_release, release_for_tag, release_title,
                      verify_attestation_publisher, verify_tag)
-from release_metadata import (ARCHIVE_LIMITS, ATTESTATION_ARTIFACT, UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job,
+from publication_attestation import ATTESTATION_ARTIFACT
+from release_metadata import (ARCHIVE_LIMITS, UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job,
                               hosted_release_job_names, job_timestamp)
 from verify_public_release import API, bounded_zip, digest, gh, require, unsigned_proof
 
@@ -218,6 +219,10 @@ def resume_draft(run_id, attempt, artifact_id):
     output, proof, draft = lookup(run_id, attempt, artifact_id, allow_draft=True)
     if draft and draft['draft'] is False:
         return output
+    notes = proof.get('release_notes')
+    if draft is None:
+        require(isinstance(notes, str) and proof.get('notes_sha256') == digest(notes.strip().encode('utf-8')),
+                'Original attested release notes are unavailable')
 
     from integrate_release import integration_base
     from publish import require_current_controller, require_publication_baseline
@@ -260,8 +265,7 @@ def resume_draft(run_id, attempt, artifact_id):
             sign_apk(original, dist / APK, Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0')
             signed = (dist / APK).read_bytes()
         if draft is None:
-            require(isinstance(proof.get('release_notes'), str), 'Original release notes are unavailable')
-            (dist / NOTES).write_text(proof['release_notes'], encoding='utf-8')
+            (dist / NOTES).write_text(notes, encoding='utf-8')
         require(digest(signed) == proof['apk_sha256'] and apk_payload(unsigned) == apk_payload(signed),
                 'Retained signed APK differs from the original candidate or attestation')
         expose_release(proof, dist, controller=controller, existing=draft)

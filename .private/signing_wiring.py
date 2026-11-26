@@ -17,6 +17,7 @@ PATHS = (
     '.github/workflows/upgrade-acceptance.yml',
     '.github/workflows/verify-signing-environment.yml',
     '.private/publish.py',
+    '.private/publication_attestation.py',
     '.private/reconcile_release.py',
     '.private/verify_public_release.py',
     '.private/release_metadata.py',
