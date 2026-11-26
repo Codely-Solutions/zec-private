@@ -11,6 +11,7 @@ import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.BaseNavigationCommand
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -37,10 +38,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -213,7 +216,14 @@ class MigrationScheduledVMTest {
         }
 
     @Test
-    fun authorityLostDuringTorReadCannotStoreOrSubmitTheSignedSplit() = runTest {
+    fun authorityLostDuringTorReadCannotStoreOrSubmitTheSignedSplit() =
+        runTest { assertSplitWaitsForAuthorityAndForeground(loseGrant = true) }
+
+    @Test
+    fun backgroundingDuringTorReadCannotStoreOrSubmitTheSignedSplit() =
+        runTest { assertSplitWaitsForAuthorityAndForeground(loseGrant = false) }
+
+    private fun TestScope.assertSplitWaitsForAuthorityAndForeground(loseGrant: Boolean) {
         val pendingSchedule = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, schedule()) }
         val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl().apply {
             set(testAccountKeyId, PendingKeystoneMigrationPczts(
@@ -222,12 +232,18 @@ class MigrationScheduledVMTest {
             ))
         }
         var current = true
+        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("scheduled", null))
+        val navigation = FakeNavigationRouter(entry)
         val authority = mockk<WalletActionAccess> {
             coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { current } }
         }
         val route = mockk<IsMigrationTorEnabledStorageProvider> {
             coEvery { this@mockk.get(testAccountKeyId) } coAnswers {
-                current = false
+                if (loseGrant) {
+                    current = false
+                } else {
+                    entry.value = entry.value?.copy(hostResumed = false)
+                }
                 false
             }
         }
@@ -239,6 +255,7 @@ class MigrationScheduledVMTest {
             pendingSchedule = pendingSchedule, pendingKeystonePczts = pendingPczts,
             getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
             isMigrationTorEnabledStorageProvider = route, walletActionAccess = authority,
+            navigationRouter = navigation, sourceEntryId = "scheduled",
         )
         advanceUntilIdle()
 
@@ -538,6 +555,7 @@ class MigrationScheduledVMTest {
         walletActionAccess: WalletActionAccess = mockk {
             coEvery { this@mockk.capture(any<WalletAccount>()) } returns { true }
         },
+        sourceEntryId: String? = null,
     ) = MigrationScheduledVM(
         args = MigrationScheduledArgs(testAccountKeyId),
         getMigrationSnapshot = getMigrationSnapshot,
@@ -558,6 +576,7 @@ class MigrationScheduledVMTest {
             coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
         },
         walletActionAccess = walletActionAccess,
+        sourceEntryId = sourceEntryId,
     )
 
     private fun schedule() =
@@ -576,7 +595,9 @@ class MigrationScheduledVMTest {
             proposalHandle = 0L,
         )
 
-    private class FakeNavigationRouter : NavigationRouter {
+    private class FakeNavigationRouter(
+        override val activeEntry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(null),
+    ) : NavigationRouter {
         override fun forward(vararg routes: Any) = Unit
 
         override fun replace(vararg routes: Any) = Unit

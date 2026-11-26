@@ -18,12 +18,21 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyNavigator
+import co.electriccoin.zcash.ui.design.component.AlertDialogState
+import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.ImageResource
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.accountlist.options.WalletOptionsArgs
 import co.electriccoin.zcash.ui.screen.editaccount.EditAccountArgs
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.io.IOException
+import co.electriccoin.zcash.ui.R as UiR
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 class AccountListVM(
     private val getWalletAccounts: GetWalletAccountsUseCase,
@@ -46,6 +55,9 @@ class AccountListVM(
      */
     private val onAccountClicks = mutableMapOf<AccountUuid, () -> Unit>()
     private val onOptionsClicks = mutableMapOf<AccountUuid, () -> Unit>()
+    private var selectionJob: Job? = null
+    private val mutableSelectionError = MutableStateFlow<AlertDialogState?>(null)
+    val selectionError = mutableSelectionError.asStateFlow()
 
     val state: StateFlow<AccountListState> =
         combine(getWalletAccounts.observe(), observeAccountIcon.observeAll(), ::createState)
@@ -91,8 +103,8 @@ class AccountListVM(
             balance = account.totalBalance,
             isSelected = account.isSelected,
             onClick =
-                onAccountClicks.getOrPut(account.sdkAccount.accountUuid) {
-                    onAccountClick(account.sdkAccount.accountUuid)
+                account.sdkAccount.accountUuid.let { uuid ->
+                    onAccountClicks.getOrPut(uuid) { { selectAccount(uuid) } }
                 },
             onOptionsClick =
                 when (account) {
@@ -118,16 +130,33 @@ class AccountListVM(
      * Selects the account and closes the screen. The account is looked up when the row is tapped,
      * so the selection always uses its current state.
      */
-    private fun onAccountClick(accountUuid: AccountUuid): () -> Unit =
-        {
-            viewModelScope.launch {
-                getWalletAccounts
-                    .observe()
-                    .value
-                    ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
-                    ?.let { selectWalletAccount(it, sourceEntryId = sourceEntryId) }
+    private fun selectAccount(accountUuid: AccountUuid) {
+        if (selectionJob?.isActive == true) return
+        mutableSelectionError.value = null
+        val account = getWalletAccounts.observe().value
+            ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid } ?: return
+        selectionJob = viewModelScope.launch {
+            try {
+                selectWalletAccount(account, sourceEntryId = sourceEntryId)
+            } catch (_: IOException) {
+                showSelectionError(accountUuid)
             }
         }
+    }
+
+    private fun showSelectionError(accountUuid: AccountUuid) {
+        val dismiss = { mutableSelectionError.value = null }
+        mutableSelectionError.value = AlertDialogState(
+            title = stringRes(UiR.string.account_list_selection_error_title),
+            text = stringRes(UiR.string.account_list_selection_error_message),
+            confirmButtonState = ButtonState(
+                text = stringRes(UiR.string.account_list_selection_retry),
+                onClick = { selectAccount(accountUuid) },
+            ),
+            dismissButtonState = ButtonState(text = stringRes(DesignR.string.general_cancel), onClick = dismiss),
+            onDismissRequest = dismiss,
+        )
+    }
 
     private fun onHardwareWalletOptionsClick(accountUuid: AccountUuid): () -> Unit =
         { navigationRouter.forward(WalletOptionsArgs(accountKeyId = accountUuid.toStorageKeyId())) }

@@ -8,6 +8,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
@@ -92,6 +93,7 @@ class MigrationKeystoneSignVM(
     private val qrParts = MutableStateFlow<List<String>?>(null)
     private val qrFrameIndex = MutableStateFlow(0)
     private val qrAuthorization = MutableStateFlow<(() -> Boolean)?>(null)
+    private val isPreparing = MutableStateFlow(false)
 
     // (0-based round index, total round count) for the batch currently being signed — null until
     // the first buildBatch() succeeds. totalRounds is always >= 1 once non-null.
@@ -114,12 +116,16 @@ class MigrationKeystoneSignVM(
     // scanned, and so a resumed round never rebuilds (and thereby diverges from) PCZTs an earlier
     // round already got signatures for.
     private fun buildBatch() {
+        if (isPreparing.value) return
+        isPreparing.value = true
         qrParts.value = null
         qrAuthorization.value = null
         viewModelScope.launch {
             var attempt: SigningAttempt? = null
-            runCatching {
-                if (sourceEntryId != null) navigationRouter.activeEntry.first { it?.id == sourceEntryId }
+            val result = runCatching {
+                if (sourceEntryId != null) {
+                    navigationRouter.activeEntry.first { it?.id == sourceEntryId && it.hostResumed }
+                }
                 val account = getSelectedWalletAccount()
                 val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
                 check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
@@ -148,7 +154,9 @@ class MigrationKeystoneSignVM(
                     qrParts.value = parts
                     roundInfo.value = roundIndex to totalRounds
                 }
-            }.onFailure { error -> showPreparationFailure(error, attempt) }
+            }
+            isPreparing.value = false
+            result.onFailure { error -> showPreparationFailure(error, attempt) }
         }
     }
 
@@ -205,12 +213,19 @@ class MigrationKeystoneSignVM(
         }
     }
 
-    private val mayDisplayQr = combine(walletActionAccess.changes, navigationRouter.activeEntry, qrAuthorization) {
-        _, _, authority ->
-        ownsEntry() && authority?.invoke() == true
+    private enum class QrState { Preparing, Ready, Retry }
+
+    private val qrState = combine(
+        walletActionAccess.changes, navigationRouter.activeEntry, qrAuthorization, isPreparing,
+    ) { _, _, authority, preparing ->
+        when {
+            preparing -> QrState.Preparing
+            ownsEntry() && authority?.invoke() == true -> QrState.Ready
+            else -> QrState.Retry
+        }
     }
 
-    private fun ownsEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
+    private fun ownsEntry() = navigationRouter.isForegroundAtEntry(sourceEntryId)
 
     private suspend fun prepareUnsignedBatch(
         sdk: OrchardMigrationSdk,
@@ -269,9 +284,10 @@ class MigrationKeystoneSignVM(
             qrParts,
             qrFrameIndex,
             roundInfo,
-            mayDisplayQr,
-        ) { account, allParts, frameIndex, round, allowed ->
-            val parts = allParts.takeIf { allowed }
+            qrState,
+        ) { account, allParts, frameIndex, round, qr ->
+            val parts = allParts.takeIf { qr == QrState.Ready }
+            val displayedAuthorization = qrAuthorization.value.takeIf { qr == QrState.Ready }
             val accountKeyId = account?.sdkAccount?.accountUuid?.toStorageKeyId()
             if (account == null || accountKeyId == null || pendingSchedule.peek(accountKeyId) == null) {
                 // Edge case only (e.g. process death mid-flow) — the schedule is proposed
@@ -316,12 +332,18 @@ class MigrationKeystoneSignVM(
                 },
                 qrData = parts?.getOrNull(frameIndex),
                 secondaryButton = null,
-                positiveButton =
+                positiveButton = if (qr == QrState.Retry) {
+                    ButtonState(
+                        text = stringRes(DesignR.string.migration_common_tryAgain),
+                        onClick = { if (ownsEntry()) buildBatch() },
+                    )
+                } else {
                     ButtonState(
                         text = stringRes(DesignR.string.migrationKeystoneSign_getSignature),
                         isEnabled = !parts.isNullOrEmpty(),
-                        onClick = { onGetSignature(accountKeyId) },
-                    ),
+                        onClick = { displayedAuthorization?.let { onGetSignature(accountKeyId, it) } },
+                    )
+                },
                 negativeButton =
                     ButtonState(text = stringRes(DesignR.string.migrationKeystoneSign_reject), onClick = ::onReject),
                 onBack = ::onReject,
@@ -335,8 +357,8 @@ class MigrationKeystoneSignVM(
             initialValue = null,
         )
 
-    private fun onGetSignature(accountKeyId: String) {
-        val authorized = qrAuthorization.value ?: return
+    private fun onGetSignature(accountKeyId: String, authorized: () -> Boolean) {
+        if (qrAuthorization.value !== authorized) return
         if (qrParts.value.isNullOrEmpty() || pendingKeystonePczts.peek(accountKeyId)?.isFullySigned != false) return
         navigationRouter.stageResultFrom(sourceEntryId, { ownsEntry() && authorized() }) {
             NavigationCommand.Forward(listOf(MigrationKeystoneScanArgs(args.mode, accountKeyId)))

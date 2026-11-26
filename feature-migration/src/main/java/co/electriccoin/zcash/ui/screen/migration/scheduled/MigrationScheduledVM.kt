@@ -13,6 +13,7 @@ import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
@@ -68,6 +69,7 @@ class MigrationScheduledVM(
     private val selectedAccount: GetSelectedWalletAccountUseCase,
     private val drive: MigrationDriveOnce,
     private val walletActionAccess: WalletActionAccess,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val loadLce = mutableLce<LiveMigrationSnapshot?>()
 
@@ -101,6 +103,9 @@ class MigrationScheduledVM(
                 isFinalizing.value = false
                 return
             }
+            if (sourceEntryId != null) {
+                navigationRouter.activeEntry.first { it?.id == sourceEntryId && it.hostResumed }
+            }
             val finalized = drive.withExclusiveAccess(accountKeyId) {
                 finalizeSignedBatch(accountKeyId, sched, pending)
             }
@@ -130,7 +135,9 @@ class MigrationScheduledVM(
         val requireCurrent = {
             val isCurrent = pendingSchedule.peek(accountKeyId) === schedule &&
                 pendingKeystonePczts.peek(accountKeyId) === pending
-            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) && isCurrent) {
+            val isForeground = navigationRouter.isForegroundAtEntry(sourceEntryId)
+            val canEnter = owner.isActive && canOperate() && isForeground && drive.permitsForeground(accountKeyId)
+            check(canEnter && isCurrent) {
                 "The reviewed migration is no longer current"
             }
         }

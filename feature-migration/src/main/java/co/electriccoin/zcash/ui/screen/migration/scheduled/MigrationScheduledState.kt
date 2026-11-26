@@ -57,8 +57,8 @@ data class MigrationScheduledState(
 )
 
 @Composable
-fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
-    val vm = koinViewModel<MigrationScheduledVM> { parametersOf(args) }
+fun MigrationScheduledScreen(args: MigrationScheduledArgs, sourceEntryId: String) {
+    val vm = koinViewModel<MigrationScheduledVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val isFinalizing by vm.isFinalizing.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()

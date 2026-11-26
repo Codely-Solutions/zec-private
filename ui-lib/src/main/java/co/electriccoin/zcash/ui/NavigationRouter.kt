@@ -225,7 +225,7 @@ suspend fun NavigationRouter.commitFrom(
 internal fun NavigationRouter.isAtEntry(sourceEntryId: String?) =
     sourceEntryId == null || activeEntry.value?.id == sourceEntryId
 
-internal fun NavigationRouter.isForegroundAtEntry(sourceEntryId: String?): Boolean =
+fun NavigationRouter.isForegroundAtEntry(sourceEntryId: String?): Boolean =
     sourceEntryId == null || activeEntry.value?.let { it.id == sourceEntryId && it.hostResumed } == true
 
 internal suspend fun <T> NavigationRouter.whileAtEntry(

@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.WalletBalance
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -29,6 +30,7 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.accountlist.options.WalletOptionsArgs
 import co.electriccoin.zcash.ui.screen.editaccount.EditAccountArgs
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -43,6 +45,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -258,6 +261,36 @@ class AccountListVMTest {
 
             coVerify(exactly = 1) { selectWalletAccount.invoke(ledger, true) }
         }
+
+    @Test
+    fun aRejectedSelectionKeepsTheCurrentWalletUntilRetrySucceeds() = runTest {
+        val current = zodl(id = 1, isSelected = true)
+        val target = ledger(id = 2, isSelected = false)
+        val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(current, target))
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val data = mockk<AccountDataSource>()
+        coEvery { data.selectAccount(target) } throws IOException("Synthetic commit failure")
+        val vm = vm(accounts, SelectWalletAccountUseCase(data, navigation), navigation)
+        collect(vm)
+
+        assertNotNull(vm.state.value.sections).last().items.single().onClick()
+        runCurrent()
+
+        val error = assertNotNull(vm.selectionError.value)
+        assertEquals(stringRes(UiR.string.account_list_selection_error_title), error.title)
+        assertTrue(assertNotNull(vm.state.value.sections).first().items.single().isSelected)
+        verify(exactly = 0) { navigation.back() }
+
+        coEvery { data.selectAccount(target) } coAnswers {
+            accounts.value = listOf(current.copy(isSelected = false), target.copy(isSelected = true))
+        }
+        assertNotNull(error.confirmButtonState).onClick()
+        runCurrent()
+
+        assertNull(vm.selectionError.value)
+        assertTrue(assertNotNull(vm.state.value.sections).last().items.single().isSelected)
+        verify(exactly = 1) { navigation.back() }
+    }
 
     @Test
     fun anUnchangedAccountKeepsAnEqualRowAcrossEmissions() =

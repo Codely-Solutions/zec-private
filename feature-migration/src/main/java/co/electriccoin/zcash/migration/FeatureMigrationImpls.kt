@@ -381,7 +381,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             dialogComposable<MigrationLockExplainerArgs> { MigrationLockExplainerScreen() }
             composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
-            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
+            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute(), entry.id) }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute(), it.id) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute(), entry.id) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute(), it.id) }

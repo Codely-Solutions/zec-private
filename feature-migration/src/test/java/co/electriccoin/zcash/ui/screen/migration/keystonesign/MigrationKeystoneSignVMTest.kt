@@ -100,8 +100,16 @@ class MigrationKeystoneSignVMTest {
                     .apply { set(testAccountKeyId, schedule()) }
             val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl()
             val router = FakeNavigationRouter()
-            val permitted = MutableStateFlow(true)
-            val vm = vm(sdk, pendingSchedule, pendingPczts, router, walletActionAccess = authority(permitted))
+            val grant = MutableStateFlow(1)
+            val access = mockk<WalletActionAccess> {
+                every { changes } returns grant.map { Unit }
+                coEvery { this@mockk.capture(any<WalletAccount>()) } answers {
+                    val admitted = grant.value
+                    val current = { grant.value == admitted }
+                    current
+                }
+            }
+            val vm = vm(sdk, pendingSchedule, pendingPczts, router, walletActionAccess = access)
             val collectJob = launch { vm.state.collect {} }
 
             advanceUntilIdle()
@@ -114,9 +122,20 @@ class MigrationKeystoneSignVMTest {
             assertNotNull(pendingPczts.get(testAccountKeyId))
             val before = assertNotNull(vm.state.value)
             assertNotNull(before.qrData)
-            permitted.value = false
+            grant.value++
             advanceUntilIdle()
-            assertNull(assertNotNull(vm.state.value).qrData)
+            val after = assertNotNull(vm.state.value)
+            assertNull(after.qrData)
+            assertEquals(
+                DesignR.string.migration_common_tryAgain,
+                (after.positiveButton.text as? StringResource.ByResource)?.resource,
+            )
+            before.positiveButton.onClick()
+            assertTrue(router.forwardedRoutes.isEmpty())
+            after.positiveButton.onClick()
+            advanceUntilIdle()
+            assertNotNull(assertNotNull(vm.state.value).qrData)
+            coVerify(exactly = 1) { sdk.createUnsignedTransferPczts(any()) }
             before.positiveButton.onClick()
             assertTrue(router.forwardedRoutes.isEmpty())
 
@@ -742,9 +761,9 @@ class MigrationKeystoneSignVMTest {
         drive = drive(),
     )
 
-    private fun authority(permitted: MutableStateFlow<Boolean> = MutableStateFlow(true)): WalletActionAccess = mockk {
-        every { changes } returns permitted.map { Unit }
-        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { permitted.value } }
+    private fun authority(): WalletActionAccess = mockk {
+        every { changes } returns flowOf(Unit)
+        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { true } }
     }
 
     private fun drive(): MigrationDriveOnce = mockk {

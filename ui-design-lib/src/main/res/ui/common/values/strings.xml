@@ -93,6 +93,9 @@
 
     <!-- ===== account_list ===== -->
     <string name="hwWallet_drawer_title">Wallets &amp; Hardware</string>
+    <string name="account_list_selection_error_title">Couldn’t switch wallets</string>
+    <string name="account_list_selection_error_message">Your current wallet is still selected.</string>
+    <string name="account_list_selection_retry">Try again</string>
     <string name="hwWallet_connect">Connect Hardware Wallet</string>
     <string name="hwWallet_section_zodl">ZEC Private Wallet</string>
     <string name="hwWallet_section_keystone">Keystone Wallet</string>

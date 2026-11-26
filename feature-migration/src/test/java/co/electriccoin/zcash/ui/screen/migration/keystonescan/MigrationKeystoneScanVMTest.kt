@@ -9,11 +9,13 @@ import cash.z.ecc.android.sdk.TransferProposal
 import cash.z.ecc.android.sdk.fixture.AccountFixture
 import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.ui.BaseNavigationCommand
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
@@ -26,14 +28,17 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import java.util.UUID
@@ -44,6 +49,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -262,11 +268,43 @@ class MigrationKeystoneScanVMTest {
         assertEquals(listOf(11L), next.accumulatedTransferSigned.map { it.first })
     }
 
+    @Test
+    fun leavingTheScannerDuringSignatureApplicationKeepsTheOriginalRound() = runTest {
+        val pendingSchedule = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, schedule()) }
+        val original = PendingKeystoneMigrationPczts(
+            requestId = byteArrayOf(1),
+            splitUnsignedPczt = null,
+            transferUnsignedPczts = listOf(11L to byteArrayOf(0)),
+        )
+        val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl().apply { set(testAccountKeyId, original) }
+        val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("scan", null))
+        val router = FakeNavigationRouter(entry)
+        val entered = CompletableDeferred<Unit>()
+        val signature = CompletableDeferred<KeystoneBatchSignedPczts>()
+        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
+        coEvery { sdk.applyKeystoneBatchSignatures(any(), any(), any()) } coAnswers {
+            entered.complete(Unit)
+            signature.await()
+        }
+        val vm = vm(sdk, pendingSchedule, pendingPczts, router, sourceEntryId = "scan")
+        vm.onScanned("frame")
+        runCurrent()
+        assertTrue(entered.isCompleted)
+
+        entry.value = ActiveNavigationEntry("sign", null)
+        signature.complete(KeystoneBatchSignedPczts(null, listOf(Pczt(byteArrayOf(1)))))
+        advanceUntilIdle()
+
+        assertSame(original, pendingPczts.peek(testAccountKeyId))
+        assertTrue(router.replacedRoutes.isEmpty())
+    }
+
     private fun vm(
         sdk: OrchardMigrationSdk,
         pendingSchedule: PendingMigrationScheduleRepositoryImpl,
         pendingPczts: PendingKeystoneMigrationPcztsRepositoryImpl,
         router: FakeNavigationRouter,
+        sourceEntryId: String? = null,
     ) = MigrationKeystoneScanVM(
         args = MigrationKeystoneScanArgs(mode = MigrationMode.IMMEDIATE),
         getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
@@ -276,6 +314,10 @@ class MigrationKeystoneScanVMTest {
         pendingSchedule = pendingSchedule,
         pendingKeystonePczts = pendingPczts,
         navigationRouter = router,
+        sourceEntryId = sourceEntryId,
+        walletActionAccess = mockk<WalletActionAccess> {
+            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { true } }
+        },
     )
 
     private fun fakeSdk(firmwareVersion: ByteArray?): OrchardMigrationSdk =
@@ -318,7 +360,9 @@ class MigrationKeystoneScanVMTest {
             roundIndex = roundIndex,
         )
 
-    private class FakeNavigationRouter : NavigationRouter {
+    private class FakeNavigationRouter(
+        override val activeEntry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(null),
+    ) : NavigationRouter {
         var backCount = 0
             private set
         val forwardedRoutes = mutableListOf<Any>()
@@ -345,7 +389,18 @@ class MigrationKeystoneScanVMTest {
 
         override fun backTo(route: KClass<*>) = Unit
 
-        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
+        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
+            val current = activeEntry.value ?: return
+            val entry = mockk<NavBackStackEntry> { every { id } returns current.id }
+            val command = block(entry) as? NavigationCommand.ForEntry ?: return
+            val replacement = if (command.isStillAllowed()) command.buildCommand() as? NavigationCommand.ReplaceFrom
+            else null
+            replacement?.let {
+                replacementOrigin = it.route
+                replacedRoutes.addAll(it.routes)
+            }
+            command.acknowledge(replacement != null)
+        }
 
         override fun backToRoot() = Unit
 

@@ -6,13 +6,16 @@ import cash.z.ecc.android.sdk.model.Pczt
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwarePolicy
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferFailureState
 import co.electriccoin.zcash.ui.common.model.toKeystoneFwVersion
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
@@ -46,6 +49,7 @@ class MigrationKeystoneScanVM(
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
     private val navigationRouter: NavigationRouter,
     private val sourceEntryId: String? = null,
+    private val walletActionAccess: WalletActionAccess,
 ) : ViewModel() {
     val validationState = MutableStateFlow(ScanValidationState.NONE)
 
@@ -81,23 +85,36 @@ class MigrationKeystoneScanVM(
     private val requiredFirmware = KeystoneFirmwareVersion(displayMajor = 3, minor = 0, build = 2)
 
     fun onScanned(result: String) {
-        if (isProcessing) return
+        if (isProcessing || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return
         isProcessing = true
         viewModelScope.launch {
             try {
-                val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+                val account = getSelectedWalletAccount()
+                val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
                 check(args.accountKeyId == null || args.accountKeyId == accountKeyId) {
                     "The scan belongs to a different account"
                 }
-                val sched = pendingSchedule.get(accountKeyId)
+                val sched = pendingSchedule.review(accountKeyId)
                 val pending = pendingKeystonePczts.get(accountKeyId)
                 if (sched == null || pending == null) {
                     // A restored Sign screen has no usable request either.
                     navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
                     return@launch
                 }
+                val canOperate = checkNotNull(walletActionAccess.capture(account)) {
+                    "The migration signing session is unavailable"
+                }
+                val canCompleteScan = {
+                    val isCurrent = pendingSchedule.review(accountKeyId) === sched &&
+                        pendingKeystonePczts.peek(accountKeyId) === pending
+                    isCurrent && canOperate() && navigationRouter.isForegroundAtEntry(sourceEntryId)
+                }
+                if (!canCompleteScan()) {
+                    isProcessing = false
+                    return@launch
+                }
                 if (pending.isFullySigned) {
-                    openAfterSigning(MigrationScheduledArgs(accountKeyId))
+                    isProcessing = openAfterSigning(MigrationScheduledArgs(accountKeyId), canCompleteScan)
                     return@launch
                 }
                 val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
@@ -195,59 +212,25 @@ class MigrationKeystoneScanVM(
                         transferCount = pending.transferUnsignedPczts.size,
                         budget = roundBudget,
                     )
-                if (pending.roundIndex + 1 < totalRounds) {
-                    // More rounds remain — carry the accumulated signatures forward and hand off to a
-                    // fresh sign-screen instance for the next round. Replace the completed Sign and Scan.
-                    //
-                    // isProcessing deliberately stays true from here on: the Keystone device doesn't
-                    // rotate/clear its response QR after being scanned, and ImageAnalysis keeps
-                    // re-decoding that still-visible frame every frame. Navigation
-                    // isn't synchronous, so without this guard a re-entrant onScanned during the
-                    // transition would re-fetch `pending` with roundIndex already advanced past this
-                    // round, hand keystoneBatchRoundSlice an out-of-range index, and silently apply the
-                    // real signature against an all-empty slice — or on the last round, crash Rust's
-                    // apply_batch_signatures with "expected 0" for a response that still carries one.
-                    // This VM instance is being navigated away from either way, so it should never
-                    // process another scan.
-                    pendingKeystonePczts.set(
-                        accountKeyId,
-                        pending.copy(
-                            roundIndex = pending.roundIndex + 1,
-                            accumulatedSplitSigned = accumulatedSplitSigned,
-                            accumulatedPrepSigned = accumulatedPrepSigned,
-                            accumulatedTransferSigned = accumulatedTransferSigned,
-                        )
-                    )
-                    migrationLog(
-                        "KeystoneScan: round ${pending.roundIndex} done — handing off to round " +
-                            "${pending.roundIndex + 1} of $totalRounds"
-                    )
-                    openAfterSigning(MigrationKeystoneSignArgs(args.mode, accountKeyId))
-                    return@launch
+                val nextRound = pending.roundIndex + 1
+                val fullySigned = nextRound >= totalRounds
+                val nextBatch = pending.copy(
+                    roundIndex = nextRound,
+                    accumulatedSplitSigned = accumulatedSplitSigned,
+                    accumulatedPrepSigned = accumulatedPrepSigned,
+                    accumulatedTransferSigned = accumulatedTransferSigned,
+                    isFullySigned = fullySigned,
+                )
+                val nextRoute: Any = if (fullySigned) {
+                    MigrationScheduledArgs(accountKeyId)
+                } else {
+                    MigrationKeystoneSignArgs(args.mode, accountKeyId)
                 }
-
-                // Last (or only) round — persist the FULL accumulated signed set (not just this
-                // round's slice) and hand off to MigrationScheduledVM, which performs the actual
-                // network/JNI work (Tor submit, schedule storage, finalize) while rendering its own
-                // loading state — this screen has no more feedback to give once scanning is done.
-                //
-                // isProcessing deliberately stays true — see the comment above the other hand-off
-                // branch; the same still-visible-QR re-entrancy is what produced the "expected 0"
-                // crash this guard exists to prevent.
-                pendingKeystonePczts.set(
-                    accountKeyId,
-                    pending.copy(
-                        roundIndex = pending.roundIndex + 1,
-                        accumulatedSplitSigned = accumulatedSplitSigned,
-                        accumulatedPrepSigned = accumulatedPrepSigned,
-                        accumulatedTransferSigned = accumulatedTransferSigned,
-                        isFullySigned = true,
-                    )
-                )
-                migrationLog(
-                    "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
-                )
-                openAfterSigning(MigrationScheduledArgs(accountKeyId))
+                // Advance only when the scanner still owns the replacement. Repeated camera frames
+                // cannot decode the same QR again while the replacement is in progress.
+                isProcessing = openAfterSigning(nextRoute, canCompleteScan) {
+                    pendingKeystonePczts.set(accountKeyId, nextBatch)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -285,7 +268,12 @@ class MigrationKeystoneScanVM(
         }
     }
 
-    private fun openAfterSigning(route: Any) = navigationRouter.stageResultFrom(sourceEntryId) {
+    private suspend fun openAfterSigning(
+        route: Any,
+        canCompleteScan: () -> Boolean,
+        advanceBatch: () -> Unit = {},
+    ) = navigationRouter.commitFrom(sourceEntryId, canCompleteScan) {
+        advanceBatch()
         NavigationCommand.ReplaceFrom(MigrationKeystoneSignArgs::class, listOf(route))
     }
 

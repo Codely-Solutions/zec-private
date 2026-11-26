@@ -86,6 +86,9 @@
 
     <!-- ===== account_list ===== -->
     <string name="hwWallet_drawer_title">Billeteras y Dispositivos</string>
+    <string name="account_list_selection_error_title">No se pudo cambiar de billetera</string>
+    <string name="account_list_selection_error_message">Tu billetera actual sigue seleccionada.</string>
+    <string name="account_list_selection_retry">Reintentar</string>
     <string name="hwWallet_connect">Conectar Billetera de Hardware</string>
     <string name="hwWallet_section_zodl">Billetera ZEC Private</string>
     <string name="hwWallet_section_keystone">Billetera Keystone</string>
