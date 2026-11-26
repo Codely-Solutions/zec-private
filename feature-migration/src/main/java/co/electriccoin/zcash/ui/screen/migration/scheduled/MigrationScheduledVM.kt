@@ -27,7 +27,6 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
@@ -37,7 +36,6 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
-import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.work.MigrationDriveOnce
@@ -65,7 +63,6 @@ class MigrationScheduledVM(
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
     private val finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase,
     private val isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider,
-    private val synchronizerProvider: SynchronizerProvider,
     private val selectedAccount: GetSelectedWalletAccountUseCase,
     private val drive: MigrationDriveOnce,
     private val walletActionAccess: WalletActionAccess,
@@ -180,7 +177,6 @@ class MigrationScheduledVM(
                 pendingSchedule.clear(accountKeyId, schedule)
                 pendingKeystonePczts.clear(accountKeyId, pending)
                 isFinalizing.value = false
-                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
             }
             TransferResult.InvalidNote, TransferResult.Expired ->
                 returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))

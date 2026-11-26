@@ -1229,7 +1229,7 @@
     <string name="migration_notification_manualConfirmationGeneric">A migration transfer is ready. Tap to confirm.</string>
     <string name="migration_notification_torFailureTitle">Migration: Couldn\'t Connect to Tor</string>
     <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-    <string name="migration_notification_stepDueText">Your migration is ready to continue — tap to run the next step.</string>
+    <string name="migration_notification_stepDueText">Open the app to continue your migration.</string>
     <string name="migration_notification_checkStatusText">Open the app to check migration status.</string>
     <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
     <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>

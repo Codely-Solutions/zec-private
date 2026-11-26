@@ -219,14 +219,7 @@ class MigrationDriveOnce(
         }
     }
 
-    /**
-     * A sync (prove) run: syncToTip + finalizeReadyTransfers + reconcile, gated by the
-     * post-broadcast privacy buffer. Afterwards the engine is asked again: a ready PREPARATION
-     * broadcasts immediately, in this same call — core sync call 2026-08-05 §2.1: upstream only
-     * ever surfaces a Preparation for proving once its own broadcast schedule is already due, so
-     * there is no separate nextStep() round-trip to wait through. A due TRANSFER still waits out
-     * the quiet gap this sync just opened (existing behavior, unchanged).
-     */
+    /** Syncs and proves after the post-broadcast gap, then schedules any broadcast for a later wake. */
     private suspend fun syncRun(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
@@ -265,20 +258,8 @@ class MigrationDriveOnce(
     private suspend fun driveAfterSync(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult =
         when (val nextStep = sdk.nextStep()?.step) {
             is MigrationAdvanceStep.Broadcast -> {
-                // §2.1 same-beat check: key off the ENGINE-NAMED transferId nextStep() just
-                // returned, not a schedule-order scan (nextDueUnsentIsPreparation's earliestUnsent
-                // could name a different transaction than the one the engine actually served,
-                // which would defer a due preparation by a full privacy buffer — latency only,
-                // but avoidable now that the id is already in hand).
-                val prep = isPreparationTransfer(sdk.getMigrationTransferStates(), nextStep.transferId)
-                if (prep) {
-                    migrationLog("MigrationDriveOnce: sync done. Broadcasting the preparation.")
-                    broadcastRun(sdk, accountKeyId, nextStep.transferId)
-                } else {
-                    val chainDelay = sdk.privacySyncBufferDuration()
-                    migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
-                    DriveOnceResult.NextWake(chainDelay)
-                }
+                migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
+                DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
             }
 
             MigrationAdvanceStep.Complete -> {
@@ -487,7 +468,6 @@ class MigrationDriveOnce(
                         DriveOnceResult.NextWake(delay)
                     }
                 } else {
-                    migrationNotifier.notifyMigrationComplete(accountKeyId)
                     // Everything sent — keep observing until the engine reports Complete (the
                     // completeRun stop). The next wake lands in waitingRun's completion-sweep
                     // branch, which runs a REAL sync so mining is actually observed (review M2).
@@ -775,23 +755,11 @@ internal fun decideBroadcastPreflight(
     nowEpochSeconds: Long,
     lastNetworkActivityEpochSeconds: Long?,
     privacyBufferSeconds: Long,
-    prepFastTrack: Boolean = false,
-): BroadcastPreflight {
-    // Preparation fast-track (security split, 2026-07-30): note-split preparations are fully
-    // shielded IN-POOL transactions — amounts and spend links hidden, natural recent anchor with
-    // the same anonymity set as all ordinary Orchard traffic. The sync/broadcast de-correlation
-    // ceremony exists for CROSSINGS (public amount + tiny migration-anchor anonymity set), and
-    // during the prep phase no crossing exists to correlate against. So when the next due pending
-    // transaction is a preparation, skip the quiet-gap and active-sync defers entirely; the
-    // per-execution sync-XOR-broadcast rule still holds (this run never syncs).
-    if (prepFastTrack) return BroadcastPreflight.BROADCAST
-    if (synchronizerSyncing) return BroadcastPreflight.DEFER
-    if (lastNetworkActivityEpochSeconds != null &&
-        nowEpochSeconds - lastNetworkActivityEpochSeconds < privacyBufferSeconds
-    ) {
-        return BroadcastPreflight.DEFER
-    }
-    return BroadcastPreflight.BROADCAST
+): BroadcastPreflight = when {
+    synchronizerSyncing -> BroadcastPreflight.DEFER
+    lastNetworkActivityEpochSeconds != null &&
+        nowEpochSeconds - lastNetworkActivityEpochSeconds < privacyBufferSeconds -> BroadcastPreflight.DEFER
+    else -> BroadcastPreflight.BROADCAST
 }
 
 /**
@@ -807,22 +775,14 @@ internal fun earliestUnsent(states: MigrationTransferStates?): MigrationTransfer
 
 /**
  * True when the earliest unsent transaction is a PREPARATION that is already proved and due by
- * the estimated tip — the trigger for the preparation fast-track (see [decideBroadcastPreflight])
- * and for immediate re-chaining after a prep broadcast (no send spacing: the prep tree is one
+ * the estimated tip. The result selects the next wake after a prep broadcast
+ * (no send spacing: the prep tree is one
  * logical unit; within a layer there is no one-at-a-time requirement).
  */
 internal fun nextDueUnsentIsPreparation(states: MigrationTransferStates?, estimatedTip: Long): Boolean {
     val next = earliestUnsent(states) ?: return false
     return !next.isTransfer && next.isProved && next.scheduledHeight <= estimatedTip
 }
-
-/**
- * Whether the specific transaction the engine named (e.g. [MigrationAdvanceStep.Broadcast]'s own
- * `transferId`) is a preparation — the precise, id-keyed check for the §2.1 same-beat decision, as
- * opposed to [nextDueUnsentIsPreparation]'s schedule-order guess at what the engine will serve next.
- */
-internal fun isPreparationTransfer(states: MigrationTransferStates?, transferId: Long): Boolean =
-    states?.transfers?.firstOrNull { it.id == transferId }?.isTransfer == false
 
 /**
  * Estimated-tip broadcast acceleration predicate: a proved, unsent, non-stuck transaction whose

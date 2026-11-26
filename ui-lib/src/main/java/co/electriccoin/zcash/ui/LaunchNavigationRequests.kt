@@ -56,8 +56,8 @@ class LaunchNavigationRequests {
         return true
     }
 
-    fun beginMigrationProgress(ownerKey: String, runStepPending: Boolean = false): MigrationNotice =
-        MigrationNotice(ownerKey, runStepPending).also { notice ->
+    fun beginMigrationProgress(ownerKey: String): MigrationNotice =
+        MigrationNotice(ownerKey).also { notice ->
             pending.update { queue ->
                 queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS } + Request(Kind.MIGRATION_PROGRESS, null, notice)
             }
@@ -74,15 +74,11 @@ class LaunchNavigationRequests {
         }
     }
 
-    internal val migrationNoticeToSave: SavedMigrationNotice?
-        get() = pending.value.firstNotNullOfOrNull { request ->
-            request.migrationNotice?.let {
-                SavedMigrationNotice(it.ownerKey, request.command == null && it.runStepPending)
-            }
-        }
+    internal val migrationNoticeToSave: String?
+        get() = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
 
-    internal val pendingMigrationLookup: SavedMigrationNotice?
-        get() = resolvingMigrationNotice?.let { SavedMigrationNotice(it.ownerKey, it.runStepPending) }
+    internal val pendingMigrationLookup: String?
+        get() = resolvingMigrationNotice?.ownerKey
 
     fun requestMigrationRecovery(
         ownerKey: String,
@@ -137,9 +133,7 @@ class LaunchNavigationRequests {
         }
     }
 
-    class MigrationNotice internal constructor(val ownerKey: String, val runStepPending: Boolean)
-
-    internal data class SavedMigrationNotice(val ownerKey: String, val runStepPending: Boolean)
+    class MigrationNotice internal constructor(val ownerKey: String)
 
     internal data class Request(
         val kind: Kind,

@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.migration.MigrationGate
 import co.electriccoin.zcash.ui.common.migration.MigrationNavContributor
 import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationGateBypassStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
@@ -78,6 +79,9 @@ import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
@@ -165,6 +169,8 @@ class MigrationAppHooksImpl(
     private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
     private val migrationReadouts: MigrationTransferStateRepository,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
+    private val appAccess: AppAccessSession,
+    private val navigationRouter: NavigationRouter,
 ) : MigrationAppHooks {
     override fun handleIntent(
         intent: Intent,
@@ -182,11 +188,9 @@ class MigrationAppHooksImpl(
 
             intent.component != ComponentName(context, MainActivity::class.java) -> false
 
-            isMigrationNotification(intent) -> {
-                val ownerKey = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)
-                openNotificationProgress(
-                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
-                )
+            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
+                intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
+                openNotificationProgress(intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID), scope)
                 true
             }
 
@@ -195,40 +199,24 @@ class MigrationAppHooksImpl(
             }
         }
 
-    private fun isMigrationNotification(intent: Intent) =
-        intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
-            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
+    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope) =
+        openNotificationProgress(ownerKey, scope)
 
-    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean) =
-        openNotificationProgress(ownerKey, scope, runStepPending)
-
-    @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
-    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
+    @Suppress("TooGenericExceptionCaught") // A failed owner lookup returns to ordinary wallet navigation.
+    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope) {
         val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
         val generation = walletWriteAccess.token()
-        val wakeVersion = MigrationScheduler.wakeVersion(key)
         val notice = MigrationAccountRetirement.admit(key) {
-            launchNavigation.beginMigrationProgress(key, runStep)
+            launchNavigation.beginMigrationProgress(key)
         } ?: return
         scope.launch {
             try {
-                val target = accountDataSource.getAllAccounts()
-                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
-                val command = target?.let { account ->
-                    walletWriteAccess.write(generation) {
-                        if (launchNavigation.resolvingMigrationNotice !== notice ||
-                            MigrationAccountRetirement.blocks(key)
-                        ) return@write null
-                        accountDataSource.selectAccount(account)
-                        val activePlan = runStep && checkMigrationRecovery.hasActivePlan(key)
-                        if (activePlan && launchNavigation.resolvingMigrationNotice === notice &&
-                            !resetProgress.isPending.value
-                        ) {
-                            MigrationScheduler(context).runNotificationStep(key, wakeVersion)
-                        }
-                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
-                    }
+                val foreground = awaitNotificationAccess()
+                val permits = {
+                    foreground() && walletWriteAccess.permits(generation) &&
+                        launchNavigation.resolvingMigrationNotice === notice && !MigrationAccountRetirement.blocks(key)
                 }
+                val command = if (permits()) resolveNotificationProgress(key, generation, permits) else null
                 val offered = MigrationAccountRetirement.admit(key) {
                     launchNavigation.finishMigrationProgress(notice, command)
                 }
@@ -239,6 +227,29 @@ class MigrationAppHooksImpl(
                 launchNavigation.finishMigrationProgress(notice, null)
                 migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
             }
+        }
+    }
+
+    private suspend fun awaitNotificationAccess(): () -> Boolean {
+        val (entryId, grant) = combine(navigationRouter.activeEntry, appAccess.authorizedGrants()) { entry, grant ->
+            entry?.takeIf { it.hostResumed && grant() }?.let { it.id to grant }
+        }.filterNotNull().first()
+        return {
+            grant() && navigationRouter.activeEntry.value?.let { it.id == entryId && it.hostResumed } == true
+        }
+    }
+
+    private suspend fun resolveNotificationProgress(
+        key: String,
+        generation: Long,
+        permits: () -> Boolean,
+    ): NavigationCommand.ReplaceAll? {
+        val target = accountDataSource.getAllAccounts()
+            .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key } ?: return null
+        return walletWriteAccess.write(generation) {
+            if (!permits()) return@write null
+            accountDataSource.selectAccount(target)
+            if (permits()) NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key))) else null
         }
     }
 

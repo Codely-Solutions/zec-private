@@ -5067,7 +5067,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..e4fc9db25 100644
+index 294506ed1..3f8cf049c 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -5078,22 +5078,27 @@ index 294506ed1..e4fc9db25 100644
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
 +import co.electriccoin.zcash.ui.MainActivity
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -20,0 +26 @@ import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorag
+@@ -16,0 +22 @@ import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
+@@ -20,0 +27 @@ import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorag
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -28 +34 @@ import co.electriccoin.zcash.ui.dialogComposable
+@@ -28 +35 @@ import co.electriccoin.zcash.ui.dialogComposable
 -import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -64,0 +71,3 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
+@@ -64,0 +72,3 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
 +import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
-@@ -65,0 +75,3 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -65,0 +76,3 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.work.MigrationAccountRetirement
 +import co.electriccoin.zcash.work.MigrationDriveOnce
 +import co.electriccoin.zcash.work.MigrationLiveDriver
-@@ -66,0 +79 @@ import co.electriccoin.zcash.work.MigrationWorker
+@@ -66,0 +80 @@ import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
-@@ -67,0 +81,7 @@ import kotlinx.coroutines.CoroutineScope
+@@ -67,0 +82,10 @@ import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.filterNotNull
++import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.guava.await
 +import kotlinx.coroutines.CancellationException
@@ -5101,21 +5106,21 @@ index 294506ed1..e4fc9db25 100644
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.withContext
-@@ -118,0 +139 @@ class MigrationSyncedHookImpl(
+@@ -118,0 +143 @@ class MigrationSyncedHookImpl(
 +    private val resetProgress: ResetProgressStore,
-@@ -120,0 +142 @@ class MigrationSyncedHookImpl(
+@@ -120,0 +146 @@ class MigrationSyncedHookImpl(
 +        if (resetProgress.isPending.value) return
-@@ -125,3 +146,0 @@ class MigrationSyncedHookImpl(
+@@ -125,3 +150,0 @@ class MigrationSyncedHookImpl(
 -        val isInProgress =
 -            getOrchardMigrationSdk().getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress
 -        if (!isInProgress) return
-@@ -128,0 +148,2 @@ class MigrationSyncedHookImpl(
+@@ -128,0 +152,2 @@ class MigrationSyncedHookImpl(
 +        val state = getOrchardMigrationSdk(accountKeyId)?.getMigrationStateUnreconciled()
 +        if (state !is cash.z.ecc.android.sdk.MigrationState.InProgress || resetProgress.isPending.value) return
-@@ -136 +157 @@ class MigrationAppHooksImpl(
+@@ -136 +161 @@ class MigrationAppHooksImpl(
 -    private val navigationRouter: NavigationRouter,
 +    private val launchNavigation: LaunchNavigationRequests,
-@@ -139,0 +161,7 @@ class MigrationAppHooksImpl(
+@@ -139,0 +165,9 @@ class MigrationAppHooksImpl(
 +    private val resetProgress: ResetProgressStore,
 +    private val migrationLiveDriver: MigrationLiveDriver,
 +    private val migrationDriveOnce: MigrationDriveOnce,
@@ -5123,12 +5128,14 @@ index 294506ed1..e4fc9db25 100644
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
 +    private val migrationReadouts: MigrationTransferStateRepository,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
-@@ -146 +174,3 @@ class MigrationAppHooksImpl(
++    private val appAccess: AppAccessSession,
++    private val navigationRouter: NavigationRouter,
+@@ -146 +180,3 @@ class MigrationAppHooksImpl(
 -            BuildConfig.DEBUG &&
 +            resetProgress.isPending.value -> false
 +
 +            DebugStartMigrationE2EUseCase.isAllowed &&
-@@ -153,8 +183,7 @@ class MigrationAppHooksImpl(
+@@ -153,8 +189,5 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
 -                // replaceAll ensures Home is always on the back stack regardless of how the app
 -                // was opened. Account selection first — the migration screens read the SELECTED
@@ -5139,12 +5146,10 @@ index 294506ed1..e4fc9db25 100644
 -                }
 +            intent.component != ComponentName(context, MainActivity::class.java) -> false
 +
-+            isMigrationNotification(intent) -> {
-+                val ownerKey = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID)
-+                openNotificationProgress(
-+                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
-+                )
-@@ -164,11 +193,37 @@ class MigrationAppHooksImpl(
++            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
++                intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
++                openNotificationProgress(intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID), scope)
+@@ -164,11 +197,72 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -5161,42 +5166,24 @@ index 294506ed1..e4fc9db25 100644
 +            }
 +        }
 +
-+    private fun isMigrationNotification(intent: Intent) =
-+        intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
-+            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
++    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope) =
++        openNotificationProgress(ownerKey, scope)
 +
-+    override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean) =
-+        openNotificationProgress(ownerKey, scope, runStepPending)
-+
-+    @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
-+    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
++    @Suppress("TooGenericExceptionCaught") // A failed owner lookup returns to ordinary wallet navigation.
++    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope) {
 +        val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
 +        val generation = walletWriteAccess.token()
-+        val wakeVersion = MigrationScheduler.wakeVersion(key)
 +        val notice = MigrationAccountRetirement.admit(key) {
-+            launchNavigation.beginMigrationProgress(key, runStep)
++            launchNavigation.beginMigrationProgress(key)
 +        } ?: return
 +        scope.launch {
 +            try {
-+                val target = accountDataSource.getAllAccounts()
-+                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
-+                val command = target?.let { account ->
-+                    walletWriteAccess.write(generation) {
-+                        if (launchNavigation.resolvingMigrationNotice !== notice ||
-+                            MigrationAccountRetirement.blocks(key)
-+                        ) return@write null
-+                        accountDataSource.selectAccount(account)
-+                        val activePlan = runStep && checkMigrationRecovery.hasActivePlan(key)
-+                        if (activePlan && launchNavigation.resolvingMigrationNotice === notice &&
-+                            !resetProgress.isPending.value
-+                        ) {
-+                            MigrationScheduler(context).runNotificationStep(key, wakeVersion)
-+                        }
-+                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
-@@ -176 +230,0 @@ class MigrationAppHooksImpl(
--                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +232,9 @@ class MigrationAppHooksImpl(
--                true
++                val foreground = awaitNotificationAccess()
++                val permits = {
++                    foreground() && walletWriteAccess.permits(generation) &&
++                        launchNavigation.resolvingMigrationNotice === notice && !MigrationAccountRetirement.blocks(key)
++                }
++                val command = if (permits()) resolveNotificationProgress(key, generation, permits) else null
 +                val offered = MigrationAccountRetirement.admit(key) {
 +                    launchNavigation.finishMigrationProgress(notice, command)
 +                }
@@ -5206,12 +5193,33 @@ index 294506ed1..e4fc9db25 100644
 +            } catch (e: Exception) {
 +                launchNavigation.finishMigrationProgress(notice, null)
 +                migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
-@@ -179,0 +242,2 @@ class MigrationAppHooksImpl(
++            }
 +        }
 +    }
-@@ -181,2 +245,15 @@ class MigrationAppHooksImpl(
--            else -> {
--                false
++
++    private suspend fun awaitNotificationAccess(): () -> Boolean {
++        val (entryId, grant) = combine(navigationRouter.activeEntry, appAccess.authorizedGrants()) { entry, grant ->
++            entry?.takeIf { it.hostResumed && grant() }?.let { it.id to grant }
++        }.filterNotNull().first()
++        return {
++            grant() && navigationRouter.activeEntry.value?.let { it.id == entryId && it.hostResumed } == true
++        }
++    }
++
++    private suspend fun resolveNotificationProgress(
++        key: String,
++        generation: Long,
++        permits: () -> Boolean,
++    ): NavigationCommand.ReplaceAll? {
++        val target = accountDataSource.getAllAccounts()
++            .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key } ?: return null
++        return walletWriteAccess.write(generation) {
++            if (!permits()) return@write null
++            accountDataSource.selectAccount(target)
++            if (permits()) NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key))) else null
++        }
++    }
++
 +    override suspend fun checkRecovery() {
 +        if (!resetProgress.isPending.value) {
 +            val wallet = walletWriteAccess.token()
@@ -5225,34 +5233,16 @@ index 294506ed1..e4fc9db25 100644
 +                        selected?.sdkAccount?.accountUuid?.toStorageKeyId() == ownerKey &&
 +                            walletWriteAccess.token() == wallet && !resetProgress.isPending.value &&
 +                            !MigrationAccountRetirement.blocks(ownerKey)
-+                    }
-+                }
-@@ -184,0 +262 @@ class MigrationAppHooksImpl(
+@@ -176 +269,0 @@ class MigrationAppHooksImpl(
+-                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
+@@ -178 +270,0 @@ class MigrationAppHooksImpl(
+-                true
+@@ -179,0 +272,2 @@ class MigrationAppHooksImpl(
++        }
 +    }
-@@ -186,23 +264,38 @@ class MigrationAppHooksImpl(
--    /**
--     * Selects the account the tapped notification belongs to (its storage-key id travels in
--     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
--     * SELECTED account — are pushed. No-op when the extra is absent (pre-upgrade notification),
--     * the account no longer exists (deleted/disconnected — the kill switch already cancelled its
--     * notifications; navigation then just shows the selected account, same as before), or it is
--     * already selected. Best-effort: a failure here must never block the navigation itself.
--     */
--    private suspend fun selectNotificationAccount(intent: Intent) {
--        val accountKeyId = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID) ?: return
--        runCatching {
--            val target =
--                accountDataSource
--                    .getAllAccounts()
--                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == accountKeyId }
--                    ?: return
--            if (accountDataSource
--                    .getSelectedAccount()
--                    .sdkAccount.accountUuid
--                    .toStorageKeyId() != accountKeyId
--            ) {
--                migrationLog("AppHooks: notification tap — switching to account $accountKeyId")
--                accountDataSource.selectAccount(target)
+@@ -181,2 +275,38 @@ class MigrationAppHooksImpl(
+-            else -> {
+-                false
 +    override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
 +        val generation = walletWriteAccess.token()
 +        val scheduler = MigrationScheduler(context)
@@ -5291,13 +5281,32 @@ index 294506ed1..e4fc9db25 100644
 +        } finally {
 +            if (retirementStarted && !deleted) {
 +                restoreRetirement(accountKeyId, generation)
-@@ -210,4 +302,0 @@ class MigrationAppHooksImpl(
--        }.onFailure {
--            migrationLog(
--                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
--            )
-@@ -217 +306,27 @@ class MigrationAppHooksImpl(
--    override suspend fun checkRecovery() = checkMigrationRecovery()
+@@ -184,0 +315 @@ class MigrationAppHooksImpl(
++    }
+@@ -186,23 +317,14 @@ class MigrationAppHooksImpl(
+-    /**
+-     * Selects the account the tapped notification belongs to (its storage-key id travels in
+-     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
+-     * SELECTED account — are pushed. No-op when the extra is absent (pre-upgrade notification),
+-     * the account no longer exists (deleted/disconnected — the kill switch already cancelled its
+-     * notifications; navigation then just shows the selected account, same as before), or it is
+-     * already selected. Best-effort: a failure here must never block the navigation itself.
+-     */
+-    private suspend fun selectNotificationAccount(intent: Intent) {
+-        val accountKeyId = intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID) ?: return
+-        runCatching {
+-            val target =
+-                accountDataSource
+-                    .getAllAccounts()
+-                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == accountKeyId }
+-                    ?: return
+-            if (accountDataSource
+-                    .getSelectedAccount()
+-                    .sdkAccount.accountUuid
+-                    .toStorageKeyId() != accountKeyId
+-            ) {
+-                migrationLog("AppHooks: notification tap — switching to account $accountKeyId")
+-                accountDataSource.selectAccount(target)
 +    private suspend fun restoreRetirement(accountKeyId: String, generation: Long) {
 +        withContext(NonCancellable) {
 +            var reopened = false
@@ -5312,10 +5321,13 @@ index 294506ed1..e4fc9db25 100644
 +                }
 +            } finally {
 +                if (!reopened) MigrationAccountRetirement.restore(accountKeyId)
-+            }
-+        }
-+    }
-+
+@@ -210,4 +331,0 @@ class MigrationAppHooksImpl(
+-        }.onFailure {
+-            migrationLog(
+-                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
+-            )
+@@ -217 +335,9 @@ class MigrationAppHooksImpl(
+-    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    @Suppress("TooGenericExceptionCaught") // The account is gone even if the OS rejects worker cleanup.
 +    private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
 +        try {
@@ -5325,7 +5337,7 @@ index 294506ed1..e4fc9db25 100644
 +            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
 +        }
 +    }
-@@ -220,5 +335,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +346,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -5348,11 +5360,11 @@ index 294506ed1..e4fc9db25 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -226,0 +354 @@ class MigrationAppHooksImpl(
+@@ -226,0 +365 @@ class MigrationAppHooksImpl(
 +            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
-@@ -227,0 +356 @@ class MigrationAppHooksImpl(
+@@ -227,0 +367 @@ class MigrationAppHooksImpl(
 +            migrationNotifier.cancelStepDue(key)
-@@ -229,6 +358 @@ class MigrationAppHooksImpl(
+@@ -229,6 +369 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
@@ -5360,17 +5372,17 @@ index 294506ed1..e4fc9db25 100644
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
 +        if (accountKeyId == null) migrationNotifier.cancelWalletMigrationNotices()
-@@ -236,0 +361,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +372,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +370 @@ class MigrationNavigatorImpl(
+@@ -242,3 +381 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -250,7 +376,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -250,7 +387,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSetupArgs> { MigrationSetupScreen() }
 -            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
 -            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
@@ -5385,13 +5397,13 @@ index 294506ed1..e4fc9db25 100644
 +            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +385 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +396 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute(), entry.id) }
-@@ -261 +387 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +398 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
-@@ -263,5 +389,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263,5 +400,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 -            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
@@ -5568,7 +5580,7 @@ index fc7d89b2b..0951092b3 100644
 +    override suspend fun store(accountKeyId: String, value: Boolean) =
 +        default(accountKeyId).putValue(preferenceHolder(), value)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
-index 259530a9c..d259f5175 100644
+index 259530a9c..22cca1da7 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/provider/MigrationNotifier.kt
 @@ -12 +11,0 @@ import co.electriccoin.zcash.ui.R
@@ -5576,7 +5588,7 @@ index 259530a9c..d259f5175 100644
 @@ -35,2 +34,2 @@ class MigrationNotifier(
 -    // (EXTRA_OPEN_MIGRATION / EXTRA_RUN_STEP / EXTRA_ACCOUNT_KEY_ID) plus the per-account
 -    // PendingIntent request codes are migration concerns. Moving construction into
-+    // (EXTRA_OPEN_MIGRATION / EXTRA_RUN_STEP / EXTRA_ACCOUNT_KEY_ID) and the scoped PendingIntent
++    // (EXTRA_OPEN_MIGRATION / EXTRA_ACCOUNT_KEY_ID) and the scoped PendingIntent
 +    // identities are migration concerns. Moving construction into
 @@ -42,2 +41,2 @@ class MigrationNotifier(
 -     * Tap target that simply opens the migration UI for [accountKeyId] on the correct account. Uses
@@ -5592,41 +5604,54 @@ index 259530a9c..d259f5175 100644
 @@ -59 +58 @@ class MigrationNotifier(
 -            REQUEST_CODE_MIGRATION_BASE + accountIdOffset(accountKeyId),
 +            REQUEST_CODE_MIGRATION,
-@@ -72,0 +72 @@ class MigrationNotifier(
-+                action = migrationIntentAction(EXTRA_RUN_STEP, accountKeyId)
-@@ -78 +78 @@ class MigrationNotifier(
+@@ -65,25 +63,0 @@ class MigrationNotifier(
+-    // Distinct request code AND a distinct intent extra from mainActivityIntent()'s
+-    // EXTRA_OPEN_MIGRATION: the step-due tap must RE-KICK the worker (handleIntent schedules an
+-    // immediate run) besides opening Progress — background execution needs no UI, the app open
+-    // exists only to give the OS a live process to run the worker in.
+-    private fun runStepIntent(accountKeyId: String): PendingIntent {
+-        val intent =
+-            Intent(context, MainActivity::class.java).apply {
+-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+-                putExtra(EXTRA_RUN_STEP, true)
+-                putExtra(EXTRA_ACCOUNT_KEY_ID, accountKeyId)
+-            }
+-        return PendingIntent.getActivity(
+-            context,
 -            REQUEST_CODE_TRANSFER_READY_BASE + accountIdOffset(accountKeyId),
-+            REQUEST_CODE_TRANSFER_READY,
-@@ -84,6 +83,0 @@ class MigrationNotifier(
+-            intent,
+-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+-        )
+-    }
+-
 -    private fun stepDueNotificationId(accountKeyId: String): Int =
 -        NOTIFICATION_ID_STEP_DUE_BASE + accountIdOffset(accountKeyId)
 -
 -    private fun progressNotificationId(accountKeyId: String): Int =
 -        NOTIFICATION_ID_PROGRESS_BASE + accountIdOffset(accountKeyId)
 -
-@@ -159 +153 @@ class MigrationNotifier(
+@@ -159 +133 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -182 +176 @@ class MigrationNotifier(
+@@ -182 +156 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -217 +211 @@ class MigrationNotifier(
+@@ -217 +191 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -253 +247 @@ class MigrationNotifier(
+@@ -253 +227 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -273 +267 @@ class MigrationNotifier(
+@@ -273 +247 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -279,2 +273,4 @@ class MigrationNotifier(
+@@ -279,2 +253,3 @@ class MigrationNotifier(
 -     * and nothing is executing it. Tapping opens the app, which silently re-kicks the worker; the
 -     * worker's own next run start cancels this via [cancelStepDue].
-+     * and nothing is executing it. The normal tap re-kicks the worker. If an interrupted removal
-+     * left ownership unresolved, the notice asks the user to check status and opens progress only
-+     * after the app resolves the original account. The step-due notice stays available if the tap
-+     * fails to select the original wallet or wake its worker. [cancelStepDue] dismisses either form.
-@@ -285 +281,7 @@ class MigrationNotifier(
++     * and nothing is executing it. The tap opens authenticated progress for the original account.
++     * Normal foreground recovery resumes eligible work. The notice remains until the worker runs
++     * or [cancelStepDue] dismisses it.
+@@ -285 +260,6 @@ class MigrationNotifier(
 -    fun notifyMigrationStepDue(accountKeyId: String) {
 +    fun notifyMigrationFallback(accountKeyId: String, removalUnresolved: Boolean) {
 +        val text = if (removalUnresolved) {
@@ -5634,34 +5659,33 @@ index 259530a9c..d259f5175 100644
 +        } else {
 +            R.string.migration_notification_stepDueText
 +        }
-+        val tap = if (removalUnresolved) mainActivityIntent(accountKeyId) else runStepIntent(accountKeyId)
-@@ -291 +293 @@ class MigrationNotifier(
+@@ -291 +271 @@ class MigrationNotifier(
 -                .setContentText(context.getString(R.string.migration_notification_stepDueText))
 +                .setContentText(context.getString(text))
-@@ -293,2 +295,2 @@ class MigrationNotifier(
+@@ -293,2 +273,2 @@ class MigrationNotifier(
 -                .setContentIntent(runStepIntent(accountKeyId))
 -                .setAutoCancel(true)
-+                .setContentIntent(tap)
++                .setContentIntent(mainActivityIntent(accountKeyId))
 +                .setAutoCancel(removalUnresolved)
-@@ -297 +299 @@ class MigrationNotifier(
+@@ -297 +277 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(stepDueNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_STEP_DUE, notification)
-@@ -304 +306 @@ class MigrationNotifier(
+@@ -304 +284 @@ class MigrationNotifier(
 -     *   notification (posted by [notifyMigrationStepDue]) should be dismissed.
 +     *   notification (posted by [notifyMigrationFallback]) should be dismissed.
-@@ -307 +309 @@ class MigrationNotifier(
+@@ -307 +287 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).cancel(stepDueNotificationId(accountKeyId))
 +        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_STEP_DUE)
-@@ -334 +336 @@ class MigrationNotifier(
+@@ -334 +314 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -358 +360 @@ class MigrationNotifier(
+@@ -358 +338 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -363 +365 @@ class MigrationNotifier(
+@@ -363 +343 @@ class MigrationNotifier(
 -     * notify* methods above share the single per-account [progressNotificationId], so one cancel
 +     * notify* methods above share the same per-account progress notification, so one cancel
-@@ -372 +374,12 @@ class MigrationNotifier(
+@@ -372 +352,12 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).cancel(progressNotificationId(accountKeyId))
 +        NotificationManagerCompat.from(context).cancel(accountKeyId, NOTIFICATION_ID_PROGRESS)
 +    }
@@ -5675,10 +5699,10 @@ index 259530a9c..d259f5175 100644
 +                    it.notification.channelId == LEGACY_DEFAULT_IMPORTANCE_CHANNEL_ID
 +            }
 +            .forEach { manager.cancel(it.tag, it.id) }
-@@ -392 +405 @@ class MigrationNotifier(
+@@ -392 +383 @@ class MigrationNotifier(
 -        NotificationManagerCompat.from(context).notify(progressNotificationId(accountKeyId), notification)
 +        NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_PROGRESS, notification)
-@@ -414,10 +427,4 @@ class MigrationNotifier(
+@@ -414,10 +405,3 @@ class MigrationNotifier(
 -        // Notification-id namespace (NotificationManager ids). Independent of the PendingIntent
 -        // request-code namespace below — sharing the same numeric base value across the two namespaces
 -        // does not collide. Per-account via `+ accountIdOffset(...)` (range 0..0xFFFF).
@@ -5692,8 +5716,7 @@ index 259530a9c..d259f5175 100644
 +        private const val NOTIFICATION_ID_PROGRESS = 0x10_0000
 +        private const val NOTIFICATION_ID_STEP_DUE = 0x40_0000
 +        private const val REQUEST_CODE_MIGRATION = 0x10_0000
-+        private const val REQUEST_CODE_TRANSFER_READY = 0x20_0000
-@@ -425,0 +433,3 @@ class MigrationNotifier(
+@@ -425,0 +410,3 @@ class MigrationNotifier(
 +
 +// Android ignores extras when comparing pending intents.
 +internal fun migrationIntentAction(kind: String, accountKeyId: String): String = "$kind.$accountKeyId"
@@ -6036,7 +6059,7 @@ index fd3ae4479..32096c85c 100644
 +    override fun clearOwner(accountKeyId: String) {
 +        pending.update { entries -> entries.filterKeys { it.first != accountKeyId } }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..27f797eb9 100644
+index 9451c3bae..3f4c59e5e 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -6108,7 +6131,7 @@ index 9451c3bae..27f797eb9 100644
 +            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
 +        } finally {
 +            recoveryMutex.unlock()
-@@ -86,13 +109,16 @@ class CheckMigrationRecoveryUseCase(
+@@ -86,13 +109,13 @@ class CheckMigrationRecoveryUseCase(
 -        // No wallet YET — on a cold start this fires before the synchronizer initializes, and
 -        // silently consuming the throttle window here left recovery permanently ineffective
 -        // (observed live: 1st call = SDK null + throttle stamped, 2nd call 3s later = throttled;
@@ -6124,9 +6147,6 @@ index 9451c3bae..27f797eb9 100644
 -            return
 +    }
 +
-+    internal suspend fun hasActivePlan(owner: String): Boolean =
-+        getOrchardMigrationSdk(owner)?.getMigrationStateUnreconciled() is MigrationState.InProgress
-+
 +    private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
 +        if (persistableWalletProvider.getPersistableWallet() == null) return
 +        val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
@@ -6138,10 +6158,10 @@ index 9451c3bae..27f797eb9 100644
 +        if (ownerKey != null && !resetPending.value) {
 +            recoverBroadcast(ownerKey, requestProgress)
 +            if (reconciled && !resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
-@@ -100 +126 @@ class CheckMigrationRecoveryUseCase(
+@@ -100 +123 @@ class CheckMigrationRecoveryUseCase(
 -        val sdk = getOrchardMigrationSdk()
 +    }
-@@ -102,46 +128,5 @@ class CheckMigrationRecoveryUseCase(
+@@ -102,46 +125,5 @@ class CheckMigrationRecoveryUseCase(
 -        // The whole engine-reading/routing body below is guarded (2026-08-07): a "database is
 -        // locked" throw here used to be unguarded and would crash the app-open/foreground-return
 -        // path — this use case drives navigation, not a screen with its own LCE error state to
@@ -6193,7 +6213,7 @@ index 9451c3bae..27f797eb9 100644
 +        resetPending.flatMapLatest { pending ->
 +            if (pending) flowOf(null) else values.filterNotNull()
 +        }.first()
-@@ -149,9 +134,9 @@ class CheckMigrationRecoveryUseCase(
+@@ -149,9 +131,9 @@ class CheckMigrationRecoveryUseCase(
 -                        MigrationWorkerRunState.ABSENT -> {
 -                            // Revival: recovers the DURABLE background chain after process kill, device
 -                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
@@ -6212,12 +6232,12 @@ index 9451c3bae..27f797eb9 100644
 +                        migrationNotifier.cancel(key)
 +                        migrationNotifier.cancelStepDue(key)
 +                        cancelRemovedWake(key)
-@@ -158,0 +144 @@ class CheckMigrationRecoveryUseCase(
+@@ -158,0 +141 @@ class CheckMigrationRecoveryUseCase(
 +                    MigrationWorkerHeartbeat.clearRemovalPending(context, key)
-@@ -160,0 +147,2 @@ class CheckMigrationRecoveryUseCase(
+@@ -160,0 +144,2 @@ class CheckMigrationRecoveryUseCase(
 +        }
 +    }
-@@ -162,35 +150,14 @@ class CheckMigrationRecoveryUseCase(
+@@ -162,35 +147,14 @@ class CheckMigrationRecoveryUseCase(
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
 -                // The flag only records THAT a background attempt once failed on Tor, not what the
 -                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -6267,7 +6287,7 @@ index 9451c3bae..27f797eb9 100644
 +                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
 +                    migrationLiveDriver.startIfNotRunning(accountKey)
 +                    reviveScheduledWorker(accountKey, wakeVersion)
-@@ -197,0 +165,54 @@ class CheckMigrationRecoveryUseCase(
+@@ -197,0 +162,54 @@ class CheckMigrationRecoveryUseCase(
 +            } catch (e: CancellationException) {
 +                throw e
 +            } catch (e: Exception) {
@@ -6322,7 +6342,7 @@ index 9451c3bae..27f797eb9 100644
 +                        "(next transfer action=${nextTransfer?.action}) — clearing."
 +                )
 +                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
-@@ -199,10 +219,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -199,10 +216,0 @@ class CheckMigrationRecoveryUseCase(
 -            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
 -            // the engine's own state is the single, authoritative record (a commit that never happened
 -            // simply leaves the engine NotStarted, and every screen renders that live).
@@ -6333,10 +6353,10 @@ index 9451c3bae..27f797eb9 100644
 -                e
 -            )
 -            throttleMutex.withLock { lastRunMark = null }
-@@ -215 +226 @@ class CheckMigrationRecoveryUseCase(
+@@ -215 +223 @@ class CheckMigrationRecoveryUseCase(
 -        private val throttleMutex = Mutex()
 +        private val recoveryMutex = Mutex()
-@@ -227,15 +237,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -227,15 +234,0 @@ class CheckMigrationRecoveryUseCase(
 -/**
 - * Production implementation of the migration-worker active check — reads WorkManager unique work
 - * state (per-account unique work name). Extracted so [CheckMigrationRecoveryUseCase] tests can
@@ -6352,7 +6372,7 @@ index 9451c3bae..27f797eb9 100644
 -            ).get()
 -    }.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
 -
-@@ -247,3 +243 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
+@@ -247,3 +240 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
 - * [isMigrationWorkerActiveInWorkManager] collapses the first two together, which is all
 - * [OnMigrationSyncCompletedUseCase] needs; this finer state is what
 - * [CheckMigrationRecoveryUseCase]'s app-open trigger needs.
@@ -7051,19 +7071,35 @@ index e8ca4f6b1..093e7cbee 100644
 @@ -72,0 +91 @@ class RestartMigrationUseCase(
 +        migrationNotifier.cancelStepDue(accountKeyId)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
-index 7eed67006..0e00fb74e 100644
+index 7eed67006..2d3a6b53a 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
-@@ -21,3 +21,4 @@ class ScheduleNextMigrationWindowUseCase(
+@@ -10,5 +10,2 @@ import kotlin.time.Duration.Companion.seconds
+- * Re-arms the background worker for whatever transfer is next in the active plan, after any
+- * transfer broadcasts successfully (scheduled, resumed, or manually confirmed). No-ops if there's
+- * no next pending transfer (e.g. the plan just completed, or IMMEDIATE mode's single-transfer
+- * plan). Background delivery is scheduled unconditionally — see [MigrationScheduler]/
+- * [FinalizeMigrationScheduleUseCase] for why this no longer depends on a delivery-mode flag.
++ * Preserves an existing wake or schedules the next transfer after a manual submission.
++ * If every transfer was sent, the next wake checks mining after the SDK's privacy window.
+@@ -19,0 +17 @@ class ScheduleNextMigrationWindowUseCase(
++    private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
+@@ -21,5 +19,11 @@ class ScheduleNextMigrationWindowUseCase(
 -    suspend operator fun invoke() {
 -        val next = getMigrationSnapshot()?.nextPending ?: return
 -        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+-        val delay = delayUntil(next.scheduledAt.epochSeconds)
+-        migrationScheduler.schedule(accountKeyId, delay)
 +    suspend operator fun invoke(accountKeyId: String? = null) {
 +        val owner = accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +        val version = MigrationScheduler.wakeVersion(owner)
-+        val next = getMigrationSnapshot(owner)?.nextPending ?: return
-@@ -25 +26 @@ class ScheduleNextMigrationWindowUseCase(
--        migrationScheduler.schedule(accountKeyId, delay)
++        val snapshot = getMigrationSnapshot(owner) ?: return
++        val next = snapshot.nextPending
++        val delay = when {
++            next != null -> delayUntil(next.scheduledAt.epochSeconds)
++            snapshot.isComplete && !snapshot.areAllMined -> getOrchardMigrationSdk(owner)?.privacySyncBufferDuration()
++            else -> null
++        } ?: return
 +        migrationScheduler.scheduleIfMissing(owner, delay, version)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/MigrationFlowPreviews.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/MigrationFlowPreviews.kt
 index e79659eb3..e6c1366e8 100644
@@ -9745,7 +9781,7 @@ index d80cbcdb3..58516c1d5 100644
 +
 +        else -> LceRenderer(
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
-index c53b8b4a0..3a7f10cd4 100644
+index c53b8b4a0..504f72ba5 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 @@ -4,0 +5,4 @@ import androidx.lifecycle.viewModelScope
@@ -9759,46 +9795,47 @@ index c53b8b4a0..3a7f10cd4 100644
 +import co.electriccoin.zcash.ui.isForegroundAtEntry
 @@ -13,0 +20 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 +import co.electriccoin.zcash.ui.common.model.migration.MigrationTransferBlocker
-@@ -23,0 +31,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -23 +30,2 @@ import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProv
+-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
-@@ -30,0 +40,2 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
-+import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
+@@ -30,0 +39 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.ui.design.util.StringResource
-@@ -31,0 +43 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -31,0 +41 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -32,0 +45,2 @@ import kotlinx.coroutines.CancellationException
+@@ -32,0 +43,2 @@ import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
-@@ -37 +51 @@ import kotlinx.coroutines.flow.map
+@@ -37 +49 @@ import kotlinx.coroutines.flow.map
 -import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.job
-@@ -38,0 +53 @@ import kotlinx.coroutines.launch
+@@ -38,0 +51 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withContext
-@@ -42,0 +58 @@ class MigrationScheduledVM(
+@@ -42,0 +56 @@ class MigrationScheduledVM(
 +    private val args: MigrationScheduledArgs,
-@@ -47 +62,0 @@ class MigrationScheduledVM(
+@@ -47 +60,0 @@ class MigrationScheduledVM(
 -    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
-@@ -53,0 +69,4 @@ class MigrationScheduledVM(
+@@ -53 +66,4 @@ class MigrationScheduledVM(
+-    private val synchronizerProvider: SynchronizerProvider,
 +    private val selectedAccount: GetSelectedWalletAccountUseCase,
 +    private val drive: MigrationDriveOnce,
 +    private val walletActionAccess: WalletActionAccess,
 +    private val sourceEntryId: String? = null,
-@@ -62,0 +82,3 @@ class MigrationScheduledVM(
+@@ -62,0 +79,3 @@ class MigrationScheduledVM(
 +    val finalizationError = MutableStateFlow<StringResource?>(null)
 +    val needsKeystoneSignatures = MutableStateFlow(false)
 +    val homeRecoveryMessage = MutableStateFlow<StringResource?>(null)
-@@ -69 +91 @@ class MigrationScheduledVM(
+@@ -69 +88 @@ class MigrationScheduledVM(
 -            loadLce.execute { getMigrationSnapshot() }
 +            if (homeRecoveryMessage.value == null) retrySnapshot()
-@@ -75,3 +97,3 @@ class MigrationScheduledVM(
+@@ -75,3 +94,3 @@ class MigrationScheduledVM(
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -            val sched = pendingSchedule.get(accountKeyId)
 -            val pending = pendingKeystonePczts.get(accountKeyId)
 +            val accountKeyId = args.accountKeyId
 +            val sched = pendingSchedule.peek(accountKeyId)
 +            val pending = pendingKeystonePczts.peek(accountKeyId)
-@@ -84,28 +106,8 @@ class MigrationScheduledVM(
+@@ -84,28 +103,8 @@ class MigrationScheduledVM(
 -            val sdk = getOrchardMigrationSdk()
 -            val splitSignedPczt = pending.accumulatedSplitSigned
 -            if (splitSignedPczt != null) {
@@ -9835,7 +9872,7 @@ index c53b8b4a0..3a7f10cd4 100644
 +            }
 +            checkNotNull(finalized) {
 +                "Another migration step is in progress"
-@@ -113,22 +114,0 @@ class MigrationScheduledVM(
+@@ -113,22 +111,0 @@ class MigrationScheduledVM(
 -            // Kind-agnostic per-id signature application — extra PREPARATIONS of the note-split
 -            // tree go through the same call as the transfers.
 -            sdk.storeSignedSchedulePczts(
@@ -9858,7 +9895,7 @@ index c53b8b4a0..3a7f10cd4 100644
 -            pendingSchedule.clear()
 -            pendingKeystonePczts.clear()
 -            isFinalizing.value = false
-@@ -138,16 +118,66 @@ class MigrationScheduledVM(
+@@ -138,16 +115,65 @@ class MigrationScheduledVM(
 -            // An unguarded failure here (e.g. a transient "database is locked" from the migration
 -            // engine mutex) would otherwise crash the app right after the user completes a
 -            // physical Keystone signing ceremony, with the signed batch already applied. Surface
@@ -9940,8 +9977,7 @@ index c53b8b4a0..3a7f10cd4 100644
 +                pendingSchedule.clear(accountKeyId, schedule)
 +                pendingKeystonePczts.clear(accountKeyId, pending)
 +                isFinalizing.value = false
-+                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
-@@ -154,0 +185,23 @@ class MigrationScheduledVM(
+@@ -154,0 +181,23 @@ class MigrationScheduledVM(
 +            TransferResult.InvalidNote, TransferResult.Expired ->
 +                returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
 +            is TransferResult.NetworkError -> showFinalizationError(migrationFailureMessage(splitResult))
@@ -9965,7 +10001,7 @@ index c53b8b4a0..3a7f10cd4 100644
 +            sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
 +        } else {
 +            null
-@@ -157,0 +211,45 @@ class MigrationScheduledVM(
+@@ -157,0 +207,45 @@ class MigrationScheduledVM(
 +    private fun returnToHomeForRecovery(
 +        accountKeyId: String,
 +        schedule: MigrationSchedule,
@@ -10011,10 +10047,10 @@ index c53b8b4a0..3a7f10cd4 100644
 +
 +    fun navigateBack() = navigationRouter.backToRoot()
 +
-@@ -162,2 +259,0 @@ class MigrationScheduledVM(
+@@ -162,2 +255,0 @@ class MigrationScheduledVM(
 -                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
 -                // instead of rendering zeroed stats (review L3).
-@@ -191,0 +288,30 @@ class MigrationScheduledVM(
+@@ -191,0 +284,30 @@ class MigrationScheduledVM(
 +
 +private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
 +    states: List<MigrationTransferState>,
@@ -10090,7 +10126,7 @@ index 9899c12bd..fed64ad27 100644
 @@ -7,0 +8 @@ data class MigrationSendingState(
 +    val canGoBack: Boolean = false,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
-index f6acbc6ca..301d854a8 100644
+index f6acbc6ca..7f2621cd5 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVM.kt
 @@ -4,0 +5,2 @@ import androidx.lifecycle.viewModelScope
@@ -10146,7 +10182,7 @@ index f6acbc6ca..301d854a8 100644
 -            SendFailure.NotReady -> stringRes(DesignR.string.migrationSending_notReady)
 -        }
 -
-@@ -71,3 +95,12 @@ class MigrationSendingVM(
+@@ -71,3 +95,17 @@ class MigrationSendingVM(
 -            .onEach { useTor ->
 -                pendingMigrationTorFailureDecisionRepository.clear()
 -                sendLce.execute { sendOnce(useTor) }
@@ -10160,9 +10196,14 @@ index f6acbc6ca..301d854a8 100644
 +                }
 +                if (pendingMigrationTorFailureDecisionRepository.consume(decision)) {
 +                    fallbackId = null
-+                    sendLce.execute { sendOnce(decision.useTor, directConsent = true) }
++                    var hasDirectConsent = true
++                    sendLce.execute {
++                        val useDirect = hasDirectConsent && !decision.useTor
++                        hasDirectConsent = false
++                        sendOnce(useTor = !useDirect, directConsent = useDirect)
++                    }
 +                }
-@@ -75,9 +108 @@ class MigrationSendingVM(
+@@ -75,9 +113 @@ class MigrationSendingVM(
 -        // If a Tor-failure decision is already sitting here at construction time (e.g. this VM was
 -        // recreated while one was pending), the collector above fires on its very first emission
 -        // and is the more specific, more recent user decision — calling send() here too would race
@@ -10173,14 +10214,14 @@ index f6acbc6ca..301d854a8 100644
 -            send()
 -        }
 +        send()
-@@ -87 +112 @@ class MigrationSendingVM(
+@@ -87 +117 @@ class MigrationSendingVM(
 -        combine(sendLce.state, failure) { _, f ->
 +        combine(sendLce.state, failure) { send, f ->
-@@ -98,2 +123 @@ class MigrationSendingVM(
+@@ -98,2 +128 @@ class MigrationSendingVM(
 -                                failure.value = null
 -                                navigationRouter.back()
 +                                onBack()
-@@ -103,10 +127,2 @@ class MigrationSendingVM(
+@@ -103,10 +132,2 @@ class MigrationSendingVM(
 -                // The escape hatch stays disabled while a send is actively in flight (no failure
 -                // shown yet) — matches TransactionProgressVM.createSendingState()'s
 -                // onBack = { /* do nothing */ } while sending, wired to a real back action only once
@@ -10193,17 +10234,17 @@ index f6acbc6ca..301d854a8 100644
 -                    },
 +                onBack = ::onBack,
 +                canGoBack = !send.loading,
-@@ -117 +133,3 @@ class MigrationSendingVM(
+@@ -117 +138,3 @@ class MigrationSendingVM(
 -    private fun send() = sendLce.execute { sendOnce(useTor = isMigrationTorEnabledStorageProvider.get()) }
 +    private fun send() = sendLce.execute {
 +        sendOnce(useTor = isMigrationTorEnabledStorageProvider.get(args.accountKeyId))
 +    }
-@@ -119 +137,3 @@ class MigrationSendingVM(
+@@ -119 +142,3 @@ class MigrationSendingVM(
 -    fun onBack() = navigationRouter.back()
 +    fun onBack() = sendLce.guardLoading {
 +        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
 +    }
-@@ -121,20 +141,14 @@ class MigrationSendingVM(
+@@ -121,20 +146,14 @@ class MigrationSendingVM(
 -    private suspend fun sendOnce(useTor: Boolean) {
 -        val sdk = getOrchardMigrationSdk()
 -        // The engine-mutating send lives entirely under DRIVE_LOCK (via withExclusiveAccess) so it
@@ -10238,20 +10279,20 @@ index f6acbc6ca..301d854a8 100644
 +            getOrchardMigrationSdk(args.accountKeyId)
 +        } else {
 +            null
-@@ -142,5 +156 @@ class MigrationSendingVM(
+@@ -142,5 +161 @@ class MigrationSendingVM(
 -        if (!acquired) {
 -            // Never got exclusive access — a background step held the lock for the whole retry
 -            // budget. Same handling as the pre-existing "not ready yet" path below: no send was
 -            // attempted, so this can't be a Tor failure.
 -            pendingMigrationTorFailureStorageProvider.store(false)
 +        if (sdk == null) {
-@@ -150,4 +160 @@ class MigrationSendingVM(
+@@ -150,4 +165 @@ class MigrationSendingVM(
 -        // Everything below is a read, a WorkManager enqueue, or app-state/navigation — none of it
 -        // mutates the engine's send state, so it stays outside the lock (avoids needless LockBusy
 -        // churn against the worker/live-driver for callers that don't need to be excluded).
 -        when (val o = outcome) {
-+        when (val o = sendWhenIdle(sdk, useTor)) {
-@@ -156,22 +163 @@ class MigrationSendingVM(
++        when (val o = sendWhenIdle(sdk, useTor, singleEntry = directConsent)) {
+@@ -156,22 +168 @@ class MigrationSendingVM(
 -                    is TransferResult.Success -> {
 -                        // The one unambiguous "problem resolved" signal — clears a pending background Tor
 -                        // failure (see PendingMigrationTorFailureStorageProvider) so app-open reconciliation
@@ -10275,25 +10316,29 @@ index f6acbc6ca..301d854a8 100644
 -                        }
 -                    }
 +                    is TransferResult.Success -> reportSubmitted(r.txId)
-@@ -183,2 +169,4 @@ class MigrationSendingVM(
+@@ -183,2 +174,4 @@ class MigrationSendingVM(
 -                        if (r.isTorFailure) {
 -                            navigationRouter.forward(MigrationTorFailureArgs)
 +                        if (r.isTorFailure && !directConsent) {
 +                            val token = UUID.randomUUID().toString()
 +                            fallbackId = token
 +                            openResult(MigrationTorFailureArgs(args.accountKeyId, token))
-@@ -204 +192,3 @@ class MigrationSendingVM(
+@@ -204 +197,3 @@ class MigrationSendingVM(
 -                pendingMigrationTorFailureStorageProvider.store(false)
 +                if (!args.isRecoveryRetry) {
 +                    pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
 +                }
-@@ -209,0 +200,28 @@ class MigrationSendingVM(
-+    private suspend fun sendWhenIdle(sdk: OrchardMigrationSdk, useTor: Boolean): TransferAttemptOutcome? {
+@@ -209,0 +205,32 @@ class MigrationSendingVM(
++    private suspend fun sendWhenIdle(
++        sdk: OrchardMigrationSdk,
++        useTor: Boolean,
++        singleEntry: Boolean,
++    ): TransferAttemptOutcome? {
 +        repeat(SEND_MAX_ATTEMPTS) { attempt ->
 +            if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
 +            val execution = migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
 +                // The whole readiness loop holds exclusive access, including when no send is due.
-+                Result.success(sendReadinessLoop(sdk, useTor))
++                Result.success(sendReadinessLoop(sdk, useTor, singleEntry))
 +            }
 +            if (execution != null) return execution.getOrThrow()
 +        }
@@ -10316,13 +10361,15 @@ index f6acbc6ca..301d854a8 100644
 +        openResult(route, replace = true)
 +    }
 +
-@@ -211,3 +229,2 @@ class MigrationSendingVM(
+@@ -211,3 +238,2 @@ class MigrationSendingVM(
 -     * The original readiness/retry loop, unchanged — runs entirely inside the caller's
 -     * [MigrationDriveOnce.withExclusiveAccess] block (2026-08-06 DRIVE_LOCK bypass fix), so a
 -     * background worker/live-driver step can never interleave with it.
 +     * Runs under [MigrationDriveOnce.withExclusiveAccess] so the background driver cannot
 +     * interleave with a retry or advance its proposed transfer.
-@@ -221,7 +238 @@ class MigrationSendingVM(
+@@ -217,0 +244 @@ class MigrationSendingVM(
++        singleEntry: Boolean,
+@@ -221,7 +248,2 @@ class MigrationSendingVM(
 -        while ((
 -                outcome == null ||
 -                    outcome is TransferAttemptOutcome.NothingDue ||
@@ -10330,8 +10377,9 @@ index f6acbc6ca..301d854a8 100644
 -            ) &&
 -            attempt < SEND_MAX_ATTEMPTS
 -        ) {
-+        while (outcome !is TransferAttemptOutcome.Executed && attempt < SEND_MAX_ATTEMPTS) {
-@@ -229,3 +240,14 @@ class MigrationSendingVM(
++        val approvalAllowsEntry = { !singleEntry || outcome == null }
++        while (outcome !is TransferAttemptOutcome.Executed && attempt < SEND_MAX_ATTEMPTS && approvalAllowsEntry()) {
+@@ -229,3 +251,14 @@ class MigrationSendingVM(
 -            withContext(NonCancellable) {
 -                outcome = sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
 -                migrationLog("SendingVM: attempt=${attempt + 1} outcome=$outcome")
@@ -10349,7 +10397,7 @@ index f6acbc6ca..301d854a8 100644
 +                    val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
 +                    migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
 +                }
-@@ -237,0 +260,21 @@ class MigrationSendingVM(
+@@ -237,0 +271,21 @@ class MigrationSendingVM(
 +    private fun canEnterSend(): Boolean {
 +        val selected = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
 +            ?.sdkAccount?.accountUuid?.toStorageKeyId()
@@ -10371,7 +10419,7 @@ index f6acbc6ca..301d854a8 100644
 +        return next?.transferId == args.retryTransferId
 +    }
 +
-@@ -242,0 +286,22 @@ class MigrationSendingVM(
+@@ -242,0 +297,22 @@ class MigrationSendingVM(
 +
 +private suspend fun NavigationRouter.awaitAuthorizedEntry(
 +    entryId: String?,
@@ -10621,7 +10669,7 @@ index 000000000..66a802200
 +        if (isRemoved(accountKeyId)) null else block()
 +}
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
-index 79bb58513..73d5fab09 100644
+index 79bb58513..6042dea7e 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.work
@@ -10814,9 +10862,19 @@ index 79bb58513..73d5fab09 100644
 @@ -219 +217 @@ class MigrationDriveOnce(
 -                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow = false)
 +                syncRun(sdk, accountKeyId)
-@@ -235 +232,0 @@ class MigrationDriveOnce(
+@@ -224,8 +222 @@ class MigrationDriveOnce(
+-    /**
+-     * A sync (prove) run: syncToTip + finalizeReadyTransfers + reconcile, gated by the
+-     * post-broadcast privacy buffer. Afterwards the engine is asked again: a ready PREPARATION
+-     * broadcasts immediately, in this same call — core sync call 2026-08-05 §2.1: upstream only
+-     * ever surfaces a Preparation for proving once its own broadcast schedule is already due, so
+-     * there is no separate nextStep() round-trip to wait through. A due TRANSFER still waits out
+-     * the quiet gap this sync just opened (existing behavior, unchanged).
+-     */
++    /** Syncs and proves after the post-broadcast gap, then schedules any broadcast for a later wake. */
+@@ -235 +225,0 @@ class MigrationDriveOnce(
 -        allowForcedBroadcastWindow: Boolean,
-@@ -239 +236,8 @@ class MigrationDriveOnce(
+@@ -239 +229,8 @@ class MigrationDriveOnce(
 -            return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration()))
 +            return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration()))
 +        }
@@ -10826,51 +10884,58 @@ index 79bb58513..73d5fab09 100644
 +            } finally {
 +                withContext(NonCancellable) { recordNetworkActivity() }
 +            }
-@@ -241,2 +245 @@ class MigrationDriveOnce(
+@@ -241,2 +238 @@ class MigrationDriveOnce(
 -        val burst = synchronizerProvider.getSynchronizerOrNull()?.syncToTip(timeout = SYNC_TIMEOUT)
 -        migrationLog("MigrationDriveOnce: syncToTip result=$burst")
 +        migrationLog("MigrationDriveOnce: syncToTip outcome=${burst?.javaClass?.simpleName}")
-@@ -250 +253 @@ class MigrationDriveOnce(
+@@ -250 +246 @@ class MigrationDriveOnce(
 -        if (sdk.reconcileInvalidations()) {
 +        return if (sdk.reconcileInvalidations()) {
-@@ -256 +259,3 @@ class MigrationDriveOnce(
+@@ -256 +252,3 @@ class MigrationDriveOnce(
 -            return DriveOnceResult.Terminal
 +            DriveOnceResult.Terminal
 +        } else {
 +            driveAfterSync(sdk, accountKeyId)
-@@ -258 +263 @@ class MigrationDriveOnce(
+@@ -258 +256 @@ class MigrationDriveOnce(
 -        lastNetworkActivity.stampNow()
 +    }
-@@ -260 +265,2 @@ class MigrationDriveOnce(
+@@ -260 +258,2 @@ class MigrationDriveOnce(
 -        return when (val nextStep = sdk.nextStep()?.step) {
 +    private suspend fun driveAfterSync(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult =
 +        when (val nextStep = sdk.nextStep()?.step) {
-@@ -269,4 +275,2 @@ class MigrationDriveOnce(
+@@ -262,17 +261,2 @@ class MigrationDriveOnce(
+-                // §2.1 same-beat check: key off the ENGINE-NAMED transferId nextStep() just
+-                // returned, not a schedule-order scan (nextDueUnsentIsPreparation's earliestUnsent
+-                // could name a different transaction than the one the engine actually served,
+-                // which would defer a due preparation by a full privacy buffer — latency only,
+-                // but avoidable now that the id is already in hand).
+-                val prep = isPreparationTransfer(sdk.getMigrationTransferStates(), nextStep.transferId)
+-                if (prep) {
 -                    migrationLog(
 -                        "MigrationDriveOnce: sync done, next=$nextStep (preparation) — broadcasting same-beat."
 -                    )
 -                    broadcastRun(sdk, accountKeyId, nextStep.transferId, allowForcedBroadcastWindow)
-+                    migrationLog("MigrationDriveOnce: sync done. Broadcasting the preparation.")
-+                    broadcastRun(sdk, accountKeyId, nextStep.transferId)
-@@ -275,3 +279,2 @@ class MigrationDriveOnce(
+-                } else {
+-                    val chainDelay = sdk.privacySyncBufferDuration()
 -                    scheduleUnlessLiveLoop(accountKeyId, chainDelay)
 -                    migrationLog("MigrationDriveOnce: sync done, next=$nextStep — broadcast run in $chainDelay")
 -                    DriveOnceResult.ReArmed(chainDelay)
-+                    migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
-+                    DriveOnceResult.NextWake(chainDelay)
-@@ -282 +285 @@ class MigrationDriveOnce(
+-                }
++                migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
++                DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
+@@ -282 +266 @@ class MigrationDriveOnce(
 -                handleCompleteStep(sdk, accountKeyId) { completeRun(accountKeyId) }
 +                handleCompleteStep(sdk, applicationContext, accountKeyId, migrationNotifier)
-@@ -286 +289 @@ class MigrationDriveOnce(
+@@ -286 +270 @@ class MigrationDriveOnce(
 -                rebuildRun(sdk, accountKeyId, nextStep.transferId)
 +                rebuildRun(sdk, accountKeyId)
-@@ -307 +310 @@ class MigrationDriveOnce(
+@@ -307 +291 @@ class MigrationDriveOnce(
 -                migrationLog("MigrationDriveOnce: sync done, next=$nextStep — re-arming.")
 +                migrationLog("MigrationDriveOnce: sync done. Choosing the next wake.")
-@@ -309 +312 @@ class MigrationDriveOnce(
+@@ -309 +293 @@ class MigrationDriveOnce(
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -311,0 +315,12 @@ class MigrationDriveOnce(
+@@ -311,0 +296,29 @@ class MigrationDriveOnce(
 +
 +    internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean {
 +        val privacyBuffer = sdk.privacySyncBufferDuration()
@@ -10883,8 +10948,8 @@ index 79bb58513..73d5fab09 100644
 +            lastNetworkActivityEpochSeconds = activity?.epochSecond,
 +            privacyBufferSeconds = privacyBuffer.inWholeSeconds,
 +        ) == BroadcastPreflight.BROADCAST
-@@ -314 +329,30 @@ class MigrationDriveOnce(
--    @Suppress("ReturnCount", "LongMethod", "CyclomaticComplexMethod")
++    }
++
 +    internal suspend fun recordCrossingSuccess(outcome: TransferAttemptOutcome) {
 +        if ((outcome as? TransferAttemptOutcome.Executed)?.result is TransferResult.Success) {
 +            recordNetworkActivity()
@@ -10900,8 +10965,8 @@ index 79bb58513..73d5fab09 100644
 +        } catch (e: Exception) {
 +            migrationLog("MigrationDriveOnce: network activity persistence failed (" + e.javaClass.simpleName + ")")
 +        }
-+    }
-+
+@@ -314 +327,13 @@ class MigrationDriveOnce(
+-    @Suppress("ReturnCount", "LongMethod", "CyclomaticComplexMethod")
 +    private suspend fun isSynchronizerSyncing(): Boolean =
 +        synchronizerProvider.synchronizer.value?.let { synchronizer ->
 +            // A cold status flow or an unrecorded completed sync cannot establish a quiet window.
@@ -10915,9 +10980,9 @@ index 79bb58513..73d5fab09 100644
 +            }
 +        } == true
 +
-@@ -319 +362,0 @@ class MigrationDriveOnce(
+@@ -319 +343,0 @@ class MigrationDriveOnce(
 -        allowForcedBroadcastWindow: Boolean,
-@@ -321,83 +364,7 @@ class MigrationDriveOnce(
+@@ -321,83 +345,7 @@ class MigrationDriveOnce(
 -        val states = sdk.getMigrationTransferStates()
 -        val est = sdk.estimatedChainTip()
 -        // The transaction the ENGINE already named via nextStep()'s own Broadcast(transferId) —
@@ -11008,7 +11073,7 @@ index 79bb58513..73d5fab09 100644
 +            DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
 +        } else {
 +            attemptBroadcast(sdk, accountKeyId, transferId, candidate)
-@@ -405,13 +371,0 @@ class MigrationDriveOnce(
+@@ -405,13 +352,0 @@ class MigrationDriveOnce(
 -        return attemptBroadcast(sdk, accountKeyId, nextCandidate)
 -    }
 -
@@ -11022,9 +11087,9 @@ index 79bb58513..73d5fab09 100644
 -        val elapsed = (Clock.System.now().epochSeconds - last.epochSecond).seconds
 -        val remaining = privacyBuffer - elapsed
 -        return if (remaining.isPositive()) remaining else Duration.ZERO
-@@ -423,0 +378 @@ class MigrationDriveOnce(
+@@ -423,0 +359 @@ class MigrationDriveOnce(
 +        transferId: Long,
-@@ -438 +393,7 @@ class MigrationDriveOnce(
+@@ -438 +374,7 @@ class MigrationDriveOnce(
 -                    sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
 +                    val step = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
 +                    val quiet = mayBroadcastCrossing(sdk)
@@ -11033,17 +11098,17 @@ index 79bb58513..73d5fab09 100644
 +                    } else {
 +                        TransferAttemptOutcome.NothingDue
 +                    }
-@@ -444 +405 @@ class MigrationDriveOnce(
+@@ -444 +386 @@ class MigrationDriveOnce(
 -                return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = REARM_FLOOR))
 +                return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = REARM_FLOOR))
-@@ -449,3 +410,3 @@ class MigrationDriveOnce(
+@@ -449,3 +391,3 @@ class MigrationDriveOnce(
 -                val delay = reArm(sdk, accountKeyId)
 -                migrationLog("MigrationDriveOnce: NothingDue — re-armed for the next window.")
 -                DriveOnceResult.ReArmed(delay)
 +                val delay = nextWakeDelay(sdk)
 +                migrationLog("MigrationDriveOnce: NothingDue — waiting for the next window.")
 +                DriveOnceResult.NextWake(delay)
-@@ -458,5 +419,2 @@ class MigrationDriveOnce(
+@@ -458,5 +400,2 @@ class MigrationDriveOnce(
 -                migrationLog(
 -                    "MigrationDriveOnce: AwaitingProof for ${outcome.transferId} despite a Broadcast step — " +
 -                        "re-arming."
@@ -11051,9 +11116,9 @@ index 79bb58513..73d5fab09 100644
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = REARM_FLOOR))
 +                migrationLog("MigrationDriveOnce: broadcast is awaiting proof. Scheduling a wake.")
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = REARM_FLOOR))
-@@ -465,0 +424 @@ class MigrationDriveOnce(
+@@ -465,0 +405 @@ class MigrationDriveOnce(
 +                withContext(NonCancellable) { recordCrossingSuccess(outcome) }
-@@ -487,8 +446,3 @@ class MigrationDriveOnce(
+@@ -487,8 +427,3 @@ class MigrationDriveOnce(
 -                migrationLog("MigrationDriveOnce: sent — txId=${result.txId.txIdString()}")
 -                // Classify zip318_kind immediately rather than waiting on the mempool watcher or a
 -                // later rescan — our own broadcast path already stores `raw` locally, which makes
@@ -11065,7 +11130,7 @@ index 79bb58513..73d5fab09 100644
 +                migrationLog("MigrationDriveOnce: sent a migration transaction.")
 +                // The SDK's explicit enhancement is a remote exact-ID lookup on the general wallet
 +                // route. Keep the crossing on its chosen route and read live migration progress locally.
-@@ -511,10 +465,2 @@ class MigrationDriveOnce(
+@@ -511,10 +446,2 @@ class MigrationDriveOnce(
 -                    // Prep fast-track: whole ready prep batches go back-to-back — no send spacing
 -                    // between preparations (one logical tree, in-pool, nothing to de-correlate).
 -                    // CROSSINGS take the opposite rule: never two sends closer than the privacy
@@ -11078,64 +11143,66 @@ index 79bb58513..73d5fab09 100644
 -                    // the crossings' anchor boundaries — the exact tx9 latency condition (review H1).
 +                    // A due preparation can wake at the earliest permitted time. The next generic
 +                    // submission will still recheck quiet because the SDK can select a crossing.
-@@ -522,2 +468,2 @@ class MigrationDriveOnce(
+@@ -522,2 +449,2 @@ class MigrationDriveOnce(
 -                        scheduleUnlessLiveLoop(accountKeyId, PREP_FAST_TRACK_REARM)
 -                        migrationLog("MigrationDriveOnce: ready preparation next — chaining in $PREP_FAST_TRACK_REARM")
 +                        val delay = maxOf(PREP_FAST_TRACK_REARM, sdk.privacySyncBufferDuration())
 +                        migrationLog("MigrationDriveOnce: ready preparation next — waking after $delay")
-@@ -531 +477 @@ class MigrationDriveOnce(
+@@ -531 +458 @@ class MigrationDriveOnce(
 -                        DriveOnceResult.ReArmed(PREP_FAST_TRACK_REARM, respectAntiSpinFloor = false)
 +                        DriveOnceResult.NextWake(delay, respectAntiSpinFloor = false)
-@@ -533 +479 @@ class MigrationDriveOnce(
+@@ -533 +460 @@ class MigrationDriveOnce(
 -                        val delay = reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration())
 +                        val delay = nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration())
-@@ -541 +487 @@ class MigrationDriveOnce(
+@@ -541 +468 @@ class MigrationDriveOnce(
 -                        DriveOnceResult.ReArmed(delay)
 +                        DriveOnceResult.NextWake(delay)
-@@ -548,3 +494,3 @@ class MigrationDriveOnce(
+@@ -544 +470,0 @@ class MigrationDriveOnce(
+-                    migrationNotifier.notifyMigrationComplete(accountKeyId)
+@@ -548,3 +474,3 @@ class MigrationDriveOnce(
 -                    val delay = reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration())
 -                    migrationLog("MigrationDriveOnce: all transfers sent — completion sweep armed.")
 -                    DriveOnceResult.ReArmed(delay)
 +                    val delay = nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration())
 +                    migrationLog("MigrationDriveOnce: all transfers sent — completion check due next.")
 +                    DriveOnceResult.NextWake(delay)
-@@ -599 +545 @@ class MigrationDriveOnce(
+@@ -599 +525 @@ class MigrationDriveOnce(
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -612 +558 @@ class MigrationDriveOnce(
+@@ -612 +538 @@ class MigrationDriveOnce(
 -     * The engine wants [transferId] rebuilt (expired today; unprovable-anchor too once the engine
 +     * The engine wants a transfer rebuilt (expired today; unprovable-anchor too once the engine
-@@ -617 +563 @@ class MigrationDriveOnce(
+@@ -617 +543 @@ class MigrationDriveOnce(
 -    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String, transferId: Long) {
 +    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String) {
-@@ -619 +565 @@ class MigrationDriveOnce(
+@@ -619 +545 @@ class MigrationDriveOnce(
 -        migrationLog("MigrationDriveOnce: engine requests Rebuild{$transferId} — user-driven reschedule required.")
 +        migrationLog("MigrationDriveOnce: engine requests a rebuild. The user must reschedule.")
-@@ -630 +576 @@ class MigrationDriveOnce(
+@@ -630 +556 @@ class MigrationDriveOnce(
 -     * single [transferId][MigrationAdvanceStep.Rebuild.transferId] to point at; the entire plan
 +     * single transfer to point at. The entire plan
-@@ -657,2 +603,2 @@ class MigrationDriveOnce(
+@@ -657,2 +583,2 @@ class MigrationDriveOnce(
 -            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run — cancelling it, " +
 -                "the user is offered a new migration. (account=$accountKeyId)"
 +            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run. " +
 +                "Cancelling it and offering a new migration."
-@@ -664,5 +609,0 @@ class MigrationDriveOnce(
+@@ -664,5 +589,0 @@ class MigrationDriveOnce(
 -    /** All transactions mined — nothing left to fold anywhere; just stop the chain. */
 -    private suspend fun completeRun(accountKeyId: String) {
 -        migrationLog("MigrationDriveOnce: migration complete — stopping the work chain. (account=$accountKeyId)")
 -    }
 -
-@@ -684 +625,2 @@ class MigrationDriveOnce(
+@@ -684 +605,2 @@ class MigrationDriveOnce(
 -        val stuck = states?.transfers?.firstOrNull { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: return
 +        val blocked = states?.transfers?.any { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: false
 +        if (!blocked) return
-@@ -686,4 +628 @@ class MigrationDriveOnce(
+@@ -686,4 +608 @@ class MigrationDriveOnce(
 -        migrationLog(
 -            "MigrationDriveOnce: transfer ${stuck.id} blocked on an unprovable anchor — user-driven reschedule " +
 -                "required."
 -        )
 +        migrationLog("MigrationDriveOnce: an unprovable anchor requires the user to reschedule.")
-@@ -697,15 +635,0 @@ class MigrationDriveOnce(
+@@ -697,15 +615,0 @@ class MigrationDriveOnce(
 -    /**
 -     * Every WorkManager (re)schedule funnels through here so [liveLoopActive] gates it in one
 -     * place. While the live driver drives this call, it will locally `delay(...)` on the returned
@@ -11151,21 +11218,21 @@ index 79bb58513..73d5fab09 100644
 -        }
 -    }
 -
-@@ -716,2 +640 @@ class MigrationDriveOnce(
+@@ -716,2 +620 @@ class MigrationDriveOnce(
 -     * cadence when the peek is unavailable. Returns the concrete delay it armed, so the caller
 -     * (`run`) can report [DriveOnceResult.ReArmed] with it.
 +     * cadence when the peek is unavailable. The worker enqueues this delay after the drive returns.
-@@ -723 +646 @@ class MigrationDriveOnce(
+@@ -723 +626 @@ class MigrationDriveOnce(
 -    private suspend fun reArm(
 +    private suspend fun nextWakeDelay(
-@@ -725 +647,0 @@ class MigrationDriveOnce(
+@@ -725 +627,0 @@ class MigrationDriveOnce(
 -        accountKeyId: String,
-@@ -730,0 +653 @@ class MigrationDriveOnce(
+@@ -730,0 +633 @@ class MigrationDriveOnce(
 +        val activity = lastNetworkActivity.latestObserved ?: lastNetworkActivity.get()
-@@ -736 +659 @@ class MigrationDriveOnce(
+@@ -736 +639 @@ class MigrationDriveOnce(
 -                lastActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
 +                lastActivityEpochSeconds = activity?.epochSecond,
-@@ -742,11 +665,2 @@ class MigrationDriveOnce(
+@@ -742,11 +645,2 @@ class MigrationDriveOnce(
 -        val armed = maxOf(delay ?: migrationCadence(), floor)
 -        scheduleUnlessLiveLoop(accountKeyId, armed)
 -        // The full "why" of the chosen wake, so timing is diagnosable from logs alone: the
@@ -11179,7 +11246,7 @@ index 79bb58513..73d5fab09 100644
 -        return armed
 +        migrationLog("MigrationDriveOnce: selected the next wake (cadenceFallback=${delay == null}).")
 +        return maxOf(delay ?: migrationCadence(), floor)
-@@ -759,7 +672,0 @@ class MigrationDriveOnce(
+@@ -759,7 +652,0 @@ class MigrationDriveOnce(
 -        // Set at the top of run() (inside the DRIVE_LOCK critical section) and read by every
 -        // scheduleUnlessLiveLoop call in the same execution. Safe without its own lock: DRIVE_LOCK
 -        // already guarantees only one run() call is ever inside its try block at a time,
@@ -11187,43 +11254,80 @@ index 79bb58513..73d5fab09 100644
 -        // visibility guarantee a plain var needs here (2026-08-06 REPLACE-race fix).
 -        private var liveLoopActive = false
 -
-@@ -768,4 +675,2 @@ class MigrationDriveOnce(
+@@ -768,4 +655,2 @@ class MigrationDriveOnce(
 -         * larger than a "normal" step's duration: when the winner is a forced broadcast window
 -         * (up to ~13 minutes: privacy buffer + broadcast timeout), a short retry here would have
 -         * the worker hammering `MigrationScheduler.schedule()` (WorkManager REPLACE + heartbeat
 -         * write + alarm re-arm) every few seconds for the whole window.
 +         * larger than a normal step's duration to avoid repeatedly replacing wakes while a native
 +         * synchronization or network attempt still owns the drive.
-@@ -796,2 +701 @@ private val BROADCAST_ATTEMPT_TIMEOUT = 3.minutes
+@@ -796,2 +681 @@ private val BROADCAST_ATTEMPT_TIMEOUT = 3.minutes
 - * (WorkManager dispatch latency is the only real gap) and the short retry when a fast-tracked
 - * prep only lost its window to a live sync overlap.
 + * (WorkManager dispatch latency is the only real gap).
-@@ -954,2 +858,3 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
+@@ -874,17 +758,5 @@ internal fun decideBroadcastPreflight(
+-    prepFastTrack: Boolean = false,
+-): BroadcastPreflight {
+-    // Preparation fast-track (security split, 2026-07-30): note-split preparations are fully
+-    // shielded IN-POOL transactions — amounts and spend links hidden, natural recent anchor with
+-    // the same anonymity set as all ordinary Orchard traffic. The sync/broadcast de-correlation
+-    // ceremony exists for CROSSINGS (public amount + tiny migration-anchor anonymity set), and
+-    // during the prep phase no crossing exists to correlate against. So when the next due pending
+-    // transaction is a preparation, skip the quiet-gap and active-sync defers entirely; the
+-    // per-execution sync-XOR-broadcast rule still holds (this run never syncs).
+-    if (prepFastTrack) return BroadcastPreflight.BROADCAST
+-    if (synchronizerSyncing) return BroadcastPreflight.DEFER
+-    if (lastNetworkActivityEpochSeconds != null &&
+-        nowEpochSeconds - lastNetworkActivityEpochSeconds < privacyBufferSeconds
+-    ) {
+-        return BroadcastPreflight.DEFER
+-    }
+-    return BroadcastPreflight.BROADCAST
++): BroadcastPreflight = when {
++    synchronizerSyncing -> BroadcastPreflight.DEFER
++    lastNetworkActivityEpochSeconds != null &&
++        nowEpochSeconds - lastNetworkActivityEpochSeconds < privacyBufferSeconds -> BroadcastPreflight.DEFER
++    else -> BroadcastPreflight.BROADCAST
+@@ -906,2 +778,2 @@ internal fun earliestUnsent(states: MigrationTransferStates?): MigrationTransfer
+- * the estimated tip — the trigger for the preparation fast-track (see [decideBroadcastPreflight])
+- * and for immediate re-chaining after a prep broadcast (no send spacing: the prep tree is one
++ * the estimated tip. The result selects the next wake after a prep broadcast
++ * (no send spacing: the prep tree is one
+@@ -915,8 +786,0 @@ internal fun nextDueUnsentIsPreparation(states: MigrationTransferStates?, estima
+-/**
+- * Whether the specific transaction the engine named (e.g. [MigrationAdvanceStep.Broadcast]'s own
+- * `transferId`) is a preparation — the precise, id-keyed check for the §2.1 same-beat decision, as
+- * opposed to [nextDueUnsentIsPreparation]'s schedule-order guess at what the engine will serve next.
+- */
+-internal fun isPreparationTransfer(states: MigrationTransferStates?, transferId: Long): Boolean =
+-    states?.transfers?.firstOrNull { it.id == transferId }?.isTransfer == false
+-
+@@ -954,2 +818,3 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
 - * `Complete` — see `derive_migration_state` in `migration.rs`), so [onActuallyComplete] — the
 - * caller's `completeRun` effects — only runs for a genuinely complete migration. Top-level
 + * `Complete` — see `derive_migration_state` in `migration.rs`).
 + * The fallback is cleared only for a genuinely complete migration.
 + * Top-level
-@@ -960,0 +866 @@ private suspend fun handleCompleteStep(
+@@ -960,0 +826 @@ private suspend fun handleCompleteStep(
 +    context: android.content.Context,
-@@ -962 +868 @@ private suspend fun handleCompleteStep(
+@@ -962 +828 @@ private suspend fun handleCompleteStep(
 -    onActuallyComplete: suspend () -> Unit,
 +    migrationNotifier: MigrationNotifier,
-@@ -963,0 +870 @@ private suspend fun handleCompleteStep(
+@@ -963,0 +830 @@ private suspend fun handleCompleteStep(
 +    // The caller holds the drive lock, so a new plan cannot replace this completion.
-@@ -965 +872,4 @@ private suspend fun handleCompleteStep(
+@@ -965 +832,4 @@ private suspend fun handleCompleteStep(
 -        onActuallyComplete()
 +        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId) {
 +            migrationNotifier.cancelStepDue(accountKeyId)
 +        }
 +        migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")
-@@ -967,4 +877 @@ private suspend fun handleCompleteStep(
+@@ -967,4 +837 @@ private suspend fun handleCompleteStep(
 -        migrationLog(
 -            "MigrationDriveOnce: nextStep reported Complete but the migration state is not " +
 -                "actually Complete (superseded/failed) — not surfacing as complete. (account=$accountKeyId)"
 -        )
 +        migrationLog("MigrationDriveOnce: the engine reported a terminal step with no completed migration.")
-@@ -979 +886 @@ private suspend fun handleCompleteStep(
+@@ -979 +846 @@ private suspend fun handleCompleteStep(
 - * `completeRun`'s effects must NOT fire.
 + * the finished-migration log applies only to a genuine completion.
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt
@@ -11370,7 +11474,7 @@ index 41f7bb347..844ad09d1 100644
 -                    e
 +                    "MigrationLiveDriver: step failed (${e.javaClass.simpleName}). Retrying."
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
-index 1886de6a8..71dbfc2ea 100644
+index 1886de6a8..3bdadb490 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 @@ -8,0 +9,2 @@ import androidx.work.OneTimeWorkRequestBuilder
@@ -11386,7 +11490,7 @@ index 1886de6a8..71dbfc2ea 100644
 +import java.util.UUID
 @@ -13,0 +22 @@ import kotlin.time.Duration
 +import kotlin.time.Duration.Companion.milliseconds
-@@ -38,17 +47,110 @@ class MigrationScheduler(
+@@ -38,17 +47,104 @@ class MigrationScheduler(
 -    fun schedule(accountKeyId: String, delay: Duration) {
 -        migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
 -        WorkManager.getInstance(context).enqueueUniqueWork(
@@ -11449,12 +11553,6 @@ index 1886de6a8..71dbfc2ea 100644
 +        }
 +    }
 +
-+    internal suspend fun runNotificationStep(accountKeyId: String, version: Long) {
-+        if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-+            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE, version)
-+        }
-+    }
-+
 +    private suspend fun enqueueConfirmed(
 +        accountKeyId: String,
 +        delay: Duration,
@@ -11514,7 +11612,7 @@ index 1886de6a8..71dbfc2ea 100644
 +        } catch (e: Exception) {
 +            migrationLog("MigrationScheduler: fallback alarm unavailable (${e.javaClass.simpleName}).")
 +        }
-@@ -58,2 +160,12 @@ class MigrationScheduler(
+@@ -58,2 +154,12 @@ class MigrationScheduler(
 -        migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
 -        WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
 +        cancelWork(accountKeyId)
@@ -11529,9 +11627,9 @@ index 1886de6a8..71dbfc2ea 100644
 +        completedPlans.remove(accountKeyId)
 +        migrationLog("MigrationScheduler: cancelling a migration work chain.")
 +        val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
-@@ -61,0 +174 @@ class MigrationScheduler(
+@@ -61,0 +168 @@ class MigrationScheduler(
 +        operation
-@@ -64,0 +178,53 @@ class MigrationScheduler(
+@@ -64,0 +172,53 @@ class MigrationScheduler(
 +        // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
 +        private val wakeVersions = mutableMapOf<String, Long>()
 +        private val completedPlans = mutableSetOf<String>()
@@ -11585,7 +11683,7 @@ index 1886de6a8..71dbfc2ea 100644
 +        private fun advanceWakeVersion(accountKeyId: String): Long =
 +            (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
 +
-@@ -70,0 +237,2 @@ class MigrationScheduler(
+@@ -70,0 +231,2 @@ class MigrationScheduler(
 +        private const val RETRY_BACKOFF_SHIFT_LIMIT = 20
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
@@ -11986,10 +12084,10 @@ index 698a60fbd..66791cab1 100644
 +        }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..6d6996f0b
+index 000000000..37d323c71
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,423 @@
+@@ -0,0 +1,435 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -12000,8 +12098,11 @@ index 000000000..6d6996f0b
 +import cash.z.ecc.android.sdk.model.AccountUuid
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
 +import co.electriccoin.zcash.ui.NavigationCommand
++import co.electriccoin.zcash.ui.ActiveNavigationEntry
++import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
@@ -12032,6 +12133,9 @@ index 000000000..6d6996f0b
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
@@ -12063,6 +12167,7 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), context, reset, driver, drive,
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
@@ -12119,6 +12224,7 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), mockk(), mockk(), mockk(), context, reset, driver, drive,
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
@@ -12155,6 +12261,7 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), mockk(), mockk(), mockk(), retirementContext(commitSucceeds = false), reset,
 +            mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        var deletionEntered = false
 +        try {
@@ -12185,12 +12292,13 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), navigation, accounts, mockk(relaxed = true), retirementContext(), reset,
 +            mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), readouts,
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
 +            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } returns Unit
 +
-+            hooks.restoreNotificationProgress(key, this, runStepPending = true)
++            hooks.restoreNotificationProgress(key, this)
 +            runCurrent()
 +            assertTrue(navigation.resolvingMigrationNotice?.ownerKey == key)
 +            hooks.retireHardwareAccount(key) {}
@@ -12199,7 +12307,6 @@ index 000000000..6d6996f0b
 +
 +            assertTrue(navigation.resolvingMigrationNotice == null)
 +            coVerify(exactly = 0) { accounts.selectAccount(target) }
-+            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any(), any()) }
 +            verify(exactly = 1) { readouts.clear(key) }
 +            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
 +        } finally {
@@ -12230,6 +12337,7 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context, pendingReset(), driver, driveOnce,
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        mockkObject(WorkManager.Companion)
 +        try {
@@ -12276,6 +12384,7 @@ index 000000000..6d6996f0b
 +            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context,
 +            pendingReset(), mockk(relaxed = true), mockk(relaxed = true),
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        mockkObject(WorkManager.Companion)
 +        mockkConstructor(MigrationScheduler::class)
@@ -12309,6 +12418,7 @@ index 000000000..6d6996f0b
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), launchNavigation, accounts, mockk(), mockk(), progress,
 +            mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), writeAccess,
++            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        val command = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
 +        coEvery { accounts.getAllAccounts() } returns listOf(target)
@@ -12337,7 +12447,7 @@ index 000000000..6d6996f0b
 +    }
 +
 +    @Test
-+    fun dueNoticeResumesItsKickAndWaitsForSchedulerAcknowledgement() = runTest {
++    fun restoredNoticeWaitsForAnOriginalLiveGrantAndOpensStatusWithoutScheduling() = runTest {
 +        val uuid = AccountUuid.new(ByteArray(16))
 +        val ownerKey = uuid.toStorageKeyId()
 +        val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -12346,45 +12456,45 @@ index 000000000..6d6996f0b
 +        coEvery { accounts.getAllAccounts() } coAnswers { releaseLookup.await() }
 +        val navigation = spyk(LaunchNavigationRequests())
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
-+        val recovery = mockk<co.electriccoin.zcash.ui.common.usecase.CheckMigrationRecoveryUseCase> {
-+            coEvery { hasActivePlan(ownerKey) } returns true
-+        }
++        val grants = MutableSharedFlow<() -> Boolean>(replay = 1)
++        var originalGrant = true
 +        val hooks = MigrationAppHooksImpl(
-+            recovery, mockk(), navigation, accounts, mockk(), mockk(), reset,
++            mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
 +            mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), WalletWriteAccess(reset),
++            appAccess = notificationAccess(grants), navigationRouter = resumedRouter(),
 +        )
-+        val acknowledged = CompletableDeferred<Unit>()
-+        mockkConstructor(MigrationScheduler::class)
++        mockkObject(WorkManager.Companion)
 +        try {
-+            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) } coAnswers {
-+                acknowledged.await()
-+            }
-+            val oldActivity = launch { hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true) }
++            hooks.restoreNotificationProgress(ownerKey, this)
 +            runCurrent()
-+            val saved = checkNotNull(navigation.resolvingMigrationNotice)
-+            assertTrue(saved.runStepPending)
-+            oldActivity.cancel()
++            assertEquals(ownerKey, navigation.resolvingMigrationNotice?.ownerKey)
++            coVerify(exactly = 0) { accounts.getAllAccounts() }
 +
-+            hooks.restoreNotificationProgress(saved.ownerKey, this, saved.runStepPending)
++            grants.emit { originalGrant }
++            runCurrent()
++            coVerify(exactly = 1) { accounts.getAllAccounts() }
++            originalGrant = false
 +            releaseLookup.complete(listOf(target))
 +            runCurrent()
-+            verify(exactly = 0) { navigation.finishMigrationProgress(any(), any()) }
-+            acknowledged.complete(Unit)
-+            runCurrent()
++            coVerify(exactly = 0) { accounts.selectAccount(target) }
 +
-+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
++            hooks.restoreNotificationProgress(ownerKey, this)
++            grants.emit { true }
++            runCurrent()
++            coVerify(exactly = 1) { accounts.selectAccount(target) }
 +            val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
 +            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
-+
-+            coEvery { recovery.hasActivePlan(ownerKey) } returns false
-+            hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true)
-+            runCurrent()
-+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
-+            verify(exactly = 2) { navigation.finishMigrationProgress(any(), progress) }
++            verify(exactly = 0) { WorkManager.getInstance(any()) }
 +        } finally {
-+            acknowledged.complete(Unit)
-+            unmockkConstructor(MigrationScheduler::class)
++            unmockkObject(WorkManager.Companion)
 +        }
++    }
++
++    private fun notificationAccess(grants: Flow<() -> Boolean> = flowOf({ true })) =
++        mockk<AppAccessSession> { every { authorizedGrants() } returns grants }
++
++    private fun resumedRouter() = mockk<NavigationRouter> {
++        every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("home", null))
 +    }
 +
 +    private fun retirementContext(commitSucceeds: Boolean = true): Context {
@@ -12442,6 +12552,72 @@ index d329553c7..d4c6d17e7 100644
 @@ -206 +209 @@ class MigrationBackgroundRecoveryScenarioTest {
 -                scheduleNow = { scheduled = true },
 +                scheduleNow = { _, _ -> scheduled = true },
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationPrepFastTrackScenarioTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationPrepFastTrackScenarioTest.kt
+index e4d6b2159..df0541669 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationPrepFastTrackScenarioTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/model/migration/sim/MigrationPrepFastTrackScenarioTest.kt
+@@ -7 +6,0 @@ import co.electriccoin.zcash.work.BroadcastPreflight
+-import co.electriccoin.zcash.work.PREP_FAST_TRACK_REARM
+@@ -17,4 +16,2 @@ import kotlin.test.assertTrue
+- * Scenario for the preparation fast-track (security split — tx9 investigation, 2026-07-30):
+- * an entire READY prep layer broadcasts back-to-back, immediately after proving, even inside the
+- * post-sync quiet gap — while a crossing TRANSFER in the exact same conditions only ever gets its
+- * proof and must wait out the full ceremony before broadcasting.
++ * Simulates proving a preparation layer and its dependent crossing. Each submission waits for
++ * a separate quiet window because the pinned SDK can select its next candidate at entry.
+@@ -56,2 +53 @@ class MigrationPrepFastTrackScenarioTest {
+-    /** The broadcast preflight exactly as MigrationWorker computes it, with a just-synced quiet gap. */
+-    private suspend fun preflightInsideQuietGap(driver: MigrationSimDriver): BroadcastPreflight {
++    private fun preflight(secondsSinceActivity: Long): BroadcastPreflight {
+@@ -62,2 +58 @@ class MigrationPrepFastTrackScenarioTest {
+-            // The last sync run stamped network activity moments ago — the quiet gap is clearly UNMET.
+-            lastNetworkActivityEpochSeconds = nowEpoch - 5,
++            lastNetworkActivityEpochSeconds = nowEpoch - secondsSinceActivity,
+@@ -65,5 +59,0 @@ class MigrationPrepFastTrackScenarioTest {
+-            prepFastTrack =
+-                nextDueUnsentIsPreparation(
+-                    driver.sdk.getMigrationTransferStates(),
+-                    driver.sdk.estimatedChainTip(),
+-                ),
+@@ -74 +64 @@ class MigrationPrepFastTrackScenarioTest {
+-    fun `ready prep layer broadcasts back-to-back inside the quiet gap, transfer proves but waits`() =
++    fun `ready preparations and a dependent crossing each require a quiet window`() =
+@@ -84,6 +74,2 @@ class MigrationPrepFastTrackScenarioTest {
+-            // ── Prep A: fast-track fires INSIDE the quiet gap ──────────────────
+-            assertEquals(
+-                BroadcastPreflight.BROADCAST,
+-                preflightInsideQuietGap(driver),
+-                "a due proved preparation must broadcast despite the unmet quiet gap",
+-            )
++            assertEquals(BroadcastPreflight.DEFER, preflight(5))
++            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
+@@ -94 +79,0 @@ class MigrationPrepFastTrackScenarioTest {
+-            // ── Prep B: still fast-tracked, no send spacing between preps ──────
+@@ -97 +82 @@ class MigrationPrepFastTrackScenarioTest {
+-                "with prep B still pending the fast-track re-arm ($PREP_FAST_TRACK_REARM) applies — not a live window",
++                "wake selection recognizes a due preparation",
+@@ -99 +84,2 @@ class MigrationPrepFastTrackScenarioTest {
+-            assertEquals(BroadcastPreflight.BROADCAST, preflightInsideQuietGap(driver))
++            assertEquals(BroadcastPreflight.DEFER, preflight(5))
++            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
+@@ -102 +88 @@ class MigrationPrepFastTrackScenarioTest {
+-            assertTrue(sdk.txById(PREP_B)!!.sent, "the second prep of the layer goes right behind the first")
++            assertTrue(sdk.txById(PREP_B)!!.sent)
+@@ -117 +103 @@ class MigrationPrepFastTrackScenarioTest {
+-                preflightInsideQuietGap(driver),
++                preflight(5),
+@@ -123,10 +109 @@ class MigrationPrepFastTrackScenarioTest {
+-            val calmPreflight =
+-                decideBroadcastPreflight(
+-                    synchronizerSyncing = false,
+-                    nowEpochSeconds = 10_000L,
+-                    lastNetworkActivityEpochSeconds = 10_000L - PRIVACY_BUFFER_SECONDS - 1,
+-                    privacyBufferSeconds = PRIVACY_BUFFER_SECONDS,
+-                    prepFastTrack =
+-                        nextDueUnsentIsPreparation(sdk.getMigrationTransferStates(), sdk.estimatedChainTip()),
+-                )
+-            assertEquals(BroadcastPreflight.BROADCAST, calmPreflight)
++            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationNotificationIdentityTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/provider/MigrationNotificationIdentityTest.kt
 new file mode 100644
 index 000000000..bae21724a
@@ -13592,6 +13768,45 @@ index f030dbba0..e4a10af8d 100644
 +            kotlin.test.assertEquals(emptyList(), callOrder)
 +
 +            busy = false
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCaseTest.kt
+new file mode 100644
+index 000000000..e6d45af11
+--- /dev/null
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCaseTest.kt
+@@ -0,0 +1,33 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import cash.z.ecc.android.sdk.OrchardMigrationSdk
++import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
++import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationTransfer
++import co.electriccoin.zcash.work.MigrationScheduler
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.time.Duration.Companion.seconds
++
++class ScheduleNextMigrationWindowUseCaseTest {
++    @Test
++    fun theLastUnminedTransferKeepsAnOwnedCompletionWake() = runTest {
++        val owner = "completion-fixture"
++        val unmined = mockk<LiveMigrationTransfer> {
++            every { isSent } returns true
++            every { minedHeight } returns null
++        }
++        val snapshots = mockk<GetMigrationSnapshotUseCase> {
++            coEvery { this@mockk(owner) } returns LiveMigrationSnapshot(listOf(unmined), emptyList(), 50)
++        }
++        val sdk = mockk<OrchardMigrationSdk> { coEvery { privacySyncBufferDuration() } returns 15.seconds }
++        val engines = mockk<GetOrchardMigrationSdkUseCase> { coEvery { this@mockk(owner) } returns sdk }
++        val scheduler = mockk<MigrationScheduler>(relaxUnitFun = true)
++        ScheduleNextMigrationWindowUseCase(snapshots, scheduler, mockk(), engines)(owner)
++        coVerify(exactly = 1) { scheduler.scheduleIfMissing(owner, 15.seconds, any()) }
++        coVerify(exactly = 0) { scheduler.scheduleAndAwait(any(), any(), any()) }
++    }
++}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
 index 14369fe4c..d335c664e 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVMTest.kt
@@ -15656,7 +15871,7 @@ index d0838db0c..383cdae5e 100644
 +    coEvery { this@mockk() } returns account
 +    every { observe() } returns flowOf(account)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
-index a914d8998..aaccb6a52 100644
+index a914d8998..32d9d5f83 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 @@ -3,0 +4 @@ import androidx.navigation.NavBackStackEntry
@@ -15669,17 +15884,18 @@ index a914d8998..aaccb6a52 100644
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
 @@ -12,0 +18 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
-@@ -16,0 +23 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -16 +22 @@ import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProv
+-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
-@@ -24,0 +32 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+@@ -24,0 +31 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -30,0 +39 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -30,0 +38 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.launch
-@@ -31,0 +41 @@ import kotlinx.coroutines.flow.Flow
+@@ -31,0 +40 @@ import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -35,0 +46 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -35,0 +45 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.TestScope
-@@ -57,10 +67,0 @@ class MigrationScheduledVMTest {
+@@ -57,10 +66,0 @@ class MigrationScheduledVMTest {
 -    private val testWalletAccount: WalletAccount =
 -        mockk(relaxed = true) {
 -            every { sdkAccount } returns testSdkAccount
@@ -15690,36 +15906,36 @@ index a914d8998..aaccb6a52 100644
 -            every { observe() } returns flowOf(testWalletAccount)
 -        }
 -
-@@ -136,0 +138 @@ class MigrationScheduledVMTest {
+@@ -136,0 +137 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -141 +143,4 @@ class MigrationScheduledVMTest {
+@@ -141 +142,4 @@ class MigrationScheduledVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
 +                coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
 +            }
-@@ -147 +152 @@ class MigrationScheduledVMTest {
+@@ -147 +151 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -157 +162 @@ class MigrationScheduledVMTest {
+@@ -157 +161 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 1) { finalize(any(), any(), startLiveDriverImmediately = false) }
 +            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, startLiveDriverImmediately = false) }
-@@ -177,0 +183 @@ class MigrationScheduledVMTest {
+@@ -177,0 +182 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -183,0 +190,3 @@ class MigrationScheduledVMTest {
+@@ -183,0 +189,3 @@ class MigrationScheduledVMTest {
 +                    coEvery { getMigrationStateUnreconciled() } returns
 +                        MigrationState.InProgress(mockk(relaxed = true))
 +                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(10L, isTransfer = false))
-@@ -192 +201 @@ class MigrationScheduledVMTest {
+@@ -192 +200 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -197 +206 @@ class MigrationScheduledVMTest {
+@@ -197 +205 @@ class MigrationScheduledVMTest {
 -                        mockk { coEvery { get() } returns false },
 +                        mockk { coEvery { this@mockk.get(testAccountKeyId) } returns false },
-@@ -203 +212 @@ class MigrationScheduledVMTest {
+@@ -203 +211 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 0) { finalize(any(), any()) }
 +            coVerify(exactly = 0) { finalize(any(), any(), any()) }
-@@ -208,0 +218,49 @@ class MigrationScheduledVMTest {
+@@ -208,0 +217,49 @@ class MigrationScheduledVMTest {
 +    @Test
 +    fun authorityLostDuringTorReadCannotStoreOrSubmitTheSignedSplit() =
 +        runTest { assertSplitWaitsForAuthorityAndForeground(loseGrant = true) }
@@ -15769,25 +15985,25 @@ index a914d8998..aaccb6a52 100644
 +        assertNotNull(pendingPczts.peek(testAccountKeyId))
 +    }
 +
-@@ -230,0 +289 @@ class MigrationScheduledVMTest {
+@@ -230,0 +288 @@ class MigrationScheduledVMTest {
 +                                isFullySigned = true,
-@@ -237 +296,5 @@ class MigrationScheduledVMTest {
+@@ -237 +295,5 @@ class MigrationScheduledVMTest {
 -                    coEvery { storeSignedSchedulePczts(any()) } throws RuntimeException("database is locked")
 +                    coEvery { getMigrationStateUnreconciled() } returns
 +                        MigrationState.InProgress(mockk(relaxed = true))
 +                    coEvery { getMigrationTransferStates() } returns sdkStates(sdkStep(11L))
 +                    coEvery { storeSignedSchedulePczts(any()) } throws
 +                        RuntimeException("database is locked") andThen Unit
-@@ -244 +307 @@ class MigrationScheduledVMTest {
+@@ -244 +306 @@ class MigrationScheduledVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
-@@ -250 +313 @@ class MigrationScheduledVMTest {
+@@ -250 +312 @@ class MigrationScheduledVMTest {
 -            assertNotNull(vm.failureSheet.value)
 +            val sheet = assertNotNull(vm.failureSheet.value)
-@@ -252 +315 @@ class MigrationScheduledVMTest {
+@@ -252 +314 @@ class MigrationScheduledVMTest {
 -            coVerify(exactly = 0) { finalize(any(), any()) }
 +            coVerify(exactly = 0) { finalize(any(), any(), any()) }
-@@ -255,0 +319,69 @@ class MigrationScheduledVMTest {
+@@ -255,0 +318,69 @@ class MigrationScheduledVMTest {
 +            sheet.onDismiss()
 +            assertNull(vm.failureSheet.value)
 +            assertNotNull(vm.finalizationError.value)
@@ -15857,7 +16073,7 @@ index a914d8998..aaccb6a52 100644
 +        val finalize = mockk<FinalizeMigrationScheduleUseCase> {
 +            coEvery { this@mockk(prepared, MigrationMode.AUTOMATIC, testAccountKeyId, false) } throws
 +                IllegalStateException("Synthetic scheduler failure") andThen Unit
-@@ -256,0 +389,147 @@ class MigrationScheduledVMTest {
+@@ -256,0 +388,147 @@ class MigrationScheduledVMTest {
 +        val vm = vm(
 +            pendingSchedule = schedules, pendingKeystonePczts = pczt,
 +            getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
@@ -16005,25 +16221,27 @@ index a914d8998..aaccb6a52 100644
 +            prepLayer = if (isTransfer) null else 0,
 +            prepIndex = if (isTransfer) null else 0,
 +        )
-@@ -262,3 +541 @@ class MigrationScheduledVMTest {
+@@ -262,3 +540 @@ class MigrationScheduledVMTest {
 -                // A REAL (empty) snapshot: a null return now means "SDK not ready yet" and keeps
 -                // the LCE loading (review L3) — these tests assert on the rendered state.
 -                coEvery { this@mockk(null) } returns
 +                coEvery { this@mockk(testAccountKeyId) } returns
-@@ -271,2 +548 @@ class MigrationScheduledVMTest {
+@@ -271,2 +547 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = testGetSelectedWalletAccount,
 -        getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk(relaxed = true),
 +        getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk { coEvery { this@mockk(any()) } returns null },
-@@ -278,0 +555,4 @@ class MigrationScheduledVMTest {
+@@ -278 +553,4 @@ class MigrationScheduledVMTest {
+-        synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
 +        walletActionAccess: WalletActionAccess = mockk {
 +            coEvery { this@mockk.capture(any<WalletAccount>()) } returns { true }
 +        },
 +        sourceEntryId: String? = null,
-@@ -279,0 +560 @@ class MigrationScheduledVMTest {
+@@ -279,0 +558 @@ class MigrationScheduledVMTest {
 +        args = MigrationScheduledArgs(testAccountKeyId),
-@@ -284 +564,0 @@ class MigrationScheduledVMTest {
+@@ -284 +562,0 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount = getSelectedWalletAccount,
-@@ -290,0 +571,9 @@ class MigrationScheduledVMTest {
+@@ -290 +568,9 @@ class MigrationScheduledVMTest {
+-        synchronizerProvider = synchronizerProvider,
 +        selectedAccount = mockk<GetSelectedWalletAccountUseCase> {
 +            coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
 +        },
@@ -16033,13 +16251,13 @@ index a914d8998..aaccb6a52 100644
 +        },
 +        walletActionAccess = walletActionAccess,
 +        sourceEntryId = sourceEntryId,
-@@ -309 +598,3 @@ class MigrationScheduledVMTest {
+@@ -309 +595,3 @@ class MigrationScheduledVMTest {
 -    private class FakeNavigationRouter : NavigationRouter {
 +    private class FakeNavigationRouter(
 +        override val activeEntry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(null),
 +    ) : NavigationRouter {
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
-index 1918e57fa..1b7a593a5 100644
+index 1918e57fa..08b326617 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingVMTest.kt
 @@ -3,0 +4,5 @@ import androidx.navigation.NavBackStackEntry
@@ -16158,7 +16376,7 @@ index 1918e57fa..1b7a593a5 100644
 +                sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), useEstimatedTip = true)
 @@ -245,0 +315 @@ class MigrationSendingVMTest {
 +            coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), any()) }
-@@ -247,0 +318,55 @@ class MigrationSendingVMTest {
+@@ -247,0 +318,104 @@ class MigrationSendingVMTest {
 +    @Test
 +    fun theNamedFailureChoiceAppliesOnlyToItsRetainedSend() = runTest {
 +        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
@@ -16183,6 +16401,55 @@ index 1918e57fa..1b7a593a5 100644
 +        runCurrent()
 +        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
 +        assertIs<MigrationSuccessArgs>(router.replacedRoutes.single())
++    }
++
++    @Test
++    fun aGenericRetryAfterDirectFailureUsesTor() = runTest {
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) } returns
++                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
++            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) } throws
++                IllegalStateException("synthetic ambiguous SDK result")
++        }
++        val genericError = io.mockk.slot<co.electriccoin.zcash.ui.common.model.LceContent.Error>()
++        val errorMapper = mockk<ErrorMapperUseCase> {
++            every { mapToState(capture(genericError), any(), any(), any(), any(), any(), any(), any()) } returns
++                mockk(relaxed = true)
++        }
++        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
++        val router = FakeNavigationRouter()
++        val vm = vm(sdk, router, torDecisionRepository = decisions, useTor = true, errorStateMapper = errorMapper)
++        backgroundScope.launch { vm.state.collect {} }
++        runCurrent()
++        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
++        decisions.set("fixture-owner", useTor = false, authorizationId = assertNotNull(sheet.authorizationId))
++        runCurrent()
++
++        genericError.captured.restart()
++        runCurrent()
++
++        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
++        coVerify(exactly = 2) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) }
++    }
++
++    @Test
++    fun aDirectApprovalAdmitsAtMostOneNativeEntryWhenNothingIsDue() = runTest {
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) } returns
++                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
++            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) } returns
++                TransferAttemptOutcome.NothingDue
++        }
++        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
++        val router = FakeNavigationRouter()
++        vm(sdk, router, torDecisionRepository = decisions, useTor = true)
++        runCurrent()
++        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
++
++        decisions.set("fixture-owner", useTor = false, authorizationId = assertNotNull(sheet.authorizationId))
++        advanceUntilIdle()
++
++        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
 +    }
 +
 +    @Test
@@ -16214,16 +16481,16 @@ index 1918e57fa..1b7a593a5 100644
 +        assertEquals("other-owner", decisions.decision.value?.accountKeyId)
 +    }
 +
-@@ -260 +385 @@ class MigrationSendingVMTest {
+@@ -260 +434 @@ class MigrationSendingVMTest {
 -            coVerify(exactly = 1) { pendingTorFailure.store(false) }
 +            coVerify(exactly = 1) { pendingTorFailure.store("fixture-owner", false) }
-@@ -278 +403 @@ class MigrationSendingVMTest {
+@@ -278 +452 @@ class MigrationSendingVMTest {
 -            coVerify(exactly = 1) { pendingTorFailure.store(false) }
 +            coVerify(exactly = 1) { pendingTorFailure.store("fixture-owner", false) }
-@@ -293 +418 @@ class MigrationSendingVMTest {
+@@ -293 +467 @@ class MigrationSendingVMTest {
 -            coVerify(exactly = 0) { pendingTorFailure.store(any()) }
 +            coVerify(exactly = 0) { pendingTorFailure.store(any<String>(), any()) }
-@@ -310 +435,122 @@ class MigrationSendingVMTest {
+@@ -310 +484,125 @@ class MigrationSendingVMTest {
 -            assertTrue(router.forwardedRoutes.any { it is MigrationTorFailureArgs })
 +            val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
 +            assertEquals("fixture-owner", sheet.accountKeyId)
@@ -16347,10 +16614,10 @@ index 1918e57fa..1b7a593a5 100644
 +        val owner = mockk<WalletAccount> {
 +            every { sdkAccount } returns account
 +            every { isSelected } returns selected
-@@ -311,0 +558,27 @@ class MigrationSendingVMTest {
++        }
 +        val accounts = mockk<AccountDataSource> {
 +            every { allAccounts } returns MutableStateFlow(listOf(owner))
-+        }
+@@ -311,0 +610,24 @@ class MigrationSendingVMTest {
 +        return MigrationSendingArgs(account.accountUuid.toStorageKeyId(), 1L, 100L) to accounts
 +    }
 +
@@ -16375,13 +16642,13 @@ index 1918e57fa..1b7a593a5 100644
 +        coEvery { executeNextPendingTransfer(any(), any()) } returns
 +            TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = false))
 +    }
-@@ -318 +591 @@ class MigrationSendingVMTest {
+@@ -318 +640 @@ class MigrationSendingVMTest {
 -                coEvery { this@mockk(null) } returns null
 +                coEvery { this@mockk("fixture-owner") } returns null
-@@ -324,0 +598,2 @@ class MigrationSendingVMTest {
+@@ -324,0 +647,2 @@ class MigrationSendingVMTest {
 +        useTor: Boolean = false,
 +        quietWindowReady: Boolean = true,
-@@ -327,2 +602,5 @@ class MigrationSendingVMTest {
+@@ -327,2 +651,5 @@ class MigrationSendingVMTest {
 -                coEvery { withExclusiveAccess<Any?>(any()) } coAnswers {
 -                    firstArg<suspend () -> Any?>().invoke()
 +                every { permitsForeground(any()) } returns true
@@ -16389,30 +16656,34 @@ index 1918e57fa..1b7a593a5 100644
 +                coEvery { recordCrossingSuccess(any()) } returns Unit
 +                coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
 +                    secondArg<suspend () -> Any?>().invoke()
-@@ -330,0 +609,4 @@ class MigrationSendingVMTest {
+@@ -330,0 +658,5 @@ class MigrationSendingVMTest {
 +        args: MigrationSendingArgs = MigrationSendingArgs("fixture-owner"),
 +        accounts: AccountDataSource? = null,
 +        scheduleNextMigrationWindow: ScheduleNextMigrationWindowUseCase = mockk(relaxed = true),
 +        sourceEntryId: String? = null,
-@@ -331,0 +614 @@ class MigrationSendingVMTest {
++        errorStateMapper: ErrorMapperUseCase = mockk(relaxed = true),
+@@ -331,0 +664 @@ class MigrationSendingVMTest {
 +        args = args,
-@@ -334 +617 @@ class MigrationSendingVMTest {
+@@ -334 +667 @@ class MigrationSendingVMTest {
 -                coEvery { this@mockk() } returns sdk
 +                coEvery { this@mockk(args.accountKeyId) } returns sdk
-@@ -337 +620 @@ class MigrationSendingVMTest {
+@@ -337 +670 @@ class MigrationSendingVMTest {
 -        scheduleNextMigrationWindow = mockk<ScheduleNextMigrationWindowUseCase>(relaxed = true),
 +        scheduleNextMigrationWindow = scheduleNextMigrationWindow,
-@@ -342 +625 @@ class MigrationSendingVMTest {
+@@ -339 +672 @@ class MigrationSendingVMTest {
+-        errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
++        errorStateMapper = errorStateMapper,
+@@ -342 +675 @@ class MigrationSendingVMTest {
 -                coEvery { get() } returns false
 +                coEvery { this@mockk.get(args.accountKeyId) } returns useTor
-@@ -346,0 +630,2 @@ class MigrationSendingVMTest {
+@@ -346,0 +680,2 @@ class MigrationSendingVMTest {
 +        sourceEntryId = sourceEntryId,
 +        accounts = accounts,
-@@ -349,0 +635 @@ class MigrationSendingVMTest {
+@@ -349,0 +685 @@ class MigrationSendingVMTest {
 +        override val activeEntry = MutableStateFlow<ActiveNavigationEntry?>(null)
-@@ -350,0 +637 @@ class MigrationSendingVMTest {
+@@ -350,0 +687 @@ class MigrationSendingVMTest {
 +        val replacedRoutes = mutableListOf<Any>()
-@@ -357 +644,3 @@ class MigrationSendingVMTest {
+@@ -357 +694,3 @@ class MigrationSendingVMTest {
 -        override fun replace(vararg routes: Any) = Unit
 +        override fun replace(vararg routes: Any) {
 +            replacedRoutes.addAll(routes.toList())
@@ -16664,12 +16935,75 @@ index 957c26bc1..150c45a70 100644
 +        pendingMigrationTorFailureDecisionRepository = decisionRepository,
 +        sourceEntryId = sourceEntryId,
 +    )
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/IsPreparationTransferTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/IsPreparationTransferTest.kt
+deleted file mode 100644
+index 637ea2df6..000000000
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/work/IsPreparationTransferTest.kt
++++ /dev/null
+@@ -1,57 +0,0 @@
+-package co.electriccoin.zcash.work
+-
+-import cash.z.ecc.android.sdk.MigrationTransferState
+-import cash.z.ecc.android.sdk.MigrationTransferStates
+-import kotlin.test.Test
+-import kotlin.test.assertFalse
+-import kotlin.test.assertTrue
+-
+-/**
+- * [isPreparationTransfer] is the id-keyed §2.1 same-beat check (core sync call 2026-08-05 §2.1):
+- * whether the specific transaction the engine just named via [MigrationAdvanceStep.Broadcast] is a
+- * preparation, so [MigrationDriveOnce.syncRun] can broadcast it in the same beat instead of waiting
+- * out the privacy buffer. Unlike [nextDueUnsentIsPreparation] (schedule-order guess, covered in
+- * PrepFastTrackTest.kt), this looks up the named id directly.
+- */
+-class IsPreparationTransferTest {
+-    private fun state(
+-        id: Long,
+-        isTransfer: Boolean,
+-        isSent: Boolean = false,
+-        isProved: Boolean = true,
+-        scheduled: Long = 100L,
+-    ) = MigrationTransferState(
+-        id = id,
+-        isTransfer = isTransfer,
+-        isSent = isSent,
+-        isProved = isProved,
+-        scheduledHeight = scheduled,
+-        anchorBoundaryHeight = if (isTransfer) scheduled - 10 else null,
+-    )
+-
+-    private fun states(vararg transfers: MigrationTransferState) =
+-        MigrationTransferStates(transfers = transfers.toList(), tipHeight = 100L)
+-
+-    @Test
+-    fun namedIdMatchingAPreparationIsTrue() {
+-        val s = states(state(1, isTransfer = false))
+-        assertTrue(isPreparationTransfer(s, transferId = 1))
+-    }
+-
+-    @Test
+-    fun namedIdMatchingATransferIsFalse() {
+-        val s = states(state(1, isTransfer = true))
+-        assertFalse(isPreparationTransfer(s, transferId = 1))
+-    }
+-
+-    @Test
+-    fun namedIdNotPresentInStatesIsFalse() {
+-        val s = states(state(1, isTransfer = false), state(2, isTransfer = true))
+-        assertFalse(isPreparationTransfer(s, transferId = 99))
+-    }
+-
+-    @Test
+-    fun nullStatesIsFalse() {
+-        assertFalse(isPreparationTransfer(null, transferId = 1))
+-    }
+-}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt
 new file mode 100644
-index 000000000..72cd6350a
+index 000000000..9bef23d37
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,346 @@
 +package co.electriccoin.zcash.work
 +
 +import cash.z.ecc.android.sdk.CloseableSynchronizer
@@ -16832,9 +17166,10 @@ index 000000000..72cd6350a
 +            coEvery { get() } returns Instant.EPOCH
 +            every { latestObserved } returns null
 +        }
++        val notifier = mockk<co.electriccoin.zcash.ui.common.provider.MigrationNotifier>(relaxed = true)
 +        val drive = MigrationDriveOnce(
 +            applicationContext = mockk(relaxed = true),
-+            migrationNotifier = mockk(relaxed = true),
++            migrationNotifier = notifier,
 +            isMigrationTorEnabledStorageProvider = mockk { coEvery { this@mockk.get("crossing-owner") } returns true },
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk {
@@ -16850,6 +17185,7 @@ index 000000000..72cd6350a
 +        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), true) }
 +        coVerify(exactly = 1) { activity.stampNow() }
 +        coVerify(exactly = 0) { sync.enhanceTransaction(txId) }
++        verify(exactly = 0) { notifier.notifyMigrationComplete(any()) }
 +    }
 +
 +    @Test
@@ -17790,6 +18126,32 @@ index 000000000..cc1a69d58
 +        }
 +    }
 +}
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/PrepFastTrackTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/PrepFastTrackTest.kt
+index d61cdba9d..ec26c4de1 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/work/PrepFastTrackTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/PrepFastTrackTest.kt
+@@ -10,6 +10 @@ import kotlin.test.assertTrue
+-/**
+- * The preparation fast-track (security split, 2026-07-30 tx9 investigation): in-pool note-split
+- * preparations skip the crossing-grade privacy ceremony — quiet gap, active-sync defer and send
+- * spacing — because they leak neither amount nor anchor-set membership. Crossings keep the full
+- * ceremony.
+- */
++/** A due preparation can affect wake timing. Every SDK broadcast still passes the quiet gate. */
+@@ -78 +73 @@ class PrepFastTrackTest {
+-    fun fastTrackSkipsQuietGapAndSyncingDefers() {
++    fun activeSynchronizationDefersBroadcastEvenWhenThePriorGapElapsed() {
+@@ -83,2 +78 @@ class PrepFastTrackTest {
+-                // quiet gap clearly unmet
+-                lastNetworkActivityEpochSeconds = 999,
++                lastNetworkActivityEpochSeconds = 700,
+@@ -86 +79,0 @@ class PrepFastTrackTest {
+-                prepFastTrack = true,
+@@ -88 +81 @@ class PrepFastTrackTest {
+-        assertEquals(BroadcastPreflight.BROADCAST, action)
++        assertEquals(BroadcastPreflight.DEFER, action)
+@@ -99 +91,0 @@ class PrepFastTrackTest {
+-                prepFastTrack = false,
 diff --git a/feature-viewing-key/build.gradle.kts b/feature-viewing-key/build.gradle.kts
 index 334eef98c..795262fae 100644
 --- a/feature-viewing-key/build.gradle.kts
@@ -38462,7 +38824,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..08646dad9 100644
+index 7b9af8bf7..ca48c4695 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -52,0 +53 @@
@@ -38837,12 +39199,13 @@ index 7b9af8bf7..08646dad9 100644
 @@ -1069 +1085 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1107 @@
+@@ -1091,4 +1107,5 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
-+    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1109,3 @@
+-    <string name="migration_notification_stepDueText">Tu migración está lista para continuar — toca para ejecutar el siguiente paso.</string>
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
++    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
++    <string name="migration_notification_stepDueText">Abre la aplicación para continuar la migración.</string>
 +    <string name="migration_notification_checkStatusText">Abre la aplicación para comprobar el estado de la migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
@@ -38958,7 +39321,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..765237dc0 100644
+index f41234151..74c8203a6 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -39545,12 +39908,13 @@ index f41234151..765237dc0 100644
 @@ -1355 +1209 @@ Your vote can no longer be submitted.</string>
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
-@@ -1377 +1231 @@ Your vote can no longer be submitted.</string>
+@@ -1377,4 +1231,5 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
-+    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1233,3 @@ Your vote can no longer be submitted.</string>
+-    <string name="migration_notification_stepDueText">Your migration is ready to continue — tap to run the next step.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
++    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
++    <string name="migration_notification_stepDueText">Open the app to continue your migration.</string>
 +    <string name="migration_notification_checkStatusText">Open the app to check migration status.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
@@ -41368,10 +41732,10 @@ index 000000000..61358bc6b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..8e929c6bf
+index 000000000..2d1352e58
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,181 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
@@ -41430,8 +41794,8 @@ index 000000000..8e929c6bf
 +        return true
 +    }
 +
-+    fun beginMigrationProgress(ownerKey: String, runStepPending: Boolean = false): MigrationNotice =
-+        MigrationNotice(ownerKey, runStepPending).also { notice ->
++    fun beginMigrationProgress(ownerKey: String): MigrationNotice =
++        MigrationNotice(ownerKey).also { notice ->
 +            pending.update { queue ->
 +                queue.filterNot { it.kind == Kind.MIGRATION_PROGRESS } + Request(Kind.MIGRATION_PROGRESS, null, notice)
 +            }
@@ -41448,15 +41812,11 @@ index 000000000..8e929c6bf
 +        }
 +    }
 +
-+    internal val migrationNoticeToSave: SavedMigrationNotice?
-+        get() = pending.value.firstNotNullOfOrNull { request ->
-+            request.migrationNotice?.let {
-+                SavedMigrationNotice(it.ownerKey, request.command == null && it.runStepPending)
-+            }
-+        }
++    internal val migrationNoticeToSave: String?
++        get() = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
 +
-+    internal val pendingMigrationLookup: SavedMigrationNotice?
-+        get() = resolvingMigrationNotice?.let { SavedMigrationNotice(it.ownerKey, it.runStepPending) }
++    internal val pendingMigrationLookup: String?
++        get() = resolvingMigrationNotice?.ownerKey
 +
 +    fun requestMigrationRecovery(
 +        ownerKey: String,
@@ -41511,9 +41871,7 @@ index 000000000..8e929c6bf
 +        }
 +    }
 +
-+    class MigrationNotice internal constructor(val ownerKey: String, val runStepPending: Boolean)
-+
-+    internal data class SavedMigrationNotice(val ownerKey: String, val runStepPending: Boolean)
++    class MigrationNotice internal constructor(val ownerKey: String)
 +
 +    internal data class Request(
 +        val kind: Kind,
@@ -41560,7 +41918,7 @@ index 000000000..8e929c6bf
 +    return !migrationHasPriority && any { it === request }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..fd3692713 100644
+index 048340e48..0c286b8f4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
@@ -41575,21 +41933,19 @@ index 048340e48..fd3692713 100644
 @@ -86 +92 @@ class MainActivity : FragmentActivity() {
 -        super.onCreate(savedInstanceState)
 +        super.onCreate(restorableNavigationState(savedInstanceState))
-@@ -87,0 +94,13 @@ class MainActivity : FragmentActivity() {
+@@ -87,0 +94,11 @@ class MainActivity : FragmentActivity() {
 +        val restoredInNewProcess = launchNavigation.restoreExternalScans(
 +            savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty(),
 +        )
 +        val migrationNotice = if (restoredInNewProcess) {
-+            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)?.let {
-+                LaunchNavigationRequests.SavedMigrationNotice(it, savedInstanceState.getBoolean(PENDING_MIGRATION_STEP))
-+            }
++            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)
 +        } else {
 +            launchNavigation.pendingMigrationLookup
 +        }
 +        migrationNotice?.let {
-+            migrationAppHooks.restoreNotificationProgress(it.ownerKey, lifecycleScope, it.runStepPending)
++            migrationAppHooks.restoreNotificationProgress(it, lifecycleScope)
 +        }
-@@ -98 +117,11 @@ class MainActivity : FragmentActivity() {
+@@ -98 +115,10 @@ class MainActivity : FragmentActivity() {
 -        handleMigrationIntent(intent)
 +        if (savedInstanceState == null) handleMigrationIntent(intent)
 +    }
@@ -41599,40 +41955,39 @@ index 048340e48..fd3692713 100644
 +        stampNavigationState(outState)
 +        outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
 +        launchNavigation.migrationNoticeToSave?.let {
-+            outState.putString(PENDING_MIGRATION_NOTICE, it.ownerKey)
-+            outState.putBoolean(PENDING_MIGRATION_STEP, it.runStepPending)
++            outState.putString(PENDING_MIGRATION_NOTICE, it)
 +        }
-@@ -110,3 +139,2 @@ class MainActivity : FragmentActivity() {
+@@ -110,3 +136,2 @@ class MainActivity : FragmentActivity() {
 -     * card app links to the gift card scanner, both asking the user to scan the code with the app instead. A gift
 -     * card link is then dropped from the intent: it is not trusted, and it carries a spending secret that must not
 -     * stay around in the activity's intent.
 +     * card app links to the gift card scanner, both asking the user to scan the code with the app instead. The
 +     * recognized link is dropped from the intent after classification.
-@@ -117,0 +146 @@ class MainActivity : FragmentActivity() {
+@@ -117,0 +143 @@ class MainActivity : FragmentActivity() {
 +        if (intent.action != Intent.ACTION_VIEW) return
-@@ -120,2 +149,2 @@ class MainActivity : FragmentActivity() {
+@@ -120,2 +146,2 @@ class MainActivity : FragmentActivity() {
 -        val isGiftCardLink = handleExternalLink(host = data.host, isRedelivery = isRecreated || isFromHistory)
 -        if (isGiftCardLink) {
 +        val consumed = handleExternalLink(data.scheme, data.host, isRedelivery = isRecreated || isFromHistory)
 +        if (consumed) {
-@@ -126 +155,5 @@ class MainActivity : FragmentActivity() {
+@@ -126 +152,5 @@ class MainActivity : FragmentActivity() {
 -    private fun handleMigrationIntent(intent: Intent): Boolean = migrationAppHooks.handleIntent(intent, lifecycleScope)
 +    private fun handleMigrationIntent(intent: Intent) {
 +        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
 +            migrationAppHooks.handleIntent(intent, lifecycleScope)
 +        }
 +    }
-@@ -163 +196 @@ class MainActivity : FragmentActivity() {
+@@ -163 +193 @@ class MainActivity : FragmentActivity() {
 -     * Holds the splash screen until the wallet secret is known and the stored theme has been read. Without
 +     * Holds the splash until the stored theme and wallet state are known, or a reset is pending. Without
-@@ -185 +218,3 @@ class MainActivity : FragmentActivity() {
+@@ -185 +215,3 @@ class MainActivity : FragmentActivity() {
 -            !themeVM.isThemeResolved.value || SecretState.LOADING == walletViewModel.secretState.value
 +            !themeVM.isThemeResolved.value ||
 +                (!resetProgressStore.isPending.value && !transportGate.restartRequired.value &&
 +                    SecretState.LOADING == walletViewModel.secretState.value)
-@@ -189,0 +225 @@ class MainActivity : FragmentActivity() {
+@@ -189,0 +222 @@ class MainActivity : FragmentActivity() {
 +        val appAccessSession = authenticationViewModel.appAccessSession
-@@ -215,2 +251,6 @@ class MainActivity : FragmentActivity() {
+@@ -215,2 +248,6 @@ class MainActivity : FragmentActivity() {
 -                            MainContent()
 -                            AuthenticationForAppAccess()
 +                            AppAccessBoundary(
@@ -41641,33 +41996,32 @@ index 048340e48..fd3692713 100644
 +                            ) { grant ->
 +                                MainContent { appAccessSession.permits(grant) }
 +                            }
-@@ -240 +280 @@ class MainActivity : FragmentActivity() {
+@@ -240 +277 @@ class MainActivity : FragmentActivity() {
 -                    authenticationViewModel.resetAuthenticationResult()
 +                    authenticationViewModel.resetAppAccessResult()
-@@ -272,5 +312 @@ class MainActivity : FragmentActivity() {
+@@ -272,5 +309 @@ class MainActivity : FragmentActivity() {
 -                        lifecycleScope.launch {
 -                            // Wait until the welcome animation finishes, then mark it as presented to the user
 -                            delay((AnimationConstants.durationOnly()).milliseconds)
 -                            authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
 -                        }
 +                        authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
-@@ -296 +332 @@ class MainActivity : FragmentActivity() {
+@@ -296 +329 @@ class MainActivity : FragmentActivity() {
 -    private fun MainContent() {
 +    private fun MainContent(hasAppAccess: () -> Boolean) {
-@@ -298 +334 @@ class MainActivity : FragmentActivity() {
+@@ -298 +331 @@ class MainActivity : FragmentActivity() {
 -        RootNavGraph(secretState, walletViewModel, storageCheckViewModel)
 +        RootNavGraph(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
-@@ -317,2 +353,3 @@ class MainActivity : FragmentActivity() {
+@@ -317,2 +350,3 @@ class MainActivity : FragmentActivity() {
 -                isSecretReadyFlow.combine(isBackgroundSyncEnabledFlow) { isSecretReady, isBackgroundSyncEnabled ->
 -                    isSecretReady && isBackgroundSyncEnabled
 +                combine(isSecretReadyFlow, isBackgroundSyncEnabledFlow, resetProgressStore.isPending) {
 +                    isSecretReady, isBackgroundSyncEnabled, resetPending ->
 +                    isSecretReady && isBackgroundSyncEnabled && !resetPending
-@@ -335,0 +373,14 @@ class MainActivity : FragmentActivity() {
+@@ -335,0 +370,13 @@ class MainActivity : FragmentActivity() {
 +        private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
 +        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
-+        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
 +        private const val NAVIGATION_STATE_VERSION = 18
 +
 +        internal fun stampNavigationState(state: Bundle) {
@@ -45122,12 +45476,12 @@ index befe3b652..6c972bcf1 100644
 +    SwapStatus.PAYMENT_SHORTFALL,
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
-index 327721528..aa9b50bea 100644
+index 327721528..7316e4017 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/migration/MigrationContracts.kt
 @@ -62,0 +63,3 @@ interface MigrationAppHooks {
 +    /** Restores pending notification navigation after process recreation. */
-+    fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean = false)
++    fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope)
 +
 @@ -72,0 +76,2 @@ interface MigrationAppHooks {
 +
@@ -45153,14 +45507,16 @@ index 77bfd5ff3..0989f382e 100644
 -private const val ACCOUNT_ID_OFFSET_MASK = 0xFFFF
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AppAccessSession.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AppAccessSession.kt
 new file mode 100644
-index 000000000..5c5ac0d01
+index 000000000..55735d726
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/AppAccessSession.kt
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,27 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.filterNotNull
++import kotlinx.coroutines.flow.map
 +
 +/** The process-local authorization for wallet UI and actions. A relock revokes every outstanding grant. */
 +class AppAccessSession {
@@ -45169,6 +45525,8 @@ index 000000000..5c5ac0d01
 +    internal val grant = activeGrant.asStateFlow()
 +
 +    internal fun permits(grant: Grant?): Boolean = grant != null && grant === activeGrant.value
++
++    fun authorizedGrants() = grant.filterNotNull().map { owner -> { permits(owner) } }
 +
 +    internal fun unlock() {
 +        if (activeGrant.value == null) activeGrant.value = Grant()
@@ -55027,7 +55385,7 @@ index 81540cc83..2d0b8eb8c 100644
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCase.kt
-index b7fd29555..c96d0442b 100644
+index b7fd29555..7cda98088 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCase.kt
 @@ -4,0 +5 @@ import android.widget.Toast
@@ -55068,7 +55426,7 @@ index b7fd29555..c96d0442b 100644
 +    private val appAccessSession: AppAccessSession,
 +    private val walletWriteAccess: WalletWriteAccess,
 +    private val isTorEnabled: IsTorEnabledStorageProvider,
-@@ -26,21 +40,22 @@ class FixEphemeralAddressUseCase(
+@@ -26,21 +40,29 @@ class FixEphemeralAddressUseCase(
 -    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 -
 -    private val isLoading = MutableStateFlow(false)
@@ -55094,11 +55452,17 @@ index b7fd29555..c96d0442b 100644
 +        val account = selectedAccount() ?: return DiscoveryOutcome.Unconfirmed
 +        val grant = appAccessSession.grant.value
 +        val token = walletWriteAccess.token()
++        val confirmedSelection = if (appAccessSession.permits(grant) && walletWriteAccess.permits(token)) {
++            accountDataSource.confirmSelection(account)
++        } else {
++            null
++        }
 +        val canRecover = {
 +            appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
++                confirmedSelection?.canOperate() == true &&
 +                selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
 +        }
-+        val confirmed = runCatchingRecoverable {
++        val confirmed = canRecover() && runCatchingRecoverable {
 +            recover(address, sourceEntryId, account, canRecover)
 +        }.getOrDefault(false)
 +        return when {
@@ -55108,11 +55472,12 @@ index b7fd29555..c96d0442b 100644
 +                isCurrent = canRecover,
 +                ownership = combine(
 +                    appAccessSession.grant, walletWriteAccess.version, accountDataSource.allAccounts,
-+                ) { _, _, _ -> canRecover() },
++                    accountDataSource.signingAuthorityChanges,
++                ) { _, _, _, _ -> canRecover() },
 +            )
 +        }
 +    }
-@@ -48,3 +63,19 @@ class FixEphemeralAddressUseCase(
+@@ -48,3 +70,19 @@ class FixEphemeralAddressUseCase(
 -                            AddressType.Transparent -> {
 -                                address
 -                            }
@@ -55135,7 +55500,7 @@ index b7fd29555..c96d0442b 100644
 +        }
 +        return scan != null && atRecoveryEntry() && runScan(scan, account, sourceEntryId, canRecover)
 +    }
-@@ -52,12 +83,17 @@ class FixEphemeralAddressUseCase(
+@@ -52,12 +90,20 @@ class FixEphemeralAddressUseCase(
 -                            is AddressType.Invalid -> {
 -                                getSwapStatus(depositAddress = address)
 -                                    .status
@@ -55154,8 +55519,11 @@ index b7fd29555..c96d0442b 100644
 +        sourceEntryId: String?,
 +        canRecover: () -> Boolean,
 +    ): Boolean = withContext(Dispatchers.Default) {
-+        if (!canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return@withContext false
 +        val (synchronizer, address) = scan
++        val canUseTor = isTorEnabled.get() == true && canRecover()
++        if (!canUseTor || !navigationRouter.isForegroundAtEntry(sourceEntryId) ||
++            !synchronizerProvider.isCurrentEngine(synchronizer)
++        ) return@withContext false
 +        val confirmed = synchronizer.fetchUtxosByAddress(
 +            accountUuid = account.sdkAccount.accountUuid,
 +            address = address,
@@ -55165,14 +55533,14 @@ index b7fd29555..c96d0442b 100644
 +                navigationRouter.stageResultFrom(sourceEntryId, canRecover) {
 +                    Toast.makeText(context, R.string.ephemeral_recovery_success, Toast.LENGTH_LONG).show()
 +                    NavigationCommand.Back
-@@ -65,0 +102,2 @@ class FixEphemeralAddressUseCase(
+@@ -65,0 +112,2 @@ class FixEphemeralAddressUseCase(
 +        }
 +        confirmed
-@@ -68 +106,2 @@ class FixEphemeralAddressUseCase(
+@@ -68 +116,2 @@ class FixEphemeralAddressUseCase(
 -    fun observeIsLoading() = isLoading.asStateFlow()
 +    private fun selectedAccount() =
 +        accountDataSource.allAccounts.value?.firstOrNull { it.isSelected }
-@@ -70,11 +109,15 @@ class FixEphemeralAddressUseCase(
+@@ -70,11 +119,15 @@ class FixEphemeralAddressUseCase(
 -    private suspend fun fetchUtxosByAddress(address: String) {
 -        val fundsDiscovered =
 -            synchronizerProvider.getSynchronizer().fetchUtxosByAddress(
@@ -55199,11 +55567,11 @@ index b7fd29555..c96d0442b 100644
 +                        .first { !it.isLoading && it.error !is MetadataReadUnavailableException }
 +                        .status?.destinationAddress?.address
 +                }
-@@ -82,0 +126,3 @@ class FixEphemeralAddressUseCase(
+@@ -82,0 +136,3 @@ class FixEphemeralAddressUseCase(
 +
 +    private companion object {
 +        val PRE_SCAN_TIMEOUT = 30.seconds
-@@ -84,0 +131,9 @@ class FixEphemeralAddressUseCase(
+@@ -84,0 +141,9 @@ class FixEphemeralAddressUseCase(
 +
 +sealed interface DiscoveryOutcome {
 +    data object Unconfirmed : DiscoveryOutcome
@@ -55724,50 +56092,49 @@ index f37946f70..11382bc0e 100644
 +        )
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..67fa9fb9a 100644
+index a33c847ad..71744c3d9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-@@ -2,0 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 +import android.content.Context
-+import cash.z.ecc.android.sdk.model.AccountUuid
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 +import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 +import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
 +import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
-@@ -3,0 +12,4 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+@@ -3,0 +11,4 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -5,0 +18 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -5,0 +17 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -6,0 +20,4 @@ import kotlinx.coroutines.channels.awaitClose
+@@ -6,0 +19,4 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.cancelAndJoin
 +import kotlinx.coroutines.currentCoroutineContext
-@@ -13,0 +31,6 @@ import kotlinx.coroutines.launch
+@@ -13,0 +30,6 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.job
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlin.time.Clock
 +import kotlin.time.Instant
 +import kotlin.time.TimeSource
-@@ -18,0 +42,6 @@ class GetSwapStatusUseCase(
+@@ -18,0 +41,6 @@ class GetSwapStatusUseCase(
 +    context: Context? = null,
 +    clock: Clock = Clock.System,
 +    timeSource: TimeSource = AndroidElapsedTimeSource,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 +    private val accounts: AccountDataSource? = null,
 +    private val accountSelection: SelectedAccountUUIDProvider? = null,
-@@ -19,0 +49,4 @@ class GetSwapStatusUseCase(
+@@ -19,0 +48,4 @@ class GetSwapStatusUseCase(
 +    private val donationPreferences = context?.let(::DonationPreferences)
 +    private val fundingClock = ElapsedTimeClock(clock, timeSource)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -21,0 +55,11 @@ class GetSwapStatusUseCase(
+@@ -21,0 +54,11 @@ class GetSwapStatusUseCase(
 +    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
 +        observe(expected.depositAddress, expected).first { !it.isLoading }
 +
@@ -55779,7 +56146,7 @@ index a33c847ad..67fa9fb9a 100644
 +        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> = observe(depositAddress, null, account, canRefresh)
 +
-@@ -23 +67,6 @@ class GetSwapStatusUseCase(
+@@ -23 +66,6 @@ class GetSwapStatusUseCase(
 -    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
 +    private fun observe(
 +        depositAddress: String,
@@ -55787,10 +56154,10 @@ index a33c847ad..67fa9fb9a 100644
 +        account: WalletAccount? = null,
 +        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> =
-@@ -32 +81,14 @@ class GetSwapStatusUseCase(
+@@ -32 +80,14 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
 +                val generation = initial?.walletWriteToken ?: walletWriteAccess.token()
-+                val owner = (account ?: initial?.ownerAccount)?.sdkAccount?.accountUuid
++                val owner = account ?: initial?.ownerAccount
 +                val canRequest = runCatchingRecoverable { requestAdmission(generation, owner, canRefresh) }
 +                    .getOrElse { error ->
 +                        data.value = SwapQuoteStatusData(isLoading = false, error = error as Exception)
@@ -55803,15 +56170,15 @@ index a33c847ad..67fa9fb9a 100644
 +                    )
 +                }
 +                val expectedMetadata = loaded.getOrNull()
-@@ -38 +100,2 @@ class GetSwapStatusUseCase(
+@@ -38 +99,2 @@ class GetSwapStatusUseCase(
 -                            error = IllegalStateException("No metadata for deposit addr")
 +                            error = loaded.exceptionOrNull() as? Exception
 +                                ?: IllegalStateException("No metadata for deposit addr"),
-@@ -43,0 +107,3 @@ class GetSwapStatusUseCase(
+@@ -43,0 +106,3 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
 +                var fundingExpiry: Job? = null
-@@ -46,9 +112,5 @@ class GetSwapStatusUseCase(
+@@ -46,9 +111,5 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -55826,23 +56193,23 @@ index a33c847ad..67fa9fb9a 100644
 +                        donationPreferences?.recordSuccessfulSettlement(saved)
 +                        val fundingUntil = result.fundingDeadline(requestStartedAt)
 +                        fundingExpiry?.cancelAndJoin()
-@@ -57,0 +120 @@ class GetSwapStatusUseCase(
+@@ -57,0 +119 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -59 +122,2 @@ class GetSwapStatusUseCase(
+@@ -59 +121,2 @@ class GetSwapStatusUseCase(
 -                                error = null
 +                                error = null,
 +                                isFundingWindowOpen = isFundingWindowOpen(fundingUntil),
-@@ -61,0 +126,6 @@ class GetSwapStatusUseCase(
+@@ -61,0 +125,6 @@ class GetSwapStatusUseCase(
 +                        fundingExpiry = fundingUntil?.let { deadline ->
 +                            launch {
 +                                waitForFundingExpiry(deadline)
 +                                data.update { it.copy(isFundingWindowOpen = false) }
 +                            }
 +                        }
-@@ -64,0 +135,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +134,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +138,8 @@ class GetSwapStatusUseCase(
+@@ -66,2 +137,8 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        fundingExpiry?.cancel()
@@ -55853,21 +56220,25 @@ index a33c847ad..67fa9fb9a 100644
 +                        data.update { it.copy(isFundingWindowOpen = false) }
 +                        val latest = savedAfterFailure(expectedMetadata, e)
 +                        data.update { it.withRefreshFailure(e, latest) }
-@@ -74,0 +153,107 @@ class GetSwapStatusUseCase(
+@@ -74,0 +152,111 @@ class GetSwapStatusUseCase(
 +
 +    private suspend fun requestAdmission(
 +        generation: Long,
-+        owner: AccountUuid?,
++        owner: WalletAccount?,
 +        canRefresh: (() -> Boolean)?,
 +    ): () -> Boolean {
 +        val observer = currentCoroutineContext().job
 +        val selection = accountSelection?.captureSelection()
++        val ownerId = owner?.sdkAccount?.accountUuid
++        val needsFallback = ownerId != null && selection != null && selection.uuid != ownerId
++        // A persisted UUID can be absent or stale. The account data source resolves that fallback against the SDK.
++        val fallback = if (needsFallback) accounts?.confirmSelection(owner) else null
 +        return {
 +            val sameSelection = selection == null || checkNotNull(accountSelection).isCurrent(selection)
 +            val currentOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
-+            val ownerMatches = owner == null || accounts == null || currentOwner == owner
++            val ownerMatches = ownerId == null || accounts == null || currentOwner == ownerId
 +            observer.isActive && walletWriteAccess.permits(generation) && canRefresh?.invoke() != false &&
-+                sameSelection && ownerMatches
++                sameSelection && ownerMatches && (!needsFallback || fallback?.canOperate() == true)
 +        }
 +    }
 +
@@ -55961,10 +56332,10 @@ index a33c847ad..67fa9fb9a 100644
 +
 +private fun DonationPreferences.recordSuccessfulSettlement(saved: TransactionSwapMetadata) {
 +    if (saved.status == SwapStatus.SUCCESS) recordSuccessfulTransaction()
-@@ -80,0 +266,2 @@ data class SwapQuoteStatusData(
+@@ -80,0 +269,2 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
 +    val isFundingWindowOpen: Boolean = false,
-@@ -83,0 +271,28 @@ data class SwapQuoteStatusData(
+@@ -83,0 +274,28 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withRefreshFailure(error: Exception, latest: TransactionSwapMetadata?): SwapQuoteStatusData =
 +        copy(
@@ -82966,7 +83337,7 @@ index 000000000..e834eb149
 +@Serializable
 +internal data class DeliveryMigrationWarning(val recoveryId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
-index b983bc0a2..356240b3e 100644
+index b983bc0a2..4588594b1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui
@@ -83016,8 +83387,8 @@ index b983bc0a2..356240b3e 100644
 +
 +            router.forward(ExportVKArgs)
 +            runCurrent()
-+            val notice = launchNavigation.beginMigrationProgress("owner", runStepPending = true)
-+            val pending = LaunchNavigationRequests.SavedMigrationNotice("owner", runStepPending = true)
++            val notice = launchNavigation.beginMigrationProgress("owner")
++            val pending = "owner"
 +            assertEquals(pending, launchNavigation.migrationNoticeToSave)
 +            assertEquals(pending, launchNavigation.pendingMigrationLookup)
 +            launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
@@ -83027,7 +83398,7 @@ index b983bc0a2..356240b3e 100644
 +
 +            launchNavigation.finishMigrationProgress(notice, requestedProgress)
 +            assertEquals(null, launchNavigation.pendingMigrationLookup)
-+            assertEquals(pending.copy(runStepPending = false), launchNavigation.migrationNoticeToSave)
++            assertEquals(pending, launchNavigation.migrationNoticeToSave)
 +            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { command, _ ->
 +                delivered.add(command)
 +            }
@@ -99200,10 +99571,10 @@ index 000000000..10116afb1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCaseTest.kt
 new file mode 100644
-index 000000000..dc3fab0d2
+index 000000000..f6e75180f
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/FixEphemeralAddressUseCaseTest.kt
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,344 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -99212,6 +99583,7 @@ index 000000000..dc3fab0d2
 +import cash.z.ecc.android.sdk.type.AddressType
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 +import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.ZcashTransparentSwapAddress
@@ -99233,6 +99605,7 @@ index 000000000..dc3fab0d2
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.async
@@ -99257,6 +99630,22 @@ index 000000000..dc3fab0d2
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class FixEphemeralAddressUseCaseTest {
 +    @Test
++    fun aStaleVisibleSelectionCannotStartATransparentAddressScan() = runTest {
++        val visible = mockk<WalletAccount> { every { isSelected } returns true }
++        val accounts = mockk<AccountDataSource> {
++            every { allAccounts } returns MutableStateFlow(listOf(visible))
++            coEvery { confirmSelection(visible) } returns null
++        }
++        val provider = mockk<SynchronizerProvider>()
++        val recovery = FixEphemeralAddressUseCase(
++            provider, mockk(), accounts, mockk(), mockk(),
++            AppAccessSession().apply { unlock() }, WalletWriteAccess(), mockk(),
++        )
++        assertEquals(DiscoveryOutcome.Superseded, recovery("synthetic-address", "discover"))
++        coVerify(exactly = 0) { provider.getSynchronizer() }
++    }
++
++    @Test
 +    fun backgroundedSuccessfulScanKeepsAnOwnerBoundCompletionForTheDialog() = backgroundedScan(false)
 +
 +    @Test
@@ -99271,6 +99660,8 @@ index 000000000..dc3fab0d2
 +            }
 +            val accounts = mockk<AccountDataSource> {
 +                every { allAccounts } returns MutableStateFlow(listOf(owner))
++                coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
++                every { signingAuthorityChanges } returns flowOf(Unit)
 +            }
 +            val entry = ActiveNavigationEntry("discover", "Discover")
 +            val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
@@ -99288,7 +99679,10 @@ index 000000000..dc3fab0d2
 +                    finishScan.await()
 +                }
 +            }
-+            val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
++            val provider = mockk<SynchronizerProvider> {
++                coEvery { getSynchronizer() } returns sdk
++                every { isCurrentEngine(sdk) } returns true
++            }
 +            val access = AppAccessSession().apply { unlock() }
 +            val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
 +            val recover = FixEphemeralAddressUseCase(
@@ -99342,6 +99736,8 @@ index 000000000..dc3fab0d2
 +            }
 +            val accounts = mockk<AccountDataSource> {
 +                every { allAccounts } returns MutableStateFlow(listOf(account))
++                coEvery { confirmSelection(account) } returns ConfirmedAccountSelection({ true }, { true })
++                every { signingAuthorityChanges } returns flowOf(Unit)
 +            }
 +            val synchronizer = mockk<Synchronizer> {
 +                coEvery { validateAddress("synthetic-address") } returns when (failure) {
@@ -99361,6 +99757,7 @@ index 000000000..dc3fab0d2
 +            }
 +            val provider = mockk<SynchronizerProvider> {
 +                coEvery { getSynchronizer() } returns synchronizer
++                every { isCurrentEngine(synchronizer) } returns true
 +            }
 +            val navigation = mockk<NavigationRouter>(relaxed = true)
 +            val recovery = FixEphemeralAddressUseCase(
@@ -99393,6 +99790,8 @@ index 000000000..dc3fab0d2
 +        }
 +        val accounts = mockk<AccountDataSource> {
 +            every { allAccounts } returns MutableStateFlow(listOf(owner))
++            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
++            every { signingAuthorityChanges } returns flowOf(Unit)
 +        }
 +        val entry = ActiveNavigationEntry("discover", "Discover")
 +        val navigation = mockk<NavigationRouter>(relaxed = true) {
@@ -99415,7 +99814,10 @@ index 000000000..dc3fab0d2
 +            coEvery { validateAddress("synthetic-reference") } returns mockk<AddressType.Invalid>()
 +            coEvery { fetchUtxosByAddress(uuid, "synthetic-resolution") } returns false
 +        }
-+        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
++        val provider = mockk<SynchronizerProvider> {
++                coEvery { getSynchronizer() } returns sdk
++                every { isCurrentEngine(sdk) } returns true
++            }
 +        val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
 +        val recover = FixEphemeralAddressUseCase(
 +            provider, navigation, accounts, status, mockk(),
@@ -99434,6 +99836,8 @@ index 000000000..dc3fab0d2
 +        }
 +        val accounts = mockk<AccountDataSource> {
 +            every { allAccounts } returns MutableStateFlow(listOf(owner))
++            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
++            every { signingAuthorityChanges } returns flowOf(Unit)
 +        }
 +        val entry = ActiveNavigationEntry("discover", "Discover")
 +        val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
@@ -99480,6 +99884,8 @@ index 000000000..dc3fab0d2
 +        }
 +        val accounts = mockk<AccountDataSource> {
 +            every { allAccounts } returns MutableStateFlow(listOf(owner))
++            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
++            every { signingAuthorityChanges } returns flowOf(Unit)
 +        }
 +        val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("discover", "Discover"))
 +        val navigation = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
@@ -99509,8 +99915,8 @@ index 000000000..dc3fab0d2
 +        INITIAL_TOR(1, 1),
 +        FINAL_TOR(2, 2),
 +        STATUS_READ(1),
-+        SDK_FALSE(2),
-+        SDK_THROW(2),
++        SDK_FALSE(3),
++        SDK_THROW(3),
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt
@@ -104205,12 +104611,13 @@ index 2c3089d4f..34343dd5a 100644
 -    private inline fun <reified T : WalletAccount> spendable(): T = mockk<T> { every { isSpendable } returns true }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
 new file mode 100644
-index 000000000..fb7e3ffed
+index 000000000..e0279487e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
-@@ -0,0 +1,495 @@
+@@ -0,0 +1,518 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
++import cash.z.ecc.android.sdk.model.AccountUuid
 +import cash.z.ecc.android.sdk.model.TransactionId
 +import cash.z.ecc.android.sdk.model.TransactionOverview
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -104624,6 +105031,28 @@ index 000000000..fb7e3ffed
 +        assertEquals(terminal, observations.last().savedMetadata)
 +        assertNull(observations.last().error)
 +        coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
++    }
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun aNewObserverCannotUseThePreviousOwnerWhileTheAccountListCatchesUp() = runTest {
++        val committed = AccountUuid.new(ByteArray(16) { 11 })
++        val accounts = mockk<AccountDataSource> {
++            every { allAccounts } returns MutableStateFlow(listOf(owner))
++            coEvery { confirmSelection(owner) } returns null
++        }
++        val preference = mockk<SelectedAccountUUIDProvider> {
++            coEvery { captureSelection() } returns SelectedAccountSelection(committed, 1)
++            every { isCurrent(any()) } returns true
++        }
++        val metadata = mockk<MetadataRepository>()
++        val swaps = mockk<SwapRepository>()
++        val useCase = GetSwapStatusUseCase(metadata, swaps, accounts = accounts, accountSelection = preference)
++
++        val observed = useCase.observeForAccount(deposit, owner).first { !it.isLoading }
++        assertNotNull(observed.error)
++        coVerify(exactly = 0) { metadata.getSwapMetadata(any(), any()) }
++        coVerify(exactly = 0) { swaps.checkSwapStatus(any(), any()) }
 +    }
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)

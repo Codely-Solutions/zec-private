@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ConfirmedAccountSelection
 import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.ZcashTransparentSwapAddress
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -51,6 +53,22 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class FixEphemeralAddressUseCaseTest {
     @Test
+    fun aStaleVisibleSelectionCannotStartATransparentAddressScan() = runTest {
+        val visible = mockk<WalletAccount> { every { isSelected } returns true }
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(visible))
+            coEvery { confirmSelection(visible) } returns null
+        }
+        val provider = mockk<SynchronizerProvider>()
+        val recovery = FixEphemeralAddressUseCase(
+            provider, mockk(), accounts, mockk(), mockk(),
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(), mockk(),
+        )
+        assertEquals(DiscoveryOutcome.Superseded, recovery("synthetic-address", "discover"))
+        coVerify(exactly = 0) { provider.getSynchronizer() }
+    }
+
+    @Test
     fun backgroundedSuccessfulScanKeepsAnOwnerBoundCompletionForTheDialog() = backgroundedScan(false)
 
     @Test
@@ -65,6 +83,8 @@ class FixEphemeralAddressUseCaseTest {
             }
             val accounts = mockk<AccountDataSource> {
                 every { allAccounts } returns MutableStateFlow(listOf(owner))
+                coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
+                every { signingAuthorityChanges } returns flowOf(Unit)
             }
             val entry = ActiveNavigationEntry("discover", "Discover")
             val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
@@ -82,7 +102,10 @@ class FixEphemeralAddressUseCaseTest {
                     finishScan.await()
                 }
             }
-            val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
+            val provider = mockk<SynchronizerProvider> {
+                coEvery { getSynchronizer() } returns sdk
+                every { isCurrentEngine(sdk) } returns true
+            }
             val access = AppAccessSession().apply { unlock() }
             val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
             val recover = FixEphemeralAddressUseCase(
@@ -136,6 +159,8 @@ class FixEphemeralAddressUseCaseTest {
             }
             val accounts = mockk<AccountDataSource> {
                 every { allAccounts } returns MutableStateFlow(listOf(account))
+                coEvery { confirmSelection(account) } returns ConfirmedAccountSelection({ true }, { true })
+                every { signingAuthorityChanges } returns flowOf(Unit)
             }
             val synchronizer = mockk<Synchronizer> {
                 coEvery { validateAddress("synthetic-address") } returns when (failure) {
@@ -155,6 +180,7 @@ class FixEphemeralAddressUseCaseTest {
             }
             val provider = mockk<SynchronizerProvider> {
                 coEvery { getSynchronizer() } returns synchronizer
+                every { isCurrentEngine(synchronizer) } returns true
             }
             val navigation = mockk<NavigationRouter>(relaxed = true)
             val recovery = FixEphemeralAddressUseCase(
@@ -187,6 +213,8 @@ class FixEphemeralAddressUseCaseTest {
         }
         val accounts = mockk<AccountDataSource> {
             every { allAccounts } returns MutableStateFlow(listOf(owner))
+            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
+            every { signingAuthorityChanges } returns flowOf(Unit)
         }
         val entry = ActiveNavigationEntry("discover", "Discover")
         val navigation = mockk<NavigationRouter>(relaxed = true) {
@@ -209,7 +237,10 @@ class FixEphemeralAddressUseCaseTest {
             coEvery { validateAddress("synthetic-reference") } returns mockk<AddressType.Invalid>()
             coEvery { fetchUtxosByAddress(uuid, "synthetic-resolution") } returns false
         }
-        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
+        val provider = mockk<SynchronizerProvider> {
+                coEvery { getSynchronizer() } returns sdk
+                every { isCurrentEngine(sdk) } returns true
+            }
         val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
         val recover = FixEphemeralAddressUseCase(
             provider, navigation, accounts, status, mockk(),
@@ -228,6 +259,8 @@ class FixEphemeralAddressUseCaseTest {
         }
         val accounts = mockk<AccountDataSource> {
             every { allAccounts } returns MutableStateFlow(listOf(owner))
+            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
+            every { signingAuthorityChanges } returns flowOf(Unit)
         }
         val entry = ActiveNavigationEntry("discover", "Discover")
         val active = MutableStateFlow<ActiveNavigationEntry?>(entry)
@@ -274,6 +307,8 @@ class FixEphemeralAddressUseCaseTest {
         }
         val accounts = mockk<AccountDataSource> {
             every { allAccounts } returns MutableStateFlow(listOf(owner))
+            coEvery { confirmSelection(owner) } returns ConfirmedAccountSelection({ true }, { true })
+            every { signingAuthorityChanges } returns flowOf(Unit)
         }
         val active = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("discover", "Discover"))
         val navigation = mockk<NavigationRouter>(relaxed = true) { every { activeEntry } returns active }
@@ -303,7 +338,7 @@ class FixEphemeralAddressUseCaseTest {
         INITIAL_TOR(1, 1),
         FINAL_TOR(2, 2),
         STATUS_READ(1),
-        SDK_FALSE(2),
-        SDK_THROW(2),
+        SDK_FALSE(3),
+        SDK_THROW(3),
     }
 }

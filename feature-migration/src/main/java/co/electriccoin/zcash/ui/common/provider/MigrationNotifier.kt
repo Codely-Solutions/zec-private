@@ -31,7 +31,7 @@ class MigrationNotifier(
     // NOTE (reviewer: "an intent for a given activity should be built ONLY by a factory in that
     // activity's companion object"): the two intents below target MainActivity, which lives in
     // ui-lib. feature-migration depends on ui-lib (not vice versa), and the extra keys
-    // (EXTRA_OPEN_MIGRATION / EXTRA_RUN_STEP / EXTRA_ACCOUNT_KEY_ID) and the scoped PendingIntent
+    // (EXTRA_OPEN_MIGRATION / EXTRA_ACCOUNT_KEY_ID) and the scoped PendingIntent
     // identities are migration concerns. Moving construction into
     // MainActivity.Companion would force ui-lib to reference feature-migration constants — a
     // circular dependency — so the factory stays here by necessity. See the deferred-factory note
@@ -56,26 +56,6 @@ class MigrationNotifier(
         return PendingIntent.getActivity(
             context,
             REQUEST_CODE_MIGRATION,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
-    // Distinct request code AND a distinct intent extra from mainActivityIntent()'s
-    // EXTRA_OPEN_MIGRATION: the step-due tap must RE-KICK the worker (handleIntent schedules an
-    // immediate run) besides opening Progress — background execution needs no UI, the app open
-    // exists only to give the OS a live process to run the worker in.
-    private fun runStepIntent(accountKeyId: String): PendingIntent {
-        val intent =
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                action = migrationIntentAction(EXTRA_RUN_STEP, accountKeyId)
-                putExtra(EXTRA_RUN_STEP, true)
-                putExtra(EXTRA_ACCOUNT_KEY_ID, accountKeyId)
-            }
-        return PendingIntent.getActivity(
-            context,
-            REQUEST_CODE_TRANSFER_READY,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -270,10 +250,9 @@ class MigrationNotifier(
     /**
      * Dead-man's-switch fallback (design 2026-07-30): the worker missed its expected run — a
      * migration STEP (prove or broadcast; everything is pre-signed, no user review exists) is due
-     * and nothing is executing it. The normal tap re-kicks the worker. If an interrupted removal
-     * left ownership unresolved, the notice asks the user to check status and opens progress only
-     * after the app resolves the original account. The step-due notice stays available if the tap
-     * fails to select the original wallet or wake its worker. [cancelStepDue] dismisses either form.
+     * and nothing is executing it. The tap opens authenticated progress for the original account.
+     * Normal foreground recovery resumes eligible work. The notice remains until the worker runs
+     * or [cancelStepDue] dismisses it.
      *
      * @param accountKeyId storage-key id ([toStorageKeyId]) of the migrating account; also selects
      *   the per-account notification id so [cancelStepDue] can dismiss exactly this one.
@@ -284,7 +263,6 @@ class MigrationNotifier(
         } else {
             R.string.migration_notification_stepDueText
         }
-        val tap = if (removalUnresolved) mainActivityIntent(accountKeyId) else runStepIntent(accountKeyId)
         val notification =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
@@ -292,7 +270,7 @@ class MigrationNotifier(
                 .setContentTitle(context.getString(R.string.migration_notification_title))
                 .setContentText(context.getString(text))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(tap)
+                .setContentIntent(mainActivityIntent(accountKeyId))
                 .setAutoCancel(removalUnresolved)
                 .build()
 
@@ -427,7 +405,6 @@ class MigrationNotifier(
         private const val NOTIFICATION_ID_PROGRESS = 0x10_0000
         private const val NOTIFICATION_ID_STEP_DUE = 0x40_0000
         private const val REQUEST_CODE_MIGRATION = 0x10_0000
-        private const val REQUEST_CODE_TRANSFER_READY = 0x20_0000
     }
 }
 

@@ -7,12 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The preparation fast-track (security split, 2026-07-30 tx9 investigation): in-pool note-split
- * preparations skip the crossing-grade privacy ceremony — quiet gap, active-sync defer and send
- * spacing — because they leak neither amount nor anchor-set membership. Crossings keep the full
- * ceremony.
- */
+/** A due preparation can affect wake timing. Every SDK broadcast still passes the quiet gate. */
 class PrepFastTrackTest {
     private fun state(
         id: Long,
@@ -75,17 +70,15 @@ class PrepFastTrackTest {
     }
 
     @Test
-    fun fastTrackSkipsQuietGapAndSyncingDefers() {
+    fun activeSynchronizationDefersBroadcastEvenWhenThePriorGapElapsed() {
         val action =
             decideBroadcastPreflight(
                 synchronizerSyncing = true,
                 nowEpochSeconds = 1_000,
-                // quiet gap clearly unmet
-                lastNetworkActivityEpochSeconds = 999,
+                lastNetworkActivityEpochSeconds = 700,
                 privacyBufferSeconds = 180,
-                prepFastTrack = true,
             )
-        assertEquals(BroadcastPreflight.BROADCAST, action)
+        assertEquals(BroadcastPreflight.DEFER, action)
     }
 
     @Test
@@ -96,7 +89,6 @@ class PrepFastTrackTest {
                 nowEpochSeconds = 1_000,
                 lastNetworkActivityEpochSeconds = 999,
                 privacyBufferSeconds = 180,
-                prepFastTrack = false,
             )
         assertEquals(BroadcastPreflight.DEFER, action)
     }

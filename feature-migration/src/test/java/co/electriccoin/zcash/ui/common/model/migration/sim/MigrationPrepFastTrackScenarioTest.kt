@@ -4,7 +4,6 @@ import cash.z.ecc.android.sdk.NetworkPrivacyOptions
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.TransferResult
 import co.electriccoin.zcash.work.BroadcastPreflight
-import co.electriccoin.zcash.work.PREP_FAST_TRACK_REARM
 import co.electriccoin.zcash.work.decideBroadcastPreflight
 import co.electriccoin.zcash.work.nextDueUnsentIsPreparation
 import kotlinx.coroutines.test.runTest
@@ -14,10 +13,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Scenario for the preparation fast-track (security split — tx9 investigation, 2026-07-30):
- * an entire READY prep layer broadcasts back-to-back, immediately after proving, even inside the
- * post-sync quiet gap — while a crossing TRANSFER in the exact same conditions only ever gets its
- * proof and must wait out the full ceremony before broadcasting.
+ * Simulates proving a preparation layer and its dependent crossing. Each submission waits for
+ * a separate quiet window because the pinned SDK can select its next candidate at entry.
  *
  * Layout: two layer-0 preps (one layer = no one-at-a-time rule) funding one transfer.
  */
@@ -53,25 +50,18 @@ class MigrationPrepFastTrackScenarioTest {
         return driver
     }
 
-    /** The broadcast preflight exactly as MigrationWorker computes it, with a just-synced quiet gap. */
-    private suspend fun preflightInsideQuietGap(driver: MigrationSimDriver): BroadcastPreflight {
+    private fun preflight(secondsSinceActivity: Long): BroadcastPreflight {
         val nowEpoch = 10_000L
         return decideBroadcastPreflight(
             synchronizerSyncing = false,
             nowEpochSeconds = nowEpoch,
-            // The last sync run stamped network activity moments ago — the quiet gap is clearly UNMET.
-            lastNetworkActivityEpochSeconds = nowEpoch - 5,
+            lastNetworkActivityEpochSeconds = nowEpoch - secondsSinceActivity,
             privacyBufferSeconds = PRIVACY_BUFFER_SECONDS,
-            prepFastTrack =
-                nextDueUnsentIsPreparation(
-                    driver.sdk.getMigrationTransferStates(),
-                    driver.sdk.estimatedChainTip(),
-                ),
         )
     }
 
     @Test
-    fun `ready prep layer broadcasts back-to-back inside the quiet gap, transfer proves but waits`() =
+    fun `ready preparations and a dependent crossing each require a quiet window`() =
         runTest {
             val driver = seededDriver()
             val sdk = driver.sdk
@@ -81,25 +71,21 @@ class MigrationPrepFastTrackScenarioTest {
             driver.advanceTip(blocks = 5)
             assertEquals(2, sdk.finalizeReadyTransfers(), "both layer-0 preps prove together")
 
-            // ── Prep A: fast-track fires INSIDE the quiet gap ──────────────────
-            assertEquals(
-                BroadcastPreflight.BROADCAST,
-                preflightInsideQuietGap(driver),
-                "a due proved preparation must broadcast despite the unmet quiet gap",
-            )
+            assertEquals(BroadcastPreflight.DEFER, preflight(5))
+            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
             val first = sdk.executeNextPendingTransfer(opts, useEstimatedTip = true)
             assertTrue(first is TransferAttemptOutcome.Executed && first.result is TransferResult.Success)
             assertTrue(sdk.txById(PREP_A)!!.sent)
 
-            // ── Prep B: still fast-tracked, no send spacing between preps ──────
             assertTrue(
                 nextDueUnsentIsPreparation(sdk.getMigrationTransferStates(), sdk.estimatedChainTip()),
-                "with prep B still pending the fast-track re-arm ($PREP_FAST_TRACK_REARM) applies — not a live window",
+                "wake selection recognizes a due preparation",
             )
-            assertEquals(BroadcastPreflight.BROADCAST, preflightInsideQuietGap(driver))
+            assertEquals(BroadcastPreflight.DEFER, preflight(5))
+            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
             val second = sdk.executeNextPendingTransfer(opts, useEstimatedTip = true)
             assertTrue(second is TransferAttemptOutcome.Executed && second.result is TransferResult.Success)
-            assertTrue(sdk.txById(PREP_B)!!.sent, "the second prep of the layer goes right behind the first")
+            assertTrue(sdk.txById(PREP_B)!!.sent)
 
             // ── Transfer: proof yes, broadcast NO while the ceremony is unmet ──
             driver.mine(id = PREP_A, height = START_TIP + 10)
@@ -114,22 +100,13 @@ class MigrationPrepFastTrackScenarioTest {
             )
             assertEquals(
                 BroadcastPreflight.DEFER,
-                preflightInsideQuietGap(driver),
+                preflight(5),
                 "a crossing must keep the full ceremony: proved and due, yet it WAITS out the quiet gap",
             )
             assertFalse(sdk.txById(TRANSFER)!!.sent, "no broadcast happened for the transfer")
 
             // ── Ceremony satisfied → the transfer finally broadcasts ───────────
-            val calmPreflight =
-                decideBroadcastPreflight(
-                    synchronizerSyncing = false,
-                    nowEpochSeconds = 10_000L,
-                    lastNetworkActivityEpochSeconds = 10_000L - PRIVACY_BUFFER_SECONDS - 1,
-                    privacyBufferSeconds = PRIVACY_BUFFER_SECONDS,
-                    prepFastTrack =
-                        nextDueUnsentIsPreparation(sdk.getMigrationTransferStates(), sdk.estimatedChainTip()),
-                )
-            assertEquals(BroadcastPreflight.BROADCAST, calmPreflight)
+            assertEquals(BroadcastPreflight.BROADCAST, preflight(PRIVACY_BUFFER_SECONDS))
             val third = sdk.executeNextPendingTransfer(opts, useEstimatedTip = true)
             assertTrue(third is TransferAttemptOutcome.Executed && third.result is TransferResult.Success)
             assertTrue(sdk.txById(TRANSFER)!!.sent)

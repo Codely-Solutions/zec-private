@@ -8,8 +8,11 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
@@ -40,6 +43,9 @@ import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -71,6 +77,7 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), context, reset, driver, drive,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         mockkConstructor(MigrationScheduler::class)
         try {
@@ -127,6 +134,7 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(), mockk(), mockk(), context, reset, driver, drive,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         mockkConstructor(MigrationScheduler::class)
         try {
@@ -163,6 +171,7 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(), mockk(), mockk(), retirementContext(commitSucceeds = false), reset,
             mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         var deletionEntered = false
         try {
@@ -193,12 +202,13 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), navigation, accounts, mockk(relaxed = true), retirementContext(), reset,
             mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), readouts,
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         mockkConstructor(MigrationScheduler::class)
         try {
             coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } returns Unit
 
-            hooks.restoreNotificationProgress(key, this, runStepPending = true)
+            hooks.restoreNotificationProgress(key, this)
             runCurrent()
             assertTrue(navigation.resolvingMigrationNotice?.ownerKey == key)
             hooks.retireHardwareAccount(key) {}
@@ -207,7 +217,6 @@ class MigrationAppHooksResetTest {
 
             assertTrue(navigation.resolvingMigrationNotice == null)
             coVerify(exactly = 0) { accounts.selectAccount(target) }
-            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any(), any()) }
             verify(exactly = 1) { readouts.clear(key) }
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
         } finally {
@@ -238,6 +247,7 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context, pendingReset(), driver, driveOnce,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         mockkObject(WorkManager.Companion)
         try {
@@ -284,6 +294,7 @@ class MigrationAppHooksResetTest {
             mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context,
             pendingReset(), mockk(relaxed = true), mockk(relaxed = true),
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         mockkObject(WorkManager.Companion)
         mockkConstructor(MigrationScheduler::class)
@@ -317,6 +328,7 @@ class MigrationAppHooksResetTest {
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), launchNavigation, accounts, mockk(), mockk(), progress,
             mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), writeAccess,
+            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         val command = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
         coEvery { accounts.getAllAccounts() } returns listOf(target)
@@ -345,7 +357,7 @@ class MigrationAppHooksResetTest {
     }
 
     @Test
-    fun dueNoticeResumesItsKickAndWaitsForSchedulerAcknowledgement() = runTest {
+    fun restoredNoticeWaitsForAnOriginalLiveGrantAndOpensStatusWithoutScheduling() = runTest {
         val uuid = AccountUuid.new(ByteArray(16))
         val ownerKey = uuid.toStorageKeyId()
         val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -354,45 +366,45 @@ class MigrationAppHooksResetTest {
         coEvery { accounts.getAllAccounts() } coAnswers { releaseLookup.await() }
         val navigation = spyk(LaunchNavigationRequests())
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
-        val recovery = mockk<co.electriccoin.zcash.ui.common.usecase.CheckMigrationRecoveryUseCase> {
-            coEvery { hasActivePlan(ownerKey) } returns true
-        }
+        val grants = MutableSharedFlow<() -> Boolean>(replay = 1)
+        var originalGrant = true
         val hooks = MigrationAppHooksImpl(
-            recovery, mockk(), navigation, accounts, mockk(), mockk(), reset,
+            mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
             mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), WalletWriteAccess(reset),
+            appAccess = notificationAccess(grants), navigationRouter = resumedRouter(),
         )
-        val acknowledged = CompletableDeferred<Unit>()
-        mockkConstructor(MigrationScheduler::class)
+        mockkObject(WorkManager.Companion)
         try {
-            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) } coAnswers {
-                acknowledged.await()
-            }
-            val oldActivity = launch { hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true) }
+            hooks.restoreNotificationProgress(ownerKey, this)
             runCurrent()
-            val saved = checkNotNull(navigation.resolvingMigrationNotice)
-            assertTrue(saved.runStepPending)
-            oldActivity.cancel()
+            assertEquals(ownerKey, navigation.resolvingMigrationNotice?.ownerKey)
+            coVerify(exactly = 0) { accounts.getAllAccounts() }
 
-            hooks.restoreNotificationProgress(saved.ownerKey, this, saved.runStepPending)
+            grants.emit { originalGrant }
+            runCurrent()
+            coVerify(exactly = 1) { accounts.getAllAccounts() }
+            originalGrant = false
             releaseLookup.complete(listOf(target))
             runCurrent()
-            verify(exactly = 0) { navigation.finishMigrationProgress(any(), any()) }
-            acknowledged.complete(Unit)
-            runCurrent()
+            coVerify(exactly = 0) { accounts.selectAccount(target) }
 
-            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
+            hooks.restoreNotificationProgress(ownerKey, this)
+            grants.emit { true }
+            runCurrent()
+            coVerify(exactly = 1) { accounts.selectAccount(target) }
             val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
-
-            coEvery { recovery.hasActivePlan(ownerKey) } returns false
-            hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true)
-            runCurrent()
-            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
-            verify(exactly = 2) { navigation.finishMigrationProgress(any(), progress) }
+            verify(exactly = 0) { WorkManager.getInstance(any()) }
         } finally {
-            acknowledged.complete(Unit)
-            unmockkConstructor(MigrationScheduler::class)
+            unmockkObject(WorkManager.Companion)
         }
+    }
+
+    private fun notificationAccess(grants: Flow<() -> Boolean> = flowOf({ true })) =
+        mockk<AppAccessSession> { every { authorizedGrants() } returns grants }
+
+    private fun resumedRouter() = mockk<NavigationRouter> {
+        every { activeEntry } returns MutableStateFlow(ActiveNavigationEntry("home", null))
     }
 
     private fun retirementContext(commitSucceeds: Boolean = true): Context {

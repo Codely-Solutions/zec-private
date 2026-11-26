@@ -89,12 +89,6 @@ class MigrationScheduler(
         }
     }
 
-    internal suspend fun runNotificationStep(accountKeyId: String, version: Long) {
-        if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE, version)
-        }
-    }
-
     private suspend fun enqueueConfirmed(
         accountKeyId: String,
         delay: Duration,

@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
-import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
@@ -79,7 +78,7 @@ class GetSwapStatusUseCase(
 
             launch {
                 val generation = initial?.walletWriteToken ?: walletWriteAccess.token()
-                val owner = (account ?: initial?.ownerAccount)?.sdkAccount?.accountUuid
+                val owner = account ?: initial?.ownerAccount
                 val canRequest = runCatchingRecoverable { requestAdmission(generation, owner, canRefresh) }
                     .getOrElse { error ->
                         data.value = SwapQuoteStatusData(isLoading = false, error = error as Exception)
@@ -153,17 +152,21 @@ class GetSwapStatusUseCase(
 
     private suspend fun requestAdmission(
         generation: Long,
-        owner: AccountUuid?,
+        owner: WalletAccount?,
         canRefresh: (() -> Boolean)?,
     ): () -> Boolean {
         val observer = currentCoroutineContext().job
         val selection = accountSelection?.captureSelection()
+        val ownerId = owner?.sdkAccount?.accountUuid
+        val needsFallback = ownerId != null && selection != null && selection.uuid != ownerId
+        // A persisted UUID can be absent or stale. The account data source resolves that fallback against the SDK.
+        val fallback = if (needsFallback) accounts?.confirmSelection(owner) else null
         return {
             val sameSelection = selection == null || checkNotNull(accountSelection).isCurrent(selection)
             val currentOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
-            val ownerMatches = owner == null || accounts == null || currentOwner == owner
+            val ownerMatches = ownerId == null || accounts == null || currentOwner == ownerId
             observer.isActive && walletWriteAccess.permits(generation) && canRefresh?.invoke() != false &&
-                sameSelection && ownerMatches
+                sameSelection && ownerMatches && (!needsFallback || fallback?.canOperate() == true)
         }
     }
 

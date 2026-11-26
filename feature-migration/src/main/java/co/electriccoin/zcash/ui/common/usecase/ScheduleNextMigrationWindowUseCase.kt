@@ -7,22 +7,25 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Re-arms the background worker for whatever transfer is next in the active plan, after any
- * transfer broadcasts successfully (scheduled, resumed, or manually confirmed). No-ops if there's
- * no next pending transfer (e.g. the plan just completed, or IMMEDIATE mode's single-transfer
- * plan). Background delivery is scheduled unconditionally — see [MigrationScheduler]/
- * [FinalizeMigrationScheduleUseCase] for why this no longer depends on a delivery-mode flag.
+ * Preserves an existing wake or schedules the next transfer after a manual submission.
+ * If every transfer was sent, the next wake checks mining after the SDK's privacy window.
  */
 class ScheduleNextMigrationWindowUseCase(
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val migrationScheduler: MigrationScheduler,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
+    private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
 ) {
     suspend operator fun invoke(accountKeyId: String? = null) {
         val owner = accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
         val version = MigrationScheduler.wakeVersion(owner)
-        val next = getMigrationSnapshot(owner)?.nextPending ?: return
-        val delay = delayUntil(next.scheduledAt.epochSeconds)
+        val snapshot = getMigrationSnapshot(owner) ?: return
+        val next = snapshot.nextPending
+        val delay = when {
+            next != null -> delayUntil(next.scheduledAt.epochSeconds)
+            snapshot.isComplete && !snapshot.areAllMined -> getOrchardMigrationSdk(owner)?.privacySyncBufferDuration()
+            else -> null
+        } ?: return
         migrationScheduler.scheduleIfMissing(owner, delay, version)
     }
 

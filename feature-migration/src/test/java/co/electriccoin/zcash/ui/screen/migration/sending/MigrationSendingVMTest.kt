@@ -342,6 +342,55 @@ class MigrationSendingVMTest {
     }
 
     @Test
+    fun aGenericRetryAfterDirectFailureUsesTor() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) } returns
+                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) } throws
+                IllegalStateException("synthetic ambiguous SDK result")
+        }
+        val genericError = io.mockk.slot<co.electriccoin.zcash.ui.common.model.LceContent.Error>()
+        val errorMapper = mockk<ErrorMapperUseCase> {
+            every { mapToState(capture(genericError), any(), any(), any(), any(), any(), any(), any()) } returns
+                mockk(relaxed = true)
+        }
+        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
+        val router = FakeNavigationRouter()
+        val vm = vm(sdk, router, torDecisionRepository = decisions, useTor = true, errorStateMapper = errorMapper)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
+        decisions.set("fixture-owner", useTor = false, authorizationId = assertNotNull(sheet.authorizationId))
+        runCurrent()
+
+        genericError.captured.restart()
+        runCurrent()
+
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
+        coVerify(exactly = 2) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) }
+    }
+
+    @Test
+    fun aDirectApprovalAdmitsAtMostOneNativeEntryWhenNothingIsDue() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) } returns
+                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) } returns
+                TransferAttemptOutcome.NothingDue
+        }
+        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
+        val router = FakeNavigationRouter()
+        vm(sdk, router, torDecisionRepository = decisions, useTor = true)
+        runCurrent()
+        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
+
+        decisions.set("fixture-owner", useTor = false, authorizationId = assertNotNull(sheet.authorizationId))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
+    }
+
+    @Test
     fun anOldSendingRouteWithoutItsLiveGrantNeverEntersTheSdk() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
         val router = FakeNavigationRouter()
@@ -610,6 +659,7 @@ class MigrationSendingVMTest {
         accounts: AccountDataSource? = null,
         scheduleNextMigrationWindow: ScheduleNextMigrationWindowUseCase = mockk(relaxed = true),
         sourceEntryId: String? = null,
+        errorStateMapper: ErrorMapperUseCase = mockk(relaxed = true),
     ) = MigrationSendingVM(
         args = args,
         getOrchardMigrationSdk =
@@ -619,7 +669,7 @@ class MigrationSendingVMTest {
         getMigrationSnapshot = getMigrationSnapshot,
         scheduleNextMigrationWindow = scheduleNextMigrationWindow,
         navigationRouter = router,
-        errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
+        errorStateMapper = errorStateMapper,
         isMigrationTorEnabledStorageProvider =
             mockk<IsMigrationTorEnabledStorageProvider> {
                 coEvery { this@mockk.get(args.accountKeyId) } returns useTor

@@ -160,9 +160,10 @@ class MigrationDriveOnceForegroundTest {
             coEvery { get() } returns Instant.EPOCH
             every { latestObserved } returns null
         }
+        val notifier = mockk<co.electriccoin.zcash.ui.common.provider.MigrationNotifier>(relaxed = true)
         val drive = MigrationDriveOnce(
             applicationContext = mockk(relaxed = true),
-            migrationNotifier = mockk(relaxed = true),
+            migrationNotifier = notifier,
             isMigrationTorEnabledStorageProvider = mockk { coEvery { this@mockk.get("crossing-owner") } returns true },
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk {
@@ -178,6 +179,7 @@ class MigrationDriveOnceForegroundTest {
         coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), true) }
         coVerify(exactly = 1) { activity.stampNow() }
         coVerify(exactly = 0) { sync.enhanceTransaction(txId) }
+        verify(exactly = 0) { notifier.notifyMigrationComplete(any()) }
     }
 
     @Test

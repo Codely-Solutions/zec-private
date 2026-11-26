@@ -95,14 +95,12 @@ class MainActivity : FragmentActivity() {
             savedInstanceState?.getStringArrayList(PENDING_EXTERNAL_SCANS).orEmpty(),
         )
         val migrationNotice = if (restoredInNewProcess) {
-            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)?.let {
-                LaunchNavigationRequests.SavedMigrationNotice(it, savedInstanceState.getBoolean(PENDING_MIGRATION_STEP))
-            }
+            savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)
         } else {
             launchNavigation.pendingMigrationLookup
         }
         migrationNotice?.let {
-            migrationAppHooks.restoreNotificationProgress(it.ownerKey, lifecycleScope, it.runStepPending)
+            migrationAppHooks.restoreNotificationProgress(it, lifecycleScope)
         }
 
         setAllowedScreenOrientation()
@@ -122,8 +120,7 @@ class MainActivity : FragmentActivity() {
         stampNavigationState(outState)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
         launchNavigation.migrationNoticeToSave?.let {
-            outState.putString(PENDING_MIGRATION_NOTICE, it.ownerKey)
-            outState.putBoolean(PENDING_MIGRATION_STEP, it.runStepPending)
+            outState.putString(PENDING_MIGRATION_NOTICE, it)
         }
     }
 
@@ -373,7 +370,6 @@ class MainActivity : FragmentActivity() {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
-        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
         private const val NAVIGATION_STATE_VERSION = 18
 
         internal fun stampNavigationState(state: Bundle) {

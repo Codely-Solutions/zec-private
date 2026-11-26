@@ -19,7 +19,6 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPczts
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepositoryImpl
@@ -551,7 +550,6 @@ class MigrationScheduledVMTest {
             PendingKeystoneMigrationPcztsRepositoryImpl(),
         finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
         isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-        synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
         walletActionAccess: WalletActionAccess = mockk {
             coEvery { this@mockk.capture(any<WalletAccount>()) } returns { true }
         },
@@ -567,7 +565,6 @@ class MigrationScheduledVMTest {
         pendingKeystonePczts = pendingKeystonePczts,
         finalizeMigrationSchedule = finalizeMigrationSchedule,
         isMigrationTorEnabledStorageProvider = isMigrationTorEnabledStorageProvider,
-        synchronizerProvider = synchronizerProvider,
         selectedAccount = mockk<GetSelectedWalletAccountUseCase> {
             coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
         },

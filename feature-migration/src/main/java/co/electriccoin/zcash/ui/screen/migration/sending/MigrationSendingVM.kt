@@ -102,7 +102,12 @@ class MigrationSendingVM(
                 }
                 if (pendingMigrationTorFailureDecisionRepository.consume(decision)) {
                     fallbackId = null
-                    sendLce.execute { sendOnce(decision.useTor, directConsent = true) }
+                    var hasDirectConsent = true
+                    sendLce.execute {
+                        val useDirect = hasDirectConsent && !decision.useTor
+                        hasDirectConsent = false
+                        sendOnce(useTor = !useDirect, directConsent = useDirect)
+                    }
                 }
             }.launchIn(viewModelScope)
         send()
@@ -157,7 +162,7 @@ class MigrationSendingVM(
             failure.value = SendFailure.NotReady
             return
         }
-        when (val o = sendWhenIdle(sdk, useTor)) {
+        when (val o = sendWhenIdle(sdk, useTor, singleEntry = directConsent)) {
             is TransferAttemptOutcome.Executed -> {
                 when (val r = o.result) {
                     is TransferResult.Success -> reportSubmitted(r.txId)
@@ -197,12 +202,16 @@ class MigrationSendingVM(
         }
     }
 
-    private suspend fun sendWhenIdle(sdk: OrchardMigrationSdk, useTor: Boolean): TransferAttemptOutcome? {
+    private suspend fun sendWhenIdle(
+        sdk: OrchardMigrationSdk,
+        useTor: Boolean,
+        singleEntry: Boolean,
+    ): TransferAttemptOutcome? {
         repeat(SEND_MAX_ATTEMPTS) { attempt ->
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
             val execution = migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
                 // The whole readiness loop holds exclusive access, including when no send is due.
-                Result.success(sendReadinessLoop(sdk, useTor))
+                Result.success(sendReadinessLoop(sdk, useTor, singleEntry))
             }
             if (execution != null) return execution.getOrThrow()
         }
@@ -232,10 +241,12 @@ class MigrationSendingVM(
     private suspend fun sendReadinessLoop(
         sdk: OrchardMigrationSdk,
         useTor: Boolean,
+        singleEntry: Boolean,
     ): TransferAttemptOutcome? {
         var outcome: TransferAttemptOutcome? = null
         var attempt = 0
-        while (outcome !is TransferAttemptOutcome.Executed && attempt < SEND_MAX_ATTEMPTS) {
+        val approvalAllowsEntry = { !singleEntry || outcome == null }
+        while (outcome !is TransferAttemptOutcome.Executed && attempt < SEND_MAX_ATTEMPTS && approvalAllowsEntry()) {
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
             if (!canRetryTarget(sdk)) break
             if (!args.isRecoveryRetry || migrationDriveOnce.mayBroadcastCrossing(sdk)) {

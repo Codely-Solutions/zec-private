@@ -41,11 +41,17 @@ class FixEphemeralAddressUseCase(
         val account = selectedAccount() ?: return DiscoveryOutcome.Unconfirmed
         val grant = appAccessSession.grant.value
         val token = walletWriteAccess.token()
+        val confirmedSelection = if (appAccessSession.permits(grant) && walletWriteAccess.permits(token)) {
+            accountDataSource.confirmSelection(account)
+        } else {
+            null
+        }
         val canRecover = {
             appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                confirmedSelection?.canOperate() == true &&
                 selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
         }
-        val confirmed = runCatchingRecoverable {
+        val confirmed = canRecover() && runCatchingRecoverable {
             recover(address, sourceEntryId, account, canRecover)
         }.getOrDefault(false)
         return when {
@@ -55,7 +61,8 @@ class FixEphemeralAddressUseCase(
                 isCurrent = canRecover,
                 ownership = combine(
                     appAccessSession.grant, walletWriteAccess.version, accountDataSource.allAccounts,
-                ) { _, _, _ -> canRecover() },
+                    accountDataSource.signingAuthorityChanges,
+                ) { _, _, _, _ -> canRecover() },
             )
         }
     }
@@ -86,8 +93,11 @@ class FixEphemeralAddressUseCase(
         sourceEntryId: String?,
         canRecover: () -> Boolean,
     ): Boolean = withContext(Dispatchers.Default) {
-        if (!canRecover() || !navigationRouter.isForegroundAtEntry(sourceEntryId)) return@withContext false
         val (synchronizer, address) = scan
+        val canUseTor = isTorEnabled.get() == true && canRecover()
+        if (!canUseTor || !navigationRouter.isForegroundAtEntry(sourceEntryId) ||
+            !synchronizerProvider.isCurrentEngine(synchronizer)
+        ) return@withContext false
         val confirmed = synchronizer.fetchUtxosByAddress(
             accountUuid = account.sdkAccount.accountUuid,
             address = address,

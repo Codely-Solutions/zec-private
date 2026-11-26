@@ -61,7 +61,7 @@ interface MigrationAppHooks {
     fun handleIntent(intent: Intent, scope: CoroutineScope): Boolean
 
     /** Restores pending notification navigation after process recreation. */
-    fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStepPending: Boolean = false)
+    fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope)
 
     /** App-open / foreground migration catch-up (recovery routing + lane revival). */
     suspend fun checkRecovery()

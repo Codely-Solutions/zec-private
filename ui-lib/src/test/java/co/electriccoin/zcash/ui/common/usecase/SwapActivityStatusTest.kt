@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -413,6 +414,28 @@ class SwapActivityStatusTest {
         assertEquals(terminal, observations.last().savedMetadata)
         assertNull(observations.last().error)
         coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aNewObserverCannotUseThePreviousOwnerWhileTheAccountListCatchesUp() = runTest {
+        val committed = AccountUuid.new(ByteArray(16) { 11 })
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+            coEvery { confirmSelection(owner) } returns null
+        }
+        val preference = mockk<SelectedAccountUUIDProvider> {
+            coEvery { captureSelection() } returns SelectedAccountSelection(committed, 1)
+            every { isCurrent(any()) } returns true
+        }
+        val metadata = mockk<MetadataRepository>()
+        val swaps = mockk<SwapRepository>()
+        val useCase = GetSwapStatusUseCase(metadata, swaps, accounts = accounts, accountSelection = preference)
+
+        val observed = useCase.observeForAccount(deposit, owner).first { !it.isLoading }
+        assertNotNull(observed.error)
+        coVerify(exactly = 0) { metadata.getSwapMetadata(any(), any()) }
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any(), any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
