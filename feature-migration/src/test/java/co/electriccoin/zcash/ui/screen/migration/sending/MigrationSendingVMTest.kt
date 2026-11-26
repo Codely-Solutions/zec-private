@@ -446,6 +446,36 @@ class MigrationSendingVMTest {
     }
 
     @Test
+    fun syncStartingDuringTheNativeTargetReadBlocksSubmission() = runTest {
+        val (args, accounts) = recoveryOwner()
+        val sdk = recoverySdk(nextTransferId = 1L)
+        val transfers = sdk.getMigrationTransferStates()
+        val readStarted = CompletableDeferred<Unit>()
+        val finishRead = CompletableDeferred<Unit>()
+        var syncing = false
+        coEvery { sdk.getMigrationTransferStates() } coAnswers {
+            readStarted.complete(Unit)
+            finishRead.await()
+            transfers
+        }
+        val drive = mockk<MigrationDriveOnce> {
+            every { permitsForeground(any()) } returns true
+            coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
+                secondArg<suspend () -> Any?>().invoke()
+            }
+            coEvery { mayBroadcastCrossing(sdk) } answers { !syncing }
+        }
+
+        vm(sdk, FakeNavigationRouter(), args = args, accounts = accounts, migrationDriveOnce = drive)
+        readStarted.await()
+        syncing = true
+        finishRead.complete(Unit)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
+
+    @Test
     fun recoveryRetryLeavesReplacementTransferAndMarkerUntouched() = runTest {
         val (args, accounts) = recoveryOwner()
         val sdk = recoverySdk(nextTransferId = 2L)
@@ -524,6 +554,7 @@ class MigrationSendingVMTest {
             mockk {
                 every { permitsForeground(any()) } returns true
                 coEvery { mayBroadcastCrossing(sdk) } returns quietWindowReady
+                coEvery { recordCrossingSuccess(any()) } returns Unit
                 coEvery { withExclusiveAccess<Any?>(any(), any()) } coAnswers {
                     secondArg<suspend () -> Any?>().invoke()
                 }

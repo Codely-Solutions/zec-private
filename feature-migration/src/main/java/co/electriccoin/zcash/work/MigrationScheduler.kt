@@ -43,6 +43,12 @@ class MigrationScheduler(
     // AlarmManager alarm instead of relying on the WorkManager job itself.
     private val migrationDueAlarmScheduler = MigrationDueAlarmScheduler(context)
 
+    private data class Wake(
+        val request: UUID,
+        val attempt: Int,
+        val dueAt: Long,
+    )
+
     internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
         check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE)) { "Migration scheduling is paused" }
     }
@@ -52,22 +58,30 @@ class MigrationScheduler(
     }
 
     internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration) {
+        val version = wakeVersion(accountKeyId)
         val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
         // An interrupted worker may already have committed its child before acknowledging it.
         val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
         if (existing == null) {
-            check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND)) { "Migration scheduling is paused" }
+            check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND, version)) {
+                "Migration scheduling is paused or changed"
+            }
         } else {
-            armFallback(accountKeyId, existing.id) { System.currentTimeMillis() + existing.initialDelayMillis }
+            armFallback(accountKeyId, version) {
+                Wake(existing.id, existing.runAttemptCount, System.currentTimeMillis() + existing.initialDelayMillis)
+            }
         }
     }
 
     internal suspend fun reconcileScheduledWake(accountKeyId: String) {
+        val version = wakeVersion(accountKeyId)
         val manager = WorkManager.getInstance(context)
         val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
             .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
             .minByOrNull { it.nextScheduleTimeMillis }
-        if (pending != null) armFallback(accountKeyId, pending.id) { pending.nextScheduleTimeMillis }
+        if (pending != null) armFallback(accountKeyId, version) {
+            Wake(pending.id, pending.runAttemptCount, pending.nextScheduleTimeMillis)
+        }
     }
 
     internal suspend fun runNotificationStep(accountKeyId: String) {
@@ -76,38 +90,56 @@ class MigrationScheduler(
         }
     }
 
-    private suspend fun enqueueConfirmed(accountKeyId: String, delay: Duration, policy: ExistingWorkPolicy): Boolean {
+    private suspend fun enqueueConfirmed(
+        accountKeyId: String,
+        delay: Duration,
+        policy: ExistingWorkPolicy,
+        expectedVersion: Long? = null,
+    ): Boolean {
         val manager = WorkManager.getInstance(context)
         val request = newWorkRequest(accountKeyId, delay)
-        val operation = MigrationAccountRetirement.keepWake(accountKeyId) {
-            manager.enqueueUniqueWork(workId(accountKeyId), policy, request)
+        val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
+            synchronized(wakeVersions) {
+                val current = wakeVersion(accountKeyId)
+                if (expectedVersion != null && expectedVersion != current) {
+                    null
+                } else {
+                    val admitted =
+                        if (policy == ExistingWorkPolicy.REPLACE) advanceWakeVersion(accountKeyId) else current
+                    manager.enqueueUniqueWork(workId(accountKeyId), policy, request) to admitted
+                }
+            }
         } ?: return false
         operation.result.await()
-        armFallback(accountKeyId, request.id) {
-            // KEEP can acknowledge without inserting this request. An older wake or live-driver
-            // heartbeat must not stand in for the exact WorkManager request.
-            val pendingRequest = if (policy == ExistingWorkPolicy.APPEND) {
-                true
+        armFallback(accountKeyId, version) {
+            if (policy == ExistingWorkPolicy.APPEND) {
+                Wake(request.id, 0, System.currentTimeMillis() + delay.inWholeMilliseconds)
             } else {
                 val pending = manager.getWorkInfoById(request.id).await()
                 if (pending == null && policy == ExistingWorkPolicy.KEEP) reconcileScheduledWake(accountKeyId)
-                pending?.state == WorkInfo.State.ENQUEUED
+                pending?.takeIf { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
+                    ?.let { Wake(request.id, it.runAttemptCount, it.nextScheduleTimeMillis) }
             }
-            if (pendingRequest) System.currentTimeMillis() + delay.inWholeMilliseconds else null
         }
         return true
     }
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
-    private suspend fun armFallback(accountKeyId: String, request: UUID, expectedTime: suspend () -> Long?) {
+    private suspend fun armFallback(accountKeyId: String, version: Long, resolve: suspend () -> Wake?) {
         try {
-            val dueAt = expectedTime() ?: return
+            val wake = resolve() ?: return
             MigrationAccountRetirement.keepWake(accountKeyId) {
-                if (!MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, request)) {
-                    migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
-                    MigrationWorkerHeartbeat.stampScheduled(context, accountKeyId, request, dueAt)
-                    val delay = (dueAt - System.currentTimeMillis()).milliseconds + WORKER_LATE_MARGIN
-                    migrationDueAlarmScheduler.schedule(accountKeyId, delay.coerceAtLeast(Duration.ZERO))
+                synchronized(wakeVersions) {
+                    val stillPending = wakeVersion(accountKeyId) == version &&
+                        !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
+                    if (stillPending) {
+                        migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
+                        MigrationWorkerHeartbeat.stampScheduled(
+                            context, accountKeyId, wake.request, wake.attempt, wake.dueAt
+                        )
+                        val delay = (wake.dueAt - System.currentTimeMillis()).milliseconds + WORKER_LATE_MARGIN
+                        migrationDueAlarmScheduler.schedule(accountKeyId, delay.coerceAtLeast(Duration.ZERO))
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -125,15 +157,25 @@ class MigrationScheduler(
         cancelWork(accountKeyId).result.await()
     }
 
-    private fun cancelWork(accountKeyId: String): Operation {
+    private fun cancelWork(accountKeyId: String): Operation = synchronized(wakeVersions) {
+        advanceWakeVersion(accountKeyId)
         migrationLog("MigrationScheduler: cancelling a migration work chain.")
         val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
         migrationDueAlarmScheduler.cancel(accountKeyId)
         MigrationWorkerHeartbeat.clear(context, accountKeyId)
-        return operation
+        operation
     }
 
     companion object {
+        // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
+        private val wakeVersions = mutableMapOf<String, Long>()
+
+        private fun wakeVersion(accountKeyId: String): Long =
+            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: 0L }
+
+        private fun advanceWakeVersion(accountKeyId: String): Long =
+            (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
+
         /**
          * How long past the expected worker run the fallback alarm waits before concluding the
          * worker is dead — absorbs ordinary WorkManager dispatch slack without false alarms.

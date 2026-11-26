@@ -237,21 +237,21 @@ class MigrationSendingVM(
     ): TransferAttemptOutcome? {
         var outcome: TransferAttemptOutcome? = null
         var attempt = 0
-        while ((
-                outcome == null ||
-                    outcome is TransferAttemptOutcome.NothingDue ||
-                    outcome is TransferAttemptOutcome.AwaitingProof
-            ) &&
-            attempt < SEND_MAX_ATTEMPTS
-        ) {
+        while (outcome !is TransferAttemptOutcome.Executed && attempt < SEND_MAX_ATTEMPTS) {
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
+            if (!canRetryTarget(sdk)) break
             if (!args.isRecoveryRetry || migrationDriveOnce.mayBroadcastCrossing(sdk)) {
-                if (!canRetryTarget(sdk) || !migrationDriveOnce.permitsForeground(args.accountKeyId)) break
+                val selectedOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
+                    ?.sdkAccount?.accountUuid?.toStorageKeyId()
+                val unauthorized = args.isRecoveryRetry && selectedOwner != args.accountKeyId
+                if (unauthorized || !migrationDriveOnce.permitsForeground(args.accountKeyId)) return outcome
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
-                    outcome = sdk.executeNextPendingTransfer(
+                    val result = sdk.executeNextPendingTransfer(
                         NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true
                     )
+                    if (args.isRecoveryRetry) migrationDriveOnce.recordCrossingSuccess(result)
+                    outcome = result
                     val outcomeType = (outcome as? TransferAttemptOutcome.Executed)?.result ?: outcome
                     migrationLog("SendingVM: attempt=${attempt + 1} outcome=${outcomeType.javaClass.simpleName}")
                 }
@@ -271,9 +271,7 @@ class MigrationSendingVM(
                     (it.anchorBoundaryHeight ?: MigrationSendingArgs.UNSET) == args.retryAnchorBoundaryHeight
             } == true
         val next = if (ready) sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast else null
-        val selectedOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
-            ?.sdkAccount?.accountUuid?.toStorageKeyId()
-        return next?.transferId == args.retryTransferId && selectedOwner == args.accountKeyId
+        return next?.transferId == args.retryTransferId
     }
 
     companion object {

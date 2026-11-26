@@ -6,6 +6,7 @@ import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,12 +39,19 @@ class SynchronizerProviderMigrationDiagnosticsTest {
             coEvery { onSynced() } throws IllegalStateException(detail)
         }
         ShadowLog.clear()
-        SynchronizerProviderImpl(coordinator, mockk(), lazyOf(hook), WalletMigrationSyncGate(), backgroundScope)
+        val activity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
+        SynchronizerProviderImpl(
+            coordinator, mockk(), lazyOf(hook), WalletMigrationSyncGate(), activity, backgroundScope,
+        )
         runCurrent()
 
         status.value = Synchronizer.Status.SYNCED
         runCurrent()
         coVerify(exactly = 1) { hook.onSynced() }
+        coVerifyOrder {
+            activity.stampNow()
+            hook.onSynced()
+        }
         val logs = ShadowLog.getLogs()
         assertTrue(logs.any { "Migration sync hook failed (IllegalStateException)" in it.msg })
         assertTrue(logs.none { detail in it.msg || detail in it.throwable?.stackTraceToString().orEmpty() })
@@ -54,5 +62,6 @@ class SynchronizerProviderMigrationDiagnosticsTest {
         status.value = Synchronizer.Status.SYNCED
         runCurrent()
         coVerify(exactly = 2) { hook.onSynced() }
+        coVerify(exactly = 2) { activity.stampNow() }
     }
 }

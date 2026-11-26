@@ -112,6 +112,7 @@ val providerModule =
                 // lazy {} breaks the AccountDataSource -> SynchronizerProvider resolution cycle
                 migrationSyncedHook = lazy { get() },
                 migrationSyncGate = get(),
+                lastNetworkActivity = get(),
                 provisioning = get(),
             )
         } bind SynchronizerProvider::class

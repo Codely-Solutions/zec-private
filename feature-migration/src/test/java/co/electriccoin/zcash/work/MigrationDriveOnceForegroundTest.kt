@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.MigrationAdvanceResult
 import cash.z.ecc.android.sdk.MigrationAdvanceStep
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.Synchronizer
+import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -68,6 +69,61 @@ class MigrationDriveOnceForegroundTest {
         coVerify(exactly = 1) { sdk.nextStep() }
         assertEquals(DriveOnceResult.Terminal, drive.run(sdk, "quiet-window-owner", allowForcedBroadcastWindow = true))
         coVerify(exactly = 2) { sdk.nextStep() }
+    }
+
+    @Test
+    fun walletSyncStartingDuringTheQuietPeriodReadBlocksManualCrossing() = runTest {
+        val status = MutableStateFlow(Synchronizer.Status.SYNCED)
+        val sync = mockk<Synchronizer> { every { this@mockk.status } returns status }
+        val activity = mockk<LastNetworkActivityStorageProvider> {
+            coEvery { get() } coAnswers {
+                status.value = Synchronizer.Status.SYNCING
+                null
+            }
+        }
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(sync) },
+            lastNetworkActivity = activity,
+            applicationStateProvider = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk(),
+        )
+
+        assertFalse(drive.mayBroadcastCrossing(sdk))
+    }
+
+    @Test
+    fun aFailedNativeSyncBurstRecordsNetworkActivity() = runTest {
+        val sync = mockk<Synchronizer> {
+            coEvery { syncToTip(any()) } throws IOException("Synthetic sync failure")
+        }
+        val activity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Reevaluate, null)
+            coEvery { isSyncBlocked() } returns flowOf(false)
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk { coEvery { getSynchronizerOrNull() } returns sync },
+            lastNetworkActivity = activity,
+            applicationStateProvider = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+
+        assertFailsWith<IOException> { drive.run(sdk, "sync-burst-owner", allowForcedBroadcastWindow = false) }
+        coVerify(exactly = 1) { activity.stampNow() }
+        coVerify(exactly = 0) { sdk.finalizeReadyTransfers() }
     }
 
     @Test

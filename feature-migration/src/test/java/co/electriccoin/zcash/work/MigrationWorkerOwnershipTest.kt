@@ -115,13 +115,14 @@ class MigrationWorkerOwnershipTest {
                 every { state } returns WorkInfo.State.BLOCKED
                 every { id } returns childId
                 every { initialDelayMillis } returns 75_000L
+                every { runAttemptCount } returns 0
             }
             every { manager.getWorkInfosForUniqueWork(workId) } returns Futures.immediateFuture(listOf(retained))
             val restartedAt = System.currentTimeMillis()
             assertEquals(Result.success(), worker.doWork())
             verify(exactly = 2) { editor.putLong("next_wake_at_$owner", any()) }
             verify { editor.putLong("next_wake_at_$owner", more(restartedAt + 74_999)) }
-            verify { editor.putString("next_wake_request_$owner", childId.toString()) }
+            verify { editor.putString("next_wake_request_$owner", childId.toString() + ":0") }
             verify(exactly = 2) {
                 manager.enqueueUniqueWork(workId, ExistingWorkPolicy.APPEND, any<OneTimeWorkRequest>())
             }
@@ -134,14 +135,14 @@ class MigrationWorkerOwnershipTest {
     }
 
     @Test
-    fun repairingAnInterruptedKeepUsesTheRetainedRequestAndDeadline() = runTest {
+    fun repairingAKeptRetryUsesTheRetainedAttemptAndDeadline() = runTest {
         val owner = "kept-fixture-owner"
         val retainedId = UUID.fromString("00000000-0000-0000-0000-000000000053")
         val expectedWake = System.currentTimeMillis() + 70_000
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences> {
             every { edit() } returns editor
-            every { getString(any(), null) } returns null
+            every { getString(any(), null) } returns retainedId.toString() + ":0"
         }
         val context = mockk<Context>(relaxed = true) {
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
@@ -152,6 +153,7 @@ class MigrationWorkerOwnershipTest {
             every { state } returns WorkInfo.State.ENQUEUED
             every { id } returns retainedId
             every { nextScheduleTimeMillis } returns expectedWake
+            every { runAttemptCount } returns 1
         }
         val manager = mockk<WorkManager> {
             every { enqueueUniqueWork(workId, ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>()) } returns
@@ -167,7 +169,7 @@ class MigrationWorkerOwnershipTest {
                 manager.enqueueUniqueWork(workId, ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>())
             }
             verify { editor.putLong("next_wake_at_$owner", expectedWake) }
-            verify { editor.putString("next_wake_request_$owner", retainedId.toString()) }
+            verify { editor.putString("next_wake_request_$owner", retainedId.toString() + ":1") }
         } finally {
             unmockkObject(WorkManager.Companion)
         }
@@ -195,7 +197,12 @@ class MigrationWorkerOwnershipTest {
         }
         val acknowledged = SettableFuture.create<Operation.State.SUCCESS>()
         val request = slot<OneTimeWorkRequest>()
-        val pending = mockk<WorkInfo> { every { state } returns WorkInfo.State.ENQUEUED }
+        val expectedWake = System.currentTimeMillis() + 60_000L
+        val pending = mockk<WorkInfo> {
+            every { state } returns WorkInfo.State.ENQUEUED
+            every { nextScheduleTimeMillis } returns expectedWake
+            every { runAttemptCount } returns 0
+        }
         val manager = mockk<WorkManager> {
             every { enqueueUniqueWork(workId, ExistingWorkPolicy.KEEP, capture(request)) } returns
                 futureOperation(acknowledged)
@@ -207,15 +214,69 @@ class MigrationWorkerOwnershipTest {
             val scheduling = async { MigrationScheduler(context).scheduleIfMissing(owner, 60.seconds) }
             runCurrent()
             assertFalse(scheduling.isCompleted)
-            MigrationWorkerHeartbeat.stampRun(context, owner, UUID.fromString("00000000-0000-0000-0000-000000000052"))
+            val requestId = UUID.fromString("00000000-0000-0000-0000-000000000052")
+            MigrationWorkerHeartbeat.stampRun(context, owner, requestId, 0)
             assertTrue(otherRunAt > 0)
             acknowledged.set(Operation.SUCCESS)
             scheduling.await()
             verify { manager.getWorkInfoById(request.captured.id) }
-            verify { editor.putString("next_wake_request_$owner", request.captured.id.toString()) }
-            verify { editor.putLong("next_wake_at_$owner", more(otherRunAt + 59_999)) }
+            verify { editor.putString("next_wake_request_$owner", request.captured.id.toString() + ":0") }
+            verify { editor.putLong("next_wake_at_$owner", expectedWake) }
         } finally {
             acknowledged.cancel(false)
+            unmockkObject(WorkManager.Companion)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aStaleRecoverySnapshotCannotReplaceTheNewAlarm() = runTest {
+        val owner = "replacement-fixture-owner"
+        val oldRequest = UUID.fromString("00000000-0000-0000-0000-000000000054")
+        val workId = MigrationScheduler.workId(owner)
+        val request = slot<OneTimeWorkRequest>()
+        val snapshot = SettableFuture.create<List<WorkInfo>>()
+        val oldDue = System.currentTimeMillis() + 90_000L
+        val newDue = oldDue - 60_000L
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context>(relaxed = true) {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+        }
+        val retained = mockk<WorkInfo> {
+            every { id } returns oldRequest
+            every { state } returns WorkInfo.State.ENQUEUED
+            every { nextScheduleTimeMillis } returns oldDue
+            every { runAttemptCount } returns 0
+        }
+        val replacement = mockk<WorkInfo> {
+            every { state } returns WorkInfo.State.ENQUEUED
+            every { nextScheduleTimeMillis } returns newDue
+            every { runAttemptCount } returns 0
+        }
+        val manager = mockk<WorkManager> {
+            every { getWorkInfosForUniqueWork(workId) } returns snapshot
+            every { enqueueUniqueWork(workId, ExistingWorkPolicy.REPLACE, capture(request)) } returns
+                mockk<Operation> { every { result } returns Futures.immediateFuture(Operation.SUCCESS) }
+            every { getWorkInfoById(any()) } returns Futures.immediateFuture(replacement)
+        }
+        mockkObject(WorkManager.Companion)
+        try {
+            every { WorkManager.getInstance(context) } returns manager
+            val scheduler = MigrationScheduler(context)
+            val oldWake = async { scheduler.reconcileScheduledWake(owner) }
+            runCurrent()
+            assertFalse(oldWake.isCompleted)
+            scheduler.scheduleAndAwait(owner, 30.seconds)
+            snapshot.set(listOf(retained))
+            oldWake.await()
+
+            verify(exactly = 1) { editor.putString("next_wake_request_$owner", request.captured.id.toString() + ":0") }
+            verify(exactly = 1) { editor.putLong("next_wake_at_$owner", newDue) }
+            verify(exactly = 0) { editor.putLong("next_wake_at_$owner", oldDue) }
+        } finally {
+            snapshot.cancel(false)
             unmockkObject(WorkManager.Companion)
         }
     }

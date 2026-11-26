@@ -67,6 +67,7 @@ class SynchronizerProviderImpl(
     // first hook fire instead, when the graph is fully built.
     private val migrationSyncedHook: Lazy<MigrationSyncedHook>,
     migrationSyncGate: WalletMigrationSyncGate,
+    private val lastNetworkActivity: LastNetworkActivityStorageProvider,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
     provisioning: WalletProvisioning? = null,
 ) : SynchronizerProvider {
@@ -128,10 +129,14 @@ class SynchronizerProviderImpl(
         }
         scope.launch {
             synchronizer
-                .flatMapLatest { s -> s?.status ?: emptyFlow() }
+                .flatMapLatest { engine -> engine?.status?.map { engine to it } ?: emptyFlow() }
                 .distinctUntilChanged()
-                .collect { status ->
-                    if (status == Synchronizer.Status.SYNCED) {
+                .collect { (engine, status) ->
+                    if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
+                        // Network activity belongs to the wallet, even if another account's migration is selected.
+                        runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
+                            Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
+                        }
                         runCatchingRecoverable { migrationSyncedHook.value.onSynced() }
                             .onFailure {
                                 Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }

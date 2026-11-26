@@ -5,7 +5,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
-import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.work.MigrationScheduler
 import com.google.common.util.concurrent.Futures
@@ -26,7 +25,6 @@ import kotlin.time.Duration.Companion.seconds
 class OnMigrationSyncCompletedUseCaseTest {
     private fun useCase(
         sdk: OrchardMigrationSdk,
-        lastNetworkActivity: LastNetworkActivityStorageProvider = mockk(relaxed = true),
         migrationNotifier: MigrationNotifier = mockk(relaxed = true),
         migrationScheduler: MigrationScheduler = mockk(relaxed = true),
         context: Context = mockk(relaxed = true),
@@ -35,33 +33,29 @@ class OnMigrationSyncCompletedUseCaseTest {
             mockk<GetOrchardMigrationSdkUseCase> {
                 coEvery { this@mockk(any()) } returns sdk
             },
-        lastNetworkActivity = lastNetworkActivity,
         migrationNotifier = migrationNotifier,
         migrationScheduler = migrationScheduler,
         context = context,
     )
 
     @Test
-    fun theObservedSyncTimePrecedesProofAndReconciliation() =
+    fun finalizesProofBeforeReconciling() =
         runTest {
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
                     coEvery { finalizeReadyTransfers() } returns 0
                     coEvery { reconcileInvalidations() } returns false
                 }
-            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
             val migrationNotifier = mockk<MigrationNotifier>(relaxed = true)
             val migrationScheduler = mockk<MigrationScheduler>(relaxed = true)
 
             useCase(
                 sdk = sdk,
-                lastNetworkActivity = lastNetworkActivity,
                 migrationNotifier = migrationNotifier,
                 migrationScheduler = migrationScheduler,
             ).invoke("account-key-1")
 
             coVerifyOrder {
-                lastNetworkActivity.stampNow()
                 sdk.finalizeReadyTransfers()
                 sdk.reconcileInvalidations()
             }
@@ -70,45 +64,28 @@ class OnMigrationSyncCompletedUseCaseTest {
         }
 
     @Test
-    fun invalidationPathNotifiesCancelsBothLanesAndStillStamps() =
+    fun invalidationPathNotifiesAndCancelsBothLanes() =
         runTest {
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
                     coEvery { finalizeReadyTransfers() } returns 0
                     coEvery { reconcileInvalidations() } returns true
                 }
-            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
             val migrationNotifier = mockk<MigrationNotifier>(relaxed = true)
             val migrationScheduler = mockk<MigrationScheduler>(relaxed = true)
 
             useCase(
                 sdk = sdk,
-                lastNetworkActivity = lastNetworkActivity,
                 migrationNotifier = migrationNotifier,
                 migrationScheduler = migrationScheduler,
             ).invoke("account-key-2")
 
             coVerify(exactly = 1) { migrationNotifier.notifyMigrationPlanInvalid("account-key-2") }
             verify(exactly = 1) { migrationScheduler.cancel("account-key-2") }
-            coVerify(exactly = 1) { lastNetworkActivity.stampNow() }
         }
 
     @Test
-    fun failedProofPreservesTheObservedSyncTime() =
-        runTest {
-            val sdk = mockk<OrchardMigrationSdk> {
-                coEvery { finalizeReadyTransfers() } throws IOException("Proof temporarily unavailable")
-            }
-            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
-            assertFailsWith<IOException> { useCase(sdk, lastNetworkActivity).invoke("proof-fixture") }
-            coVerifyOrder {
-                lastNetworkActivity.stampNow()
-                sdk.finalizeReadyTransfers()
-            }
-        }
-
-    @Test
-    fun failedRevivalPreservesTheObservedSyncTime() =
+    fun failedRevivalRemainsObservableToTheCaller() =
         runTest {
             val owner = "synced-fixture-owner"
             val sdk = mockk<OrchardMigrationSdk> {
@@ -121,22 +98,20 @@ class OnMigrationSyncCompletedUseCaseTest {
                 every { getWorkInfosForUniqueWork(MigrationScheduler.workId(owner)) } returns
                     Futures.immediateFuture(emptyList<WorkInfo>())
             }
-            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
             val scheduler = mockk<MigrationScheduler> {
                 coEvery { scheduleIfMissing(owner, 60.seconds) } throws IOException("Cannot persist migration wake")
             }
             mockkObject(WorkManager.Companion)
             try {
                 every { WorkManager.getInstance(context) } returns manager
-                val reconcile = useCase(sdk, lastNetworkActivity, migrationScheduler = scheduler, context = context)
+                val reconcile = useCase(sdk, migrationScheduler = scheduler, context = context)
                 assertFailsWith<IOException> { reconcile(owner) }
                 coVerifyOrder {
-                    lastNetworkActivity.stampNow()
+                    sdk.reconcileInvalidations()
                     scheduler.scheduleIfMissing(owner, 60.seconds)
                 }
             } finally {
                 unmockkObject(WorkManager.Companion)
             }
         }
-
 }

@@ -25,10 +25,13 @@ import co.electriccoin.zcash.ui.common.provider.MigrationUpgradeNoticeStoragePro
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -248,8 +251,13 @@ class MigrationDriveOnce(
             migrationLog("MigrationDriveOnce: sync run blocked by the post-broadcast privacy gate — deferring.")
             return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration()))
         }
-        val burst = synchronizerProvider.getSynchronizerOrNull()?.syncToTip(timeout = SYNC_TIMEOUT)
-        lastNetworkActivity.stampNow()
+        val burst = synchronizerProvider.getSynchronizerOrNull()?.let { synchronizer ->
+            try {
+                synchronizer.syncToTip(timeout = SYNC_TIMEOUT)
+            } finally {
+                withContext(NonCancellable) { recordNetworkActivity() }
+            }
+        }
         migrationLog("MigrationDriveOnce: syncToTip outcome=${burst?.javaClass?.simpleName}")
         val proved = sdk.finalizeReadyTransfers()
         migrationLog("MigrationDriveOnce: proved=$proved")
@@ -318,8 +326,33 @@ class MigrationDriveOnce(
         }
     }
 
-    internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean =
-        broadcastPreflight(sdk, isSynchronizerSyncing()) == BroadcastPreflight.BROADCAST
+    internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean {
+        val privacyBuffer = sdk.privacySyncBufferDuration()
+        val lastActivity = lastNetworkActivity.get()
+        return decideBroadcastPreflight(
+            synchronizerSyncing = isSynchronizerSyncing(),
+            nowEpochSeconds = nowEpochSeconds(),
+            lastNetworkActivityEpochSeconds = lastActivity?.epochSecond,
+            privacyBufferSeconds = privacyBuffer.inWholeSeconds,
+        ) == BroadcastPreflight.BROADCAST
+    }
+
+    internal suspend fun recordCrossingSuccess(outcome: TransferAttemptOutcome) {
+        if ((outcome as? TransferAttemptOutcome.Executed)?.result is TransferResult.Success) {
+            recordNetworkActivity()
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // An acknowledged native result remains authoritative.
+    private suspend fun recordNetworkActivity() {
+        try {
+            lastNetworkActivity.stampNow()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("MigrationDriveOnce: network activity persistence failed (" + e.javaClass.simpleName + ")")
+        }
+    }
 
     private suspend fun isSynchronizerSyncing(): Boolean =
         synchronizerProvider.synchronizer.value?.let { synchronizer ->
@@ -470,6 +503,9 @@ class MigrationDriveOnce(
             }
 
             is TransferAttemptOutcome.Executed -> {
+                if (nextCandidate?.isTransfer != false) {
+                    withContext(NonCancellable) { recordCrossingSuccess(outcome) }
+                }
                 handleExecuted(
                     sdk,
                     accountKeyId,

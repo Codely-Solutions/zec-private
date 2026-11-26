@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import co.electriccoin.zcash.migration.migrationLog
-import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.work.MigrationScheduler
@@ -12,12 +11,10 @@ import kotlin.time.Duration.Companion.seconds
  * Called on every foreground Status.SYNCED transition while a migration plan is active.
  * Finalizes any transfers whose funding note became witnessed since the last sync, then
  * checks for invalidations — if any, notifies the user and cancels the background worker
- * chain. Always stamps the last-network-activity timestamp so the worker's privacy-buffer gap
- * calculation is accurate — even on invalidation, the sync itself still happened.
+ * chain. The synchronizer provider records wallet-wide network activity before invoking this hook.
  */
 class OnMigrationSyncCompletedUseCase(
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
-    private val lastNetworkActivity: LastNetworkActivityStorageProvider,
     private val migrationNotifier: MigrationNotifier,
     private val migrationScheduler: MigrationScheduler,
     private val context: Context,
@@ -28,7 +25,6 @@ class OnMigrationSyncCompletedUseCase(
     }
 
     private suspend fun reconcileAfterSync(accountKeyId: String) {
-        lastNetworkActivity.stampNow()
         val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
         val proved = sdk.finalizeReadyTransfers()
         val invalidated = sdk.reconcileInvalidations()

@@ -45,7 +45,7 @@ class MigrationWorker(
 
         return try {
             MigrationAccountRetirement.keepWake(accountKeyId) {
-                MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId, id)
+                MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId, id, runAttemptCount)
             }
             runForOwner(accountKeyId)
         } catch (e: CancellationException) {

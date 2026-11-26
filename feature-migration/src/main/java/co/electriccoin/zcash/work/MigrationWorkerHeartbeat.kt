@@ -28,22 +28,22 @@ object MigrationWorkerHeartbeat {
             }?.takeIf { it.isNotEmpty() }
         }.toSet()
 
-    fun stampScheduled(context: Context, accountKeyId: String, request: UUID, dueAtEpochMillis: Long) {
+    fun stampScheduled(context: Context, accountKeyId: String, request: UUID, attempt: Int, dueAtEpochMillis: Long) {
         prefs(context).edit {
             putLong(KEY_NEXT_WAKE + accountKeyId, dueAtEpochMillis)
-            putString(KEY_NEXT_REQUEST + accountKeyId, request.toString())
+            putString(KEY_NEXT_REQUEST + accountKeyId, requestIdentity(request, attempt))
         }
     }
 
-    fun stampRun(context: Context, accountKeyId: String, request: UUID) {
+    fun stampRun(context: Context, accountKeyId: String, request: UUID, attempt: Int) {
         prefs(context).edit {
             putLong(KEY_LAST_RUN + accountKeyId, System.currentTimeMillis())
-            putString(KEY_LAST_REQUEST + accountKeyId, request.toString())
+            putString(KEY_LAST_REQUEST + accountKeyId, requestIdentity(request, attempt))
         }
     }
 
-    internal fun hasStarted(context: Context, accountKeyId: String, request: UUID): Boolean =
-        prefs(context).getString(KEY_LAST_REQUEST + accountKeyId, null) == request.toString()
+    internal fun hasStarted(context: Context, accountKeyId: String, request: UUID, attempt: Int): Boolean =
+        prefs(context).getString(KEY_LAST_REQUEST + accountKeyId, null) == requestIdentity(request, attempt)
 
     internal fun isWakeLate(context: Context, accountKeyId: String, now: Long): Boolean {
         val storage = prefs(context)
@@ -87,3 +87,5 @@ object MigrationWorkerHeartbeat {
     private const val KEY_LAST_REQUEST = "last_run_request_"
     private const val KEY_REMOVAL_PENDING = "removal_pending_"
 }
+
+private fun requestIdentity(request: UUID, attempt: Int) = "$request:$attempt"
