@@ -165,9 +165,8 @@ class MetadataRepositoryImpl(
     private val persistableWalletProvider: PersistableWalletProvider,
     private val simpleSwapAssetProvider: SimpleSwapAssetProvider,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
 ) : MetadataRepository {
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
     private val mutex = Mutex()
 
     private val keyMutex = Mutex()
@@ -374,7 +373,7 @@ class MetadataRepositoryImpl(
 
     override fun observeSwapMetadata(): Flow<List<TransactionSwapMetadata>?> =
         combine(accountDataSource.selectedAccount, metadata, walletWriteAccess.version) { account, all, token ->
-            account?.let { owner ->
+            account?.takeIf { walletWriteAccess.permits(token) }?.let { owner ->
                 all[owner.sdkAccount.accountUuid]?.accountMetadata?.swaps?.swapIds?.map {
                     it.toBusinessObject(simpleSwapAssetProvider).copy(ownerAccount = owner, walletWriteToken = token)
                 }

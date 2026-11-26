@@ -40,6 +40,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.junit.Test
@@ -200,6 +201,30 @@ class KeystoneEnrollmentSavedStateTest {
     }
 
     @Test
+    fun previousSwapSupportRouteIsDiscardedAndCurrentOwnerRestores() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val previous = newController().apply {
+                graph = createGraph(startDestination = HomeArgs) {
+                    composable<HomeArgs> { }
+                    dialogComposable<Version15SwapSupport> { }
+                }
+            }
+            val oldSupport = Version15SwapSupport("fixture-deposit")
+            previous.navigate(oldSupport)
+            assertEquals(oldSupport, previous.currentBackStackEntry?.toRoute<Version15SwapSupport>())
+            assertEquals(HomeArgs, roundTrip(previous, version = 15).currentBackStackEntry?.toRoute<HomeArgs>())
+
+            val current = newController().also { it.installGraph() }
+            val boundSupport = SwapSupportArgs("fixture-deposit", "00112233445566778899aabbccddeeff")
+            current.navigate(boundSupport)
+            assertEquals(boundSupport, roundTrip(current).currentBackStackEntry?.toRoute<SwapSupportArgs>())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun scannerRouteRestoresItsOpaquePreparationId() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
@@ -250,6 +275,7 @@ class KeystoneEnrollmentSavedStateTest {
             composable<ThirdPartyScan> { }
             composable<ScanKeystonePCZTRequest> { }
             dialogComposable<TransactionNote> { }
+            dialogComposable<SwapSupportArgs> { }
         }
     }
 
@@ -262,3 +288,7 @@ class KeystoneEnrollmentSavedStateTest {
 @Serializable
 @SerialName("co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote")
 private data class Version2TransactionNote(val txId: String)
+
+@Serializable
+@SerialName("co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs")
+private data class Version15SwapSupport(val depositAddress: String)

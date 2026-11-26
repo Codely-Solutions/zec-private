@@ -69,7 +69,8 @@ class SwapDetailVM(
         getReloadableSwapQuote
             .observe(args.depositAddress, args.accountKeyId)
             .map { swapData ->
-                val hasDetails = swapData.status != null || swapData.savedMetadata != null
+                val displayed = swapData.displayedMetadata
+                val hasDetails = swapData.status != null || displayed != null
                 val recheck = swapData.data.settlementCheckButton(swapData.handle).takeIf { swapData.error == null }
                 SwapDetailState(
                     transactionHeader = createTransactionHeaderState(swapData),
@@ -79,9 +80,9 @@ class SwapDetailVM(
                                 swap = swapData.status,
                                 originAsset = swapData.status?.originAsset,
                                 destinationAsset = swapData.status?.destinationAsset,
-                                savedMetadata = swapData.savedMetadata,
+                                savedMetadata = displayed,
                             ),
-                    status = swapData.data.toDetailStatusRow(mode = swapData.statusRowMode),
+                    status = swapData.data.toDetailStatusRow(mode = swapData.statusRowMode, metadata = displayed),
                     depositTo =
                         if (hasDetails) {
                             TransactionDetailInfoRowState(
@@ -104,7 +105,7 @@ class SwapDetailVM(
                                 }
                             ),
                             message =
-                                (swapData.status?.timestamp ?: swapData.savedMetadata?.lastUpdated)
+                                (swapData.status?.timestamp ?: displayed?.lastUpdated)
                                     ?.atZone(ZoneId.systemDefault())
                                     ?.let {
                                         stringResByDateTime(
@@ -114,20 +115,20 @@ class SwapDetailVM(
                                     }?.withStyle(),
                         ),
                     message = getSwapMessage.getMessage(
-                        swapData.status, swapData.savedMetadata, swapData.data.isFundingWindowOpen
+                        swapData.status, displayed, swapData.data.isFundingWindowOpen
                     ),
                     errorFooter = mapper.createTransactionDetailErrorFooter(swapData.error).takeUnless { hasDetails },
                     infoFooter = when {
                         hasDetails && swapData.error != null -> stringRes(R.string.private_swap_refresh_unavailable)
                         hasDetails && swapData.isLoading -> stringRes(R.string.private_swap_refreshing)
-                        swapData.status?.status == PENDING && swapData.savedMetadata?.fundingNotSubmitted != true ->
+                        swapData.status?.status == PENDING && displayed?.fundingNotSubmitted != true ->
                             stringRes(R.string.deposits_info)
                         else -> null
                     },
                     primaryButton = recheck ?: createPrimaryButtonState(swapData, swapData.error),
                     supportButton = when {
                         recheck != null -> createPrimaryButtonState(swapData, null)
-                        swapData.error != null -> swapData.savedMetadata?.savedSwapSupportButton {
+                        swapData.error != null -> displayed?.savedSwapSupportButton {
                             onContactSupport(it, swapData)
                         }
                         else -> null
@@ -151,9 +152,9 @@ class SwapDetailVM(
                             router = navigationRouter
                         )
                     }.orEmpty(),
-                    refundedAmount = (swapData.savedMetadata?.observedRefundAmount ?: swapData.status?.positiveRefund)
+                    refundedAmount = (displayed?.observedRefundAmount ?: swapData.status?.positiveRefund)
                         ?.let { refund ->
-                            val ticker = swapData.savedMetadata?.origin?.tokenTicker
+                            val ticker = displayed?.origin?.tokenTicker
                                 ?: checkNotNull(swapData.status).originAsset.tokenTicker
                             TransactionDetailInfoRowState(
                                 title = stringRes(R.string.swapAndPay_refundedAmount),
@@ -174,13 +175,13 @@ class SwapDetailVM(
 
     private fun onContactSupport(depositAddress: String, swapData: SwapData) {
         val accountKeyId = args.accountKeyId
-            ?: swapData.savedMetadata?.ownerAccount?.sdkAccount?.accountUuid?.toStorageKeyId()
+            ?: swapData.displayedMetadata?.ownerAccount?.sdkAccount?.accountUuid?.toStorageKeyId()
             ?: return
         navigationRouter.forward(SwapSupportArgs(depositAddress, accountKeyId))
     }
 
     private val SwapData.isOutgoing: Boolean
-        get() = (savedMetadata?.mode ?: status?.mode)?.let { it != FLEX_INPUT } == true
+        get() = (displayedMetadata?.mode ?: status?.mode)?.let { it != FLEX_INPUT } == true
 
     private val SwapData.statusRowMode: TransactionDetailSwapStatusRowState.Mode
         get() = if (isOutgoing) {
@@ -193,8 +194,8 @@ class SwapDetailVM(
         TransactionDetailInfoRowState(
             title = stringRes(R.string.private_quoted_output),
             message =
-                (swapData.savedMetadata?.quotedAmountOut ?: swapData.status?.quotedAmountOut)?.let {
-                    val ticker = swapData.savedMetadata?.destination?.tokenTicker
+                (swapData.displayedMetadata?.quotedAmountOut ?: swapData.status?.quotedAmountOut)?.let {
+                    val ticker = swapData.displayedMetadata?.destination?.tokenTicker
                         ?: swapData.status?.destinationAsset?.tokenTicker ?: CURRENCY_TICKER
                     stringResByCurrencyNumber(amount = it, ticker = ticker).withStyle()
                 }
@@ -238,7 +239,7 @@ class SwapDetailVM(
         swapData: SwapData,
         error: Exception?
     ): ButtonState? {
-        if (swapData.error != null && (swapData.status != null || swapData.savedMetadata != null)) {
+        if (swapData.error != null && (swapData.status != null || swapData.displayedMetadata != null)) {
             return ButtonState(
                 text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
                 onClick = { swapData.handle.requestReload() },
@@ -262,17 +263,17 @@ class SwapDetailVM(
             }
 
             else -> {
-                swapData.savedMetadata?.savedSwapSupportButton { onContactSupport(it, swapData) }
+                swapData.displayedMetadata?.savedSwapSupportButton { onContactSupport(it, swapData) }
             }
         }
     }
 
     private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState {
-        val settlement = swapData.status?.settlementStatus { swapData.savedMetadata?.executedAmountOut }
-            ?: swapData.savedMetadata?.status
+        val settlement = swapData.status?.settlementStatus { swapData.displayedMetadata?.executedAmountOut }
+            ?: swapData.displayedMetadata?.status
         val showAmount = when (settlement) {
             EXPIRED, REFUNDED, FAILED -> false
-            PENDING -> swapData.savedMetadata?.fundingNotSubmitted != true
+            PENDING -> swapData.displayedMetadata?.fundingNotSubmitted != true
             else -> true
         }
         return TransactionDetailHeaderState(
@@ -282,26 +283,26 @@ class SwapDetailVM(
                 listOf(
                     swapData.status
                         ?.originAsset
-                        ?.tokenIcon ?: swapData.savedMetadata?.origin?.tokenIcon ?: loadingImageRes(),
+                        ?.tokenIcon ?: swapData.displayedMetadata?.origin?.tokenIcon ?: loadingImageRes(),
                     imageRes(
                         if (swapData.isOutgoing) R.drawable.ic_transaction_sent else R.drawable.ic_transaction_received
                     ),
-                    swapData.status?.destinationAsset?.tokenIcon ?: swapData.savedMetadata?.destination?.tokenIcon
+                    swapData.status?.destinationAsset?.tokenIcon ?: swapData.displayedMetadata?.destination?.tokenIcon
                         ?: imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),
             amountTicker = (swapData.status?.destinationAsset?.tokenTicker
-                ?: swapData.savedMetadata?.destination?.tokenTicker)?.uppercase() ?: CURRENCY_TICKER,
+                ?: swapData.displayedMetadata?.destination?.tokenTicker)?.uppercase() ?: CURRENCY_TICKER,
             showAmount = showAmount,
         )
     }
 
     private fun createHeaderTitle(swapData: SwapData): StringResource? =
-        when (swapData.status?.settlementStatus { swapData.savedMetadata?.executedAmountOut }
-            ?: swapData.savedMetadata?.status) {
+        when (swapData.status?.settlementStatus { swapData.displayedMetadata?.executedAmountOut }
+            ?: swapData.displayedMetadata?.status) {
             EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
             PENDING -> stringRes(
                 when {
-                    swapData.savedMetadata?.fundingNotSubmitted == true -> R.string.private_swap_funding_not_sent
+                    swapData.displayedMetadata?.fundingNotSubmitted == true -> R.string.private_swap_funding_not_sent
                     swapData.isOutgoing -> R.string.private_swap_funding_unconfirmed
                     else -> R.string.swapAndPay_status_pendingDeposit
                 }
@@ -319,9 +320,9 @@ class SwapDetailVM(
         stringRes(
             when {
                 swapData.status?.executedAmountOut != null -> R.string.private_provider_output
-                swapData.savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
-                swapData.savedMetadata?.legacySuccessfulOutput != null -> R.string.private_swap_saved_output
-                swapData.status != null || swapData.savedMetadata?.quotedAmountOut != null ->
+                swapData.displayedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
+                swapData.displayedMetadata?.legacySuccessfulOutput != null -> R.string.private_swap_saved_output
+                swapData.status != null || swapData.displayedMetadata?.quotedAmountOut != null ->
                     R.string.private_estimated_output
                 else -> R.string.private_swap_saved_output
             }
@@ -334,7 +335,7 @@ class SwapDetailVM(
 
 private val SwapData.headlineOutput
     get() = status?.executedAmountOut
-        ?: savedMetadata?.executedAmountOut
-        ?: savedMetadata?.legacySuccessfulOutput
+        ?: displayedMetadata?.executedAmountOut
+        ?: displayedMetadata?.legacySuccessfulOutput
         ?: status?.amountOutFormatted
-        ?: savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }
+        ?: displayedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 }

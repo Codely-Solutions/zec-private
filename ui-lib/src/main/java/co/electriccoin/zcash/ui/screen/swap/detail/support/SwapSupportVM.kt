@@ -74,7 +74,7 @@ class SwapSupportVM(
                             onClick = { onReportIssue(swapData, isAllowed) }
                         ),
                     onBack = ::onBack,
-                    shareQuoteButton = swapData.savedMetadata
+                    shareQuoteButton = saved
                         ?.takeIf { it.signedQuoteEvidence != null && grant != null }
                         ?.let { saved ->
                             ButtonState(

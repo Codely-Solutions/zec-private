@@ -70,7 +70,9 @@ class GetReloadableSwapQuoteUseCase(
                 swaps?.firstOrNull { it.depositAddress == depositAddress }
             } ?: flowOf(null)
             swapFlow.combine(accepted.onStart { emit(null) }) { status, saved ->
-                SwapData(data = status.withAcceptedStatus(saved), handle = reloadHandle)
+                val owner = account?.sdkAccount?.accountUuid
+                val visible = saved?.takeIf { owner != null && it.ownerAccount?.sdkAccount?.accountUuid == owner }
+                SwapData(data = status.withAcceptedStatus(saved), handle = reloadHandle, presentation = visible)
             }.collect { send(it) }
 
             awaitClose {
@@ -95,10 +97,13 @@ internal data object UnavailableReload : ReloadHandle {
 
 data class SwapData(
     val data: SwapQuoteStatusData,
-    val handle: ReloadHandle
+    val handle: ReloadHandle,
+    private val presentation: TransactionSwapMetadata? = null,
 ) {
     val status: SwapQuoteStatus? = data.status
     val isLoading: Boolean = data.isLoading
     val error: Exception? = data.error
     val savedMetadata = data.savedMetadata
+    // Exact metadata stays the source of export and request authority.
+    internal val displayedMetadata = savedMetadata ?: presentation
 }

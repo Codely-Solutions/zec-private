@@ -6,6 +6,10 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
+import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.ZcashTransparentSwapAddress
+import kotlinx.coroutines.delay
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
@@ -172,6 +176,48 @@ class FixEphemeralAddressUseCaseTest {
             verify(exactly = statusRequests) { status.observeForAccount("synthetic-address", account, any()) }
             verify(exactly = 0) { navigation.back() }
         }
+    }
+
+    @Test
+    fun boundedRecoveryKeepsItsTorRouteThroughATemporaryMetadataReadFailure() = runTest {
+        val uuid = AccountUuid.new(ByteArray(16))
+        val owner = mockk<WalletAccount> {
+            every { isSelected } returns true
+            every { sdkAccount } returns Account.new(uuid)
+        }
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+        }
+        val entry = ActiveNavigationEntry("discover", "Discover")
+        val navigation = mockk<NavigationRouter>(relaxed = true) {
+            every { activeEntry } returns MutableStateFlow(entry)
+        }
+        val resolved = mockk<SwapQuoteStatus> {
+            every { originAsset } returns mockk()
+            every { destinationAsset } returns mockk()
+            every { destinationAddress } returns ZcashTransparentSwapAddress("synthetic-resolution")
+        }
+        val status = mockk<GetSwapStatusUseCase> {
+            every { observeForAccount("synthetic-reference", owner, any()) } returns flow {
+                assertNotNull(currentCoroutineContext()[TorOnlyRequest.Key])
+                emit(SwapQuoteStatusData(isLoading = false, error = MetadataReadUnavailableException()))
+                delay(1_000)
+                emit(SwapQuoteStatusData(status = resolved, isLoading = false))
+            }
+        }
+        val sdk = mockk<Synchronizer> {
+            coEvery { validateAddress("synthetic-reference") } returns mockk<AddressType.Invalid>()
+            coEvery { fetchUtxosByAddress(uuid, "synthetic-resolution") } returns false
+        }
+        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns sdk }
+        val tor = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns true }
+        val recover = FixEphemeralAddressUseCase(
+            provider, navigation, accounts, status, mockk(),
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(), tor,
+        )
+
+        assertEquals(DiscoveryOutcome.Unconfirmed, recover("synthetic-reference", entry.id))
+        coVerify(exactly = 1) { sdk.fetchUtxosByAddress(uuid, "synthetic-resolution") }
     }
 
     @Test

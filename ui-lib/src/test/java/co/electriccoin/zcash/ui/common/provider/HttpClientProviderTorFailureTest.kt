@@ -8,6 +8,8 @@ import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.ServerResponseException
+import io.ktor.client.request.get
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -18,9 +20,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.net.InetAddress
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -31,6 +37,43 @@ import kotlin.test.assertTrue
 
 /** A selected Tor failure must reach the caller without constructing a direct HTTP engine. */
 class HttpClientProviderTorFailureTest {
+    @Test
+    fun aGuardedDirectStatusRequestMakesOnlyOneAttemptAfterAServerError() = runBlocking {
+        val preference = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns false }
+        val clients = HttpClientProviderImpl(mockk(), preference)
+        MockWebServer().use { server ->
+            server.start(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0)
+            server.enqueue(MockResponse(code = 503))
+            val url = server.url("/v0/status?depositAddress=synthetic-reference").toString()
+
+            withContext(SwapStatusRequestAdmission { true }) {
+                clients.create().use { client ->
+                    assertFailsWith<ServerResponseException> { client.get(url) }
+                }
+            }
+            assertEquals(1, server.requestCount)
+
+            val active = AtomicBoolean(true)
+            withContext(SwapStatusRequestAdmission(active::get)) {
+                clients.create().use { client ->
+                    active.set(false)
+                    assertFailsWith<IOException> { client.get(url) }
+                }
+            }
+            assertEquals(1, server.requestCount)
+
+            server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").build())
+            server.enqueue(MockResponse(code = 200))
+            withContext(SwapStatusRequestAdmission { true }) {
+                clients.create().use { client ->
+                    val refused = assertFailsWith<IOException> { client.get(url) }
+                    assertEquals("Swap status request admission is closed", refused.message)
+                }
+            }
+            assertEquals(2, server.requestCount)
+        }
+    }
+
     @Test
     fun unavailableTorClientStopsSwapApiWithoutDirectFallback() =
         runTest {

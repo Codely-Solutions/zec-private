@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.whileAtEntry
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
@@ -117,7 +118,8 @@ class FixEphemeralAddressUseCase(
             is AddressType.Invalid -> {
                 if (!canRecover()) null else withContext(TorOnlyRequest(canRecover)) {
                     getSwapStatus.observeForAccount(address, account, canRecover)
-                        .first { !it.isLoading }.status?.destinationAddress?.address
+                        .first { !it.isLoading && it.error !is MetadataReadUnavailableException }
+                        .status?.destinationAddress?.address
                 }
             }
         }

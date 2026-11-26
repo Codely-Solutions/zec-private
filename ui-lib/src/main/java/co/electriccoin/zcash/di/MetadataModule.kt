@@ -38,5 +38,5 @@ val metadataModule =
                 walletWriteAccess = get(),
             )
         } bind MetadataDataSource::class
-        singleOf(::MetadataRepositoryImpl) bind MetadataRepository::class
+        single { MetadataRepositoryImpl(get(), get(), get(), get(), get(), get()) } bind MetadataRepository::class
     }

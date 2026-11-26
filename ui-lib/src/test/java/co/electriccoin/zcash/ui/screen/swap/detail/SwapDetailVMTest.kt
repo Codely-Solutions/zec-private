@@ -120,6 +120,23 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun readableSavedStatusAndOutputRemainVisibleWhenTheLookupCannotAuthorizeFunding() = runTest {
+        val saved = saved(SwapStatus.INCOMPLETE_DEPOSIT)
+        val harness = harness(
+            SwapQuoteStatusData(isLoading = false, error = unavailable()),
+            presentation = saved,
+        )
+        val state = harness.state()
+        assertSaved(state, saved)
+        assertNotNull(state.infoFooter)
+        assertFalse(state.showLiveDetails)
+        assertNull(state.message)
+        assertNeutralRetry(harness)
+        assertNotNull(state.supportButton).onClick()
+        verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT, OWNER_KEY)) }
+    }
+
+    @Test
     fun savedProblemStatusesOfferGenericSupportWithoutSignedEvidence() = runTest {
         val outcomes = listOf(SwapStatus.INCOMPLETE_DEPOSIT, SwapStatus.REFUNDED, SwapStatus.FAILED, SwapStatus.EXPIRED)
         for (status in outcomes) {
@@ -568,12 +585,13 @@ class SwapDetailVMTest {
         initial: SwapQuoteStatusData,
         clipboard: CopyToClipboardUseCase = mockk(relaxed = true),
         accountKeyId: String? = OWNER_KEY,
+        presentation: TransactionSwapMetadata? = null,
     ): Harness {
         var requests = 0
         val reload = mockk<ReloadHandle> {
             every { requestReload() } answers { requests += 1 }
         }
-        val upstream = MutableStateFlow(SwapData(initial, reload))
+        val upstream = MutableStateFlow(SwapData(initial, reload, presentation))
         val source = mockk<GetReloadableSwapQuoteUseCase> {
             every { observe(DEPOSIT, accountKeyId) } returns upstream
         }

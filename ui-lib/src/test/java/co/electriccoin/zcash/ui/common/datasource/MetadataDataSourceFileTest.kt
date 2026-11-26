@@ -944,6 +944,45 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun aDecodedSwapRemainsVisibleWhenQuarantinePreventsAnAuthoritativeRead() = runTest {
+        assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
+        write(legacyName, metadata(1), metadataKey(9))
+        val ownerId = AccountUuid.new(ByteArray(16))
+        val owner = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(ownerId) }
+        val selected = MutableStateFlow<WalletAccount?>(owner)
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns selected
+            every { allAccounts } returns MutableStateFlow(listOf(owner))
+        }
+        val repository = MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(),
+            metadataKeyStorageProvider = mockk { coEvery { get(ownerId) } returns key },
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            scope = backgroundScope,
+        )
+        val provider = mockk<SwapRepository>()
+        val status = GetSwapStatusUseCase(repository, provider, timeSource = testScheduler.timeSource)
+        val lookup = GetReloadableSwapQuoteUseCase(status, repository, accounts)
+        val observed = mutableListOf<SwapData>()
+        backgroundScope.launch { lookup.observe("deposit", ownerId.toStorageKeyId()).collect { observed += it } }
+        runCurrent()
+
+        val visible = observed.last { it.displayedMetadata != null }
+        assertIs<MetadataReadUnavailableException>(observed.last { it.error != null }.error)
+        assertEquals("deposit", visible.displayedMetadata?.depositAddress)
+        assertNull(visible.savedMetadata)
+        assertFalse(visible.data.isFundingWindowOpen)
+        assertNull(visible.status)
+        coVerify(exactly = 0) { provider.checkSwapStatus(any(), any()) }
+
+        selected.value = null
+        runCurrent()
+        assertNull(observed.last().displayedMetadata)
+    }
+
+    @Test
     fun openDetailsRetriesARealDirectorySyncFailureWithoutReopening() = runTest {
         assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
         val sync = TrackingSync(failures = 1)

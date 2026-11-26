@@ -16,6 +16,7 @@ import io.ktor.client.plugins.logging.Logging
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.currentCoroutineContext
+import java.io.IOException
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
@@ -42,7 +43,7 @@ class HttpClientProviderImpl(
     private val transportGate: WalletSdkTransportGate? = null,
 ) : HttpClientProvider {
     override suspend fun create(): HttpClient =
-        if (requiresTor()) createTor() else createDirect()
+        if (requiresTor()) createTor() else createDirect(currentCoroutineContext()[SwapStatusRequestAdmission.Key])
 
     override suspend fun supportsKtorTimeouts(): Boolean = !requiresTor()
 
@@ -51,24 +52,40 @@ class HttpClientProviderImpl(
 
     override suspend fun createTor(): HttpClient {
         transportGate?.checkTransportAvailable()
-        return synchronizerProvider
-            .getSynchronizer()
-            .getTorHttpClient {
-                configureHttpClient(installTimeouts = false)
-            }
+        val guardedStatus = currentCoroutineContext()[SwapStatusRequestAdmission.Key] != null
+        return synchronizerProvider.getSynchronizer().getTorHttpClient {
+            configureHttpClient(installTimeouts = false)
+            if (guardedStatus) followRedirects = false
+        }
     }
 
-    @Suppress("MagicNumber")
-    private fun createDirect() =
+    private fun createDirect(admission: SwapStatusRequestAdmission?) =
         HttpClient(OkHttp) {
             configureHttpClient(installTimeouts = true)
+            if (admission != null) followRedirects = false
             engine {
+                if (admission != null) {
+                    config {
+                        retryOnConnectionFailure(false)
+                        followRedirects(false)
+                        followSslRedirects(false)
+                    }
+                    addNetworkInterceptor { chain ->
+                        if (!admission.beginDirectAttempt()) {
+                            throw IOException("Swap status request admission is closed")
+                        }
+                        chain.proceed(chain.request())
+                    }
+                }
                 // MOB-1378: Currency Conversion exchange rates must only ever be fetched over Tor (the
                 // in-app copy promises rates are fetched over Tor to protect the user's IP). CMCApiProvider
                 // already routes through createTor(), so this clearnet client should never see a CMC
                 // request — this interceptor is a backstop that fails loudly if a future caller regresses
                 // to create(), rather than silently leaking the user's IP / request timing.
                 addInterceptor { chain ->
+                    if (admission?.permits?.invoke() == false) {
+                        throw IOException("Swap status request is no longer active")
+                    }
                     transportGate?.requireDirectHttpAllowed()
                     if (chain
                             .request()
@@ -80,20 +97,26 @@ class HttpClientProviderImpl(
                     chain.proceed(chain.request())
                 }
             }
-            install(HttpRequestRetry) {
-                maxRetries = MAX_RETRIES
-                retryIf { request, response ->
-                    !request.url.toString().isVotingHelperPath() &&
-                        !request.url.host.isExchangeRateHost() &&
-                        response.status.value in 500..599
-                }
-                retryOnExceptionIf { request, failure ->
-                    failure !is DirectHttpTransportUnavailable && !request.url.toString().isVotingHelperPath() &&
-                        !request.url.host.isExchangeRateHost()
-                }
-                exponentialDelay()
-            }
+            // Status polling and lookup retries re-enter through the wallet admission check.
+            if (admission == null) installStandardRetries()
         }
+
+    @Suppress("MagicNumber")
+    private fun HttpClientConfig<*>.installStandardRetries() {
+        install(HttpRequestRetry) {
+            maxRetries = MAX_RETRIES
+            retryIf { request, response ->
+                !request.url.toString().isVotingHelperPath() &&
+                    !request.url.host.isExchangeRateHost() &&
+                    response.status.value in 500..599
+            }
+            retryOnExceptionIf { request, failure ->
+                failure !is DirectHttpTransportUnavailable && !request.url.toString().isVotingHelperPath() &&
+                    !request.url.host.isExchangeRateHost()
+            }
+            exponentialDelay()
+        }
+    }
 
     private fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureHttpClient(
         installTimeouts: Boolean

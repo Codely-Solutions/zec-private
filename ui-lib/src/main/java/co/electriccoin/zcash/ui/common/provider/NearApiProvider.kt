@@ -19,6 +19,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.HttpResponse
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.toKotlinInstant
@@ -32,6 +33,10 @@ import kotlinx.coroutines.withContext
 typealias GetNearSupportedTokensResponse = List<NearTokenDto>
 
 internal class SwapStatusRequestAdmission(val permits: () -> Boolean) : AbstractCoroutineContextElement(Key) {
+    private val directAttemptEntered = AtomicBoolean(false)
+
+    fun beginDirectAttempt(): Boolean = permits() && directAttemptEntered.compareAndSet(false, true)
+
     object Key : CoroutineContext.Key<SwapStatusRequestAdmission>
 }
 
