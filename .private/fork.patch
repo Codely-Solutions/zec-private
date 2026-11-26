@@ -5065,7 +5065,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..ffb73d285 100644
+index 294506ed1..35bb8c2df 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -5140,7 +5140,7 @@ index 294506ed1..ffb73d285 100644
 +                openNotificationProgress(
 +                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 +                )
-@@ -164,11 +193,33 @@ class MigrationAppHooksImpl(
+@@ -164,11 +193,37 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -5168,6 +5168,7 @@ index 294506ed1..ffb73d285 100644
 +    private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
 +        val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
 +        val generation = walletWriteAccess.token()
++        val wakeVersion = MigrationScheduler.wakeVersion(key)
 +        val notice = MigrationAccountRetirement.admit(key) {
 +            launchNavigation.beginMigrationProgress(key, runStep)
 +        } ?: return
@@ -5181,13 +5182,16 @@ index 294506ed1..ffb73d285 100644
 +                            MigrationAccountRetirement.blocks(key)
 +                        ) return@write null
 +                        accountDataSource.selectAccount(account)
-+                        if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
-+                            MigrationScheduler(context).runNotificationStep(key)
++                        val activePlan = runStep && checkMigrationRecovery.hasActivePlan(key)
++                        if (activePlan && launchNavigation.resolvingMigrationNotice === notice &&
++                            !resetProgress.isPending.value
++                        ) {
++                            MigrationScheduler(context).runNotificationStep(key, wakeVersion)
 +                        }
 +                        NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
-@@ -176 +226,0 @@ class MigrationAppHooksImpl(
+@@ -176 +230,0 @@ class MigrationAppHooksImpl(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +228,9 @@ class MigrationAppHooksImpl(
+@@ -178 +232,9 @@ class MigrationAppHooksImpl(
 -                true
 +                val offered = MigrationAccountRetirement.admit(key) {
 +                    launchNavigation.finishMigrationProgress(notice, command)
@@ -5198,10 +5202,10 @@ index 294506ed1..ffb73d285 100644
 +            } catch (e: Exception) {
 +                launchNavigation.finishMigrationProgress(notice, null)
 +                migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
-@@ -179,0 +238,2 @@ class MigrationAppHooksImpl(
+@@ -179,0 +242,2 @@ class MigrationAppHooksImpl(
 +        }
 +    }
-@@ -181,2 +241,15 @@ class MigrationAppHooksImpl(
+@@ -181,2 +245,15 @@ class MigrationAppHooksImpl(
 -            else -> {
 -                false
 +    override suspend fun checkRecovery() {
@@ -5219,9 +5223,9 @@ index 294506ed1..ffb73d285 100644
 +                            !MigrationAccountRetirement.blocks(ownerKey)
 +                    }
 +                }
-@@ -184,0 +258 @@ class MigrationAppHooksImpl(
+@@ -184,0 +262 @@ class MigrationAppHooksImpl(
 +    }
-@@ -186,23 +260,38 @@ class MigrationAppHooksImpl(
+@@ -186,23 +264,38 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -5283,12 +5287,12 @@ index 294506ed1..ffb73d285 100644
 +        } finally {
 +            if (retirementStarted && !deleted) {
 +                restoreRetirement(accountKeyId, generation)
-@@ -210,4 +298,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +302,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +302,27 @@ class MigrationAppHooksImpl(
+@@ -217 +306,27 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    private suspend fun restoreRetirement(accountKeyId: String, generation: Long) {
 +        withContext(NonCancellable) {
@@ -5317,7 +5321,7 @@ index 294506ed1..ffb73d285 100644
 +            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
 +        }
 +    }
-@@ -220,5 +331,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +335,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -5340,11 +5344,11 @@ index 294506ed1..ffb73d285 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -226,0 +350 @@ class MigrationAppHooksImpl(
+@@ -226,0 +354 @@ class MigrationAppHooksImpl(
 +            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
-@@ -227,0 +352 @@ class MigrationAppHooksImpl(
+@@ -227,0 +356 @@ class MigrationAppHooksImpl(
 +            migrationNotifier.cancelStepDue(key)
-@@ -229,6 +354 @@ class MigrationAppHooksImpl(
+@@ -229,6 +358 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
@@ -5352,17 +5356,17 @@ index 294506ed1..ffb73d285 100644
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
 +        if (accountKeyId == null) migrationNotifier.cancelWalletMigrationNotices()
-@@ -236,0 +357,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +361,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +366 @@ class MigrationNavigatorImpl(
+@@ -242,3 +370 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -250,7 +372,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -250,7 +376,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSetupArgs> { MigrationSetupScreen() }
 -            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
 -            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
@@ -5377,13 +5381,13 @@ index 294506ed1..ffb73d285 100644
 +            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +381 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +385 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute(), entry.id) }
-@@ -261 +383 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +387 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
-@@ -263,5 +385,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263,5 +389,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 -            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
@@ -5990,7 +5994,7 @@ index fd3ae4479..32096c85c 100644
 +    override fun clearOwner(accountKeyId: String) {
 +        pending.update { entries -> entries.filterKeys { it.first != accountKeyId } }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..3f4c59e5e 100644
+index 9451c3bae..27f797eb9 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -6062,7 +6066,7 @@ index 9451c3bae..3f4c59e5e 100644
 +            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
 +        } finally {
 +            recoveryMutex.unlock()
-@@ -86,13 +109,13 @@ class CheckMigrationRecoveryUseCase(
+@@ -86,13 +109,16 @@ class CheckMigrationRecoveryUseCase(
 -        // No wallet YET — on a cold start this fires before the synchronizer initializes, and
 -        // silently consuming the throttle window here left recovery permanently ineffective
 -        // (observed live: 1st call = SDK null + throttle stamped, 2nd call 3s later = throttled;
@@ -6078,6 +6082,9 @@ index 9451c3bae..3f4c59e5e 100644
 -            return
 +    }
 +
++    internal suspend fun hasActivePlan(owner: String): Boolean =
++        getOrchardMigrationSdk(owner)?.getMigrationStateUnreconciled() is MigrationState.InProgress
++
 +    private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
 +        if (persistableWalletProvider.getPersistableWallet() == null) return
 +        val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
@@ -6089,10 +6096,10 @@ index 9451c3bae..3f4c59e5e 100644
 +        if (ownerKey != null && !resetPending.value) {
 +            recoverBroadcast(ownerKey, requestProgress)
 +            if (reconciled && !resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
-@@ -100 +123 @@ class CheckMigrationRecoveryUseCase(
+@@ -100 +126 @@ class CheckMigrationRecoveryUseCase(
 -        val sdk = getOrchardMigrationSdk()
 +    }
-@@ -102,46 +125,5 @@ class CheckMigrationRecoveryUseCase(
+@@ -102,46 +128,5 @@ class CheckMigrationRecoveryUseCase(
 -        // The whole engine-reading/routing body below is guarded (2026-08-07): a "database is
 -        // locked" throw here used to be unguarded and would crash the app-open/foreground-return
 -        // path — this use case drives navigation, not a screen with its own LCE error state to
@@ -6144,7 +6151,7 @@ index 9451c3bae..3f4c59e5e 100644
 +        resetPending.flatMapLatest { pending ->
 +            if (pending) flowOf(null) else values.filterNotNull()
 +        }.first()
-@@ -149,9 +131,9 @@ class CheckMigrationRecoveryUseCase(
+@@ -149,9 +134,9 @@ class CheckMigrationRecoveryUseCase(
 -                        MigrationWorkerRunState.ABSENT -> {
 -                            // Revival: recovers the DURABLE background chain after process kill, device
 -                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
@@ -6163,12 +6170,12 @@ index 9451c3bae..3f4c59e5e 100644
 +                        migrationNotifier.cancel(key)
 +                        migrationNotifier.cancelStepDue(key)
 +                        cancelRemovedWake(key)
-@@ -158,0 +141 @@ class CheckMigrationRecoveryUseCase(
+@@ -158,0 +144 @@ class CheckMigrationRecoveryUseCase(
 +                    MigrationWorkerHeartbeat.clearRemovalPending(context, key)
-@@ -160,0 +144,2 @@ class CheckMigrationRecoveryUseCase(
+@@ -160,0 +147,2 @@ class CheckMigrationRecoveryUseCase(
 +        }
 +    }
-@@ -162,35 +147,14 @@ class CheckMigrationRecoveryUseCase(
+@@ -162,35 +150,14 @@ class CheckMigrationRecoveryUseCase(
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
 -                // The flag only records THAT a background attempt once failed on Tor, not what the
 -                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -6218,7 +6225,7 @@ index 9451c3bae..3f4c59e5e 100644
 +                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
 +                    migrationLiveDriver.startIfNotRunning(accountKey)
 +                    reviveScheduledWorker(accountKey, wakeVersion)
-@@ -197,0 +162,54 @@ class CheckMigrationRecoveryUseCase(
+@@ -197,0 +165,54 @@ class CheckMigrationRecoveryUseCase(
 +            } catch (e: CancellationException) {
 +                throw e
 +            } catch (e: Exception) {
@@ -6273,7 +6280,7 @@ index 9451c3bae..3f4c59e5e 100644
 +                        "(next transfer action=${nextTransfer?.action}) — clearing."
 +                )
 +                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
-@@ -199,10 +216,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -199,10 +219,0 @@ class CheckMigrationRecoveryUseCase(
 -            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
 -            // the engine's own state is the single, authoritative record (a commit that never happened
 -            // simply leaves the engine NotStarted, and every screen renders that live).
@@ -6284,10 +6291,10 @@ index 9451c3bae..3f4c59e5e 100644
 -                e
 -            )
 -            throttleMutex.withLock { lastRunMark = null }
-@@ -215 +223 @@ class CheckMigrationRecoveryUseCase(
+@@ -215 +226 @@ class CheckMigrationRecoveryUseCase(
 -        private val throttleMutex = Mutex()
 +        private val recoveryMutex = Mutex()
-@@ -227,15 +234,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -227,15 +237,0 @@ class CheckMigrationRecoveryUseCase(
 -/**
 - * Production implementation of the migration-worker active check — reads WorkManager unique work
 - * state (per-account unique work name). Extracted so [CheckMigrationRecoveryUseCase] tests can
@@ -6303,7 +6310,7 @@ index 9451c3bae..3f4c59e5e 100644
 -            ).get()
 -    }.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
 -
-@@ -247,3 +240 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
+@@ -247,3 +243 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
 - * [isMigrationWorkerActiveInWorkManager] collapses the first two together, which is all
 - * [OnMigrationSyncCompletedUseCase] needs; this finer state is what
 - * [CheckMigrationRecoveryUseCase]'s app-open trigger needs.
@@ -6980,19 +6987,20 @@ index e8ca4f6b1..093e7cbee 100644
 @@ -72,0 +91 @@ class RestartMigrationUseCase(
 +        migrationNotifier.cancelStepDue(accountKeyId)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
-index 7eed67006..7d7a648eb 100644
+index 7eed67006..b953f5340 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/ScheduleNextMigrationWindowUseCase.kt
-@@ -21,3 +21,3 @@ class ScheduleNextMigrationWindowUseCase(
+@@ -21,3 +21,4 @@ class ScheduleNextMigrationWindowUseCase(
 -    suspend operator fun invoke() {
 -        val next = getMigrationSnapshot()?.nextPending ?: return
 -        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 +    suspend operator fun invoke(accountKeyId: String? = null) {
 +        val owner = accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
++        val version = MigrationScheduler.wakeVersion(owner)
 +        val next = getMigrationSnapshot(owner)?.nextPending ?: return
-@@ -25 +25 @@ class ScheduleNextMigrationWindowUseCase(
+@@ -25 +26 @@ class ScheduleNextMigrationWindowUseCase(
 -        migrationScheduler.schedule(accountKeyId, delay)
-+        migrationScheduler.scheduleAndAwait(owner, delay)
++        migrationScheduler.scheduleAndAwait(owner, delay, version)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/MigrationFlowPreviews.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/MigrationFlowPreviews.kt
 index e79659eb3..e6c1366e8 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/MigrationFlowPreviews.kt
@@ -10456,19 +10464,23 @@ index 000000000..66a802200
 +        if (isRemoved(accountKeyId)) null else block()
 +}
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
-index 79bb58513..f26924c4a 100644
+index 79bb58513..7b18b7042 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDriveOnce.kt
-@@ -26,0 +27,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -3 +2,0 @@ package co.electriccoin.zcash.work
+-import cash.z.ecc.android.sdk.CloseableSynchronizer
+@@ -20 +18,0 @@ import co.electriccoin.zcash.ui.common.model.migration.toSnapshot
+-import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
+@@ -26,0 +25,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.NonCancellable
-@@ -27,0 +31 @@ import kotlinx.coroutines.delay
+@@ -27,0 +29 @@ import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.StateFlow
-@@ -29,0 +34,2 @@ import kotlinx.coroutines.sync.Mutex
+@@ -29,0 +32,2 @@ import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.withContext
-@@ -38,8 +44,4 @@ import kotlin.time.Duration.Companion.seconds
+@@ -38,8 +42,4 @@ import kotlin.time.Duration.Companion.seconds
 - *  - [ReArmed]: a step ran to completion and already re-armed the WorkManager chain (via
 - *    `MigrationScheduler.schedule` inside `reArm`) to [delay] — the CALLER's own next check
 - *    (the live driver's loop) should wait the same [delay]; the worker discards this (it's
@@ -10481,22 +10493,38 @@ index 79bb58513..f26924c4a 100644
 + *    waits before its next check and leaves the already armed WorkManager chain alone.
 + *  - [LockBusy]: another caller owns the drive. The worker acknowledges a successor with the retry
 + *    delay, and the live driver waits before trying again.
-@@ -55 +57 @@ sealed class DriveOnceResult {
+@@ -55 +55 @@ sealed class DriveOnceResult {
 -    data class ReArmed(
 +    data class NextWake(
-@@ -66,0 +69,2 @@ sealed class DriveOnceResult {
+@@ -66,0 +67,2 @@ sealed class DriveOnceResult {
 +    object RemovalManaged : DriveOnceResult()
 +
-@@ -74,4 +78,2 @@ sealed class DriveOnceResult {
+@@ -74,4 +76,2 @@ sealed class DriveOnceResult {
 - * divergent ones. Internally guarded by [DRIVE_LOCK] so an already-in-flight call from one
 - * caller is never interrupted by the other (an already-*scheduled-but-not-fired* WorkManager job
 - * is superseded for free via `ExistingWorkPolicy.REPLACE` inside `reArm`; only an *actively
 - * executing* step needs this lock).
 + * divergent ones. [DRIVE_LOCK] keeps the worker and live driver from running a step at the same
 + * time. The worker owns its durable successor, while the live driver uses the returned delay.
-@@ -87,0 +90 @@ class MigrationDriveOnce(
+@@ -86 +85,0 @@ class MigrationDriveOnce(
+-    private val applicationStateProvider: ApplicationStateProvider,
+@@ -87,0 +87 @@ class MigrationDriveOnce(
 +    private val resetProgress: ResetProgressStore,
-@@ -88,0 +92,7 @@ class MigrationDriveOnce(
+@@ -89,14 +89,8 @@ class MigrationDriveOnce(
+-    /**
+-     * @param allowForcedBroadcastWindow Only `true` for [MigrationLiveDriver] — the worker (via
+-     * [MigrationWorker.doWork]) must NEVER pass `true`: forcing a broadcast window can wait
+-     * nearly a full privacy buffer (up to 10 minutes on mainnet) before broadcasting, which
+-     * cannot fit inside WorkManager's own ~10-minute `doWork()` execution ceiling. The live
+-     * driver has no such ceiling (it runs only as long as the app process is alive), so it is
+-     * the only safe caller for this branch.
+-     */
+-    suspend fun run(
+-        sdk: OrchardMigrationSdk,
+-        accountKeyId: String,
+-        allowForcedBroadcastWindow: Boolean = false,
+-        driveByLiveLoop: Boolean = false,
+-    ): DriveOnceResult {
 +    suspend fun awaitIdle() = DRIVE_LOCK.withLock { Unit }
 +
 +    internal suspend fun <T> withIdleDrive(block: suspend () -> T): T = DRIVE_LOCK.withLock { block() }
@@ -10504,9 +10532,8 @@ index 79bb58513..f26924c4a 100644
 +    internal fun permitsForeground(accountKeyId: String): Boolean =
 +        !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
 +
-@@ -101 +110,0 @@ class MigrationDriveOnce(
--        driveByLiveLoop: Boolean = false,
-@@ -107,12 +116,5 @@ class MigrationDriveOnce(
++    suspend fun run(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult {
+@@ -107,12 +101,5 @@ class MigrationDriveOnce(
 -        liveLoopActive = driveByLiveLoop
 -        try {
 -            // This IS a run — stamp the heartbeat regardless of which caller drove it, so the
@@ -10523,8 +10550,8 @@ index 79bb58513..f26924c4a 100644
 +            when {
 +                MigrationAccountRetirement.blocks(accountKeyId) -> DriveOnceResult.RemovalManaged
 +                resetProgress.isPending.value -> DriveOnceResult.Terminal
-+                else -> driveCurrentStep(sdk, accountKeyId, allowForcedBroadcastWindow)
-@@ -120,6 +122,4 @@ class MigrationDriveOnce(
++                else -> driveCurrentStep(sdk, accountKeyId)
+@@ -120,6 +107,4 @@ class MigrationDriveOnce(
 -            val step = result.step
 -            migrationLog("MigrationDriveOnce: run start account=$accountKeyId step=$step")
 -            return when (step) {
@@ -10535,7 +10562,7 @@ index 79bb58513..f26924c4a 100644
 +            DRIVE_LOCK.unlock()
 +        }
 +    }
-@@ -127,4 +127,16 @@ class MigrationDriveOnce(
+@@ -127,4 +112,15 @@ class MigrationDriveOnce(
 -                is MigrationAdvanceStep.Rebuild -> {
 -                    rebuildRun(sdk, accountKeyId, step.transferId)
 -                    DriveOnceResult.Terminal
@@ -10543,7 +10570,6 @@ index 79bb58513..f26924c4a 100644
 +    private suspend fun driveCurrentStep(
 +        sdk: OrchardMigrationSdk,
 +        accountKeyId: String,
-+        allowForcedBroadcastWindow: Boolean,
 +    ): DriveOnceResult {
 +        val result = sdk.nextStep()
 +        if (result == null) {
@@ -10556,7 +10582,7 @@ index 79bb58513..f26924c4a 100644
 +            MigrationAdvanceStep.Complete -> {
 +                handleCompleteStep(sdk, applicationContext, accountKeyId, migrationNotifier)
 +            }
-@@ -132,4 +144,4 @@ class MigrationDriveOnce(
+@@ -132,4 +128,4 @@ class MigrationDriveOnce(
 -                MigrationAdvanceStep.Replan -> {
 -                    replanRun(sdk, accountKeyId)
 -                    DriveOnceResult.Terminal
@@ -10565,7 +10591,7 @@ index 79bb58513..f26924c4a 100644
 +                rebuildRun(sdk, accountKeyId)
 +                DriveOnceResult.Terminal
 +            }
-@@ -137,3 +149,4 @@ class MigrationDriveOnce(
+@@ -137,3 +133,4 @@ class MigrationDriveOnce(
 -                is MigrationAdvanceStep.Prove -> {
 -                    syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
 -                }
@@ -10573,35 +10599,35 @@ index 79bb58513..f26924c4a 100644
 +                replanRun(sdk, accountKeyId)
 +                DriveOnceResult.Terminal
 +            }
-@@ -141,3 +154,3 @@ class MigrationDriveOnce(
+@@ -141,3 +138,3 @@ class MigrationDriveOnce(
 -                MigrationAdvanceStep.Reevaluate -> {
 -                    syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
 -                }
 +            is MigrationAdvanceStep.Prove -> {
-+                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
++                syncRun(sdk, accountKeyId)
 +            }
-@@ -145,3 +158,3 @@ class MigrationDriveOnce(
+@@ -145,3 +142,3 @@ class MigrationDriveOnce(
 -                is MigrationAdvanceStep.Broadcast -> {
 -                    broadcastRun(sdk, accountKeyId, step.transferId, allowForcedBroadcastWindow)
 -                }
 +            MigrationAdvanceStep.Reevaluate -> {
-+                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
++                syncRun(sdk, accountKeyId)
 +            }
-@@ -149,3 +162,3 @@ class MigrationDriveOnce(
+@@ -149,3 +146,3 @@ class MigrationDriveOnce(
 -                MigrationAdvanceStep.Waiting -> {
 -                    waitingRun(sdk, accountKeyId)
 -                }
 +            is MigrationAdvanceStep.Broadcast -> {
-+                broadcastRun(sdk, accountKeyId, step.transferId, allowForcedBroadcastWindow)
++                broadcastRun(sdk, accountKeyId, step.transferId)
 +            }
-@@ -153,3 +166,3 @@ class MigrationDriveOnce(
+@@ -153,3 +150,3 @@ class MigrationDriveOnce(
 -                is MigrationAdvanceStep.PausedForNetworkUpgrade -> {
 -                    waitingRun(sdk, accountKeyId)
 -                }
 +            MigrationAdvanceStep.Waiting -> {
 +                waitingRun(sdk, accountKeyId)
 +            }
-@@ -157,4 +170,7 @@ class MigrationDriveOnce(
+@@ -157,4 +154,7 @@ class MigrationDriveOnce(
 -                is MigrationAdvanceStep.InterruptedByNetworkUpgrade -> {
 -                    interruptedRun(sdk, accountKeyId, step.activationHeight)
 -                    DriveOnceResult.Terminal
@@ -10613,19 +10639,27 @@ index 79bb58513..f26924c4a 100644
 +            is MigrationAdvanceStep.InterruptedByNetworkUpgrade -> {
 +                interruptedRun(sdk, accountKeyId, step.activationHeight)
 +                DriveOnceResult.Terminal
-@@ -162,2 +177,0 @@ class MigrationDriveOnce(
+@@ -162,2 +161,0 @@ class MigrationDriveOnce(
 -        } finally {
 -            DRIVE_LOCK.unlock()
-@@ -176 +190 @@ class MigrationDriveOnce(
+@@ -176 +174 @@ class MigrationDriveOnce(
 -    suspend fun <T> withExclusiveAccess(block: suspend () -> T): T? {
 +    suspend fun <T> withExclusiveAccess(accountKeyId: String, block: suspend () -> T): T? {
-@@ -181 +195 @@ class MigrationDriveOnce(
+@@ -181 +179 @@ class MigrationDriveOnce(
 -            return block()
 +            return if (permitsForeground(accountKeyId)) block() else null
-@@ -210 +224 @@ class MigrationDriveOnce(
+@@ -205 +203 @@ class MigrationDriveOnce(
+-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow = false)
++                syncRun(sdk, accountKeyId)
+@@ -210 +208 @@ class MigrationDriveOnce(
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -239 +253,8 @@ class MigrationDriveOnce(
+@@ -219 +217 @@ class MigrationDriveOnce(
+-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow = false)
++                syncRun(sdk, accountKeyId)
+@@ -235 +232,0 @@ class MigrationDriveOnce(
+-        allowForcedBroadcastWindow: Boolean,
+@@ -239 +236,8 @@ class MigrationDriveOnce(
 -            return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration()))
 +            return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration()))
 +        }
@@ -10635,36 +10669,52 @@ index 79bb58513..f26924c4a 100644
 +            } finally {
 +                withContext(NonCancellable) { recordNetworkActivity() }
 +            }
-@@ -241,2 +262 @@ class MigrationDriveOnce(
+@@ -241,2 +245 @@ class MigrationDriveOnce(
 -        val burst = synchronizerProvider.getSynchronizerOrNull()?.syncToTip(timeout = SYNC_TIMEOUT)
 -        migrationLog("MigrationDriveOnce: syncToTip result=$burst")
 +        migrationLog("MigrationDriveOnce: syncToTip outcome=${burst?.javaClass?.simpleName}")
-@@ -258 +277,0 @@ class MigrationDriveOnce(
+@@ -250 +253 @@ class MigrationDriveOnce(
+-        if (sdk.reconcileInvalidations()) {
++        return if (sdk.reconcileInvalidations()) {
+@@ -256 +259,3 @@ class MigrationDriveOnce(
+-            return DriveOnceResult.Terminal
++            DriveOnceResult.Terminal
++        } else {
++            driveAfterSync(sdk, accountKeyId)
+@@ -258 +263 @@ class MigrationDriveOnce(
 -        lastNetworkActivity.stampNow()
-@@ -269,3 +288 @@ class MigrationDriveOnce(
++    }
+@@ -260 +265,2 @@ class MigrationDriveOnce(
+-        return when (val nextStep = sdk.nextStep()?.step) {
++    private suspend fun driveAfterSync(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult =
++        when (val nextStep = sdk.nextStep()?.step) {
+@@ -269,4 +275,2 @@ class MigrationDriveOnce(
 -                    migrationLog(
 -                        "MigrationDriveOnce: sync done, next=$nextStep (preparation) — broadcasting same-beat."
 -                    )
+-                    broadcastRun(sdk, accountKeyId, nextStep.transferId, allowForcedBroadcastWindow)
 +                    migrationLog("MigrationDriveOnce: sync done. Broadcasting the preparation.")
-@@ -275,3 +292,2 @@ class MigrationDriveOnce(
++                    broadcastRun(sdk, accountKeyId, nextStep.transferId)
+@@ -275,3 +279,2 @@ class MigrationDriveOnce(
 -                    scheduleUnlessLiveLoop(accountKeyId, chainDelay)
 -                    migrationLog("MigrationDriveOnce: sync done, next=$nextStep — broadcast run in $chainDelay")
 -                    DriveOnceResult.ReArmed(chainDelay)
 +                    migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
 +                    DriveOnceResult.NextWake(chainDelay)
-@@ -282 +298 @@ class MigrationDriveOnce(
+@@ -282 +285 @@ class MigrationDriveOnce(
 -                handleCompleteStep(sdk, accountKeyId) { completeRun(accountKeyId) }
 +                handleCompleteStep(sdk, applicationContext, accountKeyId, migrationNotifier)
-@@ -286 +302 @@ class MigrationDriveOnce(
+@@ -286 +289 @@ class MigrationDriveOnce(
 -                rebuildRun(sdk, accountKeyId, nextStep.transferId)
 +                rebuildRun(sdk, accountKeyId)
-@@ -307 +323 @@ class MigrationDriveOnce(
+@@ -307 +310 @@ class MigrationDriveOnce(
 -                migrationLog("MigrationDriveOnce: sync done, next=$nextStep — re-arming.")
 +                migrationLog("MigrationDriveOnce: sync done. Choosing the next wake.")
-@@ -309 +325 @@ class MigrationDriveOnce(
+@@ -309 +312 @@ class MigrationDriveOnce(
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -313,0 +330,56 @@ class MigrationDriveOnce(
+@@ -311,0 +315,12 @@ class MigrationDriveOnce(
++
 +    internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean {
 +        val privacyBuffer = sdk.privacySyncBufferDuration()
 +        val storedActivity = lastNetworkActivity.get()
@@ -10676,8 +10726,8 @@ index 79bb58513..f26924c4a 100644
 +            lastNetworkActivityEpochSeconds = activity?.epochSecond,
 +            privacyBufferSeconds = privacyBuffer.inWholeSeconds,
 +        ) == BroadcastPreflight.BROADCAST
-+    }
-+
+@@ -314 +329,30 @@ class MigrationDriveOnce(
+-    @Suppress("ReturnCount", "LongMethod", "CyclomaticComplexMethod")
 +    internal suspend fun recordCrossingSuccess(outcome: TransferAttemptOutcome) {
 +        if ((outcome as? TransferAttemptOutcome.Executed)?.result is TransferResult.Success) {
 +            recordNetworkActivity()
@@ -10702,26 +10752,28 @@ index 79bb58513..f26924c4a 100644
 +            val current = (statuses as? StateFlow)?.value
 +                ?: withTimeoutOrNull(STATUS_READ_TIMEOUT) { statuses.first() }
 +            when (current) {
-+                null, Synchronizer.Status.SYNCING -> true
 +                Synchronizer.Status.SYNCED -> !synchronizerProvider.hasRecordedSync(synchronizer)
-+                else -> false
++                Synchronizer.Status.STOPPED -> false
++                else -> true
 +            }
 +        } == true
 +
-+    private suspend fun broadcastPreflight(
-+        sdk: OrchardMigrationSdk,
-+        syncing: Boolean,
-+        prepFastTrack: Boolean = false,
-+    ): BroadcastPreflight =
-+        decideBroadcastPreflight(
-+            synchronizerSyncing = syncing,
-+            nowEpochSeconds = nowEpochSeconds(),
-+            lastNetworkActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
-+            privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
-+            prepFastTrack = prepFastTrack,
-+        )
-+
-@@ -333,16 +405,2 @@ class MigrationDriveOnce(
+@@ -319 +362,0 @@ class MigrationDriveOnce(
+-        allowForcedBroadcastWindow: Boolean,
+@@ -321 +364 @@ class MigrationDriveOnce(
+-        val states = sdk.getMigrationTransferStates()
++        val candidate = sdk.getMigrationTransferStates()?.transfers?.firstOrNull { it.id == transferId }
+@@ -323,81 +366,8 @@ class MigrationDriveOnce(
+-        // The transaction the ENGINE already named via nextStep()'s own Broadcast(transferId) —
+-        // looked up by id, not re-predicted locally (core sync call §2.4: no local mirror of
+-        // next_broadcastable) — for the fast-track preflight and the post-send notification kind.
+-        val nextCandidate = states?.transfers?.firstOrNull { it.id == transferId }
+-        val prepFastTrack =
+-            nextCandidate != null &&
+-                !nextCandidate.isTransfer &&
+-                nextCandidate.isProved &&
+-                nextCandidate.scheduledHeight <= est
+-
 -        // status is a Flow<Status> — timeout if cold; null synchronizer is non-syncing.
 -        // timeout → assume SYNCING → defer (privacy-safe default; production status is a StateFlow
 -        // and answers immediately).
@@ -10738,49 +10790,107 @@ index 79bb58513..f26924c4a 100644
 -                privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
 -                prepFastTrack = prepFastTrack,
 -            )
-+        val syncing = isSynchronizerSyncing()
-+        val preflight = broadcastPreflight(sdk, syncing, prepFastTrack)
-@@ -351 +409 @@ class MigrationDriveOnce(
+-        migrationLog(
+-            "MigrationDriveOnce: broadcast preflight=$preflight " +
 -                "(syncing=$syncing, prepFastTrack=$prepFastTrack, lastNetworkActivity=$lastActivity)"
-+                "(syncing=$syncing, prepFastTrack=$prepFastTrack)"
-@@ -362 +419,0 @@ class MigrationDriveOnce(
+-        )
+-        if (preflight == BroadcastPreflight.DEFER) {
+-            if (syncing && allowForcedBroadcastWindow && applicationStateProvider.isInForeground.first()) {
+-                // Force a window — ONLY the live driver ever reaches here (allowForcedBroadcastWindow),
+-                // and only while a FRESH read confirms the app is actually foreground right now (do not
+-                // trust `syncing` alone as a foreground proxy: the engine's own status is a stale
+-                // last-tick value that onBackground() does not reset).
+-                val closeable = synchronizerProvider.getSynchronizerOrNull() as? CloseableSynchronizer
+-                if (closeable == null) {
+-                    val deferDelay = sdk.privacySyncBufferDuration()
 -                    scheduleUnlessLiveLoop(accountKeyId, deferDelay)
-@@ -364 +421 @@ class MigrationDriveOnce(
+-                    migrationLog("MigrationDriveOnce: no pausable synchronizer — deferring broadcast $deferDelay.")
 -                    return DriveOnceResult.ReArmed(deferDelay)
-+                    return DriveOnceResult.NextWake(deferDelay)
-@@ -367,2 +423,0 @@ class MigrationDriveOnce(
+-                }
+-                closeable.pause()
 -                lastNetworkActivity.stampNow()
 -                migrationLog("MigrationDriveOnce: paused foreground sync to open a broadcast window.")
-@@ -369,0 +425,2 @@ class MigrationDriveOnce(
-+                    lastNetworkActivity.stampNow()
-+                    migrationLog("MigrationDriveOnce: paused foreground sync to open a broadcast window.")
-@@ -372 +429 @@ class MigrationDriveOnce(
+-                try {
+-                    val gap = quietGapRemaining(sdk.privacySyncBufferDuration())
+-                    if (gap.isPositive()) {
 -                        migrationLog("MigrationDriveOnce: waiting privacy quiet gap $gap before broadcast.")
-+                        migrationLog("MigrationDriveOnce: waiting for the privacy quiet gap before broadcast.")
-@@ -380,5 +437,2 @@ class MigrationDriveOnce(
+-                        delay(gap)
+-                    }
+-                    // Re-ask the engine — up to a full privacy buffer may have elapsed during the
+-                    // wait above, and it may no longer report Broadcast at all (something changed),
+-                    // or name a different transaction than the one that triggered this run.
+-                    val freshStep = sdk.nextStep()?.step
+-                    if (freshStep !is MigrationAdvanceStep.Broadcast) {
 -                        migrationLog(
 -                            "MigrationDriveOnce: after the wait, engine no longer reports Broadcast " +
 -                                "(now=$freshStep) — re-arming."
 -                        )
 -                        return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
-+                        migrationLog("MigrationDriveOnce: broadcast unavailable after the wait. Scheduling a wake.")
-+                        return DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -397 +450,0 @@ class MigrationDriveOnce(
+-                    }
+-                    val freshStates = sdk.getMigrationTransferStates()
+-                    val freshCandidate = freshStates?.transfers?.firstOrNull { it.id == freshStep.transferId }
+-                    return attemptBroadcast(sdk, accountKeyId, freshCandidate)
+-                } finally {
+-                    closeable.resume()
+-                    migrationLog("MigrationDriveOnce: resumed foreground sync (SDK gate now governs).")
+-                }
+-            } else {
+-                // Quiet-gap-only defer (nothing running to pause, or the worker caller, or genuinely
+-                // backgrounded) — unchanged from today's behavior.
+-                val deferDelay = if (prepFastTrack) PREP_FAST_TRACK_REARM else sdk.privacySyncBufferDuration()
 -                scheduleUnlessLiveLoop(accountKeyId, deferDelay)
-@@ -402 +455 @@ class MigrationDriveOnce(
+-                migrationLog(
+-                    "MigrationDriveOnce: deferring broadcast $deferDelay — a sync source is live or the quiet " +
+-                        "gap is unmet."
+-                )
 -                return DriveOnceResult.ReArmed(deferDelay, respectAntiSpinFloor = !prepFastTrack)
-+                return DriveOnceResult.NextWake(deferDelay, respectAntiSpinFloor = !prepFastTrack)
-@@ -444 +497 @@ class MigrationDriveOnce(
+-            }
++        val isPreparation = candidate != null && !candidate.isTransfer && candidate.isProved &&
++            candidate.scheduledHeight <= est
++        // This SDK's pause gates explicit bursts, but its continuous foreground session keeps
++        // running. Wait for an observed quiet period instead of treating pause as network silence.
++        return if (!isPreparation && !mayBroadcastCrossing(sdk)) {
++            DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
++        } else {
++            attemptBroadcast(sdk, accountKeyId, transferId, candidate, isPreparation)
+@@ -405,13 +374,0 @@ class MigrationDriveOnce(
+-        return attemptBroadcast(sdk, accountKeyId, nextCandidate)
+-    }
+-
+-    /**
+-     * Moved verbatim (including the exact reasoning comment) from
+-     * `MigrationProgressVM.quietGapRemaining` — the privacy quiet-gap wait shared by the
+-     * foreground-forced broadcast window above and the VM's own foreground broadcast pass.
+-     */
+-    private suspend fun quietGapRemaining(privacyBuffer: Duration): Duration {
+-        val last = lastNetworkActivity.get() ?: return Duration.ZERO
+-        val elapsed = (Clock.System.now().epochSeconds - last.epochSecond).seconds
+-        val remaining = privacyBuffer - elapsed
+-        return if (remaining.isPositive()) remaining else Duration.ZERO
+@@ -423,0 +381 @@ class MigrationDriveOnce(
++        transferId: Long,
+@@ -424,0 +383 @@ class MigrationDriveOnce(
++        isPreparation: Boolean,
+@@ -438 +397,7 @@ class MigrationDriveOnce(
+-                    sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
++                    val step = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
++                    val quiet = isPreparation || mayBroadcastCrossing(sdk)
++                    if (step?.transferId == transferId && quiet && permitsForeground(accountKeyId)) {
++                        sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
++                    } else {
++                        TransferAttemptOutcome.NothingDue
++                    }
+@@ -444 +409 @@ class MigrationDriveOnce(
 -                return DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = REARM_FLOOR))
 +                return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = REARM_FLOOR))
-@@ -449,3 +502,3 @@ class MigrationDriveOnce(
+@@ -449,3 +414,3 @@ class MigrationDriveOnce(
 -                val delay = reArm(sdk, accountKeyId)
 -                migrationLog("MigrationDriveOnce: NothingDue — re-armed for the next window.")
 -                DriveOnceResult.ReArmed(delay)
 +                val delay = nextWakeDelay(sdk)
 +                migrationLog("MigrationDriveOnce: NothingDue — waiting for the next window.")
 +                DriveOnceResult.NextWake(delay)
-@@ -458,5 +511,2 @@ class MigrationDriveOnce(
+@@ -458,5 +423,2 @@ class MigrationDriveOnce(
 -                migrationLog(
 -                    "MigrationDriveOnce: AwaitingProof for ${outcome.transferId} despite a Broadcast step — " +
 -                        "re-arming."
@@ -10788,68 +10898,68 @@ index 79bb58513..f26924c4a 100644
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId, floor = REARM_FLOOR))
 +                migrationLog("MigrationDriveOnce: broadcast is awaiting proof. Scheduling a wake.")
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = REARM_FLOOR))
-@@ -465,0 +516,3 @@ class MigrationDriveOnce(
+@@ -465,0 +428,3 @@ class MigrationDriveOnce(
 +                if (nextCandidate?.isTransfer != false) {
 +                    withContext(NonCancellable) { recordCrossingSuccess(outcome) }
 +                }
-@@ -487 +540 @@ class MigrationDriveOnce(
+@@ -487 +452 @@ class MigrationDriveOnce(
 -                migrationLog("MigrationDriveOnce: sent — txId=${result.txId.txIdString()}")
 +                migrationLog("MigrationDriveOnce: sent a migration transaction.")
-@@ -522 +574,0 @@ class MigrationDriveOnce(
+@@ -522 +486,0 @@ class MigrationDriveOnce(
 -                        scheduleUnlessLiveLoop(accountKeyId, PREP_FAST_TRACK_REARM)
-@@ -531 +583 @@ class MigrationDriveOnce(
+@@ -531 +495 @@ class MigrationDriveOnce(
 -                        DriveOnceResult.ReArmed(PREP_FAST_TRACK_REARM, respectAntiSpinFloor = false)
 +                        DriveOnceResult.NextWake(PREP_FAST_TRACK_REARM, respectAntiSpinFloor = false)
-@@ -533 +585 @@ class MigrationDriveOnce(
+@@ -533 +497 @@ class MigrationDriveOnce(
 -                        val delay = reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration())
 +                        val delay = nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration())
-@@ -541 +593 @@ class MigrationDriveOnce(
+@@ -541 +505 @@ class MigrationDriveOnce(
 -                        DriveOnceResult.ReArmed(delay)
 +                        DriveOnceResult.NextWake(delay)
-@@ -548,3 +600,3 @@ class MigrationDriveOnce(
+@@ -548,3 +512,3 @@ class MigrationDriveOnce(
 -                    val delay = reArm(sdk, accountKeyId, floor = sdk.privacySyncBufferDuration())
 -                    migrationLog("MigrationDriveOnce: all transfers sent — completion sweep armed.")
 -                    DriveOnceResult.ReArmed(delay)
 +                    val delay = nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration())
 +                    migrationLog("MigrationDriveOnce: all transfers sent — completion check due next.")
 +                    DriveOnceResult.NextWake(delay)
-@@ -599 +651 @@ class MigrationDriveOnce(
+@@ -599 +563 @@ class MigrationDriveOnce(
 -                DriveOnceResult.ReArmed(reArm(sdk, accountKeyId))
 +                DriveOnceResult.NextWake(nextWakeDelay(sdk))
-@@ -612 +664 @@ class MigrationDriveOnce(
+@@ -612 +576 @@ class MigrationDriveOnce(
 -     * The engine wants [transferId] rebuilt (expired today; unprovable-anchor too once the engine
 +     * The engine wants a transfer rebuilt (expired today; unprovable-anchor too once the engine
-@@ -617 +669 @@ class MigrationDriveOnce(
+@@ -617 +581 @@ class MigrationDriveOnce(
 -    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String, transferId: Long) {
 +    private suspend fun rebuildRun(sdk: OrchardMigrationSdk, accountKeyId: String) {
-@@ -619 +671 @@ class MigrationDriveOnce(
+@@ -619 +583 @@ class MigrationDriveOnce(
 -        migrationLog("MigrationDriveOnce: engine requests Rebuild{$transferId} — user-driven reschedule required.")
 +        migrationLog("MigrationDriveOnce: engine requests a rebuild. The user must reschedule.")
-@@ -630 +682 @@ class MigrationDriveOnce(
+@@ -630 +594 @@ class MigrationDriveOnce(
 -     * single [transferId][MigrationAdvanceStep.Rebuild.transferId] to point at; the entire plan
 +     * single transfer to point at. The entire plan
-@@ -657,2 +709,2 @@ class MigrationDriveOnce(
+@@ -657,2 +621,2 @@ class MigrationDriveOnce(
 -            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run — cancelling it, " +
 -                "the user is offered a new migration. (account=$accountKeyId)"
 +            "MigrationDriveOnce: the NU7 activation ($activationHeight) interrupted the run. " +
 +                "Cancelling it and offering a new migration."
-@@ -664,5 +715,0 @@ class MigrationDriveOnce(
+@@ -664,5 +627,0 @@ class MigrationDriveOnce(
 -    /** All transactions mined — nothing left to fold anywhere; just stop the chain. */
 -    private suspend fun completeRun(accountKeyId: String) {
 -        migrationLog("MigrationDriveOnce: migration complete — stopping the work chain. (account=$accountKeyId)")
 -    }
 -
-@@ -684 +731,2 @@ class MigrationDriveOnce(
+@@ -684 +643,2 @@ class MigrationDriveOnce(
 -        val stuck = states?.transfers?.firstOrNull { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: return
 +        val blocked = states?.transfers?.any { it.blocker == MigrationBlocker.UNPROVABLE_ANCHOR } ?: false
 +        if (!blocked) return
-@@ -686,4 +734 @@ class MigrationDriveOnce(
+@@ -686,4 +646 @@ class MigrationDriveOnce(
 -        migrationLog(
 -            "MigrationDriveOnce: transfer ${stuck.id} blocked on an unprovable anchor — user-driven reschedule " +
 -                "required."
 -        )
 +        migrationLog("MigrationDriveOnce: an unprovable anchor requires the user to reschedule.")
-@@ -697,15 +741,0 @@ class MigrationDriveOnce(
+@@ -697,15 +653,0 @@ class MigrationDriveOnce(
 -    /**
 -     * Every WorkManager (re)schedule funnels through here so [liveLoopActive] gates it in one
 -     * place. While the live driver drives this call, it will locally `delay(...)` on the returned
@@ -10865,16 +10975,21 @@ index 79bb58513..f26924c4a 100644
 -        }
 -    }
 -
-@@ -716,2 +746 @@ class MigrationDriveOnce(
+@@ -716,2 +658 @@ class MigrationDriveOnce(
 -     * cadence when the peek is unavailable. Returns the concrete delay it armed, so the caller
 -     * (`run`) can report [DriveOnceResult.ReArmed] with it.
 +     * cadence when the peek is unavailable. The worker enqueues this delay after the drive returns.
-@@ -723 +752 @@ class MigrationDriveOnce(
+@@ -723 +664 @@ class MigrationDriveOnce(
 -    private suspend fun reArm(
 +    private suspend fun nextWakeDelay(
-@@ -725 +753,0 @@ class MigrationDriveOnce(
+@@ -725 +665,0 @@ class MigrationDriveOnce(
 -        accountKeyId: String,
-@@ -742,11 +770,2 @@ class MigrationDriveOnce(
+@@ -730,0 +671 @@ class MigrationDriveOnce(
++        val activity = lastNetworkActivity.latestObserved ?: lastNetworkActivity.get()
+@@ -736 +677 @@ class MigrationDriveOnce(
+-                lastActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
++                lastActivityEpochSeconds = activity?.epochSecond,
+@@ -742,11 +683,2 @@ class MigrationDriveOnce(
 -        val armed = maxOf(delay ?: migrationCadence(), floor)
 -        scheduleUnlessLiveLoop(accountKeyId, armed)
 -        // The full "why" of the chosen wake, so timing is diagnosable from logs alone: the
@@ -10888,7 +11003,7 @@ index 79bb58513..f26924c4a 100644
 -        return armed
 +        migrationLog("MigrationDriveOnce: selected the next wake (cadenceFallback=${delay == null}).")
 +        return maxOf(delay ?: migrationCadence(), floor)
-@@ -759,7 +777,0 @@ class MigrationDriveOnce(
+@@ -759,7 +690,0 @@ class MigrationDriveOnce(
 -        // Set at the top of run() (inside the DRIVE_LOCK critical section) and read by every
 -        // scheduleUnlessLiveLoop call in the same execution. Safe without its own lock: DRIVE_LOCK
 -        // already guarantees only one run() call is ever inside its try block at a time,
@@ -10896,36 +11011,43 @@ index 79bb58513..f26924c4a 100644
 -        // visibility guarantee a plain var needs here (2026-08-06 REPLACE-race fix).
 -        private var liveLoopActive = false
 -
-@@ -770,2 +782 @@ class MigrationDriveOnce(
+@@ -768,4 +693,2 @@ class MigrationDriveOnce(
+-         * larger than a "normal" step's duration: when the winner is a forced broadcast window
+-         * (up to ~13 minutes: privacy buffer + broadcast timeout), a short retry here would have
 -         * the worker hammering `MigrationScheduler.schedule()` (WorkManager REPLACE + heartbeat
 -         * write + alarm re-arm) every few seconds for the whole window.
-+         * the worker scheduling and acknowledging a successor every few seconds during the wait.
-@@ -954,2 +965,3 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
++         * larger than a normal step's duration to avoid repeatedly replacing wakes while a native
++         * synchronization or network attempt still owns the drive.
+@@ -796,2 +719 @@ private val BROADCAST_ATTEMPT_TIMEOUT = 3.minutes
+- * (WorkManager dispatch latency is the only real gap) and the short retry when a fast-tracked
+- * prep only lost its window to a live sync overlap.
++ * (WorkManager dispatch latency is the only real gap).
+@@ -954,2 +876,3 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
 - * `Complete` — see `derive_migration_state` in `migration.rs`), so [onActuallyComplete] — the
 - * caller's `completeRun` effects — only runs for a genuinely complete migration. Top-level
 + * `Complete` — see `derive_migration_state` in `migration.rs`).
 + * The fallback is cleared only for a genuinely complete migration.
 + * Top-level
-@@ -960,0 +973 @@ private suspend fun handleCompleteStep(
+@@ -960,0 +884 @@ private suspend fun handleCompleteStep(
 +    context: android.content.Context,
-@@ -962 +975 @@ private suspend fun handleCompleteStep(
+@@ -962 +886 @@ private suspend fun handleCompleteStep(
 -    onActuallyComplete: suspend () -> Unit,
 +    migrationNotifier: MigrationNotifier,
-@@ -963,0 +977 @@ private suspend fun handleCompleteStep(
-+    val wakeVersion = MigrationScheduler.wakeVersion(accountKeyId)
-@@ -965 +979,4 @@ private suspend fun handleCompleteStep(
+@@ -963,0 +888 @@ private suspend fun handleCompleteStep(
++    // The caller holds the drive lock, so a new plan cannot replace this completion.
+@@ -965 +890,4 @@ private suspend fun handleCompleteStep(
 -        onActuallyComplete()
-+        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId, wakeVersion) {
++        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId) {
 +            migrationNotifier.cancelStepDue(accountKeyId)
 +        }
 +        migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")
-@@ -967,4 +984 @@ private suspend fun handleCompleteStep(
+@@ -967,4 +895 @@ private suspend fun handleCompleteStep(
 -        migrationLog(
 -            "MigrationDriveOnce: nextStep reported Complete but the migration state is not " +
 -                "actually Complete (superseded/failed) — not surfacing as complete. (account=$accountKeyId)"
 -        )
 +        migrationLog("MigrationDriveOnce: the engine reported a terminal step with no completed migration.")
-@@ -979 +993 @@ private suspend fun handleCompleteStep(
+@@ -979 +904 @@ private suspend fun handleCompleteStep(
 - * `completeRun`'s effects must NOT fire.
 + * the finished-migration log applies only to a genuine completion.
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationDueAlarmScheduler.kt
@@ -10953,7 +11075,7 @@ index b0f6f5e02..2e0b9e478 100644
 +        private const val ALARM_REQUEST_CODE = 0x30_0000
 +        private const val ACTION_TRANSFER_DUE = "co.electriccoin.zcash.migration.transfer_due"
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
-index 41f7bb347..8df6b25e0 100644
+index 41f7bb347..844ad09d1 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationLiveDriver.kt
 @@ -13,0 +14 @@ import kotlinx.coroutines.delay
@@ -11042,28 +11164,37 @@ index 41f7bb347..8df6b25e0 100644
 @@ -125 +120 @@ class MigrationLiveDriverImpl(
 -                        migrationLog("MigrationLiveDriver: SDK unavailable for $accountKeyId — stopping.")
 +                        migrationLog("MigrationLiveDriver: SDK unavailable. Stopping the loop.")
-@@ -136 +130,0 @@ class MigrationLiveDriverImpl(
+@@ -128,12 +123,3 @@ class MigrationLiveDriverImpl(
+-                val result =
+-                    migrationDriveOnce.run(
+-                        sdk,
+-                        accountKeyId,
+-                        allowForcedBroadcastWindow = true,
+-                        // true: the live driver has no execution-time ceiling (unlike the worker),
+-                        // so it is the only safe caller for a forced-broadcast-window wait that can
+-                        // run for nearly a full privacy buffer.
 -                        driveByLiveLoop = true,
-@@ -138,2 +132,2 @@ class MigrationLiveDriverImpl(
+-                    )
 -                if (result !is DriveOnceResult.LockBusy) {
 -                    // A step actually ran (ReArmed) or the migration reached a terminal state —
++                val result = migrationDriveOnce.run(sdk, accountKeyId)
 +                if (result !is DriveOnceResult.LockBusy && result != DriveOnceResult.RemovalManaged) {
 +                    // A step actually ran (NextWake) or the migration reached a terminal state —
-@@ -151 +145 @@ class MigrationLiveDriverImpl(
+@@ -151 +137 @@ class MigrationLiveDriverImpl(
 -                    is DriveOnceResult.ReArmed -> {
 +                    is DriveOnceResult.NextWake -> {
-@@ -172,2 +166,2 @@ class MigrationLiveDriverImpl(
+@@ -172,2 +158,2 @@ class MigrationLiveDriverImpl(
 -                    DriveOnceResult.Terminal -> {
 -                        migrationLog("MigrationLiveDriver: $accountKeyId reached a terminal state — stopping loop.")
 +                    DriveOnceResult.RemovalManaged, DriveOnceResult.Terminal -> {
 +                        migrationLog("MigrationLiveDriver: no admitted work. Stopping the loop.")
-@@ -191,3 +185 @@ class MigrationLiveDriverImpl(
+@@ -191,3 +177 @@ class MigrationLiveDriverImpl(
 -                    "MigrationLiveDriver: step failed for $accountKeyId (transient) — retrying in " +
 -                        "${MIN_REARM_SECONDS}s.",
 -                    e
 +                    "MigrationLiveDriver: step failed (${e.javaClass.simpleName}). Retrying."
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
-index 1886de6a8..5054ae83d 100644
+index 1886de6a8..71dbfc2ea 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 @@ -8,0 +9,2 @@ import androidx.work.OneTimeWorkRequestBuilder
@@ -11079,7 +11210,7 @@ index 1886de6a8..5054ae83d 100644
 +import java.util.UUID
 @@ -13,0 +22 @@ import kotlin.time.Duration
 +import kotlin.time.Duration.Companion.milliseconds
-@@ -38,17 +47,106 @@ class MigrationScheduler(
+@@ -38,17 +47,110 @@ class MigrationScheduler(
 -    fun schedule(accountKeyId: String, delay: Duration) {
 -        migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
 -        WorkManager.getInstance(context).enqueueUniqueWork(
@@ -11103,8 +11234,10 @@ index 1886de6a8..5054ae83d 100644
 +        val dueAt: Long,
 +    )
 +
-+    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
-+        check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE)) { "Migration scheduling is paused" }
++    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration, expectedVersion: Long? = null) {
++        val startsPlan = expectedVersion == null
++        val enqueued = enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE, expectedVersion, startsPlan)
++        check(enqueued || !startsPlan) { "Migration scheduling is paused" }
 +    }
 +
 +    internal suspend fun scheduleIfMissing(
@@ -11140,9 +11273,9 @@ index 1886de6a8..5054ae83d 100644
 +        }
 +    }
 +
-+    internal suspend fun runNotificationStep(accountKeyId: String) {
++    internal suspend fun runNotificationStep(accountKeyId: String, version: Long) {
 +        if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-+            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE)
++            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE, version)
 +        }
 +    }
 +
@@ -11151,13 +11284,15 @@ index 1886de6a8..5054ae83d 100644
 +        delay: Duration,
 +        policy: ExistingWorkPolicy,
 +        expectedVersion: Long? = null,
++        startsPlan: Boolean = false,
 +    ): Boolean {
 +        val manager = WorkManager.getInstance(context)
 +        val request = newWorkRequest(accountKeyId, delay)
 +        val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
 +            synchronized(wakeVersions) {
 +                val current = wakeVersion(accountKeyId)
-+                if (expectedVersion != null && expectedVersion != current) {
++                if (startsPlan) completedPlans.remove(accountKeyId)
++                if (accountKeyId in completedPlans || expectedVersion != null && expectedVersion != current) {
 +                    null
 +                } else {
 +                    val admitted =
@@ -11186,7 +11321,7 @@ index 1886de6a8..5054ae83d 100644
 +            val wake = resolve() ?: return
 +            MigrationAccountRetirement.keepWake(accountKeyId) {
 +                synchronized(wakeVersions) {
-+                    val stillPending = wakeVersion(accountKeyId) == version &&
++                    val stillPending = accountKeyId !in completedPlans && wakeVersion(accountKeyId) == version &&
 +                        !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
 +                    if (stillPending) {
 +                        migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
@@ -11203,7 +11338,7 @@ index 1886de6a8..5054ae83d 100644
 +        } catch (e: Exception) {
 +            migrationLog("MigrationScheduler: fallback alarm unavailable (${e.javaClass.simpleName}).")
 +        }
-@@ -58,2 +156,11 @@ class MigrationScheduler(
+@@ -58,2 +160,12 @@ class MigrationScheduler(
 -        migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
 -        WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
 +        cancelWork(accountKeyId)
@@ -11215,21 +11350,27 @@ index 1886de6a8..5054ae83d 100644
 +
 +    private fun cancelWork(accountKeyId: String): Operation = synchronized(wakeVersions) {
 +        advanceWakeVersion(accountKeyId)
++        completedPlans.remove(accountKeyId)
 +        migrationLog("MigrationScheduler: cancelling a migration work chain.")
 +        val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
-@@ -61,0 +169 @@ class MigrationScheduler(
+@@ -61,0 +174 @@ class MigrationScheduler(
 +        operation
-@@ -64,0 +173,50 @@ class MigrationScheduler(
+@@ -64,0 +178,53 @@ class MigrationScheduler(
 +        // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
 +        private val wakeVersions = mutableMapOf<String, Long>()
++        private val completedPlans = mutableSetOf<String>()
 +
 +        internal fun wakeVersion(accountKeyId: String): Long =
 +            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: 0L }
 +
-+        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long =
++        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
 +            synchronized(wakeVersions) {
-+                MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
-+                advanceWakeVersion(accountKeyId)
++                if (accountKeyId in completedPlans) {
++                    null
++                } else {
++                    MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
++                    advanceWakeVersion(accountKeyId)
++                }
 +            }
 +
 +        internal suspend fun armRetry(
@@ -11252,17 +11393,15 @@ index 1886de6a8..5054ae83d 100644
 +        internal fun withdrawCompletedFallback(
 +            context: Context,
 +            accountKeyId: String,
-+            version: Long,
 +            onCleared: () -> Unit,
 +        ) {
 +            MigrationAccountRetirement.admit(accountKeyId) {
 +                synchronized(wakeVersions) {
-+                    if (wakeVersion(accountKeyId) == version) {
-+                        advanceWakeVersion(accountKeyId)
-+                        MigrationDueAlarmScheduler(context).cancel(accountKeyId)
-+                        MigrationWorkerHeartbeat.clear(context, accountKeyId)
-+                        onCleared()
-+                    }
++                    completedPlans.add(accountKeyId)
++                    advanceWakeVersion(accountKeyId)
++                    MigrationDueAlarmScheduler(context).cancel(accountKeyId)
++                    MigrationWorkerHeartbeat.clear(context, accountKeyId)
++                    onCleared()
 +                }
 +            }
 +        }
@@ -11270,7 +11409,7 @@ index 1886de6a8..5054ae83d 100644
 +        private fun advanceWakeVersion(accountKeyId: String): Long =
 +            (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
 +
-@@ -70,0 +229,2 @@ class MigrationScheduler(
+@@ -70,0 +237,2 @@ class MigrationScheduler(
 +        private const val RETRY_BACKOFF_SHIFT_LIMIT = 20
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
@@ -11671,10 +11810,10 @@ index 698a60fbd..66791cab1 100644
 +        }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..51fd79a05
+index 000000000..6d6996f0b
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,414 @@
+@@ -0,0 +1,423 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -11884,7 +12023,7 @@ index 000000000..51fd79a05
 +
 +            assertTrue(navigation.resolvingMigrationNotice == null)
 +            coVerify(exactly = 0) { accounts.selectAccount(target) }
-+            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any()) }
++            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any(), any()) }
 +            verify(exactly = 1) { readouts.clear(key) }
 +            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
 +        } finally {
@@ -12031,14 +12170,17 @@ index 000000000..51fd79a05
 +        coEvery { accounts.getAllAccounts() } coAnswers { releaseLookup.await() }
 +        val navigation = spyk(LaunchNavigationRequests())
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
++        val recovery = mockk<co.electriccoin.zcash.ui.common.usecase.CheckMigrationRecoveryUseCase> {
++            coEvery { hasActivePlan(ownerKey) } returns true
++        }
 +        val hooks = MigrationAppHooksImpl(
-+            mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
++            recovery, mockk(), navigation, accounts, mockk(), mockk(), reset,
 +            mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), WalletWriteAccess(reset),
 +        )
 +        val acknowledged = CompletableDeferred<Unit>()
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
-+            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) } coAnswers {
++            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) } coAnswers {
 +                acknowledged.await()
 +            }
 +            val oldActivity = launch { hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true) }
@@ -12054,9 +12196,15 @@ index 000000000..51fd79a05
 +            acknowledged.complete(Unit)
 +            runCurrent()
 +
-+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) }
++            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
 +            val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
 +            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
++
++            coEvery { recovery.hasActivePlan(ownerKey) } returns false
++            hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true)
++            runCurrent()
++            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
++            verify(exactly = 2) { navigation.finishMigrationProgress(any(), progress) }
 +        } finally {
 +            acknowledged.complete(Unit)
 +            unmockkConstructor(MigrationScheduler::class)
@@ -12256,7 +12404,7 @@ index e2be5482b..832610719 100644
 +        assertEquals(true, repo.consume(second))
 +        assertNull(repo.decision.value)
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
-index 05231840e..8ffd8cf53 100644
+index 05231840e..92da583c6 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCaseTest.kt
 @@ -3,0 +4 @@ import android.content.Context
@@ -12365,7 +12513,7 @@ index 05231840e..8ffd8cf53 100644
 +            context = context,
 +            getWorkerRunState = { owner ->
 +                MigrationScheduler.withdrawCompletedFallback(
-+                    context, owner, MigrationScheduler.wakeVersion(owner)
++                    context, owner
 +                ) { withdrawn = true }
 +                MigrationWorkerRunState.SCHEDULED
 +            },
@@ -16186,15 +16334,18 @@ index 957c26bc1..424c198e8 100644
 +    )
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt
 new file mode 100644
-index 000000000..ec0aed2f2
+index 000000000..449fe5b7d
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationDriveOnceForegroundTest.kt
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,307 @@
 +package co.electriccoin.zcash.work
 +
 +import cash.z.ecc.android.sdk.CloseableSynchronizer
 +import cash.z.ecc.android.sdk.MigrationAdvanceResult
 +import cash.z.ecc.android.sdk.MigrationAdvanceStep
++import cash.z.ecc.android.sdk.MigrationTransferState
++import cash.z.ecc.android.sdk.MigrationTransferStates
++import cash.z.ecc.android.sdk.TransferAttemptOutcome
 +import cash.z.ecc.android.sdk.OrchardMigrationSdk
 +import cash.z.ecc.android.sdk.Synchronizer
 +import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
@@ -16203,7 +16354,7 @@ index 000000000..ec0aed2f2
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.verifyOrder
++import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -16219,6 +16370,7 @@ index 000000000..ec0aed2f2
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertFalse
++import kotlin.test.assertIs
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
 +import kotlin.time.Duration.Companion.seconds
@@ -16226,14 +16378,12 @@ index 000000000..ec0aed2f2
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class MigrationDriveOnceForegroundTest {
 +    @Test
-+    fun aFailedQuietWindowTimestampStillResumesThePausedSynchronizer() = runTest {
++    fun theSdkPauseIsNotUsedToCreateANetworkQuietWindow() = runTest {
 +        val transport = mockk<CloseableSynchronizer>(relaxed = true) {
 +            every { status } returns MutableStateFlow(Synchronizer.Status.SYNCING)
 +        }
 +        val sdk = mockk<OrchardMigrationSdk> {
-+            coEvery { nextStep() } returnsMany listOf(
-+                MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null), null,
-+            )
++            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
 +            coEvery { getMigrationTransferStates() } returns null
 +            coEvery { estimatedChainTip() } returns 20L
 +            coEvery { privacySyncBufferDuration() } returns 15.seconds
@@ -16245,25 +16395,92 @@ index 000000000..ec0aed2f2
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk {
 +                every { synchronizer } returns MutableStateFlow(transport)
-+                coEvery { getSynchronizerOrNull() } returns transport
 +            },
 +            lastNetworkActivity = mockk {
-+                coEvery { get() } returns null
-+                coEvery { stampNow() } throws IOException("Timestamp store unavailable")
++                coEvery { get() } returns Instant.EPOCH
++                every { latestObserved } returns null
 +            },
-+            applicationStateProvider = mockk { every { isInForeground } returns flowOf(true) },
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
 +        )
 +
-+        assertFailsWith<IOException> { drive.run(sdk, "quiet-window-owner", allowForcedBroadcastWindow = true) }
-+        verifyOrder {
-+            transport.pause()
-+            transport.resume()
++        assertEquals(DriveOnceResult.NextWake(15.seconds), drive.run(sdk, "quiet-window-owner"))
++        verify(exactly = 0) { transport.pause() }
++        verify(exactly = 0) { transport.resume() }
++        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
++    }
++
++    @Test
++    fun synchronizationDuringTransportPreparationIsRecheckedBeforeNativeSubmission() = runTest {
++        val status = MutableStateFlow(Synchronizer.Status.SYNCED)
++        val sync = mockk<Synchronizer> { every { this@mockk.status } returns status }
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
++            coEvery { getMigrationTransferStates() } returns null
++            coEvery { estimatedChainTip() } returns 20L
++            coEvery { privacySyncBufferDuration() } returns 15.seconds
 +        }
-+        coVerify(exactly = 1) { sdk.nextStep() }
-+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, "quiet-window-owner", allowForcedBroadcastWindow = true))
-+        coVerify(exactly = 2) { sdk.nextStep() }
++        val drive = MigrationDriveOnce(
++            applicationContext = mockk(relaxed = true),
++            migrationNotifier = mockk(),
++            isMigrationTorEnabledStorageProvider = mockk {
++                coEvery { this@mockk.get("transport-owner") } coAnswers {
++                    status.value = Synchronizer.Status.SYNCING
++                    true
++                }
++            },
++            pendingMigrationTorFailureStorageProvider = mockk(),
++            synchronizerProvider = mockk {
++                every { synchronizer } returns MutableStateFlow(sync)
++                every { hasRecordedSync(sync) } returns true
++            },
++            lastNetworkActivity = mockk {
++                coEvery { get() } returns Instant.EPOCH
++                every { latestObserved } returns null
++            },
++            migrationUpgradeNotice = mockk(),
++            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
++        )
++
++        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "transport-owner"))
++        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
++    }
++
++    @Test
++    fun onlyTheNamedPreparationCanSkipAnActiveSync() = runTest {
++        val sync = mockk<Synchronizer> {
++            every { status } returns MutableStateFlow(Synchronizer.Status.SYNCING)
++        }
++        val preparation = MigrationTransferState(
++            id = 7, isTransfer = false, isSent = false, isProved = true,
++            scheduledHeight = 10L, anchorBoundaryHeight = null,
++        )
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { getMigrationTransferStates() } returns MigrationTransferStates(listOf(preparation), 20L)
++            coEvery { estimatedChainTip() } returns 20L
++            coEvery { estimatedSecondsPerBlock() } returns 75L
++            coEvery { privacySyncBufferDuration() } returns 15.seconds
++            coEvery { executeNextPendingTransfer(any(), true) } returns TransferAttemptOutcome.AwaitingProof(7L)
++        }
++        val drive = MigrationDriveOnce(
++            applicationContext = mockk(relaxed = true),
++            migrationNotifier = mockk(),
++            isMigrationTorEnabledStorageProvider = mockk(relaxed = true),
++            pendingMigrationTorFailureStorageProvider = mockk(),
++            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(sync) },
++            lastNetworkActivity = mockk(relaxed = true),
++            migrationUpgradeNotice = mockk(),
++            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
++        )
++        val named = MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
++        val replaced = MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(8), null)
++        coEvery { sdk.nextStep() } returnsMany listOf(named, replaced, replaced)
++        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "replace-preparation"))
++        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), true) }
++
++        coEvery { sdk.nextStep() } returns named
++        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "keep-preparation"))
++        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), true) }
 +    }
 +
 +    @Test
@@ -16287,7 +16504,6 @@ index 000000000..ec0aed2f2
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(sync) },
 +            lastNetworkActivity = activity,
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk(),
 +        )
@@ -16324,7 +16540,6 @@ index 000000000..ec0aed2f2
 +                every { hasRecordedSync(transport) } returns true
 +            },
 +            lastNetworkActivity = activity,
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk(),
 +        )
@@ -16358,7 +16573,6 @@ index 000000000..ec0aed2f2
 +                every { hasRecordedSync(sync) } answers { recorded }
 +            },
 +            lastNetworkActivity = activity,
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk(),
 +        )
@@ -16385,12 +16599,11 @@ index 000000000..ec0aed2f2
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk { coEvery { getSynchronizerOrNull() } returns sync },
 +            lastNetworkActivity = activity,
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
 +        )
 +
-+        assertFailsWith<IOException> { drive.run(sdk, "sync-burst-owner", allowForcedBroadcastWindow = false) }
++        assertFailsWith<IOException> { drive.run(sdk, "sync-burst-owner") }
 +        coVerify(exactly = 1) { activity.stampNow() }
 +        coVerify(exactly = 0) { sdk.finalizeReadyTransfers() }
 +    }
@@ -16406,7 +16619,6 @@ index 000000000..ec0aed2f2
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk(),
 +            lastNetworkActivity = mockk(),
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = reset,
 +        )
@@ -16434,7 +16646,7 @@ index 000000000..ec0aed2f2
 +    }
 +}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
-index 4a5eda3b1..53d457ae1 100644
+index 4a5eda3b1..c368e88d9 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationLiveDriverTest.kt
 @@ -9,0 +10,3 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16453,7 +16665,7 @@ index 4a5eda3b1..53d457ae1 100644
 +    fun aTransientSdkOpenFailureDuringPrimingDoesNotStopTheFirstDrive() = runTest {
 +        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +        val driveOnce = mockk<MigrationDriveOnce> {
-+            coEvery { run(sdk, "priming-owner", true) } returns DriveOnceResult.Terminal
++            coEvery { run(sdk, "priming-owner") } returns DriveOnceResult.Terminal
 +        }
 +        var opens = 0
 +        val driver = MigrationLiveDriverImpl(
@@ -16470,7 +16682,7 @@ index 4a5eda3b1..53d457ae1 100644
 +        advanceUntilIdle()
 +
 +        assertEquals(2, opens)
-+        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner", true) }
++        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner") }
 +    }
 +
 +    @Test
@@ -16479,7 +16691,7 @@ index 4a5eda3b1..53d457ae1 100644
 +        var pendingReset = false
 +        var starts = 0
 +        val driveOnce = mockk<MigrationDriveOnce> {
-+            coEvery { run(any(), any(), any()) } coAnswers {
++            coEvery { run(any(), any()) } coAnswers {
 +                starts++
 +                withContext(NonCancellable) { finish.await() }
 +                DriveOnceResult.Terminal
@@ -16507,13 +16719,13 @@ index 4a5eda3b1..53d457ae1 100644
 +
 @@ -25 +88 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -51 +114 @@ class MigrationLiveDriverTest {
 -    fun `the loop re-arms using the ReArmed delay, and stops on Terminal`() =
 +    fun `the loop re-arms using the next wake delay, and stops on Terminal`() =
 @@ -56 +119 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -58 +121 @@ class MigrationLiveDriverTest {
 -                        if (runCallCount < 3) DriveOnceResult.ReArmed(90.seconds) else DriveOnceResult.Terminal
 +                        if (runCallCount < 3) DriveOnceResult.NextWake(90.seconds) else DriveOnceResult.Terminal
@@ -16522,7 +16734,7 @@ index 4a5eda3b1..53d457ae1 100644
 +    fun `a floorless next wake delay is floored, not spun on tightly`() =
 @@ -86 +149 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -91 +154 @@ class MigrationLiveDriverTest {
 -                            DriveOnceResult.ReArmed(kotlin.time.Duration.ZERO)
 +                            DriveOnceResult.NextWake(kotlin.time.Duration.ZERO)
@@ -16534,19 +16746,19 @@ index 4a5eda3b1..53d457ae1 100644
 +    fun `an unfloored next wake delay (respectAntiSpinFloor=false) is NOT floored, chains back-to-back`() =
 @@ -122 +185 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -127 +190 @@ class MigrationLiveDriverTest {
 -                            DriveOnceResult.ReArmed(1.seconds, respectAntiSpinFloor = false)
 +                            DriveOnceResult.NextWake(1.seconds, respectAntiSpinFloor = false)
 @@ -161 +224 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -178 +241 @@ class MigrationLiveDriverTest {
 -            assertEquals(2, runCallCount, "LockBusy must retry using its own retryDelay, not the floored ReArmed floor")
 +            assertEquals(2, runCallCount, "LockBusy must retry using its own retryDelay, not the NextWake floor")
 @@ -187 +250 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -193 +256 @@ class MigrationLiveDriverTest {
 -                            2 -> DriveOnceResult.ReArmed(1.seconds)
 +                            2 -> DriveOnceResult.NextWake(1.seconds)
@@ -16555,16 +16767,16 @@ index 4a5eda3b1..53d457ae1 100644
 +            // 2026-08-0X) on top of the 2 step-driven publishes (NextWake, Terminal — LockBusy still
 @@ -229 +292 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -263 +326 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -265 +328 @@ class MigrationLiveDriverTest {
 -                        if (runCallCount < 3) DriveOnceResult.ReArmed(1.seconds) else DriveOnceResult.Terminal
 +                        if (runCallCount < 3) DriveOnceResult.NextWake(1.seconds) else DriveOnceResult.Terminal
 @@ -300 +363 @@ class MigrationLiveDriverTest {
 -                    coEvery { run(any(), any(), any(), any()) } coAnswers {
-+                    coEvery { run(any(), any(), any()) } coAnswers {
++                    coEvery { run(any(), any()) } coAnswers {
 @@ -305 +368 @@ class MigrationLiveDriverTest {
 -                        if (runCallCount < 2) DriveOnceResult.ReArmed(250.seconds) else DriveOnceResult.Terminal
 +                        if (runCallCount < 2) DriveOnceResult.NextWake(250.seconds) else DriveOnceResult.Terminal
@@ -16679,10 +16891,10 @@ index 3058ae187..a2f0537b2 100644
 +            // MigrationWorker.doWork() acknowledges NextWake before returning success. SUCCESS
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationWorkerOwnershipTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationWorkerOwnershipTest.kt
 new file mode 100644
-index 000000000..865422730
+index 000000000..cc1a69d58
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationWorkerOwnershipTest.kt
-@@ -0,0 +1,484 @@
+@@ -0,0 +1,526 @@
 +package co.electriccoin.zcash.work
 +
 +import android.content.Context
@@ -16714,6 +16926,7 @@ index 000000000..865422730
 +import io.mockk.slot
 +import io.mockk.unmockkObject
 +import io.mockk.verify
++import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.async
@@ -16725,6 +16938,8 @@ index 000000000..865422730
 +import kotlinx.coroutines.test.runTest
 +import java.io.IOException
 +import java.util.UUID
++import kotlin.test.assertNull
++import kotlin.test.assertIs
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
@@ -16998,7 +17213,7 @@ index 000000000..865422730
 +            val scheduler = MigrationScheduler(context)
 +            val oldUpdate = async { scheduler.reconcileScheduledWake(owner) }
 +            runCurrent()
-+            val current = MigrationScheduler.recordWorkerStart(context, owner, request, 1)
++            val current = checkNotNull(MigrationScheduler.recordWorkerStart(context, owner, request, 1))
 +            MigrationScheduler.armRetry(context, owner, request, 1, current)
 +            staleSnapshot.set(listOf(pending))
 +            oldUpdate.await()
@@ -17032,15 +17247,54 @@ index 000000000..865422730
 +            pendingMigrationTorFailureStorageProvider = mockk(),
 +            synchronizerProvider = mockk(),
 +            lastNetworkActivity = mockk(),
-+            applicationStateProvider = mockk(),
 +            migrationUpgradeNotice = mockk(),
 +            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
 +        )
 +
-+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
++        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
 +        verify(exactly = 0) { editor.remove(any()) }
-+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
++        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
 +        verify(exactly = 1) { editor.remove("next_wake_at_$owner") }
++        verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
++        verify(exactly = 1) { notifier.cancelStepDue(owner) }
++    }
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun workerEntryCannotDisplaceCompletionOwnershipWhileTheNativeReadSuspends() = runTest {
++        val owner = "worker-entered-during-native-completion"
++        val request = UUID.fromString("00000000-0000-0000-0000-000000000043")
++        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
++        val preferences = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
++        val context = mockk<Context> {
++            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
++            every { getSystemService(Context.ALARM_SERVICE) } returns null
++        }
++        val notifier = mockk<MigrationNotifier>(relaxed = true)
++        val completion = CompletableDeferred<MigrationState>()
++        val sdk = mockk<OrchardMigrationSdk> {
++            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Complete, null)
++            coEvery { getMigrationState() } coAnswers { completion.await() }
++        }
++        val drive = MigrationDriveOnce(
++            applicationContext = context,
++            migrationNotifier = notifier,
++            isMigrationTorEnabledStorageProvider = mockk(),
++            pendingMigrationTorFailureStorageProvider = mockk(),
++            synchronizerProvider = mockk(),
++            lastNetworkActivity = mockk(),
++            migrationUpgradeNotice = mockk(),
++            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
++        )
++        val live = async { drive.run(sdk, owner) }
++        runCurrent()
++        val workerVersion = checkNotNull(MigrationScheduler.recordWorkerStart(context, owner, request, 0))
++        assertIs<DriveOnceResult.LockBusy>(drive.run(sdk, owner))
++
++        completion.complete(MigrationState.Complete)
++        assertEquals(DriveOnceResult.Terminal, live.await())
++        MigrationScheduler(context).scheduleSuccessorAndAwait(owner, 30.seconds, workerVersion)
++        assertNull(MigrationScheduler.recordWorkerStart(context, owner, request, 1))
 +        verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
 +        verify(exactly = 1) { notifier.cancelStepDue(owner) }
 +    }
@@ -17055,7 +17309,7 @@ index 000000000..865422730
 +            every { getSystemService(Context.ALARM_SERVICE) } returns null
 +        }
 +        val prior = MigrationScheduler.wakeVersion(owner)
-+        MigrationScheduler.withdrawCompletedFallback(context, owner, prior) {}
++        MigrationScheduler.withdrawCompletedFallback(context, owner) {}
 +
 +        // No WorkManager instance or request may be created for the stale decision.
 +        MigrationScheduler(context).scheduleSuccessorAndAwait(owner, 30.seconds, prior)
@@ -17102,7 +17356,7 @@ index 000000000..865422730
 +        }
 +        try {
 +            assertEquals(Result.retry(), worker(0).doWork())
-+            coVerify(exactly = 0) { drive.run(any(), any(), any()) }
++            coVerify(exactly = 0) { drive.run(any(), any()) }
 +            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:1") }
 +            assertEquals(Result.retry(), worker(1).doWork())
 +            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:2") }
@@ -48569,29 +48823,31 @@ index 4b2a09ed5..78ef2e276 100644
 @@ -77,0 +80 @@ class SwapAssetCacheProviderImpl(
 +        val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
-index 5ca17bee4..3c1be0d9a 100644
+index 5ca17bee4..c5dc64901 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
-@@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
+@@ -4,0 +5 @@ import cash.z.ecc.android.sdk.WalletCoordinator
++import cash.z.ecc.android.sdk.model.BlockHeight
+@@ -6,0 +8 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 +import co.electriccoin.zcash.global.WalletMigrationSyncGate
-@@ -13,0 +15 @@ import kotlinx.coroutines.SupervisorJob
+@@ -13,0 +16 @@ import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.channels.Channel
-@@ -14,0 +17 @@ import kotlinx.coroutines.channels.awaitClose
+@@ -14,0 +18 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.delay
-@@ -20,0 +24 @@ import kotlinx.coroutines.flow.combine
+@@ -20,0 +25 @@ import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.collectLatest
-@@ -32,0 +37 @@ import kotlinx.coroutines.withContext
+@@ -32,0 +38 @@ import kotlinx.coroutines.withContext
 +import kotlin.time.Duration.Companion.seconds
-@@ -40,0 +46,3 @@ interface SynchronizerProvider {
+@@ -40,0 +47,3 @@ interface SynchronizerProvider {
 +    /** True after wallet-global activity for this engine's observed synced state was recorded. */
 +    fun hasRecordedSync(engine: Synchronizer): Boolean = false
 +
-@@ -64,0 +73,4 @@ class SynchronizerProviderImpl(
+@@ -64,0 +74,4 @@ class SynchronizerProviderImpl(
 +    migrationSyncGate: WalletMigrationSyncGate,
 +    private val lastNetworkActivity: LastNetworkActivityStorageProvider,
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
 +    provisioning: WalletProvisioning? = null,
-@@ -66,3 +78,4 @@ class SynchronizerProviderImpl(
+@@ -66,3 +79,4 @@ class SynchronizerProviderImpl(
 -    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 -
 -    override val error = MutableStateFlow<SynchronizerError?>(null)
@@ -48599,17 +48855,21 @@ index 5ca17bee4..3c1be0d9a 100644
 +    override val error = combine(engineError, migrationSyncGate.error) { engine, migration ->
 +        migration ?: engine
 +    }.stateIn(scope, SharingStarted.Eagerly, null)
-@@ -71,0 +85,6 @@ class SynchronizerProviderImpl(
+@@ -71,0 +86,10 @@ class SynchronizerProviderImpl(
 +    @Volatile
-+    private var recordedSync: Synchronizer? = null
++    private var recordedSync: SyncObservation? = null
 +
-+    override fun hasRecordedSync(engine: Synchronizer): Boolean =
-+        recordedSync === engine && walletCoordinator.synchronizer.value === engine
++    override fun hasRecordedSync(engine: Synchronizer): Boolean {
++        val observed = recordedSync ?: return false
++        return observed.engine === engine && walletCoordinator.synchronizer.value === engine &&
++            observed.networkHeight == engine.networkHeight.value &&
++            observed.scannedHeight == engine.fullyScannedHeight.value
++    }
 +
-@@ -83 +102 @@ class SynchronizerProviderImpl(
+@@ -83 +107 @@ class SynchronizerProviderImpl(
 -                                error.update { new }
 +                                engineError.update { new }
-@@ -102,0 +122,19 @@ class SynchronizerProviderImpl(
+@@ -102,0 +127,19 @@ class SynchronizerProviderImpl(
 +        if (provisioning != null) {
 +            scope.launch(Dispatchers.IO) {
 +                synchronizer.flatMapLatest { engine ->
@@ -48629,7 +48889,7 @@ index 5ca17bee4..3c1be0d9a 100644
 +            }
 +        }
 +        val pendingReconciliation = Channel<Synchronizer>(Channel.CONFLATED)
-@@ -104,2 +142,11 @@ class SynchronizerProviderImpl(
+@@ -104,2 +147,20 @@ class SynchronizerProviderImpl(
 -            synchronizer
 -                .flatMapLatest { s -> s?.status ?: emptyFlow() }
 +            for (engine in pendingReconciliation) {
@@ -48641,29 +48901,50 @@ index 5ca17bee4..3c1be0d9a 100644
 +            }
 +        }
 +        scope.launch {
++            var previousStatus: Pair<Synchronizer, Synchronizer.Status>? = null
 +            walletCoordinator.synchronizer
-+                .flatMapLatest { engine -> engine?.status?.map { engine to it } ?: emptyFlow() }
-@@ -107,4 +154,10 @@ class SynchronizerProviderImpl(
++                .flatMapLatest { engine ->
++                    if (engine == null) {
++                        emptyFlow()
++                    } else {
++                        combine(
++                            engine.status, engine.networkHeight, engine.fullyScannedHeight,
++                        ) { status, tip, scanned -> status to SyncObservation(engine, tip, scanned) }
++                    }
++                }
+@@ -107,4 +168,14 @@ class SynchronizerProviderImpl(
 -                .collect { status ->
 -                    if (status == Synchronizer.Status.SYNCED) {
 -                        runCatching { migrationSyncedHook.value.onSynced() }
 -                            .onFailure { Twig.warn { "MIGRATION_DIAG foreground SYNCED hook: ${it.message}" } }
-+                .collect { (engine, status) ->
++                .collect { (status, observation) ->
 +                    recordedSync = null
++                    val engine = observation.engine
++                    val updatedStatus = engine to status
++                    val reachedSynced = previousStatus != updatedStatus && status == Synchronizer.Status.SYNCED
++                    previousStatus = updatedStatus
 +                    if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
 +                        val outcome = runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
 +                            Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
 +                        }
 +                        if (outcome.isSuccess || lastNetworkActivity.latestObserved != null) {
-+                            recordedSync = engine
++                            recordedSync = observation
 +                        }
-+                        pendingReconciliation.trySend(engine)
-@@ -148 +201 @@ class SynchronizerProviderImpl(
++                        if (reachedSynced) pendingReconciliation.trySend(engine)
+@@ -148 +219 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Processor: $error" }
 +            Twig.error { "Wallet processor failed" }
-@@ -157 +210 @@ class SynchronizerProviderImpl(
+@@ -157 +228 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Setup: $error" }
 +            Twig.error { "Wallet synchronizer setup failed" }
+@@ -219,0 +291,7 @@ internal fun SynchronizerProvider.rawWalletBalances(): Flow<Map<AccountUuid, Acc
++
++
++private data class SyncObservation(
++    val engine: Synchronizer,
++    val networkHeight: BlockHeight?,
++    val scannedHeight: BlockHeight?,
++)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletActionAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletActionAccess.kt
 new file mode 100644
 index 000000000..38e86940c
@@ -92202,14 +92483,15 @@ index 000000000..57a4d0d8f
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
 new file mode 100644
-index 000000000..692932b74
+index 000000000..725ea20d8
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,130 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.WalletCoordinator
++import cash.z.ecc.android.sdk.model.BlockHeight
 +import co.electriccoin.zcash.global.WalletMigrationSyncGate
 +import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 +import io.mockk.coEvery
@@ -92237,8 +92519,11 @@ index 000000000..692932b74
 +    @Test
 +    fun aNewSyncRemainsUnrecordedUntilItsWalletActivityIsStamped() = runTest {
 +        val status = MutableStateFlow(Synchronizer.Status.SYNCING)
++        val tip = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
 +        val synchronizer = mockk<Synchronizer>(relaxed = true) {
 +            every { this@mockk.status } returns status
++            every { networkHeight } returns tip
++            every { fullyScannedHeight } returns MutableStateFlow(null)
 +        }
 +        val coordinator = mockk<WalletCoordinator> {
 +            every { this@mockk.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)
@@ -92278,14 +92563,24 @@ index 000000000..692932b74
 +        status.value = Synchronizer.Status.SYNCED
 +        runCurrent()
 +        assertTrue(provider.hasRecordedSync(synchronizer))
++
++        status.value = Synchronizer.Status.SYNCING
++        tip.value = BlockHeight.new(101)
++        status.value = Synchronizer.Status.SYNCED
++        assertFalse(provider.hasRecordedSync(synchronizer))
++        runCurrent()
++        assertTrue(provider.hasRecordedSync(synchronizer))
 +        finishReconciliation.complete(Unit)
 +    }
 +
 +    @Test
 +    fun syncedHookFailureKeepsRawDetailsPrivateAndNextSyncRetries() = runTest {
 +        val status = MutableStateFlow(Synchronizer.Status.SYNCING)
++        val tip = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
 +        val synchronizer = mockk<Synchronizer>(relaxed = true) {
 +            every { this@mockk.status } returns status
++            every { networkHeight } returns tip
++            every { fullyScannedHeight } returns MutableStateFlow(null)
 +        }
 +        val coordinator = mockk<WalletCoordinator> {
 +            every { this@mockk.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)

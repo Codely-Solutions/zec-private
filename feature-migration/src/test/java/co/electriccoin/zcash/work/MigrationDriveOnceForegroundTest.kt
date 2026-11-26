@@ -3,6 +3,9 @@ package co.electriccoin.zcash.work
 import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.MigrationAdvanceResult
 import cash.z.ecc.android.sdk.MigrationAdvanceStep
+import cash.z.ecc.android.sdk.MigrationTransferState
+import cash.z.ecc.android.sdk.MigrationTransferStates
+import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.Synchronizer
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
@@ -11,7 +14,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verifyOrder
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +30,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -34,14 +38,12 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationDriveOnceForegroundTest {
     @Test
-    fun aFailedQuietWindowTimestampStillResumesThePausedSynchronizer() = runTest {
+    fun theSdkPauseIsNotUsedToCreateANetworkQuietWindow() = runTest {
         val transport = mockk<CloseableSynchronizer>(relaxed = true) {
             every { status } returns MutableStateFlow(Synchronizer.Status.SYNCING)
         }
         val sdk = mockk<OrchardMigrationSdk> {
-            coEvery { nextStep() } returnsMany listOf(
-                MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null), null,
-            )
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
             coEvery { getMigrationTransferStates() } returns null
             coEvery { estimatedChainTip() } returns 20L
             coEvery { privacySyncBufferDuration() } returns 15.seconds
@@ -53,25 +55,92 @@ class MigrationDriveOnceForegroundTest {
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk {
                 every { synchronizer } returns MutableStateFlow(transport)
-                coEvery { getSynchronizerOrNull() } returns transport
             },
             lastNetworkActivity = mockk {
-                coEvery { get() } returns null
-                coEvery { stampNow() } throws IOException("Timestamp store unavailable")
+                coEvery { get() } returns Instant.EPOCH
+                every { latestObserved } returns null
             },
-            applicationStateProvider = mockk { every { isInForeground } returns flowOf(true) },
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
         )
 
-        assertFailsWith<IOException> { drive.run(sdk, "quiet-window-owner", allowForcedBroadcastWindow = true) }
-        verifyOrder {
-            transport.pause()
-            transport.resume()
+        assertEquals(DriveOnceResult.NextWake(15.seconds), drive.run(sdk, "quiet-window-owner"))
+        verify(exactly = 0) { transport.pause() }
+        verify(exactly = 0) { transport.resume() }
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
+
+    @Test
+    fun synchronizationDuringTransportPreparationIsRecheckedBeforeNativeSubmission() = runTest {
+        val status = MutableStateFlow(Synchronizer.Status.SYNCED)
+        val sync = mockk<Synchronizer> { every { this@mockk.status } returns status }
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
+            coEvery { getMigrationTransferStates() } returns null
+            coEvery { estimatedChainTip() } returns 20L
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
         }
-        coVerify(exactly = 1) { sdk.nextStep() }
-        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, "quiet-window-owner", allowForcedBroadcastWindow = true))
-        coVerify(exactly = 2) { sdk.nextStep() }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(relaxed = true),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk {
+                coEvery { this@mockk.get("transport-owner") } coAnswers {
+                    status.value = Synchronizer.Status.SYNCING
+                    true
+                }
+            },
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk {
+                every { synchronizer } returns MutableStateFlow(sync)
+                every { hasRecordedSync(sync) } returns true
+            },
+            lastNetworkActivity = mockk {
+                coEvery { get() } returns Instant.EPOCH
+                every { latestObserved } returns null
+            },
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+
+        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "transport-owner"))
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
+
+    @Test
+    fun onlyTheNamedPreparationCanSkipAnActiveSync() = runTest {
+        val sync = mockk<Synchronizer> {
+            every { status } returns MutableStateFlow(Synchronizer.Status.SYNCING)
+        }
+        val preparation = MigrationTransferState(
+            id = 7, isTransfer = false, isSent = false, isProved = true,
+            scheduledHeight = 10L, anchorBoundaryHeight = null,
+        )
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationTransferStates() } returns MigrationTransferStates(listOf(preparation), 20L)
+            coEvery { estimatedChainTip() } returns 20L
+            coEvery { estimatedSecondsPerBlock() } returns 75L
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
+            coEvery { executeNextPendingTransfer(any(), true) } returns TransferAttemptOutcome.AwaitingProof(7L)
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(relaxed = true),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk(relaxed = true),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(sync) },
+            lastNetworkActivity = mockk(relaxed = true),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+        val named = MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
+        val replaced = MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(8), null)
+        coEvery { sdk.nextStep() } returnsMany listOf(named, replaced, replaced)
+        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "replace-preparation"))
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), true) }
+
+        coEvery { sdk.nextStep() } returns named
+        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "keep-preparation"))
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), true) }
     }
 
     @Test
@@ -95,7 +164,6 @@ class MigrationDriveOnceForegroundTest {
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(sync) },
             lastNetworkActivity = activity,
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk(),
         )
@@ -132,7 +200,6 @@ class MigrationDriveOnceForegroundTest {
                 every { hasRecordedSync(transport) } returns true
             },
             lastNetworkActivity = activity,
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk(),
         )
@@ -166,7 +233,6 @@ class MigrationDriveOnceForegroundTest {
                 every { hasRecordedSync(sync) } answers { recorded }
             },
             lastNetworkActivity = activity,
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk(),
         )
@@ -193,12 +259,11 @@ class MigrationDriveOnceForegroundTest {
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk { coEvery { getSynchronizerOrNull() } returns sync },
             lastNetworkActivity = activity,
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
         )
 
-        assertFailsWith<IOException> { drive.run(sdk, "sync-burst-owner", allowForcedBroadcastWindow = false) }
+        assertFailsWith<IOException> { drive.run(sdk, "sync-burst-owner") }
         coVerify(exactly = 1) { activity.stampNow() }
         coVerify(exactly = 0) { sdk.finalizeReadyTransfers() }
     }
@@ -214,7 +279,6 @@ class MigrationDriveOnceForegroundTest {
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk(),
             lastNetworkActivity = mockk(),
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = reset,
         )

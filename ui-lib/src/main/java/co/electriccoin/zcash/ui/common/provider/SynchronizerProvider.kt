@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
+import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.AccountBalance
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.global.WalletMigrationSyncGate
@@ -83,10 +84,14 @@ class SynchronizerProviderImpl(
     override val isSeedMismatch: StateFlow<Boolean> = walletCoordinator.isSeedMismatch
 
     @Volatile
-    private var recordedSync: Synchronizer? = null
+    private var recordedSync: SyncObservation? = null
 
-    override fun hasRecordedSync(engine: Synchronizer): Boolean =
-        recordedSync === engine && walletCoordinator.synchronizer.value === engine
+    override fun hasRecordedSync(engine: Synchronizer): Boolean {
+        val observed = recordedSync ?: return false
+        return observed.engine === engine && walletCoordinator.synchronizer.value === engine &&
+            observed.networkHeight == engine.networkHeight.value &&
+            observed.scannedHeight == engine.fullyScannedHeight.value
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val synchronizer: StateFlow<Synchronizer?> =
@@ -148,19 +153,32 @@ class SynchronizerProviderImpl(
             }
         }
         scope.launch {
+            var previousStatus: Pair<Synchronizer, Synchronizer.Status>? = null
             walletCoordinator.synchronizer
-                .flatMapLatest { engine -> engine?.status?.map { engine to it } ?: emptyFlow() }
+                .flatMapLatest { engine ->
+                    if (engine == null) {
+                        emptyFlow()
+                    } else {
+                        combine(
+                            engine.status, engine.networkHeight, engine.fullyScannedHeight,
+                        ) { status, tip, scanned -> status to SyncObservation(engine, tip, scanned) }
+                    }
+                }
                 .distinctUntilChanged()
-                .collect { (engine, status) ->
+                .collect { (status, observation) ->
                     recordedSync = null
+                    val engine = observation.engine
+                    val updatedStatus = engine to status
+                    val reachedSynced = previousStatus != updatedStatus && status == Synchronizer.Status.SYNCED
+                    previousStatus = updatedStatus
                     if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
                         val outcome = runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
                             Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
                         }
                         if (outcome.isSuccess || lastNetworkActivity.latestObserved != null) {
-                            recordedSync = engine
+                            recordedSync = observation
                         }
-                        pendingReconciliation.trySend(engine)
+                        if (reachedSynced) pendingReconciliation.trySend(engine)
                     }
                 }
         }
@@ -270,3 +288,10 @@ internal fun <T : Any> resolveRetained(
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun SynchronizerProvider.rawWalletBalances(): Flow<Map<AccountUuid, AccountBalance>?> =
     synchronizer.flatMapLatest { it?.walletBalances ?: flowOf(null) }
+
+
+private data class SyncObservation(
+    val engine: Synchronizer,
+    val networkHeight: BlockHeight?,
+    val scannedHeight: BlockHeight?,
+)

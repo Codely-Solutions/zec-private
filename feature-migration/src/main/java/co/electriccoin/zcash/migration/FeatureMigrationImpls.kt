@@ -206,6 +206,7 @@ class MigrationAppHooksImpl(
     private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
         val key = ownerKey?.takeIf { !resetProgress.isPending.value && ACCOUNT_KEY.matches(it) } ?: return
         val generation = walletWriteAccess.token()
+        val wakeVersion = MigrationScheduler.wakeVersion(key)
         val notice = MigrationAccountRetirement.admit(key) {
             launchNavigation.beginMigrationProgress(key, runStep)
         } ?: return
@@ -219,8 +220,11 @@ class MigrationAppHooksImpl(
                             MigrationAccountRetirement.blocks(key)
                         ) return@write null
                         accountDataSource.selectAccount(account)
-                        if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
-                            MigrationScheduler(context).runNotificationStep(key)
+                        val activePlan = runStep && checkMigrationRecovery.hasActivePlan(key)
+                        if (activePlan && launchNavigation.resolvingMigrationNotice === notice &&
+                            !resetProgress.isPending.value
+                        ) {
+                            MigrationScheduler(context).runNotificationStep(key, wakeVersion)
                         }
                         NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
                     }

@@ -207,7 +207,7 @@ class MigrationAppHooksResetTest {
 
             assertTrue(navigation.resolvingMigrationNotice == null)
             coVerify(exactly = 0) { accounts.selectAccount(target) }
-            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any()) }
+            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().runNotificationStep(any(), any()) }
             verify(exactly = 1) { readouts.clear(key) }
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
         } finally {
@@ -354,14 +354,17 @@ class MigrationAppHooksResetTest {
         coEvery { accounts.getAllAccounts() } coAnswers { releaseLookup.await() }
         val navigation = spyk(LaunchNavigationRequests())
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
+        val recovery = mockk<co.electriccoin.zcash.ui.common.usecase.CheckMigrationRecoveryUseCase> {
+            coEvery { hasActivePlan(ownerKey) } returns true
+        }
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), navigation, accounts, mockk(), mockk(), reset,
+            recovery, mockk(), navigation, accounts, mockk(), mockk(), reset,
             mockk(), mockk(), mockk(), mockk(), mockk(relaxed = true), WalletWriteAccess(reset),
         )
         val acknowledged = CompletableDeferred<Unit>()
         mockkConstructor(MigrationScheduler::class)
         try {
-            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) } coAnswers {
+            coEvery { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) } coAnswers {
                 acknowledged.await()
             }
             val oldActivity = launch { hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true) }
@@ -377,9 +380,15 @@ class MigrationAppHooksResetTest {
             acknowledged.complete(Unit)
             runCurrent()
 
-            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey) }
+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
             val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
             verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
+
+            coEvery { recovery.hasActivePlan(ownerKey) } returns false
+            hooks.restoreNotificationProgress(ownerKey, this, runStepPending = true)
+            runCurrent()
+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().runNotificationStep(ownerKey, any()) }
+            verify(exactly = 2) { navigation.finishMigrationProgress(any(), progress) }
         } finally {
             acknowledged.complete(Unit)
             unmockkConstructor(MigrationScheduler::class)

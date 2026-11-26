@@ -50,8 +50,10 @@ class MigrationScheduler(
         val dueAt: Long,
     )
 
-    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration) {
-        check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE)) { "Migration scheduling is paused" }
+    internal suspend fun scheduleAndAwait(accountKeyId: String, delay: Duration, expectedVersion: Long? = null) {
+        val startsPlan = expectedVersion == null
+        val enqueued = enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.REPLACE, expectedVersion, startsPlan)
+        check(enqueued || !startsPlan) { "Migration scheduling is paused" }
     }
 
     internal suspend fun scheduleIfMissing(
@@ -87,9 +89,9 @@ class MigrationScheduler(
         }
     }
 
-    internal suspend fun runNotificationStep(accountKeyId: String) {
+    internal suspend fun runNotificationStep(accountKeyId: String, version: Long) {
         if (migrationWorkerRunState(context, accountKeyId) != MigrationWorkerRunState.RUNNING) {
-            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE)
+            enqueueConfirmed(accountKeyId, Duration.ZERO, ExistingWorkPolicy.REPLACE, version)
         }
     }
 
@@ -98,13 +100,15 @@ class MigrationScheduler(
         delay: Duration,
         policy: ExistingWorkPolicy,
         expectedVersion: Long? = null,
+        startsPlan: Boolean = false,
     ): Boolean {
         val manager = WorkManager.getInstance(context)
         val request = newWorkRequest(accountKeyId, delay)
         val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
             synchronized(wakeVersions) {
                 val current = wakeVersion(accountKeyId)
-                if (expectedVersion != null && expectedVersion != current) {
+                if (startsPlan) completedPlans.remove(accountKeyId)
+                if (accountKeyId in completedPlans || expectedVersion != null && expectedVersion != current) {
                     null
                 } else {
                     val admitted =
@@ -133,7 +137,7 @@ class MigrationScheduler(
             val wake = resolve() ?: return
             MigrationAccountRetirement.keepWake(accountKeyId) {
                 synchronized(wakeVersions) {
-                    val stillPending = wakeVersion(accountKeyId) == version &&
+                    val stillPending = accountKeyId !in completedPlans && wakeVersion(accountKeyId) == version &&
                         !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
                     if (stillPending) {
                         migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
@@ -162,6 +166,7 @@ class MigrationScheduler(
 
     private fun cancelWork(accountKeyId: String): Operation = synchronized(wakeVersions) {
         advanceWakeVersion(accountKeyId)
+        completedPlans.remove(accountKeyId)
         migrationLog("MigrationScheduler: cancelling a migration work chain.")
         val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
         migrationDueAlarmScheduler.cancel(accountKeyId)
@@ -172,14 +177,19 @@ class MigrationScheduler(
     companion object {
         // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
         private val wakeVersions = mutableMapOf<String, Long>()
+        private val completedPlans = mutableSetOf<String>()
 
         internal fun wakeVersion(accountKeyId: String): Long =
             synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: 0L }
 
-        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long =
+        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
             synchronized(wakeVersions) {
-                MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
-                advanceWakeVersion(accountKeyId)
+                if (accountKeyId in completedPlans) {
+                    null
+                } else {
+                    MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
+                    advanceWakeVersion(accountKeyId)
+                }
             }
 
         internal suspend fun armRetry(
@@ -202,17 +212,15 @@ class MigrationScheduler(
         internal fun withdrawCompletedFallback(
             context: Context,
             accountKeyId: String,
-            version: Long,
             onCleared: () -> Unit,
         ) {
             MigrationAccountRetirement.admit(accountKeyId) {
                 synchronized(wakeVersions) {
-                    if (wakeVersion(accountKeyId) == version) {
-                        advanceWakeVersion(accountKeyId)
-                        MigrationDueAlarmScheduler(context).cancel(accountKeyId)
-                        MigrationWorkerHeartbeat.clear(context, accountKeyId)
-                        onCleared()
-                    }
+                    completedPlans.add(accountKeyId)
+                    advanceWakeVersion(accountKeyId)
+                    MigrationDueAlarmScheduler(context).cancel(accountKeyId)
+                    MigrationWorkerHeartbeat.clear(context, accountKeyId)
+                    onCleared()
                 }
             }
         }

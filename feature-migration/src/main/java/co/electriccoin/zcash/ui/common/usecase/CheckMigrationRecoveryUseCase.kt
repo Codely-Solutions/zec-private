@@ -108,6 +108,9 @@ class CheckMigrationRecoveryUseCase(
         }
     }
 
+    internal suspend fun hasActivePlan(owner: String): Boolean =
+        getOrchardMigrationSdk(owner)?.getMigrationStateUnreconciled() is MigrationState.InProgress
+
     private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
         if (persistableWalletProvider.getPersistableWallet() == null) return
         val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return

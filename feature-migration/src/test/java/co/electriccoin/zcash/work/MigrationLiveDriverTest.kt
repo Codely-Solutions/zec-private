@@ -27,7 +27,7 @@ class MigrationLiveDriverTest {
     fun aTransientSdkOpenFailureDuringPrimingDoesNotStopTheFirstDrive() = runTest {
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
         val driveOnce = mockk<MigrationDriveOnce> {
-            coEvery { run(sdk, "priming-owner", true) } returns DriveOnceResult.Terminal
+            coEvery { run(sdk, "priming-owner") } returns DriveOnceResult.Terminal
         }
         var opens = 0
         val driver = MigrationLiveDriverImpl(
@@ -44,7 +44,7 @@ class MigrationLiveDriverTest {
         advanceUntilIdle()
 
         assertEquals(2, opens)
-        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner", true) }
+        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner") }
     }
 
     @Test
@@ -53,7 +53,7 @@ class MigrationLiveDriverTest {
         var pendingReset = false
         var starts = 0
         val driveOnce = mockk<MigrationDriveOnce> {
-            coEvery { run(any(), any(), any()) } coAnswers {
+            coEvery { run(any(), any()) } coAnswers {
                 starts++
                 withContext(NonCancellable) { finish.await() }
                 DriveOnceResult.Terminal
@@ -85,7 +85,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         DriveOnceResult.Terminal // stops the loop on the very first call
                     }
@@ -116,7 +116,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         if (runCallCount < 3) DriveOnceResult.NextWake(90.seconds) else DriveOnceResult.Terminal
                     }
@@ -146,7 +146,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         // 0 seconds is exactly what nextWake's floorless privacy-gap term can
                         // return — the loop must not spin on this.
@@ -182,7 +182,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         // A deliberate short constant (e.g. PREP_FAST_TRACK_REARM) opts out of the
                         // anti-spin floor — the loop must honor that and chain back-to-back.
@@ -221,7 +221,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         if (runCallCount < 2) DriveOnceResult.LockBusy(5.seconds) else DriveOnceResult.Terminal
                     }
@@ -247,7 +247,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         when (runCallCount) {
                             1 -> DriveOnceResult.LockBusy(5.seconds)
@@ -289,7 +289,7 @@ class MigrationLiveDriverTest {
             val callOrder = mutableListOf<String>()
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         callOrder.add("run")
                         DriveOnceResult.Terminal
                     }
@@ -323,7 +323,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         if (runCallCount < 3) DriveOnceResult.NextWake(1.seconds) else DriveOnceResult.Terminal
                     }
@@ -360,7 +360,7 @@ class MigrationLiveDriverTest {
             var runCallCount = 0
             val driveOnce =
                 mockk<MigrationDriveOnce> {
-                    coEvery { run(any(), any(), any()) } coAnswers {
+                    coEvery { run(any(), any()) } coAnswers {
                         runCallCount++
                         // 250s is comfortably more than 4x the 60s staleness-refresh interval, and
                         // ends the loop right after — Terminal itself never triggers a periodic

@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
+import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.global.WalletMigrationSyncGate
 import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 import io.mockk.coEvery
@@ -29,8 +30,11 @@ class SynchronizerProviderMigrationDiagnosticsTest {
     @Test
     fun aNewSyncRemainsUnrecordedUntilItsWalletActivityIsStamped() = runTest {
         val status = MutableStateFlow(Synchronizer.Status.SYNCING)
+        val tip = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
         val synchronizer = mockk<Synchronizer>(relaxed = true) {
             every { this@mockk.status } returns status
+            every { networkHeight } returns tip
+            every { fullyScannedHeight } returns MutableStateFlow(null)
         }
         val coordinator = mockk<WalletCoordinator> {
             every { this@mockk.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)
@@ -70,14 +74,24 @@ class SynchronizerProviderMigrationDiagnosticsTest {
         status.value = Synchronizer.Status.SYNCED
         runCurrent()
         assertTrue(provider.hasRecordedSync(synchronizer))
+
+        status.value = Synchronizer.Status.SYNCING
+        tip.value = BlockHeight.new(101)
+        status.value = Synchronizer.Status.SYNCED
+        assertFalse(provider.hasRecordedSync(synchronizer))
+        runCurrent()
+        assertTrue(provider.hasRecordedSync(synchronizer))
         finishReconciliation.complete(Unit)
     }
 
     @Test
     fun syncedHookFailureKeepsRawDetailsPrivateAndNextSyncRetries() = runTest {
         val status = MutableStateFlow(Synchronizer.Status.SYNCING)
+        val tip = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
         val synchronizer = mockk<Synchronizer>(relaxed = true) {
             every { this@mockk.status } returns status
+            every { networkHeight } returns tip
+            every { fullyScannedHeight } returns MutableStateFlow(null)
         }
         val coordinator = mockk<WalletCoordinator> {
             every { this@mockk.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)

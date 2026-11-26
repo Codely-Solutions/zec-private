@@ -120,15 +120,7 @@ class MigrationLiveDriverImpl(
                         migrationLog("MigrationLiveDriver: SDK unavailable. Stopping the loop.")
                         return
                     }
-                val result =
-                    migrationDriveOnce.run(
-                        sdk,
-                        accountKeyId,
-                        allowForcedBroadcastWindow = true,
-                        // true: the live driver has no execution-time ceiling (unlike the worker),
-                        // so it is the only safe caller for a forced-broadcast-window wait that can
-                        // run for nearly a full privacy buffer.
-                    )
+                val result = migrationDriveOnce.run(sdk, accountKeyId)
                 if (result !is DriveOnceResult.LockBusy && result != DriveOnceResult.RemovalManaged) {
                     // A step actually ran (NextWake) or the migration reached a terminal state —
                     // either way, publish one fresh read for every screen/use-case that used to

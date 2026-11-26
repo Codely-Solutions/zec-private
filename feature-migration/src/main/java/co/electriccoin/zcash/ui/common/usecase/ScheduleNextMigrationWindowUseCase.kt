@@ -20,9 +20,10 @@ class ScheduleNextMigrationWindowUseCase(
 ) {
     suspend operator fun invoke(accountKeyId: String? = null) {
         val owner = accountKeyId ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+        val version = MigrationScheduler.wakeVersion(owner)
         val next = getMigrationSnapshot(owner)?.nextPending ?: return
         val delay = delayUntil(next.scheduledAt.epochSeconds)
-        migrationScheduler.scheduleAndAwait(owner, delay)
+        migrationScheduler.scheduleAndAwait(owner, delay, version)
     }
 
     private fun delayUntil(epochSeconds: Long): Duration {

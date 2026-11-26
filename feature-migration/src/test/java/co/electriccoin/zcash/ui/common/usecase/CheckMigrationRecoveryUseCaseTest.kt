@@ -176,7 +176,7 @@ class CheckMigrationRecoveryUseCaseTest {
             context = context,
             getWorkerRunState = { owner ->
                 MigrationScheduler.withdrawCompletedFallback(
-                    context, owner, MigrationScheduler.wakeVersion(owner)
+                    context, owner
                 ) { withdrawn = true }
                 MigrationWorkerRunState.SCHEDULED
             },

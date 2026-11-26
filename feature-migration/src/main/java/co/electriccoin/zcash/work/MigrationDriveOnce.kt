@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.work
 
-import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.MigrationAdvanceStep
 import cash.z.ecc.android.sdk.MigrationBlocker
 import cash.z.ecc.android.sdk.MigrationPeek
@@ -17,7 +16,6 @@ import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
 import co.electriccoin.zcash.ui.common.model.migration.estimatedSecondsBetweenHeights
 import co.electriccoin.zcash.ui.common.model.migration.toSnapshot
-import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
@@ -85,7 +83,6 @@ class MigrationDriveOnce(
     private val pendingMigrationTorFailureStorageProvider: PendingMigrationTorFailureStorageProvider,
     private val synchronizerProvider: SynchronizerProvider,
     private val lastNetworkActivity: LastNetworkActivityStorageProvider,
-    private val applicationStateProvider: ApplicationStateProvider,
     private val migrationUpgradeNotice: MigrationUpgradeNoticeStorageProvider,
     private val resetProgress: ResetProgressStore,
 ) {
@@ -96,19 +93,7 @@ class MigrationDriveOnce(
     internal fun permitsForeground(accountKeyId: String): Boolean =
         !resetProgress.isPending.value && !MigrationAccountRetirement.blocks(accountKeyId)
 
-    /**
-     * @param allowForcedBroadcastWindow Only `true` for [MigrationLiveDriver] — the worker (via
-     * [MigrationWorker.doWork]) must NEVER pass `true`: forcing a broadcast window can wait
-     * nearly a full privacy buffer (up to 10 minutes on mainnet) before broadcasting, which
-     * cannot fit inside WorkManager's own ~10-minute `doWork()` execution ceiling. The live
-     * driver has no such ceiling (it runs only as long as the app process is alive), so it is
-     * the only safe caller for this branch.
-     */
-    suspend fun run(
-        sdk: OrchardMigrationSdk,
-        accountKeyId: String,
-        allowForcedBroadcastWindow: Boolean = false,
-    ): DriveOnceResult {
+    suspend fun run(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult {
         if (!DRIVE_LOCK.tryLock()) {
             migrationLog("MigrationDriveOnce: another drive is in progress — skipping, short retry.")
             return DriveOnceResult.LockBusy(SKIP_RETRY_DELAY)
@@ -117,7 +102,7 @@ class MigrationDriveOnce(
             when {
                 MigrationAccountRetirement.blocks(accountKeyId) -> DriveOnceResult.RemovalManaged
                 resetProgress.isPending.value -> DriveOnceResult.Terminal
-                else -> driveCurrentStep(sdk, accountKeyId, allowForcedBroadcastWindow)
+                else -> driveCurrentStep(sdk, accountKeyId)
             }
         } finally {
             DRIVE_LOCK.unlock()
@@ -127,7 +112,6 @@ class MigrationDriveOnce(
     private suspend fun driveCurrentStep(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
-        allowForcedBroadcastWindow: Boolean,
     ): DriveOnceResult {
         val result = sdk.nextStep()
         if (result == null) {
@@ -152,15 +136,15 @@ class MigrationDriveOnce(
             }
 
             is MigrationAdvanceStep.Prove -> {
-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
+                syncRun(sdk, accountKeyId)
             }
 
             MigrationAdvanceStep.Reevaluate -> {
-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow)
+                syncRun(sdk, accountKeyId)
             }
 
             is MigrationAdvanceStep.Broadcast -> {
-                broadcastRun(sdk, accountKeyId, step.transferId, allowForcedBroadcastWindow)
+                broadcastRun(sdk, accountKeyId, step.transferId)
             }
 
             MigrationAdvanceStep.Waiting -> {
@@ -216,7 +200,7 @@ class MigrationDriveOnce(
                 // reconcile, so the sweep must be a REAL sync run — a passive wait would never let
                 // the engine reach Complete in the background (review M2).
                 migrationLog("MigrationDriveOnce: all transactions sent — completion sweep sync run.")
-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow = false)
+                syncRun(sdk, accountKeyId)
             }
 
             WaitingDisposition.SURFACE_UNPROVABLE -> {
@@ -230,7 +214,7 @@ class MigrationDriveOnce(
                 // real sync can. syncRun's own else-fallback (below) safely re-arms if, after
                 // syncing, there is still genuinely nothing due — no busy-loop risk. Root cause
                 // and live diagnosis: 2026-08-06 overnight stall (spec in z/wt/migration/spec/).
-                syncRun(sdk, accountKeyId, allowForcedBroadcastWindow = false)
+                syncRun(sdk, accountKeyId)
             }
         }
     }
@@ -246,7 +230,6 @@ class MigrationDriveOnce(
     private suspend fun syncRun(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
-        allowForcedBroadcastWindow: Boolean,
     ): DriveOnceResult {
         if (sdk.isSyncBlocked().first()) {
             migrationLog("MigrationDriveOnce: sync run blocked by the post-broadcast privacy gate — deferring.")
@@ -267,16 +250,20 @@ class MigrationDriveOnce(
         // there is no live foreign-spend detection path left here (advance_migration's own candidate
         // checks own that now, reached through nextStep()). Kept because "was this plan already dead"
         // is still a correct, cheap early-exit for this function.
-        if (sdk.reconcileInvalidations()) {
+        return if (sdk.reconcileInvalidations()) {
             // The plan is invalid (input notes spent externally) — notify and do NOT re-arm; the
             // app-open router (CheckMigrationRecoveryUseCase) takes over from here.
             migrationNotifier.notifyMigrationPlanInvalid(accountKeyId)
             MigrationScheduler(applicationContext).cancel(accountKeyId)
             migrationLog("MigrationDriveOnce: reconcile found an invalidation — stopping the work chain.")
-            return DriveOnceResult.Terminal
+            DriveOnceResult.Terminal
+        } else {
+            driveAfterSync(sdk, accountKeyId)
         }
+    }
 
-        return when (val nextStep = sdk.nextStep()?.step) {
+    private suspend fun driveAfterSync(sdk: OrchardMigrationSdk, accountKeyId: String): DriveOnceResult =
+        when (val nextStep = sdk.nextStep()?.step) {
             is MigrationAdvanceStep.Broadcast -> {
                 // §2.1 same-beat check: key off the ENGINE-NAMED transferId nextStep() just
                 // returned, not a schedule-order scan (nextDueUnsentIsPreparation's earliestUnsent
@@ -286,7 +273,7 @@ class MigrationDriveOnce(
                 val prep = isPreparationTransfer(sdk.getMigrationTransferStates(), nextStep.transferId)
                 if (prep) {
                     migrationLog("MigrationDriveOnce: sync done. Broadcasting the preparation.")
-                    broadcastRun(sdk, accountKeyId, nextStep.transferId, allowForcedBroadcastWindow)
+                    broadcastRun(sdk, accountKeyId, nextStep.transferId)
                 } else {
                     val chainDelay = sdk.privacySyncBufferDuration()
                     migrationLog("MigrationDriveOnce: sync done. Broadcast deferred.")
@@ -325,7 +312,6 @@ class MigrationDriveOnce(
                 DriveOnceResult.NextWake(nextWakeDelay(sdk))
             }
         }
-    }
 
     internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean {
         val privacyBuffer = sdk.privacySyncBufferDuration()
@@ -364,117 +350,37 @@ class MigrationDriveOnce(
             val current = (statuses as? StateFlow)?.value
                 ?: withTimeoutOrNull(STATUS_READ_TIMEOUT) { statuses.first() }
             when (current) {
-                null, Synchronizer.Status.SYNCING -> true
                 Synchronizer.Status.SYNCED -> !synchronizerProvider.hasRecordedSync(synchronizer)
-                else -> false
+                Synchronizer.Status.STOPPED -> false
+                else -> true
             }
         } == true
 
-    private suspend fun broadcastPreflight(
-        sdk: OrchardMigrationSdk,
-        syncing: Boolean,
-        prepFastTrack: Boolean = false,
-    ): BroadcastPreflight =
-        decideBroadcastPreflight(
-            synchronizerSyncing = syncing,
-            nowEpochSeconds = nowEpochSeconds(),
-            lastNetworkActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
-            privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
-            prepFastTrack = prepFastTrack,
-        )
-
-    @Suppress("ReturnCount", "LongMethod", "CyclomaticComplexMethod")
     private suspend fun broadcastRun(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
         transferId: Long,
-        allowForcedBroadcastWindow: Boolean,
     ): DriveOnceResult {
-        val states = sdk.getMigrationTransferStates()
+        val candidate = sdk.getMigrationTransferStates()?.transfers?.firstOrNull { it.id == transferId }
         val est = sdk.estimatedChainTip()
-        // The transaction the ENGINE already named via nextStep()'s own Broadcast(transferId) —
-        // looked up by id, not re-predicted locally (core sync call §2.4: no local mirror of
-        // next_broadcastable) — for the fast-track preflight and the post-send notification kind.
-        val nextCandidate = states?.transfers?.firstOrNull { it.id == transferId }
-        val prepFastTrack =
-            nextCandidate != null &&
-                !nextCandidate.isTransfer &&
-                nextCandidate.isProved &&
-                nextCandidate.scheduledHeight <= est
-
-        val syncing = isSynchronizerSyncing()
-        val preflight = broadcastPreflight(sdk, syncing, prepFastTrack)
-        migrationLog(
-            "MigrationDriveOnce: broadcast preflight=$preflight " +
-                "(syncing=$syncing, prepFastTrack=$prepFastTrack)"
-        )
-        if (preflight == BroadcastPreflight.DEFER) {
-            if (syncing && allowForcedBroadcastWindow && applicationStateProvider.isInForeground.first()) {
-                // Force a window — ONLY the live driver ever reaches here (allowForcedBroadcastWindow),
-                // and only while a FRESH read confirms the app is actually foreground right now (do not
-                // trust `syncing` alone as a foreground proxy: the engine's own status is a stale
-                // last-tick value that onBackground() does not reset).
-                val closeable = synchronizerProvider.getSynchronizerOrNull() as? CloseableSynchronizer
-                if (closeable == null) {
-                    val deferDelay = sdk.privacySyncBufferDuration()
-                    migrationLog("MigrationDriveOnce: no pausable synchronizer — deferring broadcast $deferDelay.")
-                    return DriveOnceResult.NextWake(deferDelay)
-                }
-                closeable.pause()
-                try {
-                    lastNetworkActivity.stampNow()
-                    migrationLog("MigrationDriveOnce: paused foreground sync to open a broadcast window.")
-                    val gap = quietGapRemaining(sdk.privacySyncBufferDuration())
-                    if (gap.isPositive()) {
-                        migrationLog("MigrationDriveOnce: waiting for the privacy quiet gap before broadcast.")
-                        delay(gap)
-                    }
-                    // Re-ask the engine — up to a full privacy buffer may have elapsed during the
-                    // wait above, and it may no longer report Broadcast at all (something changed),
-                    // or name a different transaction than the one that triggered this run.
-                    val freshStep = sdk.nextStep()?.step
-                    if (freshStep !is MigrationAdvanceStep.Broadcast) {
-                        migrationLog("MigrationDriveOnce: broadcast unavailable after the wait. Scheduling a wake.")
-                        return DriveOnceResult.NextWake(nextWakeDelay(sdk))
-                    }
-                    val freshStates = sdk.getMigrationTransferStates()
-                    val freshCandidate = freshStates?.transfers?.firstOrNull { it.id == freshStep.transferId }
-                    return attemptBroadcast(sdk, accountKeyId, freshCandidate)
-                } finally {
-                    closeable.resume()
-                    migrationLog("MigrationDriveOnce: resumed foreground sync (SDK gate now governs).")
-                }
-            } else {
-                // Quiet-gap-only defer (nothing running to pause, or the worker caller, or genuinely
-                // backgrounded) — unchanged from today's behavior.
-                val deferDelay = if (prepFastTrack) PREP_FAST_TRACK_REARM else sdk.privacySyncBufferDuration()
-                migrationLog(
-                    "MigrationDriveOnce: deferring broadcast $deferDelay — a sync source is live or the quiet " +
-                        "gap is unmet."
-                )
-                return DriveOnceResult.NextWake(deferDelay, respectAntiSpinFloor = !prepFastTrack)
-            }
+        val isPreparation = candidate != null && !candidate.isTransfer && candidate.isProved &&
+            candidate.scheduledHeight <= est
+        // This SDK's pause gates explicit bursts, but its continuous foreground session keeps
+        // running. Wait for an observed quiet period instead of treating pause as network silence.
+        return if (!isPreparation && !mayBroadcastCrossing(sdk)) {
+            DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
+        } else {
+            attemptBroadcast(sdk, accountKeyId, transferId, candidate, isPreparation)
         }
-        return attemptBroadcast(sdk, accountKeyId, nextCandidate)
-    }
-
-    /**
-     * Moved verbatim (including the exact reasoning comment) from
-     * `MigrationProgressVM.quietGapRemaining` — the privacy quiet-gap wait shared by the
-     * foreground-forced broadcast window above and the VM's own foreground broadcast pass.
-     */
-    private suspend fun quietGapRemaining(privacyBuffer: Duration): Duration {
-        val last = lastNetworkActivity.get() ?: return Duration.ZERO
-        val elapsed = (Clock.System.now().epochSeconds - last.epochSecond).seconds
-        val remaining = privacyBuffer - elapsed
-        return if (remaining.isPositive()) remaining else Duration.ZERO
     }
 
     @Suppress("ReturnCount")
     private suspend fun attemptBroadcast(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
+        transferId: Long,
         nextCandidate: MigrationTransferState?,
+        isPreparation: Boolean,
     ): DriveOnceResult {
         val snapshotBefore = sdk.snapshot()
         val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
@@ -488,7 +394,13 @@ class MigrationDriveOnce(
         val outcome =
             withTimeoutOrNull(BROADCAST_ATTEMPT_TIMEOUT) {
                 executeWithRetries {
-                    sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
+                    val step = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
+                    val quiet = isPreparation || mayBroadcastCrossing(sdk)
+                    if (step?.transferId == transferId && quiet && permitsForeground(accountKeyId)) {
+                        sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
+                    } else {
+                        TransferAttemptOutcome.NothingDue
+                    }
                 }
             } ?: run {
                 migrationLog(
@@ -756,12 +668,13 @@ class MigrationDriveOnce(
         val states = sdk.getMigrationTransferStates()
         val est = sdk.estimatedChainTip()
         val peek = sdk.nextStep()?.next
+        val activity = lastNetworkActivity.latestObserved ?: lastNetworkActivity.get()
         val delay =
             nextWake(
                 states,
                 est,
                 sdk.estimatedSecondsPerBlock(),
-                lastActivityEpochSeconds = lastNetworkActivity.get()?.epochSecond,
+                lastActivityEpochSeconds = activity?.epochSecond,
                 privacyBufferSeconds = sdk.privacySyncBufferDuration().inWholeSeconds,
                 nowEpochSeconds = nowEpochSeconds(),
                 peek = peek,
@@ -777,9 +690,8 @@ class MigrationDriveOnce(
 
         /**
          * How long a caller that lost the lock race waits before trying again. Deliberately
-         * larger than a "normal" step's duration: when the winner is a forced broadcast window
-         * (up to ~13 minutes: privacy buffer + broadcast timeout), a short retry here would have
-         * the worker scheduling and acknowledging a successor every few seconds during the wait.
+         * larger than a normal step's duration to avoid repeatedly replacing wakes while a native
+         * synchronization or network attempt still owns the drive.
          */
         private val SKIP_RETRY_DELAY = 30.seconds
     }
@@ -804,8 +716,7 @@ private val BROADCAST_ATTEMPT_TIMEOUT = 3.minutes
 
 /**
  * Re-arm delay for the preparation fast-track: back-to-back scheduling for ready prep batches
- * (WorkManager dispatch latency is the only real gap) and the short retry when a fast-tracked
- * prep only lost its window to a live sync overlap.
+ * (WorkManager dispatch latency is the only real gap).
  */
 internal val PREP_FAST_TRACK_REARM = 1.seconds
 
@@ -974,9 +885,9 @@ private suspend fun handleCompleteStep(
     accountKeyId: String,
     migrationNotifier: MigrationNotifier,
 ): DriveOnceResult {
-    val wakeVersion = MigrationScheduler.wakeVersion(accountKeyId)
+    // The caller holds the drive lock, so a new plan cannot replace this completion.
     if (isMigrationActuallyComplete(sdk.getMigrationState())) {
-        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId, wakeVersion) {
+        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId) {
             migrationNotifier.cancelStepDue(accountKeyId)
         }
         migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")

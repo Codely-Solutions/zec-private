@@ -29,6 +29,7 @@ import io.mockk.mockkObject
 import io.mockk.slot
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -40,6 +41,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
 import java.util.UUID
+import kotlin.test.assertNull
+import kotlin.test.assertIs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -313,7 +316,7 @@ class MigrationWorkerOwnershipTest {
             val scheduler = MigrationScheduler(context)
             val oldUpdate = async { scheduler.reconcileScheduledWake(owner) }
             runCurrent()
-            val current = MigrationScheduler.recordWorkerStart(context, owner, request, 1)
+            val current = checkNotNull(MigrationScheduler.recordWorkerStart(context, owner, request, 1))
             MigrationScheduler.armRetry(context, owner, request, 1, current)
             staleSnapshot.set(listOf(pending))
             oldUpdate.await()
@@ -347,15 +350,54 @@ class MigrationWorkerOwnershipTest {
             pendingMigrationTorFailureStorageProvider = mockk(),
             synchronizerProvider = mockk(),
             lastNetworkActivity = mockk(),
-            applicationStateProvider = mockk(),
             migrationUpgradeNotice = mockk(),
             resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
         )
 
-        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
         verify(exactly = 0) { editor.remove(any()) }
-        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
         verify(exactly = 1) { editor.remove("next_wake_at_$owner") }
+        verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
+        verify(exactly = 1) { notifier.cancelStepDue(owner) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun workerEntryCannotDisplaceCompletionOwnershipWhileTheNativeReadSuspends() = runTest {
+        val owner = "worker-entered-during-native-completion"
+        val request = UUID.fromString("00000000-0000-0000-0000-000000000043")
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val preferences = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context> {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+        }
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
+        val completion = CompletableDeferred<MigrationState>()
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Complete, null)
+            coEvery { getMigrationState() } coAnswers { completion.await() }
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = context,
+            migrationNotifier = notifier,
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk(),
+            lastNetworkActivity = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+        val live = async { drive.run(sdk, owner) }
+        runCurrent()
+        val workerVersion = checkNotNull(MigrationScheduler.recordWorkerStart(context, owner, request, 0))
+        assertIs<DriveOnceResult.LockBusy>(drive.run(sdk, owner))
+
+        completion.complete(MigrationState.Complete)
+        assertEquals(DriveOnceResult.Terminal, live.await())
+        MigrationScheduler(context).scheduleSuccessorAndAwait(owner, 30.seconds, workerVersion)
+        assertNull(MigrationScheduler.recordWorkerStart(context, owner, request, 1))
         verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
         verify(exactly = 1) { notifier.cancelStepDue(owner) }
     }
@@ -370,7 +412,7 @@ class MigrationWorkerOwnershipTest {
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
         val prior = MigrationScheduler.wakeVersion(owner)
-        MigrationScheduler.withdrawCompletedFallback(context, owner, prior) {}
+        MigrationScheduler.withdrawCompletedFallback(context, owner) {}
 
         // No WorkManager instance or request may be created for the stale decision.
         MigrationScheduler(context).scheduleSuccessorAndAwait(owner, 30.seconds, prior)
@@ -417,7 +459,7 @@ class MigrationWorkerOwnershipTest {
         }
         try {
             assertEquals(Result.retry(), worker(0).doWork())
-            coVerify(exactly = 0) { drive.run(any(), any(), any()) }
+            coVerify(exactly = 0) { drive.run(any(), any()) }
             verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:1") }
             assertEquals(Result.retry(), worker(1).doWork())
             verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:2") }
