@@ -499,7 +499,7 @@ def stopped_recovery(run_id, metadata, *, historical=False):
     return history
 
 
-def acceptance_workflow(root, revision, stage):
+def acceptance_workflow(root, revision, stage, *, linked_wallet=False):
     workflow = git(root, 'show', f'{revision}:{RELEASE_WORKFLOW}')
     # The canonical workflow places all acceptance and artifact production before publication.
     acceptance, marker, publication = workflow.partition(b'\n  publish:\n')
@@ -509,9 +509,12 @@ def acceptance_workflow(root, revision, stage):
     if not marker or len(headers) != len(set(headers)) or not set(headers) <= expected:
         raise ReceiptInputsChanged('Cannot establish the shared release workflow acceptance boundary')
     # The opposite acceptance job cannot provide artifacts or execute a step for this receipt.
-    independent = (b'hosted_core',) if stage == 'Quote' else (
-        b'hosted_quotes', b'recovery_quotes', b'reserve_quote_retry',
-    )
+    if stage == 'Quote':
+        independent = (b'hosted_core',)
+    else:
+        independent = (b'hosted_quotes', b'reserve_quote_retry')
+        if not linked_wallet:
+            independent += (b'recovery_quotes',)
     for name in independent:
         acceptance = re.sub(rb'(?ms)^  ' + name + rb':\n.*?(?=^  [^ ]|\Z)', b'', acceptance)
     return acceptance
@@ -526,7 +529,7 @@ def quote_inputs_match(root, producer, controller):
     return True
 
 
-def verify_receipt_delta(root, producer, controller, stage):
+def verify_receipt_delta(root, producer, controller, stage, *, linked_wallet=False):
     if producer == controller:
         return
     require(git(root, 'merge-base', producer, controller).decode().strip() == producer,
@@ -548,7 +551,9 @@ def verify_receipt_delta(root, producer, controller, stage):
     if not changed <= paths:
         raise ReceiptInputsChanged(stage + ' execution inputs changed after the passing receipt')
     if RELEASE_WORKFLOW in changed:
-        if acceptance_workflow(root, producer, stage) != acceptance_workflow(root, controller, stage):
+        before = acceptance_workflow(root, producer, stage, linked_wallet=linked_wallet)
+        current = acceptance_workflow(root, controller, stage, linked_wallet=linked_wallet)
+        if before != current:
             raise ReceiptInputsChanged(stage + ' execution inputs changed in the shared release workflow')
 
 

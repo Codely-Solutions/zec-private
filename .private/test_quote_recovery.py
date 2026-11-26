@@ -1004,6 +1004,21 @@ class QuoteRecoveryTests(unittest.TestCase):
                 ), self.assertRaisesRegex(ValueError, stage + ' execution inputs changed'):
                     verify_receipt_delta(Path('.'), OLD, MAIN, stage)
 
+    def test_linked_wallet_reuse_preserves_its_quote_before_claim_dependency(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / '.github/workflows/build-release.yml').read_bytes().replace(b'\r\n', b'\n')
+        changed = workflow.replace(b'\n  recovery_quotes:\n', b'\n  recovery_quotes:\n    # Readiness repair\n', 1)
+        self.assertTrue(changed != workflow)
+        for linked in (False, True):
+            with self.subTest(linked=linked), patch('quote_recovery.git', side_effect=[
+                OLD.encode(), b'.github/workflows/build-release.yml\0', workflow, changed
+            ]):
+                if linked:
+                    with self.assertRaisesRegex(ValueError, 'Wallet execution inputs changed'):
+                        verify_receipt_delta(root, OLD, MAIN, 'Wallet', linked_wallet=True)
+                else:
+                    verify_receipt_delta(root, OLD, MAIN, 'Wallet')
+
     def test_changed_quote_runner_admits_original_apks_with_fresh_unfunded_quotes(self):
         states = dict(BUILD_JOBS, publish='failure', **{QUOTE: 'success', WALLET: 'success'})
         names = (*BUILD_ARTIFACTS, 'hosted-core-receipt', 'hosted-quote-receipt')

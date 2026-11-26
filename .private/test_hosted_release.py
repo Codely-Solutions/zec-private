@@ -306,8 +306,11 @@ class HostedReleaseTests(unittest.TestCase):
                     patch.object(hosted_release, 'validate_core_sources') as validate_core, \
                     patch.object(hosted_release, 'validate_quotes'), \
                     patch('hosted_claim.claim_revision', side_effect=lambda commit, **kwargs: commit), \
+                    patch('quote_recovery.git', side_effect=lambda _root, verb, *_: wallet_controller.encode()
+                          if verb == 'merge-base' else b'') as receipt_delta, \
                     patch('subprocess.check_output', side_effect=lambda cmd, **kw: archives[cmd[-1]]):
                 admit(root)
+                self.assertEqual(receipt_delta.call_count, 2)
                 self.assertEqual(outputs['previous_reservation'], primary)
                 proof = dict(workflow_run_id=build_run, versionCode=VERSION)
 

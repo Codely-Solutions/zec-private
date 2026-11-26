@@ -245,6 +245,9 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
                 require(not use_tor, 'Wallet recovery requires direct app networking')
                 previous = recovered_reservation(core, source, core_run, core_controller, version, metadata)
                 if previous:
+                    from quote_recovery import verify_receipt_delta
+
+                    verify_receipt_delta(root, core_controller, controller, 'Wallet', linked_wallet=True)
                     outputs['previous_reservation'] = previous
             else:
                 require(original_reserve == 'success' and (use_tor or original_prepared == 'success'),
