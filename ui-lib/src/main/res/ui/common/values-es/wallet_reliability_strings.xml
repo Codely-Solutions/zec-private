@@ -8,5 +8,8 @@
     <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
     <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
     <string name="private_restore_funds_available">Fondos disponibles. Recuperando el historial de transacciones.</string>
+    <string name="private_wallet_local_data_unavailable">Datos de la cartera no disponibles</string>
+    <string name="private_wallet_reopen_for_data">Cierra la aplicación y vuelve a abrirla. Si el problema continúa, contacta con asistencia.</string>
+    <string name="private_wallet_contact_support">Contactar con asistencia</string>
     <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 </resources>

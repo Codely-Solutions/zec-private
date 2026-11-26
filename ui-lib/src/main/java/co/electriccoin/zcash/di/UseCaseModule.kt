@@ -101,7 +101,6 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveFastestServersUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveKeepScreenOnSyncSessionUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
-import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveTransactionSubmitStateUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveZashiAccountUseCase
@@ -117,7 +116,6 @@ import co.electriccoin.zcash.ui.common.usecase.PersistServerSelectionUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
-import co.electriccoin.zcash.ui.common.usecase.RecoverFromSeedMismatchUseCase
 import co.electriccoin.zcash.ui.common.usecase.RefreshFastestServersUseCase
 import co.electriccoin.zcash.ui.common.usecase.RejectIfSelectedAccountCannotSpendUseCase
 import co.electriccoin.zcash.ui.common.usecase.RemindWalletBackupLaterUseCase
@@ -313,8 +311,6 @@ val useCaseModule =
         factoryOf(::CreateIncreaseEphemeralGapLimitProposalUseCase)
         factoryOf(::ResetZashiUseCase)
         factoryOf(::GetPreselectedSwapAssetUseCase)
-        singleOf(::RecoverFromSeedMismatchUseCase)
-        factoryOf(::ObserveSeedMismatchUseCase)
         factoryOf(::ObserveKeepScreenOnSyncSessionUseCase)
         factory { GetSwapStatusUseCase(get(), get(), get()) }
         factoryOf(::ExecuteDebugDBQueryUseCase)

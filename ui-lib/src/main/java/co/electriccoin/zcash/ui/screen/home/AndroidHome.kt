@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetArgs
 import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetVM
 import co.electriccoin.zcash.ui.screen.transactionhistory.widget.ActivityWidgetVM
@@ -25,6 +26,8 @@ import co.electriccoin.zcash.ui.screen.updates.rememberAppUpdateNotice
 @Composable
 internal fun AndroidHome() {
     val donationRouter = koinInject<NavigationRouter>()
+    val synchronizer = koinInject<SynchronizerProvider>()
+    val seedMismatch by synchronizer.isSeedMismatch.collectAsStateWithLifecycle()
     val topAppBarVM = koinActivityViewModel<ZashiTopAppBarVM>()
     val balanceWidgetVM =
         koinViewModel<BalanceWidgetVM> {
@@ -45,10 +48,16 @@ internal fun AndroidHome() {
     homeVM.uiLifecyclePipeline.collectAsStateWithLifecycle()
     val transactionWidgetState by activityWidgetVM.state.collectAsStateWithLifecycle()
 
+    HomeSeedMismatchNotice(
+        mismatch = seedMismatch,
+        isStillMismatched = { synchronizer.isSeedMismatch.value },
+        canDismiss = state != null,
+    )
+
     state?.let {
-        val update = rememberAppUpdateNotice(blocked = it.message != null || !it.isSyncComplete)
+        val update = rememberAppUpdateNotice(blocked = seedMismatch || it.message != null || !it.isSyncComplete)
         val support = rememberHomeDonationSupport(
-            blocked = it.message != null || !it.isSyncComplete || update != null,
+            blocked = seedMismatch || it.message != null || !it.isSyncComplete || update != null,
             onDonate = { donationRouter.forward(DonationArgs()) },
         )
         HomeView(

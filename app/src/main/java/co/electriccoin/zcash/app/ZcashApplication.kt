@@ -27,7 +27,6 @@ import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.repository.WalletSnapshotRepository
 import co.electriccoin.zcash.ui.common.usecase.ObserveKeepScreenOnSyncSessionUseCase
-import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
 import co.electriccoin.zcash.ui.common.usecase.SweepOrphanedGiftCardWalletsUseCase
 import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
 import co.electriccoin.zcash.di.excludedVotingModule
@@ -50,7 +49,6 @@ class ZcashApplication : CoroutineApplication() {
     private val walletRepository: WalletRepository by inject()
     private val automaticServerRepository: AutomaticServerRepository by inject()
     private val migrationNotifier: MigrationNotifier by inject()
-    private val observeSeedMismatch: ObserveSeedMismatchUseCase by inject()
     private val observeKeepScreenOnSyncSession: ObserveKeepScreenOnSyncSessionUseCase by inject()
     private val sweepOrphanedGiftCardWallets: SweepOrphanedGiftCardWalletsUseCase by inject()
 
@@ -100,7 +98,6 @@ class ZcashApplication : CoroutineApplication() {
         applicationStateRepository.init()
         automaticServerRepository.init()
         walletRepository.init()
-        applicationScope.launch { observeSeedMismatch() }
         applicationScope.launch { observeKeepScreenOnSyncSession() }
         applicationScope.launch { sweepOrphanedGiftCardWallets() }
     }

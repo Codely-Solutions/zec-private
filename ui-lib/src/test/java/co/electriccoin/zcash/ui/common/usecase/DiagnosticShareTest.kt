@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import android.content.Intent
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.mockk
+import io.mockk.coVerify
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -16,6 +17,27 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class DiagnosticShareTest {
+    @Test
+    fun blankWalletSupportChecksAccessAndSharesNoWalletData() {
+        val context = RuntimeEnvironment.getApplication()
+        val diagnostics = mockk<GetSupportUseCase>()
+        val useCase = SendEmailUseCase(context, diagnostics, mockk())
+        val app = shadowOf(context)
+        useCase.sendBlankSupport { false }
+        assertNull(app.nextStartedActivity)
+
+        useCase.sendBlankSupport { true }
+        val chooser = app.nextStartedActivity
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        @Suppress("DEPRECATION")
+        val shared = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertEquals("", shared.getStringExtra(Intent.EXTRA_TEXT))
+        assertNull(shared.clipData)
+        assertFalse(shared.hasExtra(Intent.EXTRA_STREAM))
+        assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
+        coVerify(exactly = 0) { diagnostics() }
+    }
+
     @Test(timeout = 30_000)
     fun diagnosticsRequireRecipientSelectionAndContainNoUpstreamAddress() {
         val context = RuntimeEnvironment.getApplication()

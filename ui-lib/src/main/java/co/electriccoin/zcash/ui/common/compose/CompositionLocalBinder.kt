@@ -7,8 +7,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.rememberNavController
-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
 import co.electriccoin.zcash.ui.MainActivity
+import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.design.component.LocalScreenBrightness
 import co.electriccoin.zcash.ui.design.component.ScreenBrightnessState
 import co.electriccoin.zcash.ui.design.util.LocalNavController
@@ -41,7 +41,7 @@ private fun ObserveScreenSecurityFlag() {
                 screenSecurity.referenceCount
                     .map { it > 0 }
                     .collect { isSecure ->
-                        val isTest = FirebaseTestLabUtil.isFirebaseTestLab(context)
+                        val isTest = VersionInfo.testLabFixturesEnabled(context)
 
                         if (isSecure && !isTest) {
                             activity.window.setFlags(
