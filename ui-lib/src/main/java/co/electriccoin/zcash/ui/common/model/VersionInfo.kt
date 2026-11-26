@@ -39,6 +39,10 @@ data class VersionInfo(
 
         val IS_CMC_AVAILABLE = BuildConfig.ZCASH_CMC_KEY.takeIf { it.isNotBlank() } != null
 
+        internal fun testLabFixturesEnabled(context: Context): Boolean =
+            BuildConfig.DEBUG && NETWORK_DIMENSION == NetworkDimension.TESTNET &&
+                FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext)
+
         fun new(context: Context): VersionInfo {
             val packageInfo = context.packageManager.getPackageInfoCompat(context.packageName, 0L)
             val applicationInfo = context.applicationInfo
@@ -49,7 +53,7 @@ data class VersionInfo(
                 // Should only be 0 during tests
                 versionCode = packageInfo.versionCodeCompat,
                 isDebuggable = (0 != applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE),
-                isRunningUnderTestService = FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext),
+                isRunningUnderTestService = testLabFixturesEnabled(context),
                 gitSha = gitSha,
                 gitCommitCount = gitCommitCount.toLong(),
                 changelog = Changelog.new(json = resolveBestReleaseNotes(context)),
