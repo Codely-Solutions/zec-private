@@ -49,6 +49,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -394,7 +395,7 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(legacyFile, key) } returns metadata(lastUpdated = 2)
 
             val dataSource = dataSource()
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             dataSource.markTxMemoAsRead("tx1", key)
 
             verify(exactly = 0) { metadataProvider.writeMetadataToFile(any(), any(), any()) }
@@ -442,10 +443,10 @@ class MetadataDataSourceTest {
                 metadata(lastUpdated = 2, read = listOf("r1"))
 
             val dataSource = dataSource()
-            val result = checkNotNull(dataSource.observe(key).first { it != null })
+            val result = assertIs<MetadataObservation.Unavailable>(dataSource.observe(key).first { it != null })
             dataSource.markTxMemoAsRead("tx1", key)
 
-            assertEquals(metadata(lastUpdated = 2, read = listOf("r1")), result)
+            assertEquals(metadata(lastUpdated = 2, read = listOf("r1")), result.content)
             verify(exactly = 6) { metadataProvider.readMetadataFromFile(canonicalFile, key) }
             verify(exactly = 0) { metadataStorageProvider.setAsideUndecodable(any()) }
             verify(exactly = 0) { metadataProvider.writeMetadataToFile(any(), any(), any()) }
@@ -472,7 +473,7 @@ class MetadataDataSourceTest {
                 metadata(lastUpdated = 1, read = listOf("r1"))
 
             val dataSource = dataSource()
-            val result = checkNotNull(dataSource.observe(key).first { it != null })
+            val result = checkNotNull(dataSource.observeContent(key).first { it != null })
             dataSource.markTxMemoAsRead("tx2", key)
 
             assertEquals(listOf("r1"), result.accountMetadata.read)
@@ -722,8 +723,8 @@ class MetadataDataSourceTest {
             val written = mergeWithFlush(isFlushFailing = { true })
             val dataSource = dataSource()
 
-            val first = dataSource.observe(key).first { it != null }
-            val second = dataSource.observe(key).first { it != null }
+            val first = dataSource.observeContent(key).first { it != null }
+            val second = dataSource.observeContent(key).first { it != null }
 
             assertEquals(written.captured, first)
             assertEquals(written.captured, second)
@@ -739,11 +740,11 @@ class MetadataDataSourceTest {
             var isFlushFailing = true
             mergeWithFlush(isFlushFailing = { isFlushFailing })
 
-            dataSource().observe(key).first { it != null }
+            dataSource().observeContent(key).first { it != null }
             verify(exactly = 0) { legacyFile.delete() }
 
             isFlushFailing = false
-            dataSource().observe(key).first { it != null }
+            dataSource().observeContent(key).first { it != null }
 
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(legacyFile, key) }
             verify(exactly = 2) { metadataProvider.writeMetadataToFile(any(), any(), any()) }
@@ -756,11 +757,11 @@ class MetadataDataSourceTest {
             mergeWithFlush(isFlushFailing = { true })
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataStorageProvider.lastModifiedOf(legacyFile) } returns 2L
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataStorageProvider.sizeOf(legacyFile) } returns 2L
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
 
             verify(exactly = 3) { metadataProvider.readMetadataFromFile(legacyFile, key) }
             verify(exactly = 3) { metadataProvider.writeMetadataToFile(any(), any(), any()) }
@@ -774,9 +775,9 @@ class MetadataDataSourceTest {
             every { metadataStorageProvider.setAsideUndecodable(canonicalFile) } returns true
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } throws DecryptionException()
-            val result = dataSource.observe(key).first { it != null }
+            val result = dataSource.observeContent(key).first { it != null }
 
             assertEquals(listOf("r1"), result?.accountMetadata?.read)
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -789,9 +790,9 @@ class MetadataDataSourceTest {
             mergeWithFlush(isFlushFailing = { true })
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } throws IOException()
-            val result = dataSource.observe(key).first { it != null }
+            val result = dataSource.observeContent(key).first { it != null }
 
             assertEquals(listOf("r1"), result?.accountMetadata?.read)
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -811,8 +812,8 @@ class MetadataDataSourceTest {
                 metadata(lastUpdated = 2, read = listOf("r1"))
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             dataSource.observe(longerKey).first { it != null }
 
             verify(exactly = 1) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -833,8 +834,8 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(legacyFile, key) } throws IllegalStateException()
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
 
             verify(exactly = 1) { metadataProvider.readMetadataFromFile(setAsideFile, key) }
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -1023,7 +1024,7 @@ class MetadataDataSourceTest {
             val colors = mutableListOf<Color?>()
 
             backgroundScope.launch {
-                dataSource.observe(key).filterNotNull().collect { metadata ->
+                dataSource.observeContent(key).filterNotNull().collect { metadata ->
                     colors += metadata.accountMetadata.appearance?.color
                 }
             }
@@ -1050,8 +1051,8 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(legacyFile, key) } throws DecryptionException()
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             dataSource.markTxMemoAsRead("tx1", key)
 
             verify(exactly = 1) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -1066,11 +1067,11 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(legacyFile, key) } throws DecryptionException()
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataStorageProvider.lastModifiedOf(legacyFile) } returns 2L
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             every { metadataStorageProvider.sizeOf(legacyFile) } returns 2L
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
 
             verify(exactly = 3) { metadataProvider.readMetadataFromFile(legacyFile, key) }
         }
@@ -1085,7 +1086,7 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(legacyFile, any()) } throws DecryptionException()
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
             dataSource.observe(longerKey).first { it != null }
 
             verify(exactly = 1) { metadataProvider.readMetadataFromFile(legacyFile, key) }
@@ -1099,8 +1100,8 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } returns metadata(lastUpdated = 1)
             every { metadataProvider.readMetadataFromFile(legacyFile, key) } throws DecryptionException()
 
-            dataSource().observe(key).first { it != null }
-            dataSource().observe(key).first { it != null }
+            dataSource().observeContent(key).first { it != null }
+            dataSource().observeContent(key).first { it != null }
 
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(legacyFile, key) }
         }
@@ -1113,8 +1114,8 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } throws DecryptionException()
             val dataSource = dataSource()
 
-            dataSource.observe(key).first { it != null }
-            dataSource.observe(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
+            dataSource.observeContent(key).first { it != null }
 
             verify(exactly = 2) { metadataProvider.readMetadataFromFile(canonicalFile, key) }
         }
@@ -1258,14 +1259,15 @@ class MetadataDataSourceTest {
         every { metadataProvider.readMetadataFromFile(legacyFile, key) } throws error
         val dataSource = dataSource()
 
-        dataSource.observe(key).first { it != null }
-        dataSource.observe(key).first { it != null }
+        dataSource.observeContent(key).first { it != null }
+        dataSource.observeContent(key).first { it != null }
 
         verify(exactly = 1) { metadataProvider.readMetadataFromFile(legacyFile, key) }
         verify(exactly = 0) { legacyFile.delete() }
     }
 
-    private suspend fun TestScope.observe(): MetadataV3 = checkNotNull(dataSource().observe(key).first { it != null })
+    private suspend fun TestScope.observe(): MetadataV3 =
+        checkNotNull(dataSource().observeContent(key).first { it != null })
 
     /**
      * Starts collecting [dataSource]'s non-null emissions and runs the collector until it waits for
@@ -1274,7 +1276,7 @@ class MetadataDataSourceTest {
     private fun TestScope.collectEmissions(dataSource: MetadataDataSourceImpl): List<MetadataV3> {
         val emitted = mutableListOf<MetadataV3>()
         backgroundScope.launch {
-            dataSource.observe(key).filterNotNull().collect { emitted += it }
+            dataSource.observeContent(key).filterNotNull().collect { emitted += it }
         }
         runCurrent()
         return emitted
@@ -1374,3 +1376,5 @@ class MetadataDataSourceTest {
             AccountAppearanceMetadataV3(color = Color(0xFFBE38F3), lastUpdated = Instant.ofEpochSecond(2))
     }
 }
+
+internal fun MetadataDataSource.observeContent(key: MetadataKey) = observe(key).map { it?.content }

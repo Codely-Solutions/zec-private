@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImp
 import co.electriccoin.zcash.ui.common.repository.TransactionMetadata
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ActivityData
+import co.electriccoin.zcash.ui.common.usecase.FilteredActivities
 import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionFiltersUseCase
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailArgs
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
@@ -142,6 +144,13 @@ class ActivityHistoryVMTest {
         }
         val row = row(activity, restoreTimestamp)
         assertFalse(row.isUnread)
+        val filteredRow = row(
+            activity,
+            restoreTimestamp,
+            FilteredActivities(listOf(activity), unreadFilterApplied = true, unreadCutoff = Instant.EPOCH),
+        )
+        assertEquals(true, filteredRow.isUnread)
+        coVerify(exactly = 1) { restoreTimestamp.getOrCreate() }
 
         assertEquals(transaction.id.txIdString(), row.key)
         assertEquals(stringRes(R.string.transaction_sent), row.title)
@@ -199,10 +208,11 @@ class ActivityHistoryVMTest {
         restoreTimestamp: RestoreTimestampDataSource = mockk {
             coEvery { getOrCreate() } returns Instant.EPOCH
         },
+        snapshot: FilteredActivities = FilteredActivities(listOf(activity)),
     ): ActivityState {
         val filters = TransactionFilterRepositoryImpl()
         val activities = mockk<GetFilteredActivitiesUseCase> {
-            every { observe() } returns flowOf(listOf(activity))
+            every { observe() } returns flowOf(snapshot)
         }
         val vm = ActivityHistoryVM(
             getFilteredActivities = activities,

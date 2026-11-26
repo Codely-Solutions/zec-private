@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -26,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -64,8 +66,10 @@ class MetadataRepositorySelectedAccountTest {
                 },
             metadataDataSource =
                 mockk<MetadataDataSource>(relaxed = true) {
-                    every { observe(firstKey) } returns firstMetadata
-                    every { observe(secondKey) } returns secondMetadata
+                    every { observe(firstKey) } returns
+                        firstMetadata.map { it?.let { content -> MetadataObservation.Available(content) } }
+                    every { observe(secondKey) } returns
+                        secondMetadata.map { it?.let { content -> MetadataObservation.Available(content) } }
                 },
             metadataKeyStorageProvider =
                 mockk<MetadataKeyStorageProvider> {

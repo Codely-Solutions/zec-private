@@ -91,20 +91,24 @@ class ActivityHistoryVM(
             getTransactionFilters.observe(),
         ) { (activities, searchHash), filters ->
             Triple(activities, filters, searchHash)
-        }.mapLatest { (activities, filters, searchHash) ->
+        }.mapLatest { (snapshot, filters, searchHash) ->
             when {
-                activities == null -> {
+                snapshot == null -> {
                     createLoadingState(filtersSize = filters.size)
                 }
 
-                activities.isEmpty() -> {
+                snapshot.activities.isEmpty() -> {
                     createEmptyState(filtersSize = filters.size)
                 }
 
                 else -> {
                     createDataState(
-                        transactions = activities,
-                        restoreTimestamp = restoreTimestampDataSource.getForActivity(),
+                        transactions = snapshot.activities,
+                        restoreTimestamp = if (snapshot.unreadFilterApplied) {
+                            snapshot.unreadCutoff
+                        } else {
+                            restoreTimestampDataSource.getForActivity()
+                        },
                         filters = filters,
                         searchHash = searchHash
                     )

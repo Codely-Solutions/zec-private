@@ -512,7 +512,7 @@ class MetadataDataSourceFileTest {
         failSync = false
         assertTrue(markSwap(source(), provider = "replacement", mode = SwapMode.EXACT_INPUT))
         assertEquals(4, directorySyncs)
-        assertEquals("replacement", source().observe(key).first { it != null }
+        assertEquals("replacement", source().observeContent(key).first { it != null }
             ?.accountMetadata?.swaps?.swapIds?.single()?.provider)
         assertFalse(File(metadataDir, "$canonicalName.tmp").exists())
     }
@@ -838,7 +838,7 @@ class MetadataDataSourceFileTest {
             write(canonicalName, metadata(lastUpdated = 1, annotations = listOf(note("tx1", "canonical", 1))))
             write(legacyName, metadata(lastUpdated = 2, bookmarked = listOf(bookmark("tx2", 2))), metadataKey(1))
 
-            val result = dataSource().observe(key).first { it != null }
+            val result = dataSource().observeContent(key).first { it != null }
 
             val expected =
                 metadata(
@@ -850,7 +850,7 @@ class MetadataDataSourceFileTest {
             assertEquals(listOf(canonicalName), fileNames())
             assertEquals(expected, read(canonicalName))
             assertEquals(listOf(File(metadataDir, canonicalName)), storageProvider.getStorageFiles(key))
-            assertEquals(expected, dataSource().observe(key).first { it != null })
+            assertEquals(expected, dataSource().observeContent(key).first { it != null })
         }
 
     @Test
@@ -873,7 +873,7 @@ class MetadataDataSourceFileTest {
             assertEquals(listOf("new"), read(canonicalName).accountMetadata.read)
 
             val keyThatDecodesTheOldFile = metadataKey(0, 1, 9)
-            val merged = dataSource.observe(keyThatDecodesTheOldFile).first { it != null }
+            val merged = dataSource.observeContent(keyThatDecodesTheOldFile).first { it != null }
 
             assertEquals(setOf("old", "new"), merged?.accountMetadata?.read?.toSet())
             assertEquals(listOf(canonicalName), fileNames())
@@ -1154,7 +1154,7 @@ class MetadataDataSourceFileTest {
         runTest {
             File(metadataDir.apply { mkdirs() }, legacyName).writeText("not encrypted metadata")
 
-            dataSource().observe(key).first { it != null }
+            dataSource().observeContent(key).first { it != null }
 
             assertEquals("not encrypted metadata", File(metadataDir, legacyName).readText())
             assertFalse(File(metadataDir, canonicalName).length() > 0)
@@ -1252,7 +1252,7 @@ class MetadataDataSourceFileTest {
     private fun TestScope.collectEmissions(dataSource: MetadataDataSourceImpl, key: MetadataKey): List<MetadataV3?> {
         val emitted = mutableListOf<MetadataV3?>()
         backgroundScope.launch {
-            dataSource.observe(key).drop(1).collect { emitted += it }
+            dataSource.observeContent(key).drop(1).collect { emitted += it }
         }
         runCurrent()
         return emitted

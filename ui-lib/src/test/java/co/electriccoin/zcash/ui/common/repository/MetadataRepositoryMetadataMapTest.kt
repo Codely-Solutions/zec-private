@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
@@ -75,7 +76,8 @@ class MetadataRepositoryMetadataMapTest {
                 flow {
                     emit(null)
                     heldReads.first { key !in it }
-                    emit(contents.getValue(keys.entries.single { it.value == key }.key))
+                    val account = keys.entries.single { it.value == key }.key
+                    emit(MetadataObservation.Available(contents.getValue(account)))
                 }
             }
             coEvery { setAccountColor(any(), any()) } returns true
@@ -137,7 +139,8 @@ class MetadataRepositoryMetadataMapTest {
                 delay(DERIVATION_MILLIS)
                 mockk()
             }
-            every { metadataDataSource.observe(any()) } returns flowOf(null, metadata(null))
+            every { metadataDataSource.observe(any()) } returns
+                flowOf(null, MetadataObservation.Available(metadata(null)))
             val repository = repository(keyStorage)
             accounts.value = listOf(first, second)
 
@@ -217,6 +220,30 @@ class MetadataRepositoryMetadataMapTest {
 
             assertEquals(contentsOf(FIRST_UUID, SECOND_UUID), recovered)
             assertEquals(2, attempts.get())
+        }
+
+    @Test
+    fun anIncompleteReadKeepsTheLastContentThenRecoversWithoutAWrite() =
+        runTest {
+            val key = keys.getValue(FIRST_UUID)
+            val initial = contents.getValue(FIRST_UUID)
+            val incomplete = metadata(null)
+            val recovered = metadata(Color(THIRD_COLOR))
+            every { metadataDataSource.observe(key) } returnsMany listOf(
+                flowOf(MetadataObservation.Available(initial), MetadataObservation.Unavailable(incomplete)),
+                flowOf(MetadataObservation.Available(recovered)),
+            )
+            val repository = repository(storedKeys())
+            accounts.value = listOf(first)
+            val seen = record(repository)
+            val final = withContext(Dispatchers.Default) {
+                withTimeout(LOCK_FREE_READ_TIMEOUT) { repository.metadata.first { it[FIRST_UUID] == recovered } }
+            }
+
+            val published = synchronized(seen) { seen.mapNotNull { it[FIRST_UUID] } }
+            assertEquals(recovered, final[FIRST_UUID])
+            assertTrue(initial in published)
+            assertTrue(incomplete !in published)
         }
 
     private fun TestScope.record(repository: MetadataRepositoryImpl): List<Map<AccountUuid, MetadataV3>> {

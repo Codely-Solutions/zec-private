@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
@@ -24,6 +25,7 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
@@ -84,8 +86,10 @@ class MetadataRepositoryAccountColorTest {
     @Test
     fun theMapHoldsEveryAccountsMetadataReadUnderItsOwnKey() =
         runTest {
-            every { metadataDataSource.observe(selectedKey) } returns flowOf(null, metadata(null))
-            every { metadataDataSource.observe(viewOnlyKey) } returns flowOf(null, metadata(Color(PICKED)))
+            every { metadataDataSource.observe(selectedKey) } returns
+                flowOf(null, MetadataObservation.Available(metadata(null)))
+            every { metadataDataSource.observe(viewOnlyKey) } returns
+                flowOf(null, MetadataObservation.Available(metadata(Color(PICKED))))
 
             assertEquals(
                 mapOf(SELECTED_UUID to metadata(null), VIEW_ONLY_UUID to metadata(Color(PICKED))),
@@ -98,7 +102,8 @@ class MetadataRepositoryAccountColorTest {
         runTest {
             val stored = MutableStateFlow<MetadataV3?>(metadata(null))
             every { metadataDataSource.observe(selectedKey) } returns flowOf(null)
-            every { metadataDataSource.observe(viewOnlyKey) } returns stored
+            every { metadataDataSource.observe(viewOnlyKey) } returns
+                stored.map { it?.let { content -> MetadataObservation.Available(content) } }
             coEvery { metadataDataSource.setAccountColor(any(), viewOnlyKey) } answers {
                 stored.value = metadata(Color(PICKED))
                 true

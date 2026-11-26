@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
@@ -51,12 +52,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.IOException
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.time.toJavaInstant
@@ -425,28 +426,55 @@ class MetadataRepositoryImpl(
     override fun observeColor(accountUuid: AccountUuid): Flow<Color?> =
         metadata.map { it[accountUuid]?.accountMetadata?.appearance?.color }.distinctUntilChanged()
 
-    /** Retry the same admitted owner's read without clearing the last decrypted content. */
+    /** Reopen failed reads for one wallet generation and retain the last published content. */
     private fun observeMetadata(
         account: WalletAccount,
         generation: Long,
         initial: MetadataV3?,
     ): Flow<MetadataV3?> =
         flow {
-            if (!walletWriteAccess.permits(generation)) return@flow
-            val key = getMetadataKey(account, generation)
-            val observations = walletWriteAccess.write(generation) { metadataDataSource.observe(key) } ?: return@flow
-            emitAll(observations.dropWhile { it == null })
-        }.retryWhen { failure, attempt ->
-            if (failure !is Exception || failure is CancellationException) throw failure
-            if (!walletWriteAccess.permits(generation)) return@retryWhen false
-            if (attempt == 0L) Twig.warn { "Metadata read unavailable (${failure.javaClass.simpleName})" }
-            delay(METADATA_READ_BACKOFF_MS[attempt.coerceAtMost(METADATA_READ_BACKOFF_MS.lastIndex.toLong()).toInt()])
-            true
-        }.catch { failure ->
-            if (walletWriteAccess.permits(generation) || failure is CancellationException || failure !is Exception) {
-                throw failure
-            }
-        }.onStart { emit(initial) }
+            emit(initial)
+            var lastContent = initial
+            emitAll(
+                flow observations@{
+                    if (!walletWriteAccess.permits(generation)) return@observations
+                    val key = getMetadataKey(account, generation)
+                    val observations = walletWriteAccess.write(generation) {
+                        metadataDataSource.observe(key)
+                    } ?: return@observations
+                    observations.dropWhile { it == null }.collect { observation ->
+                        when (observation) {
+                            is MetadataObservation.Unavailable -> {
+                                if (lastContent == null) {
+                                    lastContent = observation.content
+                                    emit(observation.content)
+                                }
+                                throw IOException("Metadata read incomplete")
+                            }
+
+                            else -> {
+                                lastContent = observation?.content
+                                emit(lastContent)
+                            }
+                        }
+                    }
+                }.retryWhen { failure, attempt ->
+                    if (failure !is Exception || failure is CancellationException) throw failure
+                    if (!walletWriteAccess.permits(generation)) return@retryWhen false
+                    if (attempt == 0L) Twig.warn { "Metadata read unavailable (${failure.javaClass.simpleName})" }
+                    val delayIndex = attempt.coerceAtMost(METADATA_READ_BACKOFF_MS.lastIndex.toLong()).toInt()
+                    delay(METADATA_READ_BACKOFF_MS[delayIndex])
+                    true
+                }.catch { failure ->
+                    if (
+                        walletWriteAccess.permits(generation) ||
+                        failure is CancellationException || failure !is Exception
+                    ) {
+                        throw failure
+                    }
+                }
+            )
+        }
 
     override suspend fun setAccountColor(
         account: WalletAccount,

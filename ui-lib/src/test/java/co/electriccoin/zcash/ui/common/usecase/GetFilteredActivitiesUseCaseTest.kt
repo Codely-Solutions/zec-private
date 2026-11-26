@@ -68,6 +68,6 @@ class GetFilteredActivitiesUseCaseTest {
             context = RuntimeEnvironment.getApplication(),
         ).observe().filterNotNull().first()
         coVerify(exactly = 0) { restoreTimestamp.getOrCreate() }
-        return result
+        return result.activities
     }
 }

@@ -48,6 +48,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
+sealed interface MetadataObservation {
+    val content: MetadataV3
+
+    data class Available(override val content: MetadataV3) : MetadataObservation
+    data class Unavailable(override val content: MetadataV3) : MetadataObservation
+}
+
 /**
  * Every update returns whether persistence was acknowledged. A false result can mean read-only
  * storage or a write failure, including a failed acknowledgement after rename. Callers retain
@@ -55,7 +62,7 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @Suppress("TooManyFunctions")
 interface MetadataDataSource {
-    fun observe(key: MetadataKey): Flow<MetadataV3?>
+    fun observe(key: MetadataKey): Flow<MetadataObservation?>
 
     /** Publishes and returns canonical metadata after its directory sync. The caller owns wallet admission. */
     suspend fun read(key: MetadataKey): MetadataV3?
@@ -186,20 +193,22 @@ class MetadataDataSourceImpl(
      * under the same [mutex] as the read, and every update is published under it, so none is lost
      * or replayed between the two.
      */
-    override fun observe(key: MetadataKey): Flow<MetadataV3?> {
+    override fun observe(key: MetadataKey): Flow<MetadataObservation?> {
         val token = walletWriteAccess.token()
         return channelFlow {
-            val updates = Channel<MetadataV3?>(Channel.UNLIMITED)
+            val updates = Channel<MetadataObservation?>(Channel.UNLIMITED)
             send(null)
             val initial =
                 walletWriteAccess.write(token) {
                     mutex.withLock {
                         launch(start = CoroutineStart.UNDISPATCHED) {
                             metadataUpdatePipeline.collect { (k, m) ->
-                                if (k == null || k.isSameAs(key)) updates.send(m)
+                                if (k == null || k.isSameAs(key)) {
+                                    updates.send(m?.let { MetadataObservation.Available(it) })
+                                }
                             }
                         }
-                        getMetadataInternal(key)
+                        readMetadata(key).observe()
                     }
                 }
             send(initial)
@@ -453,8 +462,6 @@ class MetadataDataSourceImpl(
             }
         }
 
-    private suspend fun getMetadataInternal(key: MetadataKey): MetadataV3 = readMetadata(key).metadata
-
     /**
      * A hardware-wallet account's metadata key can have more than one file on disk: the SDK
      * derives one key per viewing-key item, and a key read back in a different order than it was
@@ -514,10 +521,12 @@ class MetadataDataSourceImpl(
             otherReads.filter { (_, read) -> read == FileRead.Empty }.forEach { (file, _) -> deleteLogged(file) }
 
             val canonicalMetadata = canonicalRead.decoded()
+            val complete = otherReads.none { (_, read) -> read == FileRead.Unreadable }
             if (decodedOthers.isEmpty()) {
                 return@withContext MetadataRead(
                     metadata = canonicalMetadata ?: defaultMetadata(),
-                    isWritable = true
+                    isWritable = true,
+                    isComplete = complete
                 )
             }
 
@@ -526,7 +535,7 @@ class MetadataDataSourceImpl(
             if (writeToLocalStorage(merged, key)) {
                 retireMergedFiles(canonicalFile, decodedOthers)
             }
-            MetadataRead(metadata = merged, isWritable = true)
+            MetadataRead(metadata = merged, isWritable = true, isComplete = complete)
         }
 
     /**
@@ -830,8 +839,12 @@ private data class FileSignature(
  */
 private data class MetadataRead(
     val metadata: MetadataV3,
-    val isWritable: Boolean
-)
+    val isWritable: Boolean,
+    val isComplete: Boolean = isWritable,
+) {
+    fun observe(): MetadataObservation =
+        if (isComplete) MetadataObservation.Available(metadata) else MetadataObservation.Unavailable(metadata)
+}
 
 /**
  * The outcome of reading one metadata file.

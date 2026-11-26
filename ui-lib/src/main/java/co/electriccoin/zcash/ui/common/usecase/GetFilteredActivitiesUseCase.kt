@@ -37,6 +37,12 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 
 @Suppress("TooManyFunctions")
+internal data class FilteredActivities(
+    val activities: List<ActivityData>,
+    val unreadFilterApplied: Boolean = false,
+    val unreadCutoff: Instant? = null,
+)
+
 class GetFilteredActivitiesUseCase(
     getActivities: GetActivitiesUseCase,
     transactionFilterRepository: TransactionFilterRepository,
@@ -121,7 +127,7 @@ class GetFilteredActivitiesUseCase(
         }.flowOn(Dispatchers.Default)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val result: Flow<List<ActivityData>?> =
+    private val result: Flow<FilteredActivities?> =
         channelFlow {
             val transactionsFilteredByFulltext = transactionsFilteredByFulltext.stateIn(this)
             launch {
@@ -131,24 +137,7 @@ class GetFilteredActivitiesUseCase(
                             emitAll(
                                 transactionsFilteredByFulltext
                                     .mapLatest { transactions ->
-                                        val restoreTimestamp =
-                                            if (TransactionFilter.UNREAD in filters && !transactions.isNullOrEmpty()) {
-                                                restoreTimestampDataSource.getForActivity()
-                                            } else {
-                                                null
-                                            }
-                                        transactions
-                                            ?.filter { transaction ->
-                                                filterBySentReceivedSwap(filters, transaction)
-                                            }?.filter { transaction ->
-                                                filterByGeneralFilters(
-                                                    filters = filters,
-                                                    activity = transaction,
-                                                    restoreTimestamp = restoreTimestamp
-                                                )
-                                            }?.map { transaction ->
-                                                transaction.activity
-                                            }
+                                        transactions?.let { filterActivities(filters, it) }
                                     }
                             )
                         }
@@ -162,7 +151,21 @@ class GetFilteredActivitiesUseCase(
         }.distinctUntilChanged()
             .flowOn(Dispatchers.Default)
 
-    fun observe(): Flow<List<ActivityData>?> = result
+    internal fun observe(): Flow<FilteredActivities?> = result
+
+    private suspend fun filterActivities(
+        filters: List<TransactionFilter>,
+        activities: List<InternalState>,
+    ): FilteredActivities {
+        val unreadApplied = TransactionFilter.UNREAD in filters
+        val cutoff = if (unreadApplied && activities.isNotEmpty()) restoreTimestampDataSource.getForActivity() else null
+        val filtered = activities.asSequence()
+            .filter { filterBySentReceivedSwap(filters, it) }
+            .filter { filterByGeneralFilters(filters, it, cutoff) }
+            .map { it.activity }
+            .toList()
+        return FilteredActivities(filtered, unreadApplied, cutoff)
+    }
 
     private fun filterByGeneralFilters(
         filters: List<TransactionFilter>,
@@ -178,8 +181,10 @@ class GetFilteredActivitiesUseCase(
             } else {
                 true
             }
-        val unreadPass = if (filters.contains(TransactionFilter.UNREAD)) isUnread(activity, restoreTimestamp) else true
-        val bookmarkPass = if (filters.contains(TransactionFilter.BOOKMARKED)) isBookmark(activity) else true
+        val unreadPass = TransactionFilter.UNREAD !in filters ||
+            (activity is InternalState.ByTransaction && activity.activity.isUnread(restoreTimestamp))
+        val bookmarkPass = TransactionFilter.BOOKMARKED !in filters ||
+            (activity is InternalState.ByTransaction && activity.activity.metadata.isBookmarked)
         val notesPass = if (filters.contains(TransactionFilter.NOTES)) hasNotes(activity) else true
         return memoPass && unreadPass && bookmarkPass && notesPass
     }
@@ -217,12 +222,6 @@ class GetFilteredActivitiesUseCase(
         } else {
             true
         }
-
-    private fun isUnread(activity: InternalState, restoreTimestamp: Instant?): Boolean =
-        activity is InternalState.ByTransaction && activity.activity.isUnread(restoreTimestamp)
-
-    private fun isBookmark(activity: InternalState): Boolean =
-        activity is InternalState.ByTransaction && activity.activity.metadata.isBookmarked
 
     private fun hasNotes(activity: InternalState): Boolean =
         activity is InternalState.ByTransaction && activity.activity.metadata.note != null
