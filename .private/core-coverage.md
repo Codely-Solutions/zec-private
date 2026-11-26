@@ -307,6 +307,10 @@ Migration replan tests cover the hosted origin beneath the custom-server warning
 
 Real encrypted-file fixtures exercise automatic Swap Details recovery after a temporary directory flush failure. Note editing waits for a complete read before it shows an empty draft.
 
-Migration crossing waits for the current engine to record a completed sync. The sync recorder can continue while the account-specific reconciliation is blocked. Recovery and WorkManager successor checks carry their prior wake version through a completed plan, and all-wallet reset clears notices from its migration channels.
+Scheduled migration sends wait for the current engine to record a completed sync and an observed quiet period. The SDK can select the transaction internally, so a preparation preview does not waive this check. Foreground sync records wallet activity independently and serializes SDK reconciliation with the migration driver. A successful scheduled send leaves exact-ID lookup to the wallet SDK's normal lifecycle. Activity labels can remain generic when the pinned SDK does not classify a stored transaction.
+
+An explicit Progress retry issues one in-memory grant for the exact reviewed transfer. The Sending screen rechecks the live navigation entry and the original account and app access before SDK entry. Direct consent applies only to the failed attempt that opened its Tor sheet. Manual follow-up leaves an existing worker in place.
+
+Guarded swap HTTP verifies the wallet and account selection through request admission, and direct calls check the transport setting immediately before sending. Saved partial history is visible while the exact read is incomplete. A complete read of an absent swap clears that presentation.
 
 Gift redemption keeps the account shown at confirmation. The production repository rechecks the original app grant, wallet generation and destination engine at the SDK boundary, including when Reset is already pending and gift shutdown is still waiting. A redemption which crossed that boundary still finishes through the existing drain. Test-service fixture onboarding, authentication shortcuts and screen-capture overrides require a debug testnet build.

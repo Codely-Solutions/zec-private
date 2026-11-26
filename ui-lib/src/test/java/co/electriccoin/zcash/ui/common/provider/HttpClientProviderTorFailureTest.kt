@@ -1,11 +1,14 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.Synchronizer
+import co.electriccoin.zcash.global.DirectHttpTransportUnavailable
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.ServerResponseException
@@ -71,6 +74,29 @@ class HttpClientProviderTorFailureTest {
                 }
             }
             assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
+    fun changingToTorAfterDirectAdmissionKeepsTheStatusReferenceOffTheWire() = runBlocking {
+        val transport = WalletSdkTransportGate()
+        val preference = mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns false }
+        val clients = HttpClientProviderImpl(mockk(), preference, transport)
+        val checks = AtomicInteger()
+        MockWebServer().use { server ->
+            server.start(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), 0)
+            server.enqueue(MockResponse(code = 200))
+            val url = server.url("/v0/status?depositAddress=synthetic-reference").toString()
+            withContext(SwapStatusRequestAdmission {
+                if (checks.incrementAndGet() == 2) transport.recordCommittedMode(true)
+                true
+            }) {
+                clients.create().use { client ->
+                    assertFailsWith<DirectHttpTransportUnavailable> { client.get(url) }
+                }
+            }
+            assertEquals(2, checks.get())
+            assertEquals(0, server.requestCount)
         }
     }
 
@@ -162,6 +188,32 @@ class HttpClientProviderTorFailureTest {
         ready.complete(Unit)
 
         assertEquals("Swap status request is no longer active", request.await().message)
+        assertEquals(0, requests.get())
+    }
+
+    @Test
+    fun aTorClientChecksTheOperationAgainAtKtorSendEntry() = runTest {
+        val active = AtomicBoolean(true)
+        val requests = AtomicInteger()
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { getTorHttpClient(any()) } coAnswers {
+                val configure = firstArg<HttpClientConfig<*>.() -> Unit>()
+                HttpClient(MockEngine {
+                    requests.incrementAndGet()
+                    error("A withdrawn status request must not enter the engine")
+                }) { configure() }
+            }
+        }
+        val provider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } returns synchronizer
+        }
+        val clients = HttpClientProviderImpl(provider, mockk())
+        withContext(TorOnlyRequest(active::get)) {
+            clients.create().use { client ->
+                active.set(false)
+                assertFailsWith<IOException> { client.get("https://example.invalid/status") }
+            }
+        }
         assertEquals(0, requests.get())
     }
 

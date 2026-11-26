@@ -3,36 +3,29 @@ package co.electriccoin.zcash.ui.screen.migration.torfailure
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
-import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
-import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 class MigrationTorFailureVM(
     private val navigationRouter: NavigationRouter,
     private val args: MigrationTorFailureArgs,
     private val pendingMigrationTorFailureDecisionRepository: PendingMigrationTorFailureDecisionRepository,
-    private val isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
     override fun onCleared() {
         navigationRouter.discardResultFrom(sourceEntryId)
         super.onCleared()
     }
-    private var continuing: Job? = null
-
     val state: StateFlow<MigrationTorFailureState?> =
         flowOf(
             MigrationTorFailureState(
@@ -46,31 +39,30 @@ class MigrationTorFailureVM(
             initialValue = null,
         )
 
-    @Suppress("TooGenericExceptionCaught") // Keep the choice available after an unsuccessful preference write.
     private fun onContinueWithoutTor() {
-        if (continuing?.isActive == true) return
-        continuing = viewModelScope.launch {
-            try {
-                isMigrationTorEnabledStorageProvider.store(args.accountKeyId, false)
-                pendingMigrationTorFailureDecisionRepository.set(args.accountKeyId, useTor = false)
-                navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Back }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                migrationLog("Migration Tor choice unavailable (${e.javaClass.simpleName}).")
-            }
+        val attempt = args.authorizationId ?: return
+        val foreground = { navigationRouter.isForegroundAtEntry(sourceEntryId) }
+        navigationRouter.stageResultFrom(sourceEntryId, foreground) {
+            pendingMigrationTorFailureDecisionRepository.set(
+                args.accountKeyId,
+                useTor = false,
+                authorizationId = attempt,
+            )
+            NavigationCommand.Back
         }
     }
 
     // Return to live progress so a new attempt requires an explicit choice on the current transfer.
     // Keep the saved Tor preference and leave the decision repository untouched.
     private fun onTryAgain() {
-        if (continuing?.isActive != true) {
-            navigationRouter.replaceAll(MigrationProgressArgs(args.accountKeyId, offerRetry = true))
+        navigationRouter.stageResultFrom(sourceEntryId, { navigationRouter.isForegroundAtEntry(sourceEntryId) }) {
+            NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(args.accountKeyId, offerRetry = true)))
         }
     }
 
     private fun onBack() {
-        if (continuing?.isActive != true) navigationRouter.back()
+        navigationRouter.stageResultFrom(sourceEntryId, { navigationRouter.isForegroundAtEntry(sourceEntryId) }) {
+            NavigationCommand.Back
+        }
     }
 }

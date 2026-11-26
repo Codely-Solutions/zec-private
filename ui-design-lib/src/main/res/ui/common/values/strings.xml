@@ -1348,7 +1348,7 @@
     <string name="migrationCustomServerTor_switchServer">Switch Server</string>
 
     <string name="migrationTorFailure_title">Couldn\'t Connect to Tor</string>
-    <string name="migrationTorFailure_body">We couldn\'t establish a Tor connection. You can proceed without Tor protection, or cancel and try again.</string>
+    <string name="migrationTorFailure_body">Tor couldn\'t connect. You can retry this transfer without Tor.</string>
     <string name="migrationTorFailure_riskBody">Without Tor, your IP address is exposed to the server and could be linked to the migration amounts.</string>
 
     <string name="migrationSetup_title">Move to Ironwood</string>

@@ -12,6 +12,7 @@ import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.TransferResult
 import cash.z.ecc.android.sdk.fixture.AccountFixture
 import cash.z.ecc.android.sdk.model.TransactionId
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -20,6 +21,7 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
+import co.electriccoin.zcash.ui.common.repository.MigrationSendAuthorization
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -54,6 +56,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import co.electriccoin.zcash.ui.design.R as DesignR
 
@@ -200,7 +204,9 @@ class MigrationSendingVMTest {
         val collectJob = launch { vm.state.collect {} }
         advanceUntilIdle()
 
-        assertEquals<List<Any>>(listOf(MigrationTorFailureArgs("fixture-owner")), router.forwardedRoutes)
+        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
+        assertEquals("fixture-owner", sheet.accountKeyId)
+        assertNotNull(sheet.authorizationId)
         assertTrue(vm.state.value.content?.canGoBack == true)
         vm.onBack()
         assertEquals(1, router.backCount)
@@ -291,22 +297,61 @@ class MigrationSendingVMTest {
         }
 
     @Test
-    fun pendingTorDecisionAtConstructionTimeIsUsedInsteadOfADuplicateDefaultSend() =
+    fun aRestoredDecisionCannotOverrideTheNewSendRoute() =
         runTest {
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
             coEvery { sdk.executeNextPendingTransfer(any(), any()) } returns
                 TransferAttemptOutcome.Executed(TransferResult.Success(TransactionId.new("txid".toByteArray())))
             val router = FakeNavigationRouter()
             val torDecisionRepository = PendingMigrationTorFailureDecisionRepositoryImpl()
-            torDecisionRepository.set("fixture-owner", useTor = true)
+            torDecisionRepository.set("fixture-owner", useTor = false, authorizationId = "older-attempt")
 
-            vm(sdk = sdk, router = router, torDecisionRepository = torDecisionRepository)
+            vm(sdk = sdk, router = router, torDecisionRepository = torDecisionRepository, useTor = true)
             advanceUntilIdle()
 
             coVerify(exactly = 1) {
                 sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), useEstimatedTip = true)
             }
+            coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), any()) }
         }
+
+    @Test
+    fun theNamedFailureChoiceAppliesOnlyToItsRetainedSend() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = true), true) } returns
+                TransferAttemptOutcome.Executed(TransferResult.NetworkError(retryable = false, isTorFailure = true))
+            coEvery { executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) } returns
+                TransferAttemptOutcome.Executed(TransferResult.Success(TransactionId.new(ByteArray(32))))
+        }
+        val decisions = PendingMigrationTorFailureDecisionRepositoryImpl()
+        val router = FakeNavigationRouter()
+        vm(sdk, router, torDecisionRepository = decisions, useTor = true)
+        runCurrent()
+        val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
+        val challenge = assertNotNull(sheet.authorizationId)
+        decisions.set("fixture-owner", useTor = false, authorizationId = "other-attempt")
+        runCurrent()
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), any()) }
+
+        decisions.set("fixture-owner", useTor = false, authorizationId = challenge)
+        runCurrent()
+        decisions.set("fixture-owner", useTor = false, authorizationId = challenge)
+        runCurrent()
+        coVerify(exactly = 1) { sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = false), true) }
+        assertIs<MigrationSuccessArgs>(router.replacedRoutes.single())
+    }
+
+    @Test
+    fun anOldSendingRouteWithoutItsLiveGrantNeverEntersTheSdk() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val router = FakeNavigationRouter()
+        router.activeEntry.value = ActiveNavigationEntry("send", "MigrationSending")
+
+        vm(sdk, router, sourceEntryId = "send")
+        runCurrent()
+
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), any()) }
+    }
 
     @Test
     fun otherAccountDecisionDoesNotOverrideTorOrConsumeTheChoice() = runTest {
@@ -387,7 +432,9 @@ class MigrationSendingVMTest {
             vm(sdk = sdk, router = router)
             advanceUntilIdle()
 
-            assertTrue(router.forwardedRoutes.any { it == MigrationTorFailureArgs("fixture-owner") })
+            val sheet = assertIs<MigrationTorFailureArgs>(router.forwardedRoutes.single())
+            assertEquals("fixture-owner", sheet.accountKeyId)
+            assertNotNull(sheet.authorizationId)
         }
 
     @Test
@@ -562,6 +609,7 @@ class MigrationSendingVMTest {
         args: MigrationSendingArgs = MigrationSendingArgs("fixture-owner"),
         accounts: AccountDataSource? = null,
         scheduleNextMigrationWindow: ScheduleNextMigrationWindowUseCase = mockk(relaxed = true),
+        sourceEntryId: String? = null,
     ) = MigrationSendingVM(
         args = args,
         getOrchardMigrationSdk =
@@ -579,10 +627,12 @@ class MigrationSendingVMTest {
         pendingMigrationTorFailureDecisionRepository = torDecisionRepository,
         pendingMigrationTorFailureStorageProvider = pendingMigrationTorFailureStorageProvider,
         migrationDriveOnce = migrationDriveOnce,
+        sourceEntryId = sourceEntryId,
         accounts = accounts,
     )
 
     private class FakeNavigationRouter : NavigationRouter {
+        override val activeEntry = MutableStateFlow<ActiveNavigationEntry?>(null)
         val forwardedRoutes = mutableListOf<Any>()
         val replacedRoutes = mutableListOf<Any>()
         var backCount = 0

@@ -362,15 +362,12 @@ class MigrationDriveOnce(
         transferId: Long,
     ): DriveOnceResult {
         val candidate = sdk.getMigrationTransferStates()?.transfers?.firstOrNull { it.id == transferId }
-        val est = sdk.estimatedChainTip()
-        val isPreparation = candidate != null && !candidate.isTransfer && candidate.isProved &&
-            candidate.scheduledHeight <= est
-        // This SDK's pause gates explicit bursts, but its continuous foreground session keeps
-        // running. Wait for an observed quiet period instead of treating pause as network silence.
-        return if (!isPreparation && !mayBroadcastCrossing(sdk)) {
+        // The SDK chooses again at submission and accepts no expected transfer ID. Its candidate
+        // preview can never exempt a submission from the quiet-window check.
+        return if (!mayBroadcastCrossing(sdk)) {
             DriveOnceResult.NextWake(sdk.privacySyncBufferDuration())
         } else {
-            attemptBroadcast(sdk, accountKeyId, transferId, candidate, isPreparation)
+            attemptBroadcast(sdk, accountKeyId, transferId, candidate)
         }
     }
 
@@ -380,7 +377,6 @@ class MigrationDriveOnce(
         accountKeyId: String,
         transferId: Long,
         nextCandidate: MigrationTransferState?,
-        isPreparation: Boolean,
     ): DriveOnceResult {
         val snapshotBefore = sdk.snapshot()
         val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
@@ -395,7 +391,7 @@ class MigrationDriveOnce(
             withTimeoutOrNull(BROADCAST_ATTEMPT_TIMEOUT) {
                 executeWithRetries {
                     val step = sdk.nextStep()?.step as? MigrationAdvanceStep.Broadcast
-                    val quiet = isPreparation || mayBroadcastCrossing(sdk)
+                    val quiet = mayBroadcastCrossing(sdk)
                     if (step?.transferId == transferId && quiet && permitsForeground(accountKeyId)) {
                         sdk.executeNextPendingTransfer(NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true)
                     } else {
@@ -425,9 +421,7 @@ class MigrationDriveOnce(
             }
 
             is TransferAttemptOutcome.Executed -> {
-                if (nextCandidate?.isTransfer != false) {
-                    withContext(NonCancellable) { recordCrossingSuccess(outcome) }
-                }
+                withContext(NonCancellable) { recordCrossingSuccess(outcome) }
                 handleExecuted(
                     sdk,
                     accountKeyId,
@@ -450,13 +444,8 @@ class MigrationDriveOnce(
         when (result) {
             is TransferResult.Success -> {
                 migrationLog("MigrationDriveOnce: sent a migration transaction.")
-                // Classify zip318_kind immediately rather than waiting on the mempool watcher or a
-                // later rescan — our own broadcast path already stores `raw` locally, which makes
-                // the normal enhancement queue skip this txid forever (`raw IS NOT NULL` guard), so
-                // without this call the tx would sit permanently NOT_CLASSIFIED ("Sent" instead of
-                // "Migrating…"/"Migrated"). One call is enough for both labels: mined-height driven
-                // Pending→Success derivation is independent of zip318_kind and isn't reset by it.
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
+                // The SDK's explicit enhancement is a remote exact-ID lookup on the general wallet
+                // route. Keep the crossing on its chosen route and read live migration progress locally.
                 // Everything below reads the engine's post-send state live — there is no cache to
                 // write through anymore (the banner reads the same live states).
                 val snapshot = sdk.snapshot()
@@ -473,18 +462,11 @@ class MigrationDriveOnce(
                 val postStates = sdk.getMigrationTransferStates()
                 val anyUnsent = postStates?.transfers?.any { !it.isSent } == true
                 if (anyUnsent) {
-                    // Prep fast-track: whole ready prep batches go back-to-back — no send spacing
-                    // between preparations (one logical tree, in-pool, nothing to de-correlate).
-                    // CROSSINGS take the opposite rule: never two sends closer than the privacy
-                    // buffer, even in catch-up (a starved worker once fired 5 overdue crossings in
-                    // ~51 s — grid spacing means nothing if catch-up collapses it into one
-                    // network-timing cluster). The non-fast-track case delegates to reArm — it
-                    // targets the EARLIEST relevant moment across engine wake-ups and ALL unsent
-                    // heights INCLUDING preparations; an ad-hoc crossing-only delay here used to
-                    // sleep past inter-layer prep windows and compress the serial prep tail toward
-                    // the crossings' anchor boundaries — the exact tx9 latency condition (review H1).
+                    // A due preparation can wake at the earliest permitted time. The next generic
+                    // submission will still recheck quiet because the SDK can select a crossing.
                     if (nextDueUnsentIsPreparation(postStates, sdk.estimatedChainTip())) {
-                        migrationLog("MigrationDriveOnce: ready preparation next — chaining in $PREP_FAST_TRACK_REARM")
+                        val delay = maxOf(PREP_FAST_TRACK_REARM, sdk.privacySyncBufferDuration())
+                        migrationLog("MigrationDriveOnce: ready preparation next — waking after $delay")
                         if (!sentWasPrep && snapshot != null) {
                             migrationNotifier.notifyTransferComplete(
                                 accountKeyId,
@@ -492,7 +474,7 @@ class MigrationDriveOnce(
                                 snapshot.totalCount,
                             )
                         }
-                        DriveOnceResult.NextWake(PREP_FAST_TRACK_REARM, respectAntiSpinFloor = false)
+                        DriveOnceResult.NextWake(delay, respectAntiSpinFloor = false)
                     } else {
                         val delay = nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration())
                         if (!sentWasPrep && snapshot != null) {

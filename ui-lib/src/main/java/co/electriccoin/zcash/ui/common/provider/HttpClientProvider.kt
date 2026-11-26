@@ -9,6 +9,8 @@ import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.api.SendingRequest
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
@@ -52,10 +54,22 @@ class HttpClientProviderImpl(
 
     override suspend fun createTor(): HttpClient {
         transportGate?.checkTransportAvailable()
-        val guardedStatus = currentCoroutineContext()[SwapStatusRequestAdmission.Key] != null
+        val context = currentCoroutineContext()
+        val status = context[SwapStatusRequestAdmission.Key]
+        val torOnly = context[TorOnlyRequest.Key]
         return synchronizerProvider.getSynchronizer().getTorHttpClient {
             configureHttpClient(installTimeouts = false)
-            if (guardedStatus) followRedirects = false
+            if (status != null || torOnly != null) {
+                followRedirects = false
+                install(createClientPlugin("WalletTorRequestAdmission") {
+                    on(SendingRequest) { _, _ ->
+                        transportGate?.checkTransportAvailable()
+                        if (status?.permits?.invoke() == false || torOnly?.canRequest?.invoke() == false) {
+                            throw IOException("Swap status request is no longer active")
+                        }
+                    }
+                })
+            }
         }
     }
 
@@ -74,6 +88,7 @@ class HttpClientProviderImpl(
                         if (!admission.beginDirectAttempt()) {
                             throw IOException("Swap status request admission is closed")
                         }
+                        transportGate?.requireDirectHttpAllowed()
                         chain.proceed(chain.request())
                     }
                 }

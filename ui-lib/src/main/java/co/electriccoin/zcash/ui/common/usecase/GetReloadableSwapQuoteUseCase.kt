@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
@@ -71,7 +72,10 @@ class GetReloadableSwapQuoteUseCase(
             } ?: flowOf(null)
             swapFlow.combine(accepted.onStart { emit(null) }) { status, saved ->
                 val owner = account?.sdkAccount?.accountUuid
-                val visible = saved?.takeIf { owner != null && it.ownerAccount?.sdkAccount?.accountUuid == owner }
+                val lookupUncertain = status.isLoading || status.error is MetadataReadUnavailableException
+                val visible = saved?.takeIf {
+                    lookupUncertain && owner != null && it.ownerAccount?.sdkAccount?.accountUuid == owner
+                }
                 SwapData(data = status.withAcceptedStatus(saved), handle = reloadHandle, presentation = visible)
             }.collect { send(it) }
 

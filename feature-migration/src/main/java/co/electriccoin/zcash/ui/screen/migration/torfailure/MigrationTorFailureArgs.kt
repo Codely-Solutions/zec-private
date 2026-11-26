@@ -44,7 +44,7 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data class MigrationTorFailureArgs(val accountKeyId: String)
+data class MigrationTorFailureArgs(val accountKeyId: String, val authorizationId: String? = null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationPreparation
@@ -25,8 +26,10 @@ import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
+import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.MigrationLiveReadout
+import co.electriccoin.zcash.ui.common.repository.MigrationSendAuthorization
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveMigrationLiveReadoutUseCase
@@ -61,6 +64,8 @@ class MigrationProgressVM(
     private val exchangeRateRepository: ExchangeRateRepository,
     private val errorStateMapper: ErrorMapperUseCase,
     private val sourceEntryId: String? = null,
+    private val walletActionAccess: WalletActionAccess? = null,
+    private val sendAuthorization: MigrationSendAuthorization = MigrationSendAuthorization(),
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
     private val retry = MutableStateFlow(0)
@@ -129,11 +134,15 @@ class MigrationProgressVM(
                 text = stringRes(DesignR.string.migration_common_retry),
                 onClick = {
                     viewModelScope.launch {
-                        val selected = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-                        if (selected == target.accountKeyId && sourceEntryId != null) {
-                            navigationRouter.stageResultFrom(sourceEntryId) {
-                                NavigationCommand.Forward(listOf(target))
-                            }
+                        val selected = getSelectedWalletAccount()
+                        val matches = selected.sdkAccount.accountUuid.toStorageKeyId() == target.accountKeyId
+                        if (!matches || sourceEntryId == null || !navigationRouter.isForegroundAtEntry(sourceEntryId)) {
+                            return@launch
+                        }
+                        val permits = walletActionAccess?.capture(selected) ?: return@launch
+                        val canNavigate = { permits() && navigationRouter.isForegroundAtEntry(sourceEntryId) }
+                        navigationRouter.stageResultFrom(sourceEntryId, canNavigate) {
+                            NavigationCommand.Forward(listOf(sendAuthorization.issue(target, permits)))
                         }
                     }
                 },

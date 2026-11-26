@@ -17,6 +17,8 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountSelection
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -37,6 +39,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +58,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -409,6 +413,45 @@ class SwapActivityStatusTest {
         assertEquals(terminal, observations.last().savedMetadata)
         assertNull(observations.last().error)
         coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun selectedPreferenceRevocationClosesAnInFlightStatusRequestBeforeTheUiChangesOwner() = runTest {
+        val pending = swap(SwapStatus.PENDING)
+        val selected = mockk<WalletAccount> {
+            every { sdkAccount } returns owner.sdkAccount
+            every { isSelected } returns true
+        }
+        val accounts = mockk<AccountDataSource> { every { allAccounts } returns MutableStateFlow(listOf(selected)) }
+        var selectionVersion = 0L
+        val preference = mockk<SelectedAccountUUIDProvider> {
+            coEvery { captureSelection() } returns SelectedAccountSelection(owner.sdkAccount.accountUuid, 0)
+            every { isCurrent(any()) } answers { firstArg<SelectedAccountSelection>().version == selectionVersion }
+        }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(deposit, owner) } returns pending
+        }
+        val transportReady = CompletableDeferred<Unit>()
+        val enteredRequest = CompletableDeferred<() -> Boolean>()
+        val swaps = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(pending, any()) } coAnswers {
+                enteredRequest.complete(secondArg())
+                transportReady.await()
+                error("Synthetic transport stopped")
+            }
+        }
+        val useCase = GetSwapStatusUseCase(metadata, swaps, accounts = accounts, accountSelection = preference)
+        val observations = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch { useCase.observeForAccount(deposit, owner).collect { observations += it } }
+        val canTransmit = enteredRequest.await()
+
+        selectionVersion += 1
+        assertFalse(canTransmit())
+        transportReady.complete(Unit)
+        runCurrent()
+        assertNull(observations.last().savedMetadata)
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
     }
 
     @Test

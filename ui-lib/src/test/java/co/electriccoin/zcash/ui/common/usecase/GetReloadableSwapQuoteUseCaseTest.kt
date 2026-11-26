@@ -1,10 +1,13 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import io.mockk.every
@@ -118,5 +121,39 @@ class GetReloadableSwapQuoteUseCaseTest {
         runCurrent()
         assertEquals(newer, emissions.last().savedMetadata)
         assertNull(emissions.last().status)
+    }
+
+    @Test
+    fun aSuccessfulLookupOfAnAbsentRecordClearsReadOnlyHistory() = runTest {
+        val owner = EditAccountFixtures.zodl()
+        val ownerKey = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val partial = TransactionSwapMetadata(
+            depositAddress, "near", Zatoshi(0), BigDecimal.ZERO, Instant.EPOCH,
+            SwapAssetTestFixture.simpleAsset(), SwapAssetTestFixture.zecSimpleAsset(), SwapMode.FLEX_INPUT,
+            SwapStatus.PROCESSING, BigDecimal.ONE, ownerAccount = owner, walletWriteToken = 0,
+        )
+        val current = MutableStateFlow(
+            SwapQuoteStatusData(isLoading = false, error = MetadataReadUnavailableException())
+        )
+        val status = mockk<GetSwapStatusUseCase> {
+            every { observeForAccount(depositAddress, owner, any()) } returns current
+        }
+        val metadata = mockk<MetadataRepository> {
+            every { observeSwapMetadata() } returns flowOf(listOf(partial))
+        }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
+        val observed = mutableListOf<SwapData>()
+        backgroundScope.launch {
+            GetReloadableSwapQuoteUseCase(status, metadata, accounts)
+                .observe(depositAddress, ownerKey).collect { observed += it }
+        }
+        runCurrent()
+        assertEquals(partial, observed.last().displayedMetadata)
+        assertNull(observed.last().savedMetadata)
+
+        current.value = SwapQuoteStatusData(isLoading = false, error = IllegalStateException("No record"))
+        runCurrent()
+        assertNull(observed.last().displayedMetadata)
+        assertEquals("No record", observed.last().error?.message)
     }
 }

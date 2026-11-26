@@ -323,7 +323,12 @@ val useCaseModule =
         singleOf(::RecoverFromSeedMismatchUseCase)
         factoryOf(::ObserveSeedMismatchUseCase)
         factoryOf(::ObserveKeepScreenOnSyncSessionUseCase)
-        single { GetSwapStatusUseCase(get(), get(), get(), walletWriteAccess = get()) }
+        single {
+            GetSwapStatusUseCase(
+                get(), get(), get(),
+                walletWriteAccess = get(), accounts = get(), accountSelection = get(),
+            )
+        }
         factoryOf(::ExecuteDebugDBQueryUseCase)
         factoryOf(::SimulateSeedNotRelevantUseCase)
         factoryOf(::SwapSupportMapper)

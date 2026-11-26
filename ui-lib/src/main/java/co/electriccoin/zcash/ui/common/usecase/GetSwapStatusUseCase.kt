@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
@@ -9,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProvider
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -17,6 +20,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
@@ -38,6 +43,8 @@ class GetSwapStatusUseCase(
     clock: Clock = Clock.System,
     timeSource: TimeSource = AndroidElapsedTimeSource,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+    private val accounts: AccountDataSource? = null,
+    private val accountSelection: SelectedAccountUUIDProvider? = null,
 ) {
     private val donationPreferences = context?.let(::DonationPreferences)
     private val fundingClock = ElapsedTimeClock(clock, timeSource)
@@ -72,11 +79,16 @@ class GetSwapStatusUseCase(
 
             launch {
                 val generation = initial?.walletWriteToken ?: walletWriteAccess.token()
-                val canRequest = { walletWriteAccess.permits(generation) && canRefresh?.invoke() != false }
+                val owner = (account ?: initial?.ownerAccount)?.sdkAccount?.accountUuid
+                val canRequest = runCatchingRecoverable { requestAdmission(generation, owner, canRefresh) }
+                    .getOrElse { error ->
+                        data.value = SwapQuoteStatusData(isLoading = false, error = error as Exception)
+                        return@launch
+                    }
                 val loaded = runCatchingRecoverable {
                     check(canRequest()) { "Swap status refresh is no longer active" }
                     initial ?: metadataRepository.loadExpectedMetadata(
-                        depositAddress, account, data, walletWriteAccess, generation,
+                        depositAddress, account, data, canRequest,
                     )
                 }
                 val expectedMetadata = loaded.getOrNull()
@@ -100,7 +112,7 @@ class GetSwapStatusUseCase(
                         val requestStartedAt = fundingClock.now()
                         val (result, saved) = refresh(depositAddress, expectedMetadata, canRequest)
                         donationPreferences?.recordSuccessfulSettlement(saved)
-                        val fundingUntil = fundingDeadline(result, requestStartedAt)
+                        val fundingUntil = result.fundingDeadline(requestStartedAt)
                         fundingExpiry?.cancelAndJoin()
                         data.update {
                             it.copy(
@@ -124,7 +136,7 @@ class GetSwapStatusUseCase(
                         throw e
                     } catch (e: Exception) {
                         fundingExpiry?.cancel()
-                        if (!walletWriteAccess.permits(generation)) {
+                        if (!canRequest()) {
                             data.value = SwapQuoteStatusData(isLoading = false, error = e)
                             break
                         }
@@ -139,12 +151,21 @@ class GetSwapStatusUseCase(
             awaitClose()
         }
 
-    private fun fundingDeadline(status: SwapQuoteStatus, requestStartedAt: Instant): Instant? =
-        status.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }?.observedAtProvider?.let { issuedAt ->
-            // HTTP Date is only precise to one second. Start its conservative budget before the
-            // request so network, parsing and persistence time cannot extend the funding window.
-            minOf(status.deadline, requestStartedAt + (status.deadline - issuedAt - 1.seconds))
+    private suspend fun requestAdmission(
+        generation: Long,
+        owner: AccountUuid?,
+        canRefresh: (() -> Boolean)?,
+    ): () -> Boolean {
+        val observer = currentCoroutineContext().job
+        val selection = accountSelection?.captureSelection()
+        return {
+            val sameSelection = selection == null || checkNotNull(accountSelection).isCurrent(selection)
+            val currentOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
+            val ownerMatches = owner == null || accounts == null || currentOwner == owner
+            observer.isActive && walletWriteAccess.permits(generation) && canRefresh?.invoke() != false &&
+                sameSelection && ownerMatches
         }
+    }
 
     private fun isFundingWindowOpen(deadline: Instant?): Boolean =
         deadline != null && deadline > fundingClock.now()
@@ -203,17 +224,23 @@ class GetSwapStatusUseCase(
         IllegalStateException("Swap status refresh was not saved")
 }
 
+private fun SwapQuoteStatus.fundingDeadline(requestStartedAt: Instant): Instant? =
+    takeIf { status == SwapStatus.INCOMPLETE_DEPOSIT }?.observedAtProvider?.let { issuedAt ->
+        // HTTP Date is only precise to one second. Start its conservative budget before the
+        // request so network, parsing and persistence time cannot extend the funding window.
+        minOf(deadline, requestStartedAt + (deadline - issuedAt - 1.seconds))
+    }
+
 private suspend fun MetadataRepository.loadExpectedMetadata(
     depositAddress: String,
     account: WalletAccount?,
     data: MutableStateFlow<SwapQuoteStatusData>,
-    walletWriteAccess: WalletWriteAccess,
-    generation: Long,
+    canRequest: () -> Boolean,
 ): TransactionSwapMetadata? {
-    while (walletWriteAccess.permits(generation)) {
+    while (canRequest()) {
         try {
             val saved = getSwapMetadata(depositAddress, account)
-            return saved.takeIf { walletWriteAccess.permits(generation) }
+            return saved.takeIf { canRequest() }
         } catch (e: MetadataReadUnavailableException) {
             data.update { it.copy(isLoading = false, error = e) }
             delay(1.seconds)

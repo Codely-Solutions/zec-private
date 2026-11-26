@@ -13,6 +13,7 @@ import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.stageResultFrom
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LceState
@@ -26,6 +27,7 @@ import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
+import co.electriccoin.zcash.ui.common.repository.MigrationSendAuthorization
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.ScheduleNextMigrationWindowUseCase
@@ -45,9 +47,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 class MigrationSendingVM(
@@ -63,11 +67,21 @@ class MigrationSendingVM(
     private val migrationDriveOnce: MigrationDriveOnce,
     private val sourceEntryId: String? = null,
     private val accounts: AccountDataSource? = null,
+    sendAuthorization: MigrationSendAuthorization = MigrationSendAuthorization(),
 ) : ViewModel() {
     private val sendLce = mutableLce<Unit>()
     private val failure = MutableStateFlow<SendFailure?>(null)
+    private val canOperate: (() -> Boolean)? =
+        if (sourceEntryId == null) ({ true }) else sendAuthorization.take(args)
+    private var fallbackId: String? = null
 
     private sealed interface SendFailure {
+        fun message(): StringResource =
+            when (this) {
+                is Engine -> migrationFailureMessage(result)
+                NotReady -> stringRes(DesignR.string.migrationSending_notReady)
+            }
+
         data class Engine(
             val result: TransferResult
         ) : SendFailure
@@ -75,26 +89,23 @@ class MigrationSendingVM(
         data object NotReady : SendFailure
     }
 
-    private fun SendFailure.message(): StringResource =
-        when (this) {
-            is SendFailure.Engine -> migrationFailureMessage(result)
-            SendFailure.NotReady -> stringRes(DesignR.string.migrationSending_notReady)
-        }
-
     init {
-        val hasPendingDecision =
-            pendingMigrationTorFailureDecisionRepository.decision.value?.accountKeyId == args.accountKeyId
         pendingMigrationTorFailureDecisionRepository.decision
             .filterNotNull()
-            .filter { it.accountKeyId == args.accountKeyId }
+            .filter { decision ->
+                fallbackId != null && decision.accountKeyId == args.accountKeyId &&
+                    decision.authorizationId == fallbackId
+            }
             .onEach { decision ->
+                if (sourceEntryId != null) {
+                    navigationRouter.activeEntry.first { it?.id == sourceEntryId && it.hostResumed }
+                }
                 if (pendingMigrationTorFailureDecisionRepository.consume(decision)) {
-                    sendLce.execute { sendOnce(decision.useTor) }
+                    fallbackId = null
+                    sendLce.execute { sendOnce(decision.useTor, directConsent = true) }
                 }
             }.launchIn(viewModelScope)
-        if (!hasPendingDecision) {
-            send()
-        }
+        send()
     }
 
     val state: StateFlow<LceState<MigrationSendingState>> =
@@ -136,42 +147,17 @@ class MigrationSendingVM(
         super.onCleared()
     }
 
-    private suspend fun sendOnce(useTor: Boolean) {
-        val sdk = getOrchardMigrationSdk(args.accountKeyId)
+    private suspend fun sendOnce(useTor: Boolean, directConsent: Boolean = false) {
+        val sdk = if (navigationRouter.awaitAuthorizedEntry(sourceEntryId, canOperate)) {
+            getOrchardMigrationSdk(args.accountKeyId)
+        } else {
+            null
+        }
         if (sdk == null) {
             failure.value = SendFailure.NotReady
             return
         }
-        // The engine-mutating send lives entirely under DRIVE_LOCK (via withExclusiveAccess) so it
-        // can never race MigrationWorker/MigrationLiveDriver's own executeNextPendingTransfer call
-        // for the same transfer (2026-08-06 DRIVE_LOCK bypass fix). Lock acquisition itself retries
-        // on the SAME budget the readiness loop already used (no new retry concept) — once acquired,
-        // the whole readiness loop runs under the one lock acquisition (not re-acquired per attempt),
-        // so a background broadcast can't land in a gap between this screen's own attempts.
-        var acquired = false
-        var outcome: TransferAttemptOutcome? = null
-        var lockAttempt = 0
-        while (!acquired && lockAttempt < SEND_MAX_ATTEMPTS) {
-            if (lockAttempt > 0) delay(SEND_RETRY_DELAY_MS)
-            val result =
-                migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
-                    acquired = true
-                    sendReadinessLoop(sdk, useTor)
-                }
-            if (result != null) outcome = result
-            lockAttempt++
-        }
-        if (!acquired) {
-            // Never got exclusive access — a background step held the lock for the whole retry
-            // budget. Same handling as the pre-existing "not ready yet" path below: no send was
-            // attempted, so this can't be a Tor failure.
-            reportNotReady()
-            return
-        }
-        // Everything below is a read, a WorkManager enqueue, or app-state/navigation — none of it
-        // mutates the engine's send state, so it stays outside the lock (avoids needless LockBusy
-        // churn against the worker/live-driver for callers that don't need to be excluded).
-        when (val o = outcome) {
+        when (val o = sendWhenIdle(sdk, useTor)) {
             is TransferAttemptOutcome.Executed -> {
                 when (val r = o.result) {
                     is TransferResult.Success -> reportSubmitted(r.txId)
@@ -180,8 +166,10 @@ class MigrationSendingVM(
                     // sheet (offering "continue without Tor") instead of the generic "Couldn't Send" one,
                     // since the fix (drop Tor) differs from a real network outage.
                     is TransferResult.NetworkError -> {
-                        if (r.isTorFailure) {
-                            openResult(MigrationTorFailureArgs(args.accountKeyId))
+                        if (r.isTorFailure && !directConsent) {
+                            val token = UUID.randomUUID().toString()
+                            fallbackId = token
+                            openResult(MigrationTorFailureArgs(args.accountKeyId, token))
                         } else {
                             failure.value = SendFailure.Engine(r)
                         }
@@ -200,8 +188,25 @@ class MigrationSendingVM(
             // would survive to keep re-triggering the app-open Sending redirect for a transfer
             // that was never going to attempt a network send in the first place.
             // The foreground sync + Lane A hook will prove it; the user can retry later.
-            else -> reportNotReady()
+            else -> {
+                if (!args.isRecoveryRetry) {
+                    pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
+                }
+                failure.value = SendFailure.NotReady
+            }
         }
+    }
+
+    private suspend fun sendWhenIdle(sdk: OrchardMigrationSdk, useTor: Boolean): TransferAttemptOutcome? {
+        repeat(SEND_MAX_ATTEMPTS) { attempt ->
+            if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
+            val execution = migrationDriveOnce.withExclusiveAccess(args.accountKeyId) {
+                // The whole readiness loop holds exclusive access, including when no send is due.
+                Result.success(sendReadinessLoop(sdk, useTor))
+            }
+            if (execution != null) return execution.getOrThrow()
+        }
+        return null
     }
 
     private suspend fun reportSubmitted(txId: TransactionId) {
@@ -220,13 +225,6 @@ class MigrationSendingVM(
         openResult(route, replace = true)
     }
 
-    private suspend fun reportNotReady() {
-        if (!args.isRecoveryRetry) {
-            pendingMigrationTorFailureStorageProvider.store(args.accountKeyId, false)
-        }
-        failure.value = SendFailure.NotReady
-    }
-
     /**
      * Runs under [MigrationDriveOnce.withExclusiveAccess] so the background driver cannot
      * interleave with a retry or advance its proposed transfer.
@@ -241,12 +239,10 @@ class MigrationSendingVM(
             if (attempt > 0) delay(SEND_RETRY_DELAY_MS)
             if (!canRetryTarget(sdk)) break
             if (!args.isRecoveryRetry || migrationDriveOnce.mayBroadcastCrossing(sdk)) {
-                val selectedOwner = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
-                    ?.sdkAccount?.accountUuid?.toStorageKeyId()
-                val unauthorized = args.isRecoveryRetry && selectedOwner != args.accountKeyId
-                if (unauthorized || !migrationDriveOnce.permitsForeground(args.accountKeyId)) return outcome
+                if (!canEnterSend()) return outcome
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
+                    if (!canEnterSend()) return@withContext
                     val result = sdk.executeNextPendingTransfer(
                         NetworkPrivacyOptions(useTor = useTor), useEstimatedTip = true
                     )
@@ -259,6 +255,14 @@ class MigrationSendingVM(
             attempt++
         }
         return outcome
+    }
+
+    private fun canEnterSend(): Boolean {
+        val selected = accounts?.allAccounts?.value?.firstOrNull { it.isSelected }
+            ?.sdkAccount?.accountUuid?.toStorageKeyId()
+        val ownerMatches = !args.isRecoveryRetry || selected == args.accountKeyId
+        return ownerMatches && canOperate?.invoke() == true && navigationRouter.isForegroundAtEntry(sourceEntryId) &&
+            migrationDriveOnce.permitsForeground(args.accountKeyId)
     }
 
     private suspend fun canRetryTarget(sdk: OrchardMigrationSdk): Boolean {
@@ -278,6 +282,17 @@ class MigrationSendingVM(
         private const val SEND_MAX_ATTEMPTS = 3
         private const val SEND_RETRY_DELAY_MS = 1500L
     }
+}
+
+private suspend fun NavigationRouter.awaitAuthorizedEntry(
+    entryId: String?,
+    permits: (() -> Boolean)?,
+): Boolean {
+    if (permits?.invoke() != true) return false
+    if (entryId != null && !isForegroundAtEntry(entryId)) {
+        activeEntry.first { it?.id == entryId && it.hostResumed }
+    }
+    return permits.invoke()
 }
 
 @Suppress("TooGenericExceptionCaught") // Ancillary storage, scheduler and SDK read failures leave the broadcast intact.

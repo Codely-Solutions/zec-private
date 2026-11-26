@@ -8,6 +8,7 @@ data class MigrationSendingArgs(
     val retryTransferId: Long = UNSET,
     val retryScheduledHeight: Long = UNSET,
     val retryAnchorBoundaryHeight: Long = UNSET,
+    val authorizationId: String? = null,
 ) {
     val isRecoveryRetry: Boolean get() = retryTransferId != UNSET
 

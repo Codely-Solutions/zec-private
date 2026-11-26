@@ -31,6 +31,7 @@ import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsR
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepository
+import co.electriccoin.zcash.ui.common.repository.MigrationSendAuthorization
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationTorFailureDecisionRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepositoryImpl
@@ -119,6 +120,7 @@ val featureMigrationModule =
         singleOf(::RestartMigrationScheduleRepositoryImpl) bind RestartMigrationScheduleRepository::class
         singleOf(::PendingMigrationTorFailureDecisionRepositoryImpl) bind
             PendingMigrationTorFailureDecisionRepository::class
+        singleOf(::MigrationSendAuthorization)
         singleOf(::PendingKeystoneMigrationPcztsRepositoryImpl) bind PendingKeystoneMigrationPcztsRepository::class
         singleOf(::MigrationTransferStateRepositoryImpl) bind MigrationTransferStateRepository::class
 

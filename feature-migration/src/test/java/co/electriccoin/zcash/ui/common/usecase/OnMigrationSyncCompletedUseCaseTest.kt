@@ -6,6 +6,7 @@ import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationScheduler
 import com.google.common.util.concurrent.Futures
 import io.mockk.coEvery
@@ -16,7 +17,12 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -28,6 +34,7 @@ class OnMigrationSyncCompletedUseCaseTest {
         migrationNotifier: MigrationNotifier = mockk(relaxed = true),
         migrationScheduler: MigrationScheduler = mockk(relaxed = true),
         context: Context = mockk(relaxed = true),
+        drive: MigrationDriveOnce = migrationDrive(),
     ) = OnMigrationSyncCompletedUseCase(
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
@@ -36,6 +43,38 @@ class OnMigrationSyncCompletedUseCaseTest {
         migrationNotifier = migrationNotifier,
         migrationScheduler = migrationScheduler,
         context = context,
+        drive = drive,
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aSyncCannotReconcileWhileTheDriverOwnsTheSdkTransfer() = runTest {
+        val drive = migrationDrive()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val release = CompletableDeferred<Unit>()
+        val activeDrive = launch { drive.withIdleDrive { release.await() } }
+        runCurrent()
+
+        val reconcile = launch { useCase(sdk, drive = drive)("original-account") }
+        runCurrent()
+        coVerify(exactly = 0) { sdk.finalizeReadyTransfers() }
+
+        release.complete(Unit)
+        activeDrive.join()
+        reconcile.join()
+        coVerify(exactly = 1) { sdk.finalizeReadyTransfers() }
+        coVerify(exactly = 1) { sdk.reconcileInvalidations() }
+    }
+
+    private fun migrationDrive() = MigrationDriveOnce(
+        applicationContext = mockk(),
+        migrationNotifier = mockk(),
+        isMigrationTorEnabledStorageProvider = mockk(),
+        pendingMigrationTorFailureStorageProvider = mockk(),
+        synchronizerProvider = mockk(),
+        lastNetworkActivity = mockk(),
+        migrationUpgradeNotice = mockk(),
+        resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
     )
 
     @Test

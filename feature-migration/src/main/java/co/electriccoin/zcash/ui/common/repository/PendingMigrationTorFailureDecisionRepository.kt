@@ -3,13 +3,13 @@ package co.electriccoin.zcash.ui.common.repository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class MigrationTorFailureDecision(val accountKeyId: String, val useTor: Boolean)
+class MigrationTorFailureDecision(val accountKeyId: String, val useTor: Boolean, val authorizationId: String?)
 
 /** Delivers the explicit Tor choice to the migration send for the same account. */
 interface PendingMigrationTorFailureDecisionRepository {
     val decision: StateFlow<MigrationTorFailureDecision?>
 
-    fun set(accountKeyId: String, useTor: Boolean)
+    fun set(accountKeyId: String, useTor: Boolean, authorizationId: String? = null)
 
     fun consume(decision: MigrationTorFailureDecision): Boolean
 }
@@ -18,8 +18,8 @@ class PendingMigrationTorFailureDecisionRepositoryImpl : PendingMigrationTorFail
     private val pending = MutableStateFlow<MigrationTorFailureDecision?>(null)
     override val decision: StateFlow<MigrationTorFailureDecision?> = pending
 
-    override fun set(accountKeyId: String, useTor: Boolean) {
-        pending.value = MigrationTorFailureDecision(accountKeyId, useTor)
+    override fun set(accountKeyId: String, useTor: Boolean, authorizationId: String?) {
+        pending.value = MigrationTorFailureDecision(accountKeyId, useTor, authorizationId)
     }
 
     override fun consume(decision: MigrationTorFailureDecision): Boolean = pending.compareAndSet(decision, null)

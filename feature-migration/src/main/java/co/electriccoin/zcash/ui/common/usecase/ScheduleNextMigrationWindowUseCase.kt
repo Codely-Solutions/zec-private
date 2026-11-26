@@ -23,7 +23,7 @@ class ScheduleNextMigrationWindowUseCase(
         val version = MigrationScheduler.wakeVersion(owner)
         val next = getMigrationSnapshot(owner)?.nextPending ?: return
         val delay = delayUntil(next.scheduledAt.epochSeconds)
-        migrationScheduler.scheduleAndAwait(owner, delay, version)
+        migrationScheduler.scheduleIfMissing(owner, delay, version)
     }
 
     private fun delayUntil(epochSeconds: Long): Duration {

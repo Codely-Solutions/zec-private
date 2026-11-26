@@ -8,6 +8,8 @@ import cash.z.ecc.android.sdk.MigrationTransferStates
 import cash.z.ecc.android.sdk.TransferAttemptOutcome
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.TransferResult
+import cash.z.ecc.android.sdk.model.TransactionId
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import io.mockk.coEvery
@@ -107,7 +109,7 @@ class MigrationDriveOnceForegroundTest {
     }
 
     @Test
-    fun onlyTheNamedPreparationCanSkipAnActiveSync() = runTest {
+    fun aNamedPreparationCannotExemptTheSdkFromTheQuietWindow() = runTest {
         val sync = mockk<Synchronizer> {
             every { status } returns MutableStateFlow(Synchronizer.Status.SYNCING)
         }
@@ -140,7 +142,42 @@ class MigrationDriveOnceForegroundTest {
 
         coEvery { sdk.nextStep() } returns named
         assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "keep-preparation"))
+        coVerify(exactly = 0) { sdk.executeNextPendingTransfer(any(), true) }
+    }
+
+    @Test
+    fun aSuccessfulCrossingDoesNotRequestTheTxIdOnTheWalletSyncRoute() = runTest {
+        val txId = TransactionId.new(ByteArray(32))
+        val sync = mockk<Synchronizer>(relaxed = true)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Broadcast(7), null)
+            coEvery { getMigrationTransferStates() } returns null
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
+            coEvery { executeNextPendingTransfer(any(), true) } returns
+                TransferAttemptOutcome.Executed(TransferResult.Success(txId))
+        }
+        val activity = mockk<LastNetworkActivityStorageProvider>(relaxed = true) {
+            coEvery { get() } returns Instant.EPOCH
+            every { latestObserved } returns null
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(relaxed = true),
+            migrationNotifier = mockk(relaxed = true),
+            isMigrationTorEnabledStorageProvider = mockk { coEvery { this@mockk.get("crossing-owner") } returns true },
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk {
+                every { synchronizer } returns MutableStateFlow(null)
+                coEvery { getSynchronizerOrNull() } returns sync
+            },
+            lastNetworkActivity = activity,
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+
+        assertIs<DriveOnceResult.NextWake>(drive.run(sdk, "crossing-owner"))
         coVerify(exactly = 1) { sdk.executeNextPendingTransfer(any(), true) }
+        coVerify(exactly = 1) { activity.stampNow() }
+        coVerify(exactly = 0) { sync.enhanceTransaction(txId) }
     }
 
     @Test
