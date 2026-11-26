@@ -69,7 +69,8 @@ class MigrationNotificationVM(
 
     // The Tor privacy check already happened earlier in the flow (How This Works, ahead of
     // Battery/Notification).
-    private fun reviewArgs() = MigrationReviewArgs(MigrationMode.AUTOMATIC, args.accountKeyId, args.useTor)
+    private fun reviewArgs() =
+        MigrationReviewArgs(MigrationMode.AUTOMATIC, args.accountKeyId, args.useTor, args.recoveryId)
 
     private fun onBack() = navigationRouter.back()
 }

@@ -15,11 +15,14 @@ import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -80,6 +83,7 @@ class MigrationDriveOnceForegroundTest {
                 status.value = Synchronizer.Status.SYNCING
                 null
             }
+            every { latestObserved } returns null
         }
         val sdk = mockk<OrchardMigrationSdk> {
             coEvery { privacySyncBufferDuration() } returns 15.seconds
@@ -97,6 +101,45 @@ class MigrationDriveOnceForegroundTest {
         )
 
         assertFalse(drive.mayBroadcastCrossing(sdk))
+    }
+
+    @Test
+    fun aSyncRecordedDuringTheStatusReadKeepsManualCrossingInTheQuietWindow() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val idle = CompletableDeferred<Unit>()
+        val transport = mockk<Synchronizer> {
+            every { status } returns flow {
+                started.complete(Unit)
+                idle.await()
+                emit(Synchronizer.Status.SYNCED)
+            }
+        }
+        var latest: Instant? = null
+        val activity = mockk<LastNetworkActivityStorageProvider> {
+            coEvery { get() } returns Instant.EPOCH
+            every { latestObserved } answers { latest }
+        }
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { privacySyncBufferDuration() } returns 15.seconds
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = mockk(),
+            migrationNotifier = mockk(),
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk { every { synchronizer } returns MutableStateFlow(transport) },
+            lastNetworkActivity = activity,
+            applicationStateProvider = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk(),
+        )
+        val admitted = async { drive.mayBroadcastCrossing(sdk) }
+
+        started.await()
+        latest = Instant.now()
+        idle.complete(Unit)
+
+        assertFalse(admitted.await())
     }
 
     @Test

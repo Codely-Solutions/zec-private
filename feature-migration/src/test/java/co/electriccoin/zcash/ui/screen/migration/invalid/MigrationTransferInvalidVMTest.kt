@@ -19,7 +19,9 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationPrivacyOrReviewDestinationUseCase
+import co.electriccoin.zcash.ui.screen.migration.customservertor.MigrationCustomServerTorArgs
 import co.electriccoin.zcash.ui.screen.migration.privacy.MigrationPrivacyArgs
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
@@ -177,14 +179,16 @@ class MigrationTransferInvalidVMTest {
                     coEvery { restartCurrentMigrationStep() } returns
                         MigrationRestartOutcome.Replanned(restartedSchedule)
                 }
-            val restartRepo = mockk<RestartMigrationScheduleRepository>(relaxed = true)
+            val restartRepo = RestartMigrationScheduleRepositoryImpl()
             val router = FakeNavigationRouter()
+            var custom = true
             val vm =
                 vm(
                     snapshot = snapshot(emptyList()),
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
                     restartMigrationScheduleRepository = restartRepo,
                     router = router,
+                    isCustomServer = { custom },
                 )
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -192,11 +196,20 @@ class MigrationTransferInvalidVMTest {
             requireNotNull(vm.state.value.content).onContinue()
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { restartRepo.set(any(), restartedSchedule) }
+            val warning = router.forwardedRoutes.single() as MigrationCustomServerTorArgs
+            val recoveryId = requireNotNull(warning.recoveryId)
+            assertEquals(restartedSchedule, restartRepo.find(warning.accountKeyId, recoveryId)?.schedule)
+            assertEquals(emptyList(), router.replacedRoutes)
+
+            custom = false
+            requireNotNull(vm.state.value.content).onContinue()
+            advanceUntilIdle()
+
             assertEquals(
-                listOf<Any>(MigrationPrivacyArgs(MigrationMode.AUTOMATIC, "00000000000000000000000000000001")),
-                router.replacedRoutes.toList(),
+                MigrationPrivacyArgs(MigrationMode.AUTOMATIC, warning.accountKeyId, recoveryId),
+                router.forwardedRoutes.last(),
             )
+            coVerify(exactly = 1) { sdk.restartCurrentMigrationStep() }
             collectJob.cancel()
         }
 
@@ -212,7 +225,9 @@ class MigrationTransferInvalidVMTest {
                     coEvery { restartCurrentMigrationStep() } returns
                         MigrationRestartOutcome.CancelledUntilNetworkUpgrade(2_000L)
                 }
-            val restartRepo = mockk<RestartMigrationScheduleRepository>(relaxed = true)
+            val restartRepo = mockk<RestartMigrationScheduleRepository>(relaxed = true) {
+                every { find(any(), any()) } returns null
+            }
             val router = FakeNavigationRouter()
             val vm =
                 vm(
@@ -227,7 +242,7 @@ class MigrationTransferInvalidVMTest {
             requireNotNull(vm.state.value.content).onContinue()
             advanceUntilIdle()
 
-            coVerify(exactly = 0) { restartRepo.set(any(), any()) }
+            coVerify(exactly = 0) { restartRepo.set(any(), any(), any()) }
             assertEquals(listOf<Any>(MigrationSetupArgs), router.replacedRoutes.toList())
             collectJob.cancel()
         }
@@ -277,9 +292,11 @@ class MigrationTransferInvalidVMTest {
     private fun vm(
         snapshot: LiveMigrationSnapshot?,
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
-        restartMigrationScheduleRepository: RestartMigrationScheduleRepository = mockk(relaxed = true),
+        restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
+            RestartMigrationScheduleRepositoryImpl(),
         router: NavigationRouter = FakeNavigationRouter(),
         args: MigrationTransferInvalidArgs = MigrationTransferInvalidArgs("00000000000000000000000000000001"),
+        isCustomServer: () -> Boolean = { false },
     ): MigrationTransferInvalidVM {
         val fakeAccount =
             AccountFixture.new(
@@ -310,7 +327,7 @@ class MigrationTransferInvalidVMTest {
             chooseTransport = GetMigrationPrivacyOrReviewDestinationUseCase(
                 getSelectedWalletAccount,
                 mockk<IsTorEnabledStorageProvider> { coEvery { get() } returns false },
-                mockk<AutomaticServerRepository> { coEvery { isServerCustom() } returns false }
+                mockk<AutomaticServerRepository> { coEvery { isServerCustom() } answers { isCustomServer() } }
             ),
             navigationRouter = router,
             errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
@@ -319,8 +336,11 @@ class MigrationTransferInvalidVMTest {
 
     private class FakeNavigationRouter : NavigationRouter {
         val replacedRoutes = mutableListOf<Any>()
+        val forwardedRoutes = mutableListOf<Any>()
 
-        override fun forward(vararg routes: Any) = Unit
+        override fun forward(vararg routes: Any) {
+            forwardedRoutes.addAll(routes)
+        }
 
         override fun replace(vararg routes: Any) {
             replacedRoutes.addAll(routes)

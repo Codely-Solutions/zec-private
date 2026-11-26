@@ -215,7 +215,7 @@ class MigrationReviewVMTest {
                 )
             val restartRepo =
                 mockk<RestartMigrationScheduleRepository>(relaxed = true) {
-                    every { consume(any()) } returns restartSchedule
+                    every { find(any(), "retained-origin") } returns ReviewedMigrationSchedule(restartSchedule)
                 }
             val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
             val vm =
@@ -224,6 +224,7 @@ class MigrationReviewVMTest {
                     getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     mode = MigrationMode.AUTOMATIC,
                     restartMigrationScheduleRepository = restartRepo,
+                    recoveryId = "retained-origin",
                 )
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -235,7 +236,7 @@ class MigrationReviewVMTest {
                     ?.size
             )
             coVerify(exactly = 0) { sdk.proposeMigrationTransfers(any()) }
-            coVerify(exactly = 1) { restartRepo.consume(any()) }
+            coVerify(exactly = 1) { restartRepo.find(any(), "retained-origin") }
             collectJob.cancel()
         }
 
@@ -913,8 +914,9 @@ private fun vm(
         PendingMigrationScheduleRepositoryImpl(),
     draftTor: Boolean? = null,
     draftOwner: String? = null,
+    recoveryId: String? = null,
     restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
-        mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
+        mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { find(any(), any()) } returns null },
     synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
     sourceEntryId: String? = null,
     walletActionAccess: WalletActionAccess = mockk {
@@ -926,7 +928,7 @@ private fun vm(
         coEvery { withExclusiveAccess<Unit>(any(), any()) } coAnswers { secondArg<suspend () -> Unit>().invoke() }
     },
 ) = MigrationReviewVM(
-    args = MigrationReviewArgs(mode = mode, accountKeyId = draftOwner, useTor = draftTor),
+    args = MigrationReviewArgs(mode = mode, accountKeyId = draftOwner, useTor = draftTor, recoveryId = recoveryId),
     getOrchardMigrationSdk = getOrchardMigrationSdk,
     pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
     pendingKeystone = mockk { every { peek(any()) } returns null },

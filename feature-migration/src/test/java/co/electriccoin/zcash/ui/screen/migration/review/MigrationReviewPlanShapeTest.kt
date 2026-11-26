@@ -370,7 +370,7 @@ class MigrationReviewPlanShapeTest {
             pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
             restartMigrationScheduleRepository =
                 mockk<RestartMigrationScheduleRepository>(relaxed = true) {
-                    every { consume(any()) } returns null
+                    every { find(any(), any()) } returns null
                 },
             finalizeMigrationSchedule = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true),
             migrationTorEnabled = mockk(relaxed = true),

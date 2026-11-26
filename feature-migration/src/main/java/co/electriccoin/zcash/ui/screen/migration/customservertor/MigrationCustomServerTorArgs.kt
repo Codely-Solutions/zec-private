@@ -48,6 +48,7 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 data class MigrationCustomServerTorArgs(
     val mode: MigrationMode,
     val accountKeyId: String,
+    val recoveryId: String? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

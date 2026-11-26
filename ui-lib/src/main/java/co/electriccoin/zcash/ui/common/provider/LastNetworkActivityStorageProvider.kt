@@ -14,6 +14,9 @@ import java.time.Instant
  * Key: `"last_network_activity_epoch"` — backed by regular (non-encrypted) app storage.
  */
 interface LastNetworkActivityStorageProvider {
+    /** Latest observation in this process, available without suspending after a status sample. */
+    val latestObserved: Instant?
+
     /** Writes the current epoch as the last-seen network activity timestamp. */
     suspend fun stampNow()
 
@@ -29,18 +32,19 @@ class LastNetworkActivityStorageProviderImpl(
     private val writeLock = Mutex()
 
     @Volatile
-    private var lastObserved: Instant? = null
+    override var latestObserved: Instant? = null
+        private set
 
     override suspend fun stampNow() {
         writeLock.withLock {
             val now = Instant.now()
-            val observed = maxOf(now, lastObserved ?: now)
+            val observed = maxOf(now, latestObserved ?: now)
             // Keep the local quiet window when saving the durable timestamp fails.
-            lastObserved = observed
+            latestObserved = observed
             default.putValue(preferenceHolder(), observed)
         }
     }
 
     override suspend fun get(): Instant? =
-        lastObserved ?: default.getValue(preferenceHolder()).let { persisted -> lastObserved ?: persisted }
+        latestObserved ?: default.getValue(preferenceHolder()).let { persisted -> latestObserved ?: persisted }
 }

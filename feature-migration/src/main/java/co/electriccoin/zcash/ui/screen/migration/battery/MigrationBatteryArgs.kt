@@ -55,7 +55,11 @@ import org.koin.compose.koinInject
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data class MigrationBatteryArgs(val accountKeyId: String, val useTor: Boolean)
+data class MigrationBatteryArgs(
+    val accountKeyId: String,
+    val useTor: Boolean,
+    val recoveryId: String? = null,
+)
 
 @Composable
 fun MigrationBatteryScreen(args: MigrationBatteryArgs) {

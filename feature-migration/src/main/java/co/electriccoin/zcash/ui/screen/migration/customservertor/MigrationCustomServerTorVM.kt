@@ -47,7 +47,8 @@ class MigrationCustomServerTorVM(
         navigationRouter.forward(
             when (args.mode) {
                 MigrationMode.IMMEDIATE -> MigrationReviewArgs(args.mode, args.accountKeyId)
-                MigrationMode.AUTOMATIC -> MigrationBatteryArgs(args.accountKeyId, useTor = false)
+                MigrationMode.AUTOMATIC ->
+                    MigrationBatteryArgs(args.accountKeyId, useTor = false, recoveryId = args.recoveryId)
             }
         )
     }

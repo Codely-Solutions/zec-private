@@ -65,7 +65,7 @@ class MigrationPrivacyVM(
         navigationRouter.forward(
             when (args.mode) {
                 MigrationMode.IMMEDIATE -> MigrationReviewArgs(args.mode, args.accountKeyId)
-                MigrationMode.AUTOMATIC -> MigrationBatteryArgs(args.accountKeyId, useTor.value)
+                MigrationMode.AUTOMATIC -> MigrationBatteryArgs(args.accountKeyId, useTor.value, args.recoveryId)
             }
         )
     }

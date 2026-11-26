@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Operation
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import androidx.work.workDataOf
 import co.electriccoin.zcash.migration.BuildConfig
 import co.electriccoin.zcash.migration.migrationLog
@@ -170,8 +171,49 @@ class MigrationScheduler(
         // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
         private val wakeVersions = mutableMapOf<String, Long>()
 
-        private fun wakeVersion(accountKeyId: String): Long =
+        internal fun wakeVersion(accountKeyId: String): Long =
             synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: 0L }
+
+        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long =
+            synchronized(wakeVersions) {
+                MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
+                advanceWakeVersion(accountKeyId)
+            }
+
+        internal suspend fun armRetry(
+            context: Context,
+            accountKeyId: String,
+            requestId: UUID,
+            startedAttempt: Int,
+            version: Long,
+        ) {
+            // The WorkManager retry reuses this UUID and starts its configured default backoff
+            // when doWork returns. The alarm's late margin absorbs that handoff interval.
+            MigrationScheduler(context).armFallback(accountKeyId, version) {
+                val multiplier = 1L shl startedAttempt.coerceIn(0, RETRY_BACKOFF_SHIFT_LIMIT)
+                val backoff = WorkRequest.DEFAULT_BACKOFF_DELAY_MILLIS * multiplier
+                val dueAt = System.currentTimeMillis() + backoff.coerceAtMost(WorkRequest.MAX_BACKOFF_MILLIS)
+                Wake(requestId, startedAttempt + 1, dueAt)
+            }
+        }
+
+        internal fun withdrawCompletedFallback(
+            context: Context,
+            accountKeyId: String,
+            version: Long,
+            onCleared: () -> Unit,
+        ) {
+            MigrationAccountRetirement.admit(accountKeyId) {
+                synchronized(wakeVersions) {
+                    if (wakeVersion(accountKeyId) == version) {
+                        advanceWakeVersion(accountKeyId)
+                        MigrationDueAlarmScheduler(context).cancel(accountKeyId)
+                        MigrationWorkerHeartbeat.clear(context, accountKeyId)
+                        onCleared()
+                    }
+                }
+            }
+        }
 
         private fun advanceWakeVersion(accountKeyId: String): Long =
             (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
@@ -181,6 +223,8 @@ class MigrationScheduler(
          * worker is dead — absorbs ordinary WorkManager dispatch slack without false alarms.
          */
         val WORKER_LATE_MARGIN = 2.minutes
+
+        private const val RETRY_BACKOFF_SHIFT_LIMIT = 20
 
         const val WORK_ID_PREFIX = "co.electriccoin.zcash.migration_transfer"
         const val KEY_ACCOUNT_KEY_ID = "co.electriccoin.zcash.migration.work_account_key_id"

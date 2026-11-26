@@ -69,7 +69,7 @@ class MigrationTransferDueReceiverTest {
             verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
             verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
             MigrationAccountRetirement.restore(owner)
-            startedRequest = "same-worker:1"
+            startedRequest = "same-worker:2"
             MigrationTransferDueReceiver().onReceive(context, intent)
             verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
         } finally {

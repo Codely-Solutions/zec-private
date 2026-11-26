@@ -8,4 +8,5 @@ data class MigrationReviewArgs(
     val mode: MigrationMode,
     val accountKeyId: String? = null,
     val useTor: Boolean? = null,
+    val recoveryId: String? = null,
 )

@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleRepository
+import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationPrivacyOrReviewDestinationUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import kotlin.time.Clock
 
 class MigrationTransferInvalidVM(
@@ -45,7 +47,10 @@ class MigrationTransferInvalidVM(
     private val errorStateMapper: ErrorMapperUseCase,
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
+    private val recoveryId = UUID.randomUUID().toString()
+
     override fun onCleared() {
+        restartMigrationScheduleRepository.clear(args.accountKeyId, recoveryId)
         navigationRouter.discardResultFrom(sourceEntryId)
         super.onCleared()
     }
@@ -70,8 +75,9 @@ class MigrationTransferInvalidVM(
 
     fun load() {
         loadLce.execute {
-            recoveryInfo.value = null
             val owner = args.accountKeyId
+            if (restartMigrationScheduleRepository.find(owner, recoveryId) != null) return@execute
+            recoveryInfo.value = null
             if (selectedOwner() == owner) {
                 val state = getOrchardMigrationSdk(owner)?.getMigrationStateUnreconciled()
                 if (state is MigrationState.RequiresAttention) {
@@ -120,6 +126,10 @@ class MigrationTransferInvalidVM(
     private fun onContinue(info: RecoveryInfo) =
         restartLce.execute {
             val owner = args.accountKeyId
+            if (restartMigrationScheduleRepository.find(owner, recoveryId) != null) {
+                continueReplan(owner)
+                return@execute
+            }
             val outcome = migrationDriveOnce.withExclusiveAccess(owner) {
                 check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
                 val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
@@ -140,12 +150,9 @@ class MigrationTransferInvalidVM(
             // doc for why this is a separate slot from the Keystone sign/scan hand-off).
             when (outcome) {
                 is MigrationRestartOutcome.Replanned -> {
-                    restartMigrationScheduleRepository.set(owner, outcome.schedule)
-                    val destination = chooseTransport(MigrationMode.AUTOMATIC, expectedOwner = owner)
-                    check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
-                    navigationRouter.stageResultFrom(sourceEntryId) {
-                        NavigationCommand.Replace(listOf(destination))
-                    }
+                    val reviewed = ReviewedMigrationSchedule(outcome.schedule)
+                    restartMigrationScheduleRepository.set(owner, recoveryId, reviewed)
+                    continueReplan(owner)
                 }
 
                 is MigrationRestartOutcome.CancelledUntilNetworkUpgrade -> {
@@ -155,6 +162,12 @@ class MigrationTransferInvalidVM(
                 }
             }
         }
+
+    private suspend fun continueReplan(owner: String) {
+        val destination = chooseTransport(MigrationMode.AUTOMATIC, expectedOwner = owner, recoveryId = recoveryId)
+        check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
+        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.Forward(listOf(destination)) }
+    }
 
     private suspend fun selectedOwner() = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 

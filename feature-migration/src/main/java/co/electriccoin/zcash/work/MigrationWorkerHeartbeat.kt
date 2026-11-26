@@ -43,7 +43,8 @@ object MigrationWorkerHeartbeat {
     }
 
     internal fun hasStarted(context: Context, accountKeyId: String, request: UUID, attempt: Int): Boolean =
-        prefs(context).getString(KEY_LAST_REQUEST + accountKeyId, null) == requestIdentity(request, attempt)
+        prefs(context).getString(KEY_LAST_REQUEST + accountKeyId, null)
+            .coversWorkerAttempt(requestIdentity(request, attempt))
 
     internal fun isWakeLate(context: Context, accountKeyId: String, now: Long): Boolean {
         val storage = prefs(context)
@@ -89,3 +90,14 @@ object MigrationWorkerHeartbeat {
 }
 
 private fun requestIdentity(request: UUID, attempt: Int) = "$request:$attempt"
+
+internal fun String?.coversWorkerAttempt(expected: String): Boolean {
+    if (this == null || substringBefore(':') != expected.substringBefore(':')) return false
+    val startedAttempt = substringAfter(':', "").toIntOrNull()
+    val expectedAttempt = expected.substringAfter(':', "").toIntOrNull()
+    return if (startedAttempt != null && expectedAttempt != null) {
+        startedAttempt >= expectedAttempt
+    } else {
+        this == expected
+    }
+}

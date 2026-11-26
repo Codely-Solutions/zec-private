@@ -10,6 +10,9 @@ import androidx.work.Operation
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import cash.z.ecc.android.sdk.MigrationAdvanceResult
+import cash.z.ecc.android.sdk.MigrationAdvanceStep
+import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -49,10 +52,11 @@ class MigrationWorkerOwnershipTest {
     @Test
     fun theCurrentWorkerWaitsForItsSuccessorAndRetriesIfTheAppendFails() = runTest {
         val owner = "successor-fixture-owner"
+        val workerId = UUID.fromString("00000000-0000-0000-0000-000000000050")
         val childId = UUID.fromString("00000000-0000-0000-0000-000000000051")
         val workId = MigrationScheduler.workId(owner)
         val params = mockk<WorkerParameters>(relaxed = true) {
-            every { id } returns UUID.fromString("00000000-0000-0000-0000-000000000050")
+            every { id } returns workerId
             every { inputData } returns Data.Builder().putString(MigrationScheduler.KEY_ACCOUNT_KEY_ID, owner).build()
         }
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
@@ -99,14 +103,15 @@ class MigrationWorkerOwnershipTest {
             verify(exactly = 0) { editor.putLong("next_wake_at_$owner", any()) }
             failed.setException(IOException("Cannot persist the next wake"))
             assertEquals(Result.retry(), first.await())
-            verify(exactly = 0) { editor.putLong("next_wake_at_$owner", any()) }
+            verify(exactly = 1) { editor.putLong("next_wake_at_$owner", any()) }
+            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$workerId:1") }
 
             val second = async { worker.doWork() }
             runCurrent()
             assertFalse(second.isCompleted)
             acknowledged.set(Operation.SUCCESS)
             assertEquals(Result.success(), second.await())
-            verify(exactly = 1) { editor.putLong("next_wake_at_$owner", any()) }
+            verify(exactly = 2) { editor.putLong("next_wake_at_$owner", any()) }
             verify(exactly = 2) {
                 manager.enqueueUniqueWork(workId, ExistingWorkPolicy.APPEND, any<OneTimeWorkRequest>())
             }
@@ -120,7 +125,7 @@ class MigrationWorkerOwnershipTest {
             every { manager.getWorkInfosForUniqueWork(workId) } returns Futures.immediateFuture(listOf(retained))
             val restartedAt = System.currentTimeMillis()
             assertEquals(Result.success(), worker.doWork())
-            verify(exactly = 2) { editor.putLong("next_wake_at_$owner", any()) }
+            verify(exactly = 3) { editor.putLong("next_wake_at_$owner", any()) }
             verify { editor.putLong("next_wake_at_$owner", more(restartedAt + 74_999)) }
             verify { editor.putString("next_wake_request_$owner", childId.toString() + ":0") }
             verify(exactly = 2) {
@@ -281,15 +286,98 @@ class MigrationWorkerOwnershipTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aStaleAttemptSnapshotCannotReplaceTheRetryAlarm() = runTest {
+        val owner = "retry-snapshot-owner"
+        val request = UUID.fromString("00000000-0000-0000-0000-000000000056")
+        val staleSnapshot = SettableFuture.create<List<WorkInfo>>()
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context>(relaxed = true) {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+        }
+        val pending = mockk<WorkInfo> {
+            every { id } returns request
+            every { state } returns WorkInfo.State.ENQUEUED
+            every { nextScheduleTimeMillis } returns System.currentTimeMillis() + 90_000L
+            every { runAttemptCount } returns 0
+        }
+        val manager = mockk<WorkManager> {
+            every { getWorkInfosForUniqueWork(MigrationScheduler.workId(owner)) } returns staleSnapshot
+        }
+        mockkObject(WorkManager.Companion)
+        try {
+            every { WorkManager.getInstance(context) } returns manager
+            val scheduler = MigrationScheduler(context)
+            val oldUpdate = async { scheduler.reconcileScheduledWake(owner) }
+            runCurrent()
+            val current = MigrationScheduler.recordWorkerStart(context, owner, request, 1)
+            MigrationScheduler.armRetry(context, owner, request, 1, current)
+            staleSnapshot.set(listOf(pending))
+            oldUpdate.await()
+
+            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$request:2") }
+            verify(exactly = 0) { editor.putString("next_wake_request_$owner", "$request:0") }
+        } finally {
+            staleSnapshot.cancel(false)
+            unmockkObject(WorkManager.Companion)
+        }
+    }
+
+    @Test
+    fun authoritativeCompletionWithdrawsOnlyItsOwnFallback() = runTest {
+        val owner = "live-completion-owner"
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val preferences = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context>(relaxed = true) {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
+        }
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Complete, null)
+            coEvery { getMigrationState() } returnsMany listOf(MigrationState.ReadyToPropose, MigrationState.Complete)
+        }
+        val drive = MigrationDriveOnce(
+            applicationContext = context,
+            migrationNotifier = notifier,
+            isMigrationTorEnabledStorageProvider = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            synchronizerProvider = mockk(),
+            lastNetworkActivity = mockk(),
+            applicationStateProvider = mockk(),
+            migrationUpgradeNotice = mockk(),
+            resetProgress = mockk { every { isPending } returns MutableStateFlow(false) },
+        )
+
+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
+        verify(exactly = 0) { editor.remove(any()) }
+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner, allowForcedBroadcastWindow = true))
+        verify(exactly = 1) { editor.remove("next_wake_at_$owner") }
+        verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
+        verify(exactly = 1) { notifier.cancelStepDue(owner) }
+    }
+
     private fun futureOperation(result: SettableFuture<Operation.State.SUCCESS>): Operation =
         mockk { every { this@mockk.result } returns result }
 
     @Test
     fun workerRetriesAnUnavailableSdkAndRechecksEngineStateAfterAnInterruptedDrive() = runTest {
         val owner = "recovering-worker-owner"
-        val params = mockk<WorkerParameters>(relaxed = true) {
-            every { inputData } returns Data.Builder().putString(MigrationScheduler.KEY_ACCOUNT_KEY_ID, owner).build()
+        val requestId = UUID.fromString("00000000-0000-0000-0000-000000000055")
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
+        val context = mockk<Context>(relaxed = true) {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
+            every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
+        fun worker(attempt: Int) = MigrationWorker(context, mockk<WorkerParameters>(relaxed = true) {
+            every { inputData } returns Data.Builder().putString(MigrationScheduler.KEY_ACCOUNT_KEY_ID, owner).build()
+            every { id } returns requestId
+            every { runAttemptCount } returns attempt
+        })
         val sdk = mockk<OrchardMigrationSdk>()
         val resolver = mockk<GetOrchardMigrationSdkUseCase> {
             coEvery { lookup(owner) } returnsMany listOf(
@@ -311,11 +399,13 @@ class MigrationWorkerOwnershipTest {
             })
         }
         try {
-            val worker = MigrationWorker(mockk<Context>(relaxed = true), params)
-            assertEquals(Result.retry(), worker.doWork())
+            assertEquals(Result.retry(), worker(0).doWork())
             coVerify(exactly = 0) { drive.run(any(), any(), any()) }
-            assertEquals(Result.retry(), worker.doWork())
-            assertEquals(Result.success(), worker.doWork())
+            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:1") }
+            assertEquals(Result.retry(), worker(1).doWork())
+            verify(exactly = 1) { editor.putString("next_wake_request_$owner", "$requestId:2") }
+            assertEquals(Result.success(), worker(2).doWork())
+            verify(exactly = 0) { editor.putString("next_wake_request_$owner", "$requestId:3") }
             coVerify(exactly = 3) { resolver.lookup(owner) }
             coVerify(exactly = 2) { drive.run(sdk, owner) }
         } finally {

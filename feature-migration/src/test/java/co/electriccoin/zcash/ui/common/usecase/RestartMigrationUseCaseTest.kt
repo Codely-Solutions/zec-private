@@ -90,7 +90,7 @@ class RestartMigrationUseCaseTest {
             assertTrue(fakeSdk.clearMigrationCalled)
             verify { scheduler.cancel(accountKeyId) }
             coVerify { torFailure.store(accountKeyId, false) }
-            verify { restartSchedule.consume(accountKeyId) }
+            verify { restartSchedule.clearOwner(accountKeyId) }
             verify(exactly = 0) { keystonePczt.clear() }
             verify { notifier.cancel(accountKeyId) }
             verify { notifier.cancelStepDue(accountKeyId) }

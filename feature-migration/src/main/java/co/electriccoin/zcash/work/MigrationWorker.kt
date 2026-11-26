@@ -43,9 +43,10 @@ class MigrationWorker(
         val accountKeyId = inputData.getString(MigrationScheduler.KEY_ACCOUNT_KEY_ID)
         if (accountKeyId.isNullOrBlank() || resetProgress.isPending.value) return Result.success()
 
-        return try {
-            MigrationAccountRetirement.keepWake(accountKeyId) {
-                MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId, id, runAttemptCount)
+        var wakeAtEntry: Long? = null
+        val result = try {
+            wakeAtEntry = MigrationAccountRetirement.keepWake(accountKeyId) {
+                MigrationScheduler.recordWorkerStart(applicationContext, accountKeyId, id, runAttemptCount)
             }
             runForOwner(accountKeyId)
         } catch (e: CancellationException) {
@@ -54,6 +55,10 @@ class MigrationWorker(
             migrationLog("Migration worker state unavailable (${e.javaClass.simpleName}). Rechecking on retry.")
             if (resetProgress.isPending.value) Result.success() else retryWhileRemoving(accountKeyId)
         }
+        if (result == Result.retry() && !resetProgress.isPending.value) {
+            wakeAtEntry?.let { MigrationScheduler.armRetry(applicationContext, accountKeyId, id, runAttemptCount, it) }
+        }
+        return result
     }
 
     private suspend fun runForOwner(accountKeyId: String): Result {

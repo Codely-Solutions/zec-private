@@ -302,3 +302,5 @@ Activity reads reconnect after temporary key or incomplete file reads within the
 Migration wake tests distinguish successive attempts of one worker request and reject an older scheduler snapshot after a replacement. Foreground migration tests cover final quiet-window sampling and record an attempted native sync even when it fails.
 
 Temporary encrypted metadata read failures preserve the last complete Activity snapshot. Pending swap rows and open details retry the bound read. An unavailable alternate store cannot establish a missing funding reference or acknowledge an edit.
+
+Migration replan tests cover the hosted origin beneath the custom-server warning and picker, the same retained schedule after a server change, and the exact handoff identity. Retry and completion tests reject stale worker-attempt reads, arm a background retry and withdraw the fallback for an authoritatively completed plan. The manual crossing check combines its last status read with the latest observed sync timestamp.

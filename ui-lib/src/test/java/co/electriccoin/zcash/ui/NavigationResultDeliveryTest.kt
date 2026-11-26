@@ -439,6 +439,35 @@ class NavigationResultDeliveryTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun aServerPickerOpenedFromTheRecoveryDialogReturnsToTheHostedOrigin() {
+        install()
+        compose.runOnIdle {
+            runTest {
+                val router = collectOwnedNavigation()
+                val recovery = DeliveryMigrationArgs("original")
+                val warning = DeliveryMigrationWarning("the-recovery")
+                controller.navigate(recovery)
+                val origin = checkNotNull(controller.currentBackStackEntry).id
+                router.stageResultFrom(origin) { NavigationCommand.Forward(listOf(warning)) }
+                runCurrent()
+                val warningEntry = checkNotNull(controller.currentBackStackEntry)
+                assertEquals(warning, warningEntry.toRoute<DeliveryMigrationWarning>())
+
+                router.stageResultFrom(warningEntry.id) { NavigationCommand.Forward(listOf(ActivityHistoryArgs)) }
+                runCurrent()
+                assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                assertTrue(controller.popBackStack())
+                assertEquals(origin, controller.currentBackStackEntry?.id)
+                assertEquals(recovery, controller.currentBackStackEntry?.toRoute<DeliveryMigrationArgs>())
+                router.stageResultFrom(origin) { NavigationCommand.Forward(listOf(warning)) }
+                runCurrent()
+                assertEquals(warning, controller.currentBackStackEntry?.toRoute<DeliveryMigrationWarning>())
+            }
+        }
+    }
+
     private fun install() {
         compose.setContent {
             controller = rememberNavController()
@@ -447,6 +476,7 @@ class NavigationResultDeliveryTest {
                 composable<DeliveryMigrationArgs> { Text("Migration progress") }
                 composable<DeliveryOrigin> { Text("Signing") }
                 dialog<DeliverySigningSheet> { Text("Hardware signing") }
+                dialog<DeliveryMigrationWarning> { Text("Custom migration server") }
                 dialog<ColorPickerArgs> { Text("Color picker") }
                 dialog<ErrorDialog> { Text("Seed recovery") }
                 composable<ScanGiftCardArgs> { Text("External scan") }
@@ -481,3 +511,6 @@ internal data object DeliveryOrigin
 
 @Serializable
 internal data object DeliverySigningSheet
+
+@Serializable
+internal data class DeliveryMigrationWarning(val recoveryId: String)

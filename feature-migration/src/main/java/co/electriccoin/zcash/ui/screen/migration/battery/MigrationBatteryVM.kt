@@ -58,7 +58,7 @@ class MigrationBatteryVM(
     // straight back here when they press back from a later screen.
     private fun onAutoSkip() = navigationRouter.replace(notificationArgs())
 
-    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
+    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor, args.recoveryId)
 
     private fun onBack() = navigationRouter.back()
 }

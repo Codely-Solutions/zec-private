@@ -80,7 +80,7 @@ class RestartMigrationUseCase(
         // A leftover Tor-failure flag would keep routing launches into the Sending recovery screen.
         pendingMigrationTorFailureStorageProvider.store(accountKeyId, false)
         // An unconsumed restart schedule would otherwise be reused in place of a fresh proposal.
-        restartMigrationScheduleRepository.consume(accountKeyId)
+        restartMigrationScheduleRepository.clearOwner(accountKeyId)
         // Both handoffs belong to the deleted run and may still hold a signed batch.
         pendingSchedule.peek(accountKeyId)?.let { pendingSchedule.clear(accountKeyId, it) }
         pendingKeystoneMigrationPcztsRepository.peek(accountKeyId)?.let {

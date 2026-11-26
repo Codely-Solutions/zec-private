@@ -50,7 +50,11 @@ import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data class MigrationNotificationArgs(val accountKeyId: String, val useTor: Boolean)
+data class MigrationNotificationArgs(
+    val accountKeyId: String,
+    val useTor: Boolean,
+    val recoveryId: String? = null,
+)
 
 @Composable
 fun MigrationNotificationScreen(args: MigrationNotificationArgs) {

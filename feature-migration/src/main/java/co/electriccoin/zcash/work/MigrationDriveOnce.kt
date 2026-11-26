@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -137,7 +138,7 @@ class MigrationDriveOnce(
         migrationLog("MigrationDriveOnce: starting ${step.javaClass.simpleName}.")
         return when (step) {
             MigrationAdvanceStep.Complete -> {
-                handleCompleteStep(sdk)
+                handleCompleteStep(sdk, applicationContext, accountKeyId, migrationNotifier)
             }
 
             is MigrationAdvanceStep.Rebuild -> {
@@ -294,7 +295,7 @@ class MigrationDriveOnce(
             }
 
             MigrationAdvanceStep.Complete -> {
-                handleCompleteStep(sdk)
+                handleCompleteStep(sdk, applicationContext, accountKeyId, migrationNotifier)
             }
 
             is MigrationAdvanceStep.Rebuild -> {
@@ -328,11 +329,13 @@ class MigrationDriveOnce(
 
     internal suspend fun mayBroadcastCrossing(sdk: OrchardMigrationSdk): Boolean {
         val privacyBuffer = sdk.privacySyncBufferDuration()
-        val lastActivity = lastNetworkActivity.get()
+        val storedActivity = lastNetworkActivity.get()
+        val syncing = isSynchronizerSyncing()
+        val activity = lastNetworkActivity.latestObserved ?: storedActivity
         return decideBroadcastPreflight(
-            synchronizerSyncing = isSynchronizerSyncing(),
+            synchronizerSyncing = syncing,
             nowEpochSeconds = nowEpochSeconds(),
-            lastNetworkActivityEpochSeconds = lastActivity?.epochSecond,
+            lastNetworkActivityEpochSeconds = activity?.epochSecond,
             privacyBufferSeconds = privacyBuffer.inWholeSeconds,
         ) == BroadcastPreflight.BROADCAST
     }
@@ -357,7 +360,10 @@ class MigrationDriveOnce(
     private suspend fun isSynchronizerSyncing(): Boolean =
         synchronizerProvider.synchronizer.value?.let { synchronizer ->
             // A cold status flow cannot establish that the synchronizer is idle.
-            withTimeoutOrNull(STATUS_READ_TIMEOUT) { synchronizer.status.first() } ?: Synchronizer.Status.SYNCING
+            val statuses = synchronizer.status
+            (statuses as? StateFlow)?.value
+                ?: withTimeoutOrNull(STATUS_READ_TIMEOUT) { statuses.first() }
+                ?: Synchronizer.Status.SYNCING
         } == Synchronizer.Status.SYNCING
 
     private suspend fun broadcastPreflight(
@@ -952,13 +958,23 @@ internal enum class WaitingDisposition { COMPLETION_SWEEP, SURFACE_UNPROVABLE, R
  * was already handled at the moment it superseded — `replanRun`'s `notifyRescheduleRequired` — so a
  * LATER call landing here must not re-surface it as done. [sdk]'s `getMigrationState()` resolves
  * the ambiguity: it reads the persisted status directly (Superseded maps to `ReadyToPropose`, not
- * `Complete` — see `derive_migration_state` in `migration.rs`), so [onActuallyComplete] — the
- * caller's `completeRun` effects — only runs for a genuinely complete migration. Top-level
+ * `Complete` — see `derive_migration_state` in `migration.rs`).
+ * The fallback is cleared only for a genuinely complete migration.
+ * Top-level
  * (rather than a method on [MigrationDriveOnce]) so adding this disambiguation does not itself push
  * the class over its function-count budget.
  */
-private suspend fun handleCompleteStep(sdk: OrchardMigrationSdk): DriveOnceResult {
+private suspend fun handleCompleteStep(
+    sdk: OrchardMigrationSdk,
+    context: android.content.Context,
+    accountKeyId: String,
+    migrationNotifier: MigrationNotifier,
+): DriveOnceResult {
+    val wakeVersion = MigrationScheduler.wakeVersion(accountKeyId)
     if (isMigrationActuallyComplete(sdk.getMigrationState())) {
+        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId, wakeVersion) {
+            migrationNotifier.cancelStepDue(accountKeyId)
+        }
         migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")
     } else {
         migrationLog("MigrationDriveOnce: the engine reported a terminal step with no completed migration.")

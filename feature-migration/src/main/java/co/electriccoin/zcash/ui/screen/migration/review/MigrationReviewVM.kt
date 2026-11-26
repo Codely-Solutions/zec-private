@@ -177,7 +177,7 @@ class MigrationReviewVM(
         loadProposal()
     }
 
-    private fun loadProposal() {
+    private fun loadProposal(refreshRetainedPlan: Boolean = false) {
         proposeLce.execute {
             // Timed, bracketed logging (2026-08-07 Review-screen slow-load investigation): pairs
             // with the MIGRATION_DB_ACCESS_MUTEX queued/acquired/released lines OrchardMigrationSdkImpl.logged()
@@ -215,7 +215,7 @@ class MigrationReviewVM(
                         // doc: the two calls compute independent guesses over the same balance that
                         // aren't guaranteed to agree). Falls back to a fresh proposal for every
                         // ordinary, non-recovery entry into this screen.
-                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
+                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount, refreshRetainedPlan)
                         val schedule = reviewed.schedule
                         // IMMEDIATE has no Keystone branch at all (a documented pre-existing gap —
                         // see MigrationReviewVM.confirmAutomatic()'s Keystone check below), so round
@@ -437,18 +437,30 @@ class MigrationReviewVM(
     private suspend fun loadAutomaticPlan(
         sdk: OrchardMigrationSdk,
         accountKeyId: String,
-        usesKeystone: Boolean
+        usesKeystone: Boolean,
+        refreshRetainedPlan: Boolean,
     ): ReviewedMigrationSchedule {
-        if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
-            return checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
-                "Return to Home to recover the existing migration."
+        val recoveryId = args.recoveryId
+        val retained = recoveryId?.let { id ->
+            checkNotNull(restartMigrationScheduleRepository.find(accountKeyId, id)) {
+                "Reopen migration recovery from Home to review a new plan."
             }
         }
-        val restarted = restartMigrationScheduleRepository.consume(accountKeyId)
-        return if (restarted != null && restarted.proposalHandle >= 0) {
-            ReviewedMigrationSchedule(restarted)
-        } else {
-            sdk.prepareReviewedAutomaticMigration()
+        return when {
+            sdk.getMigrationStateUnreconciled() is MigrationState.InProgress ->
+                checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
+                    "Return to Home to recover the existing migration."
+                }
+
+            retained != null && !refreshRetainedPlan && retained.schedule.proposalHandle >= 0 -> retained
+
+            else -> sdk.prepareReviewedAutomaticMigration().also { replacement ->
+                if (recoveryId != null && retained != null) {
+                    check(restartMigrationScheduleRepository.replace(accountKeyId, recoveryId, retained, replacement)) {
+                        "Reopen migration recovery from Home to review a new plan."
+                    }
+                }
+            }
         }
     }
 
@@ -515,7 +527,7 @@ class MigrationReviewVM(
                 // The SDK owns the already-committed plan. Do not draw or sign a replacement.
                 navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) { NavigationCommand.BackToRoot }
             } else {
-                loadProposal()
+                loadProposal(refreshRetainedPlan = true)
             }
         }
     }

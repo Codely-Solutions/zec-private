@@ -55,7 +55,7 @@ class DebugStartMigrationE2EUseCase(
         sdk.clearMigration()
         MigrationScheduler(context).cancel(accountKeyId)
         pendingMigrationTorFailureStorageProvider.store(accountKeyId, false)
-        restartMigrationScheduleRepository.consume(accountKeyId)
+        restartMigrationScheduleRepository.clearOwner(accountKeyId)
         migrationNotifier.cancel(accountKeyId)
         migrationLog("E2E: reset done — proposing a fresh AUTOMATIC plan")
 

@@ -24,13 +24,21 @@ class MigrationHandoffAccountGuardTest {
     }
 
     @Test
-    fun restartScheduleConsumeReturnsNullForDifferentAccount() {
+    fun restartScheduleRequiresTheExactOwnerAndOrigin() {
         val repo = RestartMigrationScheduleRepositoryImpl()
-        val schedule = mockk<cash.z.ecc.android.sdk.MigrationSchedule>()
-        repo.set("accountA", schedule)
-        assertNull(repo.consume("accountB"))
-        // mismatched consume clears — value is also gone for the right account
-        assertNull(repo.consume("accountA"))
+        val reviewed = ReviewedMigrationSchedule(mockk())
+        val neighboring = ReviewedMigrationSchedule(mockk())
+        repo.set("accountA", "origin1", reviewed)
+        repo.set("accountA", "origin2", neighboring)
+
+        assertNull(repo.find("accountB", "origin1"))
+        assertNull(repo.find("accountA", "unrelated-review"))
+        assertSame(reviewed, repo.find("accountA", "origin1"))
+        repo.clear("accountA", "origin1")
+        assertNull(repo.find("accountA", "origin1"))
+        assertSame(neighboring, repo.find("accountA", "origin2"))
+        repo.clearOwner("accountA")
+        assertNull(repo.find("accountA", "origin2"))
     }
 
     @Test

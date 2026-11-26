@@ -64,6 +64,6 @@ internal fun migrationWorkerIsLate(
     return if (expectedRequest == null) {
         lastRunAt == null || lastRunAt < expectedRunAt - EARLY_WORKER_TOLERANCE_MILLIS
     } else {
-        startedRequest != expectedRequest
+        !startedRequest.coversWorkerAttempt(expectedRequest)
     }
 }
