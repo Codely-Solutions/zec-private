@@ -77847,10 +77847,10 @@ index 000000000..4777cf6e0
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
 new file mode 100644
-index 000000000..d66adea86
+index 000000000..7fc4ac5a3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt
-@@ -0,0 +1,752 @@
+@@ -0,0 +1,749 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -78529,9 +78529,7 @@ index 000000000..d66adea86
 +    private fun install(onLoadingBack: () -> Unit = {}) {
 +        val accounts = emptyAccounts()
 +        val swaps = emptySwaps()
-+        val keys = mockk<KeystoneProposalRepository> {
-+            every { transactionProposal } returns MutableStateFlow(null)
-+        }
++        val keys = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
 +        val dependencies = module {
 +            single<NavigationRouter> { router }
 +            single { NavigateToErrorUseCase(router) }
@@ -78546,8 +78544,7 @@ index 000000000..d66adea86
 +                )
 +            }
 +            viewModel {
-+                val fresh = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
-+                ScanKeystonePCZTViewModel(mockk(), get(), fresh)
++                ScanKeystonePCZTViewModel(mockk(), get(), keys)
 +            }
 +        }
 +        val testContext = koinApplication { modules(dependencies) }.also(contexts::add)
@@ -80589,7 +80586,7 @@ index 000000000..cd3bbbf96
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..f62d202bd 100644
+index aa5a81f8c..0fe3d4b58 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,13 @@ import android.content.Context
@@ -80689,7 +80686,7 @@ index aa5a81f8c..f62d202bd 100644
 +@Suppress("LargeClass") // Quote retention uses the same encrypted file, restart, and tracking fixture.
 @@ -55,0 +132 @@ class MetadataDataSourceFileTest {
 +            directorySync = DirectorySync {},
-@@ -76,0 +154,678 @@ class MetadataDataSourceFileTest {
+@@ -76,0 +154,681 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun anOpenDetailReloadsSettlementAfterAnotherObserverSavedSuccess() = runTest {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -80979,6 +80976,7 @@ index aa5a81f8c..f62d202bd 100644
 +        SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT))
 +        val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
 +        val settled = mockk<SwapQuoteStatus> {
++            every { refundedFormatted } returns null
 +            every { quotedAmountOut } returns BigDecimal.ONE
 +            every { executedAmountOut } returns BigDecimal.ONE
 +            every { status } returns SwapStatus.SUCCESS
@@ -81005,6 +81003,7 @@ index aa5a81f8c..f62d202bd 100644
 +        val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
 +        assertEquals(SwapMode.EXACT_INPUT, expected.mode)
 +        val settled = mockk<SwapQuoteStatus> {
++            every { refundedFormatted } returns null
 +            every { quotedAmountOut } returns BigDecimal.ONE
 +            every { executedAmountOut } returns BigDecimal.ONE
 +            every { status } returns SwapStatus.SUCCESS
@@ -81080,6 +81079,7 @@ index aa5a81f8c..f62d202bd 100644
 +        assertEquals(evidence, expected.signedQuoteEvidence)
 +        assertNull(dataSource().read(metadataKey(2, 3))?.accountMetadata?.swaps?.swapIds?.singleOrNull())
 +        val success = mockk<SwapQuoteStatus> {
++            every { refundedFormatted } returns null
 +            every { status } returns SwapStatus.SUCCESS
 +            every { mode } returns SwapMode.FLEX_INPUT
 +            every { quotedAmountOut } returns BigDecimal.ONE
@@ -81368,28 +81368,28 @@ index aa5a81f8c..f62d202bd 100644
 +        assertEquals(evidence, saved.last().signedQuoteEvidence)
 +    }
 +
-@@ -125 +880 @@ class MetadataDataSourceFileTest {
+@@ -125 +883 @@ class MetadataDataSourceFileTest {
 -    fun deleteWipesEveryFileOfTheKeyAndEmitsNull() =
 +    fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =
-@@ -129,0 +885,3 @@ class MetadataDataSourceFileTest {
+@@ -129,0 +888,3 @@ class MetadataDataSourceFileTest {
 +            val removedKey = metadataKey(9)
 +            write(removedKey.fileIdentifier(), metadata(lastUpdated = 1), removedKey)
 +            val removedEmissions = collectEmissions(dataSource, removedKey)
-@@ -135 +893 @@ class MetadataDataSourceFileTest {
+@@ -135 +896 @@ class MetadataDataSourceFileTest {
 -            dataSource.delete(key)
 +            dataSource.delete()
-@@ -139,0 +898 @@ class MetadataDataSourceFileTest {
+@@ -139,0 +901 @@ class MetadataDataSourceFileTest {
 +            assertNull(removedEmissions.last())
-@@ -143 +902 @@ class MetadataDataSourceFileTest {
+@@ -143 +905 @@ class MetadataDataSourceFileTest {
 -    fun flippingABookmarkTwiceKeepsAnUnbookmarkedEntry() =
 +    fun removingABookmarkKeepsAnUnbookmarkedEntry() =
-@@ -147 +906 @@ class MetadataDataSourceFileTest {
+@@ -147 +909 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", true, key)
-@@ -150 +909 @@ class MetadataDataSourceFileTest {
+@@ -150 +912 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", false, key)
-@@ -154,0 +914,38 @@ class MetadataDataSourceFileTest {
+@@ -154,0 +917,38 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun repeatedBookmarkActionsFinishTheRequestedChangeAfterAnUnacknowledgedRename() = runTest {
 +        val sync = TrackingSync().apply { fail = false }
@@ -81428,7 +81428,7 @@ index aa5a81f8c..f62d202bd 100644
 +        verify(exactly = 2) { showError(any()) }
 +    }
 +
-@@ -167,0 +965,58 @@ class MetadataDataSourceFileTest {
+@@ -167,0 +968,58 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun noteAndMemoEditsStayWithTheDisplayedAccountAfterSelectionChanges() = runTest {
 +        val owner = AccountUuid.new(ByteArray(16))
@@ -81487,11 +81487,11 @@ index aa5a81f8c..f62d202bd 100644
 +        assertTrue(otherMetadata.read.isEmpty())
 +    }
 +
-@@ -193 +1048,2 @@ class MetadataDataSourceFileTest {
+@@ -193 +1051,2 @@ class MetadataDataSourceFileTest {
 -                amountOutFormatted = BigDecimal.TEN,
 +                amountOutFormatted = BigDecimal.ONE,
 +                executedAmountOut = BigDecimal.TEN,
-@@ -219,0 +1076,45 @@ class MetadataDataSourceFileTest {
+@@ -219,0 +1079,45 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
 +        val reviewedIdentity = "synthetic-reviewed-identity"
@@ -81537,16 +81537,16 @@ index aa5a81f8c..f62d202bd 100644
 +        assertEquals(saved, storedSwaps().swapIds.single())
 +    }
 +
-@@ -259 +1160,4 @@ class MetadataDataSourceFileTest {
+@@ -259 +1163,4 @@ class MetadataDataSourceFileTest {
 -    private fun TestScope.dataSource() =
 +    private fun TestScope.dataSource(
 +        provider: MetadataProviderImpl = metadataProvider,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
 +    ) =
-@@ -262 +1166 @@ class MetadataDataSourceFileTest {
+@@ -262 +1169 @@ class MetadataDataSourceFileTest {
 -            metadataProvider = metadataProvider,
 +            metadataProvider = provider,
-@@ -264 +1168,53 @@ class MetadataDataSourceFileTest {
+@@ -264 +1171,53 @@ class MetadataDataSourceFileTest {
 -            ioDispatcher = StandardTestDispatcher(testScheduler)
 +            ioDispatcher = StandardTestDispatcher(testScheduler),
 +            walletWriteAccess = ownership
@@ -81601,7 +81601,7 @@ index aa5a81f8c..f62d202bd 100644
 +                }
 +            }
 +            """.trimIndent()
-@@ -265,0 +1222,22 @@ class MetadataDataSourceFileTest {
+@@ -265,0 +1225,22 @@ class MetadataDataSourceFileTest {
 +        return NearSwapQuote(
 +            response = response.copy(signedEvidence = evidence),
 +            originAsset = origin,
@@ -81624,7 +81624,7 @@ index aa5a81f8c..f62d202bd 100644
 +            }
 +        )
 +    }
-@@ -280 +1258,8 @@ class MetadataDataSourceFileTest {
+@@ -280 +1261,8 @@ class MetadataDataSourceFileTest {
 -    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
 +    private suspend fun markSwap(
 +        dataSource: MetadataDataSourceImpl,
@@ -81634,15 +81634,15 @@ index aa5a81f8c..f62d202bd 100644
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        depositAddress: String = "deposit",
 +    ) =
-@@ -282 +1267 @@ class MetadataDataSourceFileTest {
+@@ -282 +1270 @@ class MetadataDataSourceFileTest {
 -            depositAddress = "deposit",
 +            depositAddress = depositAddress,
-@@ -291 +1276,3 @@ class MetadataDataSourceFileTest {
+@@ -291 +1279,3 @@ class MetadataDataSourceFileTest {
 -            key = key
 +            key = key,
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -309,3 +1296,5 @@ class MetadataDataSourceFileTest {
+@@ -309,3 +1299,5 @@ class MetadataDataSourceFileTest {
 -            mockk<SimpleSwapAsset> {
 -                every { tokenTicker } returns token
 -                every { chainTicker } returns chain

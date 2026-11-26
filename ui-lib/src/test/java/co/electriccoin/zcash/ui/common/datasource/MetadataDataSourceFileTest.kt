@@ -440,6 +440,7 @@ class MetadataDataSourceFileTest {
         SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT))
         val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
         val settled = mockk<SwapQuoteStatus> {
+            every { refundedFormatted } returns null
             every { quotedAmountOut } returns BigDecimal.ONE
             every { executedAmountOut } returns BigDecimal.ONE
             every { status } returns SwapStatus.SUCCESS
@@ -466,6 +467,7 @@ class MetadataDataSourceFileTest {
         val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
         assertEquals(SwapMode.EXACT_INPUT, expected.mode)
         val settled = mockk<SwapQuoteStatus> {
+            every { refundedFormatted } returns null
             every { quotedAmountOut } returns BigDecimal.ONE
             every { executedAmountOut } returns BigDecimal.ONE
             every { status } returns SwapStatus.SUCCESS
@@ -541,6 +543,7 @@ class MetadataDataSourceFileTest {
         assertEquals(evidence, expected.signedQuoteEvidence)
         assertNull(dataSource().read(metadataKey(2, 3))?.accountMetadata?.swaps?.swapIds?.singleOrNull())
         val success = mockk<SwapQuoteStatus> {
+            every { refundedFormatted } returns null
             every { status } returns SwapStatus.SUCCESS
             every { mode } returns SwapMode.FLEX_INPUT
             every { quotedAmountOut } returns BigDecimal.ONE

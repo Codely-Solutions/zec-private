@@ -676,9 +676,7 @@ class RestoredWalletRoutesLayoutTest {
     private fun install(onLoadingBack: () -> Unit = {}) {
         val accounts = emptyAccounts()
         val swaps = emptySwaps()
-        val keys = mockk<KeystoneProposalRepository> {
-            every { transactionProposal } returns MutableStateFlow(null)
-        }
+        val keys = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
         val dependencies = module {
             single<NavigationRouter> { router }
             single { NavigateToErrorUseCase(router) }
@@ -693,8 +691,7 @@ class RestoredWalletRoutesLayoutTest {
                 )
             }
             viewModel {
-                val fresh = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
-                ScanKeystonePCZTViewModel(mockk(), get(), fresh)
+                ScanKeystonePCZTViewModel(mockk(), get(), keys)
             }
         }
         val testContext = koinApplication { modules(dependencies) }.also(contexts::add)
