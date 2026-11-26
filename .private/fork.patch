@@ -12673,7 +12673,7 @@ index 60f75827b..0d30bd9ab 100644
 -                    coEvery { this@mockk(null) } returns snapshot
 +                    coEvery { this@mockk(any()) } returns snapshot
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
-index 7ec2ab46a..2b93d3d1a 100644
+index 7ec2ab46a..41d22b730 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.BaseNavigationCommand
@@ -12778,7 +12778,7 @@ index 7ec2ab46a..2b93d3d1a 100644
 +        vm.onScanned("frame")
 +        advanceUntilIdle()
 +        assertTrue(assertNotNull(pendingPczts.peek(testAccountKeyId)).isFullySigned)
-+        assertEquals(listOf(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
++        assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
 +        coVerify(exactly = 2) { sdk.resetKeystoneSignBatchDecoder() }
 +    }
 +

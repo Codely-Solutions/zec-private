@@ -302,7 +302,7 @@ class MigrationKeystoneScanVMTest {
         vm.onScanned("frame")
         advanceUntilIdle()
         assertTrue(assertNotNull(pendingPczts.peek(testAccountKeyId)).isFullySigned)
-        assertEquals(listOf(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
+        assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
         coVerify(exactly = 2) { sdk.resetKeystoneSignBatchDecoder() }
     }
 
