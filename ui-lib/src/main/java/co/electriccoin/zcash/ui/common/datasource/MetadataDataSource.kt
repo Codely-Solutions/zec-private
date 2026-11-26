@@ -48,6 +48,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
+internal class MetadataReadUnavailableException : IOException("Metadata read incomplete")
+
 sealed interface MetadataObservation {
     val content: MetadataV3
 
@@ -151,7 +153,7 @@ class MetadataDataSourceImpl(
 ) : MetadataDataSource {
     private val mutex = Mutex()
 
-    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey?, MetadataV3?>>()
+    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey?, MetadataObservation?>>()
 
     /**
      * Non-canonical and set-aside files that failed to decode, remembered for the process lifetime:
@@ -176,14 +178,26 @@ class MetadataDataSourceImpl(
     override suspend fun read(key: MetadataKey): MetadataV3? =
         mutex.withLock {
             withContext(ioDispatcher) {
-                if (!readMetadata(key).isWritable) return@withContext null
+                val snapshot = readMetadata(key)
+                val content = snapshot.metadata
+                if (!snapshot.isComplete) unavailableRead(key, content)
                 val canonicalName = key.fileIdentifier()
-                val canonicalFile = metadataStorageProvider.getStorageFiles(key)
-                    .firstOrNull { it.name == canonicalName } ?: return@withContext null
+                val canonicalFile = runCatchingRecoverable { metadataStorageProvider.getStorageFiles(key) }
+                    .getOrElse { unavailableRead(key, content) }
+                    .firstOrNull { it.name == canonicalName }
                 // Recovery can leave a merged snapshot in memory after a failed replacement.
-                readWithRetry(canonicalFile, key, skipCacheFingerprint = null).decoded()?.also { metadata ->
-                    metadataProvider.syncDirectoryOf(canonicalFile)
-                    metadataUpdatePipeline.emit(key to metadata)
+                val canonical = canonicalFile?.let { readWithRetry(it, key, skipCacheFingerprint = null) }
+                when (canonical) {
+                    is FileRead.Decoded -> canonical.metadata.also { metadata ->
+                        if (metadata != content) unavailableRead(key, content)
+                        metadataProvider.syncDirectoryOf(checkNotNull(canonicalFile))
+                        metadataUpdatePipeline.emit(key to MetadataObservation.Available(metadata))
+                    }
+                    null, FileRead.Absent, FileRead.Empty -> {
+                        if (content.accountMetadata != defaultAccountMetadata()) unavailableRead(key, content)
+                        null
+                    }
+                    else -> unavailableRead(key, content)
                 }
             }
         }
@@ -204,7 +218,7 @@ class MetadataDataSourceImpl(
                         launch(start = CoroutineStart.UNDISPATCHED) {
                             metadataUpdatePipeline.collect { (k, m) ->
                                 if (k == null || k.isSameAs(key)) {
-                                    updates.send(m?.let { MetadataObservation.Available(it) })
+                                    updates.send(m)
                                 }
                             }
                         }
@@ -777,8 +791,9 @@ class MetadataDataSourceImpl(
     ): Boolean =
         withContext(ioDispatcher) {
             val read = readMetadata(key)
-            if (!read.isWritable) {
-                Twig.error { "Skipping the metadata update, the metadata storage is unavailable" }
+            if (!read.isComplete) {
+                metadataUpdatePipeline.emit(key to read.observe())
+                Twig.error { "Skipping the metadata update, the complete metadata is unavailable" }
                 return@withContext false
             }
             val metadata = read.metadata
@@ -793,12 +808,17 @@ class MetadataDataSourceImpl(
 
             val isWritten = writeToLocalStorage(updatedMetadata, key)
             if (isWritten) {
-                metadataUpdatePipeline.emit(key to updatedMetadata)
+                metadataUpdatePipeline.emit(key to MetadataObservation.Available(updatedMetadata))
             } else {
                 Twig.error { "Skipping the metadata update, the write failed" }
             }
             isWritten
         }
+
+    private suspend fun unavailableRead(key: MetadataKey, content: MetadataV3): Nothing {
+        metadataUpdatePipeline.emit(key to MetadataObservation.Unavailable(content))
+        throw MetadataReadUnavailableException()
+    }
 
     private fun MetadataKey.isSameAs(other: MetadataKey): Boolean =
         bytes.size == other.bytes.size &&

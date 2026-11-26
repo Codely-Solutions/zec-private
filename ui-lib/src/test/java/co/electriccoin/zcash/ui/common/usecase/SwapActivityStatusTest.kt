@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -39,6 +40,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onEach
@@ -341,6 +343,82 @@ class SwapActivityStatusTest {
         advanceTimeBy(1)
         runCurrent()
         coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aVisibleSwapRetriesAnUnavailableReadWithoutRedisplaying() = runTest {
+        val pending = swap(SwapStatus.PENDING)
+        val terminal = swap(SwapStatus.SUCCESS)
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns MutableStateFlow(owner)
+        }
+        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.SUCCESS }
+        var readable = false
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(deposit, owner) } coAnswers {
+                if (!readable) throw MetadataReadUnavailableException()
+                pending
+            }
+            coEvery { updateSwap(pending, result) } returns terminal
+        }
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
+        val poll = UpdateSwapActivityMetadataUseCase(
+            accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
+        )
+
+        poll(ActivityData.BySwap(pending))
+        runCurrent()
+        coVerify(exactly = 1) { metadata.getSwapMetadata(deposit, owner) }
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any()) }
+
+        readable = true
+        advanceTimeBy(15_000)
+        runCurrent()
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+        advanceTimeBy(16_000)
+        runCurrent()
+        coVerify(exactly = 2) { metadata.getSwapMetadata(deposit, owner) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun openSwapDetailsRecoversItsExactOwnerAfterATemporaryReadFailure() = runTest {
+        val pending = swap(SwapStatus.PENDING)
+        val terminal = swap(SwapStatus.SUCCESS)
+        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.SUCCESS }
+        var readable = false
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(deposit, owner) } coAnswers {
+                if (!readable) throw MetadataReadUnavailableException()
+                pending
+            }
+            coEvery { updateSwap(pending, result) } returns terminal
+        }
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
+        val status = GetSwapStatusUseCase(metadata, swaps)
+        val observations = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch { status.observeForAccount(deposit, owner).collect { observations += it } }
+        runCurrent()
+        assertIs<MetadataReadUnavailableException>(observations.last().error)
+
+        readable = true
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(terminal, observations.last().savedMetadata)
+        assertNull(observations.last().error)
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+    }
+
+    @Test
+    fun anExistingTransactionRowGainsAPollIdentityWhenItsSavedSwapAppears() {
+        val initial = activity(confirmed, null)
+        val associated = activity(confirmed, swap(SwapStatus.PENDING))
+        assertEquals(initial.key, associated.key)
+        assertNull(initial.pendingSwapReference)
+        assertEquals(deposit, associated.pendingSwapReference)
+        assertNull(activity(confirmed, swap(SwapStatus.SUCCESS)).pendingSwapReference)
     }
 
     private fun swap(status: SwapStatus?) =

@@ -1,12 +1,14 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
 import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -35,6 +37,7 @@ class GetSwapStatusUseCase(
     context: Context? = null,
     clock: Clock = Clock.System,
     timeSource: TimeSource = AndroidElapsedTimeSource,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     private val donationPreferences = context?.let(::DonationPreferences)
     private val fundingClock = ElapsedTimeClock(clock, timeSource)
@@ -69,7 +72,7 @@ class GetSwapStatusUseCase(
 
             launch {
                 val loaded = runCatchingRecoverable {
-                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
+                    initial ?: metadataRepository.loadExpectedMetadata(depositAddress, account, data, walletWriteAccess)
                 }
                 val expectedMetadata = loaded.getOrNull()
 
@@ -182,7 +185,9 @@ class GetSwapStatusUseCase(
                 val result = swapRepository.checkSwapStatus(expected, canRefresh)
                 check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
                 val saved = metadataRepository.updateSwap(expected, result)
-                    ?: throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
+                    ?: throw SwapRefreshNotSavedException(
+                        runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
+                    )
                 result to saved
             }
         } finally {
@@ -199,6 +204,25 @@ class GetSwapStatusUseCase(
 
     private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
         IllegalStateException("Swap status refresh was not saved")
+}
+
+private suspend fun MetadataRepository.loadExpectedMetadata(
+    depositAddress: String,
+    account: WalletAccount?,
+    data: MutableStateFlow<SwapQuoteStatusData>,
+    walletWriteAccess: WalletWriteAccess,
+): TransactionSwapMetadata? {
+    val generation = walletWriteAccess.token()
+    while (walletWriteAccess.permits(generation)) {
+        try {
+            val saved = getSwapMetadata(depositAddress, account)
+            return saved.takeIf { walletWriteAccess.permits(generation) }
+        } catch (e: MetadataReadUnavailableException) {
+            data.update { it.copy(isLoading = false, error = e) }
+            delay(1.seconds)
+        }
+    }
+    return null
 }
 
 private fun DonationPreferences.recordSuccessfulSettlement(saved: TransactionSwapMetadata) {

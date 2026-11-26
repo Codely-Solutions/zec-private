@@ -680,7 +680,7 @@ class MetadataDataSourceTest {
         }
 
     @Test
-    fun aReadOnlyUpdateEmitsNothing() =
+    fun aReadOnlyUpdateReportsItsAvailabilityWithoutAcknowledgingAnEdit() =
         runTest {
             every { metadataStorageProvider.getStorageFiles(key) } returns listOf(canonicalFile)
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } returns metadata(lastUpdated = 1)
@@ -688,12 +688,13 @@ class MetadataDataSourceTest {
             val emitted = collectEmissions(dataSource)
 
             every { metadataStorageProvider.getStorageFiles(key) } throws IOException()
-            dataSource.markTxMemoAsRead("failed", key)
+            assertFalse(dataSource.markTxMemoAsRead("failed", key))
             every { metadataStorageProvider.getStorageFiles(key) } returns listOf(canonicalFile)
-            dataSource.markTxMemoAsRead("after", key)
+            assertTrue(dataSource.markTxMemoAsRead("after", key))
             runCurrent()
 
-            assertEquals(listOf(emptyList(), listOf("after")), emitted.map { it.accountMetadata.read })
+            // The middle emission is the incomplete read. It cannot claim the edit succeeded.
+            assertEquals(listOf(emptyList(), emptyList(), listOf("after")), emitted.map { it.accountMetadata.read })
         }
 
     @Test

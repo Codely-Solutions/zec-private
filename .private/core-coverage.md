@@ -300,3 +300,5 @@ Home checks the live migratable total before offering another migration over a s
 Activity reads reconnect after temporary key or incomplete file reads within the original wallet generation. Reconnect preserves the last published data. History and Home keep transaction rows when the optional unread marker fails. The Unread filter and history badges use the same cutoff, and unrelated filters skip the preference read. Manual migration retries observe the same crossing quiet period and recheck the selected owner after it. A fresh software split requires an explicit direct-transport choice for the reviewed owner. Replan retains its schedule while reopening that choice.
 
 Migration wake tests distinguish successive attempts of one worker request and reject an older scheduler snapshot after a replacement. Foreground migration tests cover final quiet-window sampling and record an attempted native sync even when it fails.
+
+Temporary encrypted metadata read failures preserve the last complete Activity snapshot. Pending swap rows and open details retry the bound read. An unavailable alternate store cannot establish a missing funding reference or acknowledge an edit.

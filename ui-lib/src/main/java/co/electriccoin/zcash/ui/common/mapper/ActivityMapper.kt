@@ -58,7 +58,8 @@ class ActivityMapper {
                     value = getSwapValue(data),
                     onClick = { onSwapClick(data.swap) },
                     isUnread = false,
-                    onDisplayed = { onDisplayed(data) }
+                    onDisplayed = { onDisplayed(data) },
+                    pendingSwapReference = data.swap.takeUnless { it.status.isTerminal }?.depositAddress,
                 )
             }
 
@@ -73,7 +74,9 @@ class ActivityMapper {
                     value = getTransactionValue(data),
                     onClick = { onTransactionClick(data.transaction) },
                     isUnread = data.isUnread(restoreTimestamp),
-                    onDisplayed = { onDisplayed(data) }
+                    onDisplayed = { onDisplayed(data) },
+                    pendingSwapReference =
+                        data.metadata.swapMetadata?.takeUnless { it.status.isTerminal }?.depositAddress,
                 )
             }
         }

@@ -7,6 +7,7 @@ import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
+import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
@@ -57,7 +58,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.IOException
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.time.toJavaInstant
@@ -449,7 +449,7 @@ class MetadataRepositoryImpl(
                                     lastContent = observation.content
                                     emit(observation.content)
                                 }
-                                throw IOException("Metadata read incomplete")
+                                throw MetadataReadUnavailableException()
                             }
 
                             else -> {

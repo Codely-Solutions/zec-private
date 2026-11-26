@@ -54,7 +54,7 @@ fun Activity(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(vertical = 12.dp)
 ) {
-    LaunchedEffect(state.key) {
+    LaunchedEffect(state.key, state.pendingSwapReference) {
         state.onDisplayed()
     }
 
@@ -161,7 +161,8 @@ data class ActivityState(
     val value: StyledStringResource?,
     val isUnread: Boolean,
     val onClick: () -> Unit,
-    val onDisplayed: () -> Unit
+    val onDisplayed: () -> Unit,
+    val pendingSwapReference: String? = null,
 ) : Itemizable {
     override val contentType: Any = "activity"
 }

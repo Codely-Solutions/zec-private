@@ -39538,7 +39538,7 @@ index 1c2a8787c..53d13e159 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..1f26f3d77 100644
+index c9262f680..09f15cd6f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -39623,7 +39623,7 @@ index c9262f680..1f26f3d77 100644
 +        singleOf(::ResetZashiUseCase)
 @@ -325 +326 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
-+        single { GetSwapStatusUseCase(get(), get(), get()) }
++        single { GetSwapStatusUseCase(get(), get(), get(), walletWriteAccess = get()) }
 @@ -330 +330,0 @@ val useCaseModule =
 -        factoryOf(::IsServerAutomaticUseCase)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -42420,7 +42420,7 @@ index cd30d81f4..a5724248a 100644
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 +private val CARD_WALLET_CLOSE_CONFIRMATION_TIMEOUT = 28.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
-index abf14322d..422e3835d 100644
+index abf14322d..3c80669dd 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 @@ -0,0 +1,2 @@
@@ -42430,7 +42430,9 @@ index abf14322d..422e3835d 100644
 +import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 @@ -20,0 +24 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -46,0 +51,7 @@ import kotlin.time.Duration.Companion.milliseconds
+@@ -46,0 +51,9 @@ import kotlin.time.Duration.Companion.milliseconds
++internal class MetadataReadUnavailableException : IOException("Metadata read incomplete")
++
 +sealed interface MetadataObservation {
 +    val content: MetadataV3
 +
@@ -42438,15 +42440,15 @@ index abf14322d..422e3835d 100644
 +    data class Unavailable(override val content: MetadataV3) : MetadataObservation
 +}
 +
-@@ -48,2 +59,3 @@ import kotlin.time.Duration.Companion.milliseconds
+@@ -48,2 +61,3 @@ import kotlin.time.Duration.Companion.milliseconds
 - * Every update returns whether the change was written to disk. A false result means the edit was
 - * not saved, because the storage is read-only for this read or the write failed.
 + * Every update returns whether persistence was acknowledged. A false result can mean read-only
 + * storage or a write failure, including a failed acknowledgement after rename. Callers retain
 + * their desired edit for an idempotent retry instead of assuming either persisted value.
-@@ -50,0 +63 @@ import kotlin.time.Duration.Companion.milliseconds
+@@ -50,0 +65 @@ import kotlin.time.Duration.Companion.milliseconds
 +@Suppress("TooManyFunctions")
-@@ -52 +65,6 @@ interface MetadataDataSource {
+@@ -52 +67,6 @@ interface MetadataDataSource {
 -    fun observe(key: MetadataKey): Flow<MetadataV3?>
 +    fun observe(key: MetadataKey): Flow<MetadataObservation?>
 +
@@ -42454,17 +42456,17 @@ index abf14322d..422e3835d 100644
 +    suspend fun read(key: MetadataKey): MetadataV3?
 +
 +    suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, key: MetadataKey): Boolean
-@@ -54 +72,2 @@ interface MetadataDataSource {
+@@ -54 +74,2 @@ interface MetadataDataSource {
 -    suspend fun flipTxAsBookmarked(txId: String, key: MetadataKey): Boolean
 +    /** Reads the note only when this account's metadata can be edited. */
 +    suspend fun readTxNote(txId: String, key: MetadataKey): String?
-@@ -76 +95,4 @@ interface MetadataDataSource {
+@@ -76 +97,4 @@ interface MetadataDataSource {
 -        key: MetadataKey
 +        key: MetadataKey,
 +        reviewedIdentity: String? = null,
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        reservationCreatedAt: Instant? = null,
-@@ -86 +108,13 @@ interface MetadataDataSource {
+@@ -86 +110,13 @@ interface MetadataDataSource {
 -        key: MetadataKey
 +        key: MetadataKey,
 +        statusUpdatedAt: kotlin.time.Instant? = null,
@@ -42479,31 +42481,43 @@ index abf14322d..422e3835d 100644
 +        expectedCreatedAt: Instant,
 +        expectedReviewedIdentity: String,
 +        key: MetadataKey,
-@@ -100 +134 @@ interface MetadataDataSource {
+@@ -100 +136 @@ interface MetadataDataSource {
 -    suspend fun delete(key: MetadataKey)
 +    suspend fun delete()
-@@ -115,0 +150 @@ class MetadataDataSourceImpl(
+@@ -115,0 +152 @@ class MetadataDataSourceImpl(
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -119 +154 @@ class MetadataDataSourceImpl(
+@@ -119 +156 @@ class MetadataDataSourceImpl(
 -    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey, MetadataV3?>>()
-+    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey?, MetadataV3?>>()
-@@ -140,0 +176,15 @@ class MetadataDataSourceImpl(
++    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey?, MetadataObservation?>>()
+@@ -140,0 +178,27 @@ class MetadataDataSourceImpl(
 +    override suspend fun read(key: MetadataKey): MetadataV3? =
 +        mutex.withLock {
 +            withContext(ioDispatcher) {
-+                if (!readMetadata(key).isWritable) return@withContext null
++                val snapshot = readMetadata(key)
++                val content = snapshot.metadata
++                if (!snapshot.isComplete) unavailableRead(key, content)
 +                val canonicalName = key.fileIdentifier()
-+                val canonicalFile = metadataStorageProvider.getStorageFiles(key)
-+                    .firstOrNull { it.name == canonicalName } ?: return@withContext null
++                val canonicalFile = runCatchingRecoverable { metadataStorageProvider.getStorageFiles(key) }
++                    .getOrElse { unavailableRead(key, content) }
++                    .firstOrNull { it.name == canonicalName }
 +                // Recovery can leave a merged snapshot in memory after a failed replacement.
-+                readWithRetry(canonicalFile, key, skipCacheFingerprint = null).decoded()?.also { metadata ->
-+                    metadataProvider.syncDirectoryOf(canonicalFile)
-+                    metadataUpdatePipeline.emit(key to metadata)
++                val canonical = canonicalFile?.let { readWithRetry(it, key, skipCacheFingerprint = null) }
++                when (canonical) {
++                    is FileRead.Decoded -> canonical.metadata.also { metadata ->
++                        if (metadata != content) unavailableRead(key, content)
++                        metadataProvider.syncDirectoryOf(checkNotNull(canonicalFile))
++                        metadataUpdatePipeline.emit(key to MetadataObservation.Available(metadata))
++                    }
++                    null, FileRead.Absent, FileRead.Empty -> {
++                        if (content.accountMetadata != defaultAccountMetadata()) unavailableRead(key, content)
++                        null
++                    }
++                    else -> unavailableRead(key, content)
 +                }
 +            }
 +        }
 +
-@@ -146,3 +196,4 @@ class MetadataDataSourceImpl(
+@@ -146,3 +210,4 @@ class MetadataDataSourceImpl(
 -    override fun observe(key: MetadataKey): Flow<MetadataV3?> =
 -        channelFlow {
 -            val updates = Channel<MetadataV3?>(Channel.UNLIMITED)
@@ -42511,7 +42525,7 @@ index abf14322d..422e3835d 100644
 +        val token = walletWriteAccess.token()
 +        return channelFlow {
 +            val updates = Channel<MetadataObservation?>(Channel.UNLIMITED)
-@@ -151,3 +202,10 @@ class MetadataDataSourceImpl(
+@@ -151,3 +216,10 @@ class MetadataDataSourceImpl(
 -                mutex.withLock {
 -                    launch(start = CoroutineStart.UNDISPATCHED) {
 -                        metadataUpdatePipeline.collect { (k, m) -> if (k.isSameAs(key)) updates.send(m) }
@@ -42520,22 +42534,22 @@ index abf14322d..422e3835d 100644
 +                        launch(start = CoroutineStart.UNDISPATCHED) {
 +                            metadataUpdatePipeline.collect { (k, m) ->
 +                                if (k == null || k.isSameAs(key)) {
-+                                    updates.send(m?.let { MetadataObservation.Available(it) })
++                                    updates.send(m)
 +                                }
 +                            }
 +                        }
 +                        readMetadata(key).observe()
-@@ -155 +212,0 @@ class MetadataDataSourceImpl(
+@@ -155 +226,0 @@ class MetadataDataSourceImpl(
 -                    getMetadataInternal(key)
-@@ -159,0 +217 @@ class MetadataDataSourceImpl(
+@@ -159,0 +231 @@ class MetadataDataSourceImpl(
 +    }
-@@ -161 +219 @@ class MetadataDataSourceImpl(
+@@ -161 +233 @@ class MetadataDataSourceImpl(
 -    override suspend fun flipTxAsBookmarked(txId: String, key: MetadataKey) =
 +    override suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, key: MetadataKey) =
-@@ -165 +223 @@ class MetadataDataSourceImpl(
+@@ -165 +237 @@ class MetadataDataSourceImpl(
 -                    isBookmarked = !it.isBookmarked,
 +                    isBookmarked = isBookmarked,
-@@ -170,0 +229,7 @@ class MetadataDataSourceImpl(
+@@ -170,0 +243,7 @@ class MetadataDataSourceImpl(
 +    override suspend fun readTxNote(txId: String, key: MetadataKey): String? =
 +        mutex.withLock {
 +            val content = readMetadata(key)
@@ -42543,13 +42557,13 @@ index abf14322d..422e3835d 100644
 +            content.metadata.accountMetadata.annotations.find { it.txId == txId }?.content
 +        }
 +
-@@ -219 +284,4 @@ class MetadataDataSourceImpl(
+@@ -219 +298,4 @@ class MetadataDataSourceImpl(
 -        key: MetadataKey
 +        key: MetadataKey,
 +        reviewedIdentity: String?,
 +        signedQuoteEvidence: NearSignedQuoteEvidence?,
 +        reservationCreatedAt: Instant?,
-@@ -223,0 +292,7 @@ class MetadataDataSourceImpl(
+@@ -223,0 +306,7 @@ class MetadataDataSourceImpl(
 +                val tracked = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
 +                if (tracked != null && reservationCreatedAt != null) return@updateMetadata null
 +                if (tracked != null && (tracked.reviewedIdentity != null || reviewedIdentity != null)) {
@@ -42557,17 +42571,17 @@ index abf14322d..422e3835d 100644
 +                    return@updateMetadata metadata.takeIf { tracked.reviewedIdentity == reviewedIdentity }
 +                }
 +                val evidence = signedQuoteEvidence.takeIf { reviewedIdentity != null }
-@@ -232 +307 @@ class MetadataDataSourceImpl(
+@@ -232 +321 @@ class MetadataDataSourceImpl(
 -                                            lastUpdated = Instant.now(),
 +                                            lastUpdated = reservationCreatedAt ?: Instant.now(),
-@@ -248,0 +324,3 @@ class MetadataDataSourceImpl(
+@@ -248,0 +338,3 @@ class MetadataDataSourceImpl(
 +                                            quotedAmountOut = amountOutFormatted,
 +                                            reviewedIdentity = reviewedIdentity,
 +                                            signedQuoteEvidence = evidence,
-@@ -250 +328 @@ class MetadataDataSourceImpl(
+@@ -250 +342 @@ class MetadataDataSourceImpl(
 -                                    }
 +                                    }.withBoundedQuoteEvidence()
-@@ -265 +343,6 @@ class MetadataDataSourceImpl(
+@@ -265 +357,6 @@ class MetadataDataSourceImpl(
 -    ): Boolean =
 +        statusUpdatedAt: kotlin.time.Instant?,
 +        expectedCreatedAt: Instant?,
@@ -42575,11 +42589,11 @@ index abf14322d..422e3835d 100644
 +        executedAmountOut: BigDecimal?,
 +        observedRefundAmount: BigDecimal?,
 +    ): SwapMetadataV3? =
-@@ -267 +350,2 @@ class MetadataDataSourceImpl(
+@@ -267 +364,2 @@ class MetadataDataSourceImpl(
 -            updateMetadata(
 +            var savedSwap: SwapMetadataV3? = null
 +            val written = updateMetadata(
-@@ -269,0 +354,31 @@ class MetadataDataSourceImpl(
+@@ -269,0 +368,31 @@ class MetadataDataSourceImpl(
 +                    val current = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
 +                        ?: return@updateMetadata null
 +                    val sameEntry = expectedCreatedAt == null ||
@@ -42611,7 +42625,7 @@ index abf14322d..422e3835d 100644
 +                        ),
 +                    )
 +                    savedSwap = updated
-@@ -275,17 +390 @@ class MetadataDataSourceImpl(
+@@ -275,17 +404 @@ class MetadataDataSourceImpl(
 -                                        .update(predicate = { it.depositAddress == depositAddress }) {
 -                                            it.copy(
 -                                                status = status,
@@ -42630,9 +42644,9 @@ index abf14322d..422e3835d 100644
 -                                            )
 -                                        }
 +                                        .update(predicate = { it.depositAddress == depositAddress }) { updated }
-@@ -295,0 +395 @@ class MetadataDataSourceImpl(
+@@ -295,0 +409 @@ class MetadataDataSourceImpl(
 +            savedSwap.takeIf { written }
-@@ -297,0 +398,19 @@ class MetadataDataSourceImpl(
+@@ -297,0 +412,19 @@ class MetadataDataSourceImpl(
 +    override suspend fun markSwapFundingNotSubmitted(
 +        depositAddress: String,
 +        expectedCreatedAt: Instant,
@@ -42652,60 +42666,75 @@ index abf14322d..422e3835d 100644
 +        })
 +    }
 +
-@@ -336 +455 @@ class MetadataDataSourceImpl(
+@@ -336 +469 @@ class MetadataDataSourceImpl(
 -    override suspend fun delete(key: MetadataKey) =
 +    override suspend fun delete() =
-@@ -339,2 +458,4 @@ class MetadataDataSourceImpl(
+@@ -339,2 +472,4 @@ class MetadataDataSourceImpl(
 -                metadataStorageProvider.deleteStorageFiles(key)
 -                metadataUpdatePipeline.emit(key to null)
 +                metadataStorageProvider.deleteStorageFiles()
 +                undecodableFiles.clear()
 +                mergedFiles.clear()
 +                metadataUpdatePipeline.emit(null to null)
-@@ -344,2 +464,0 @@ class MetadataDataSourceImpl(
+@@ -344,2 +478,0 @@ class MetadataDataSourceImpl(
 -    private suspend fun getMetadataInternal(key: MetadataKey): MetadataV3 = readMetadata(key).metadata
 -
-@@ -374 +493 @@ class MetadataDataSourceImpl(
+@@ -374 +507 @@ class MetadataDataSourceImpl(
 -                    .onFailure { e -> Twig.warn(e) { "Failed to list metadata files" } }
 +                    .onFailure { e -> Twig.warn { "Failed to list metadata files (${e.javaClass.simpleName})" } }
-@@ -378 +497 @@ class MetadataDataSourceImpl(
+@@ -378 +511 @@ class MetadataDataSourceImpl(
 -                    .onFailure { e -> Twig.warn(e) { "Failed to create metadata file" } }
 +                    .onFailure { e -> Twig.warn { "Failed to create metadata file (${e.javaClass.simpleName})" } }
-@@ -404,0 +524 @@ class MetadataDataSourceImpl(
+@@ -404,0 +538 @@ class MetadataDataSourceImpl(
 +            val complete = otherReads.none { (_, read) -> read == FileRead.Unreadable }
-@@ -408 +528,2 @@ class MetadataDataSourceImpl(
+@@ -408 +542,2 @@ class MetadataDataSourceImpl(
 -                    isWritable = true
 +                    isWritable = true,
 +                    isComplete = complete
-@@ -417 +538 @@ class MetadataDataSourceImpl(
+@@ -417 +552 @@ class MetadataDataSourceImpl(
 -            MetadataRead(metadata = merged, isWritable = true)
 +            MetadataRead(metadata = merged, isWritable = true, isComplete = complete)
-@@ -473 +594 @@ class MetadataDataSourceImpl(
+@@ -473 +608 @@ class MetadataDataSourceImpl(
 -            .onFailure { e -> Twig.warn(e) { "Failed to set the undecodable metadata file aside" } }
 +            .onFailure { e -> Twig.warn { "Failed to set undecodable metadata aside (${e.javaClass.simpleName})" } }
-@@ -480 +601 @@ class MetadataDataSourceImpl(
+@@ -480 +615 @@ class MetadataDataSourceImpl(
 -                    Twig.warn(e) { "Failed to flush the metadata directory" }
 +                    Twig.warn { "Failed to flush the metadata directory (${e.javaClass.simpleName})" }
-@@ -542 +663 @@ class MetadataDataSourceImpl(
+@@ -542 +677 @@ class MetadataDataSourceImpl(
 -            Twig.warn(error) { "Failed to read metadata" }
 +            Twig.warn { "Failed to read metadata (${error.javaClass.simpleName})" }
-@@ -574 +695,2 @@ class MetadataDataSourceImpl(
+@@ -574 +709,2 @@ class MetadataDataSourceImpl(
 -     * Returns whether the write landed. A failed write leaves the previous file content intact.
 +     * Returns whether replacement and directory sync completed. A failed sync keeps any replacement
 +     * already renamed into place so tracking remains available for recovery.
-@@ -581 +703 @@ class MetadataDataSourceImpl(
+@@ -581 +717 @@ class MetadataDataSourceImpl(
 -            }.onFailure { e -> Twig.warn(e) { "Failed to write metadata" } }
 +            }.onFailure { e -> Twig.warn { "Failed to write metadata (${e.javaClass.simpleName})" } }
-@@ -654 +776 @@ class MetadataDataSourceImpl(
+@@ -654 +790 @@ class MetadataDataSourceImpl(
 -        transform: (AccountMetadataV3) -> AccountMetadataV3
 +        transform: (AccountMetadataV3) -> AccountMetadataV3?
-@@ -664 +786 @@ class MetadataDataSourceImpl(
+@@ -658,2 +794,3 @@ class MetadataDataSourceImpl(
+-            if (!read.isWritable) {
+-                Twig.error { "Skipping the metadata update, the metadata storage is unavailable" }
++            if (!read.isComplete) {
++                metadataUpdatePipeline.emit(key to read.observe())
++                Twig.error { "Skipping the metadata update, the complete metadata is unavailable" }
+@@ -664 +801 @@ class MetadataDataSourceImpl(
 -            val accountMetadata = metadata.accountMetadata
 +            val accountMetadata = transform(metadata.accountMetadata) ?: return@withContext false
-@@ -669 +791 @@ class MetadataDataSourceImpl(
+@@ -669 +806 @@ class MetadataDataSourceImpl(
 -                    accountMetadata = transform(accountMetadata)
 +                    accountMetadata = accountMetadata
-@@ -720,2 +842,6 @@ private data class MetadataRead(
+@@ -674 +811 @@ class MetadataDataSourceImpl(
+-                metadataUpdatePipeline.emit(key to updatedMetadata)
++                metadataUpdatePipeline.emit(key to MetadataObservation.Available(updatedMetadata))
+@@ -680,0 +818,5 @@ class MetadataDataSourceImpl(
++    private suspend fun unavailableRead(key: MetadataKey, content: MetadataV3): Nothing {
++        metadataUpdatePipeline.emit(key to MetadataObservation.Unavailable(content))
++        throw MetadataReadUnavailableException()
++    }
++
+@@ -720,2 +862,6 @@ private data class MetadataRead(
 -    val isWritable: Boolean
 -)
 +    val isWritable: Boolean,
@@ -42714,7 +42743,7 @@ index abf14322d..422e3835d 100644
 +    fun observe(): MetadataObservation =
 +        if (isComplete) MetadataObservation.Available(metadata) else MetadataObservation.Unavailable(metadata)
 +}
-@@ -841 +967,6 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
+@@ -841 +987,6 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
 -        swapIds = swapIds.mergeById(other.swapIds, idOf = { it.depositAddress }, lastUpdatedOf = { it.lastUpdated }),
 +        swapIds = swapIds.mergeById(
 +            other.swapIds,
@@ -42722,7 +42751,7 @@ index abf14322d..422e3835d 100644
 +            lastUpdatedOf = { it.lastUpdated },
 +            mergeOnTie = SwapMetadataV3::mergeStatus,
 +        ).withBoundedQuoteEvidence(),
-@@ -847,0 +979,32 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
+@@ -847,0 +999,32 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
 +private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV3 {
 +    val sameRoute = reviewedIdentity == candidate.reviewedIdentity && provider == candidate.provider
 +    val sameAssets = fromAsset == candidate.fromAsset && toAsset == candidate.toAsset
@@ -42755,26 +42784,26 @@ index abf14322d..422e3835d 100644
 +        acceptsStatus(candidateStatus, timestamp, candidate.executedAmountOut, candidate.observedRefundAmount)
 +}
 +
-@@ -850,2 +1013,2 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
+@@ -850,2 +1033,2 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
 - * the same id appears twice, within one list or across both. A tie keeps the earlier entry, so
 - * this list wins over [other].
 + * the same id appears twice, within one list or across both. A tie keeps the earlier entry
 + * unless [mergeOnTie] combines them.
-@@ -856 +1019,2 @@ private fun <T> List<T>.mergeById(
+@@ -856 +1039,2 @@ private fun <T> List<T>.mergeById(
 -    lastUpdatedOf: (T) -> Instant
 +    lastUpdatedOf: (T) -> Instant,
 +    mergeOnTie: (T, T) -> T = { current, _ -> current },
-@@ -862 +1026 @@ private fun <T> List<T>.mergeById(
+@@ -862 +1046 @@ private fun <T> List<T>.mergeById(
 -        if (current == null || lastUpdatedOf(candidate) > lastUpdatedOf(current)) {
 +        if (current == null) {
-@@ -863,0 +1028,6 @@ private fun <T> List<T>.mergeById(
+@@ -863,0 +1048,6 @@ private fun <T> List<T>.mergeById(
 +            return@forEach
 +        }
 +        val recency = lastUpdatedOf(candidate).compareTo(lastUpdatedOf(current))
 +        when {
 +            recency > 0 -> merged[id] = candidate
 +            recency == 0 -> merged[id] = mergeOnTie(current, candidate)
-@@ -869,0 +1040,16 @@ private const val MAX_SWAP_ASSETS_IN_HISTORY = 10
+@@ -869,0 +1060,16 @@ private const val MAX_SWAP_ASSETS_IN_HISTORY = 10
 +private const val MAX_RETAINED_SIGNED_QUOTES = 64
 +
 +private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3> {
@@ -43493,7 +43522,7 @@ index 996645a58..0549bc82d 100644
 -    fun forwardToSign()
 +    fun forwardToSign(sourceEntryId: String? = null, canSign: () -> Boolean = { true })
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-index b7227e48f..7d80476b8 100644
+index b7227e48f..e4b3a9d74 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
@@ -43515,10 +43544,18 @@ index b7227e48f..7d80476b8 100644
 @@ -54 +59 @@ class ActivityMapper {
 -                    onClick = { onSwapClick(data.swap.depositAddress) },
 +                    onClick = { onSwapClick(data.swap) },
-@@ -70 +75 @@ class ActivityMapper {
+@@ -56 +61,2 @@ class ActivityMapper {
+-                    onDisplayed = { onDisplayed(data) }
++                    onDisplayed = { onDisplayed(data) },
++                    pendingSwapReference = data.swap.takeUnless { it.status.isTerminal }?.depositAddress,
+@@ -70,2 +76,4 @@ class ActivityMapper {
 -                    isUnread = isTransactionUnread(data, restoreTimestamp),
+-                    onDisplayed = { onDisplayed(data) }
 +                    isUnread = data.isUnread(restoreTimestamp),
-@@ -76,2 +81,14 @@ class ActivityMapper {
++                    onDisplayed = { onDisplayed(data) },
++                    pendingSwapReference =
++                        data.metadata.swapMetadata?.takeUnless { it.status.isTerminal }?.depositAddress,
+@@ -76,2 +84,14 @@ class ActivityMapper {
 -    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource =
 -        stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER).withStyle(
 +    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
@@ -43535,19 +43572,19 @@ index b7227e48f..7d80476b8 100644
 +            else -> R.string.private_activity_saved_amount
 +        }
 +        return (label?.let { stringRes(it, amount) } ?: amount).withStyle(
-@@ -82 +99 @@ class ActivityMapper {
+@@ -82 +102 @@ class ActivityMapper {
 -                        EXPIRED, REFUNDED, FAILED -> StringResourceColor.NEGATIVE
 +                        EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> StringResourceColor.NEGATIVE
-@@ -85,0 +103 @@ class ActivityMapper {
+@@ -85,0 +106 @@ class ActivityMapper {
 +    }
-@@ -88 +106,3 @@ class ActivityMapper {
+@@ -88 +109,3 @@ class ActivityMapper {
 -        stringRes(
 +        if (data.swap.mode != FLEX_INPUT) {
 +            stringRes(getUnmatchedFundingTitle(data))
 +        } else stringRes(
-@@ -91,0 +112 @@ class ActivityMapper {
+@@ -91,0 +115 @@ class ActivityMapper {
 +                PAYMENT_SHORTFALL -> R.string.private_payment_shortfall
-@@ -99 +120,7 @@ class ActivityMapper {
+@@ -99 +123,7 @@ class ActivityMapper {
 -        when (data.swap.status) {
 +        if (data.swap.mode != FLEX_INPUT) {
 +            when (data.swap.status) {
@@ -43556,10 +43593,10 @@ index b7227e48f..7d80476b8 100644
 +                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_send_failed
 +            }
 +        } else when (data.swap.status) {
-@@ -102 +129 @@ class ActivityMapper {
+@@ -102 +132 @@ class ActivityMapper {
 -            EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_receive_failed
 +            EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_receive_failed
-@@ -105,13 +131,0 @@ class ActivityMapper {
+@@ -105,13 +134,0 @@ class ActivityMapper {
 -    private fun isTransactionUnread(data: ActivityData.ByTransaction, restoreTimestamp: Instant): Boolean {
 -        val transactionDateTime = data.transaction.timestamp?.atZone(ZoneId.systemDefault())
 -        val hasMemo = data.transaction.memoCount > 0
@@ -43573,7 +43610,7 @@ index b7227e48f..7d80476b8 100644
 -            hasMemo && transactionMetadata.isRead.not()
 -        }
 -    }
-@@ -166,13 +180,7 @@ class ActivityMapper {
+@@ -166,13 +183,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> R.drawable.ic_transaction_send_failed
@@ -43594,9 +43631,9 @@ index b7227e48f..7d80476b8 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
 +                                SUCCESS -> R.drawable.ic_transaction_sent
 +                                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_send_failed
-@@ -179,0 +188 @@ class ActivityMapper {
+@@ -179,0 +191 @@ class ActivityMapper {
 +                        }
-@@ -181,6 +190,5 @@ class ActivityMapper {
+@@ -181,6 +193,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
@@ -43608,7 +43645,7 @@ index b7227e48f..7d80476b8 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
 +                                SUCCESS -> R.drawable.ic_transaction_paid
 +                                EXPIRED, REFUNDED, FAILED, PAYMENT_SHORTFALL -> R.drawable.ic_transaction_pay_failed
-@@ -249,12 +257,14 @@ class ActivityMapper {
+@@ -249,12 +260,14 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -43635,23 +43672,23 @@ index b7227e48f..7d80476b8 100644
 +                                        R.string.transaction_history_swapping
 +                                    }
 +                                )
-@@ -262 +272,2 @@ class ActivityMapper {
+@@ -262 +275,2 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
-@@ -264 +275 @@ class ActivityMapper {
+@@ -264 +278 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -266 +277 @@ class ActivityMapper {
+@@ -266 +280 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -268,2 +279 @@ class ActivityMapper {
+@@ -268,2 +282 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -270,0 +281 @@ class ActivityMapper {
+@@ -270,0 +284 @@ class ActivityMapper {
 +                        }
-@@ -272,5 +283,12 @@ class ActivityMapper {
+@@ -272,5 +286,12 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT,
@@ -43669,31 +43706,31 @@ index b7227e48f..7d80476b8 100644
 +                                        R.string.transaction_history_paying
 +                                    }
 +                                )
-@@ -278 +296,2 @@ class ActivityMapper {
+@@ -278 +299,2 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                PAYMENT_SHORTFALL -> stringRes(R.string.private_payment_shortfall)
-@@ -280 +299 @@ class ActivityMapper {
+@@ -280 +302 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -282 +301 @@ class ActivityMapper {
+@@ -282 +304 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -284,2 +303 @@ class ActivityMapper {
+@@ -284,2 +306 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -386,4 +403,0 @@ class ActivityMapper {
+@@ -386,4 +406,0 @@ class ActivityMapper {
 -                        data.transaction is SendTransaction.Failed -> {
 -                            StringResourceColor.NEGATIVE
 -                        }
 -
-@@ -391 +405 @@ class ActivityMapper {
+@@ -391 +408 @@ class ActivityMapper {
 -                            when (data.metadata.swapMetadata.status) {
 +                            when (data.metadata.swapMetadata.outgoingStatus(data.transaction)) {
-@@ -398,0 +413 @@ class ActivityMapper {
+@@ -398,0 +416 @@ class ActivityMapper {
 +                                PAYMENT_SHORTFALL,
-@@ -410,0 +426,18 @@ private const val MONTH_THRESHOLD = 30
+@@ -410,0 +429,18 @@ private const val MONTH_THRESHOLD = 30
 +
 +private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
 +    fun byMode(payment: Int, swap: Int) = if (data.swap.mode == EXACT_OUTPUT) payment else swap
@@ -49961,30 +49998,29 @@ index f9a562c53..92b58ab70 100644
 -    val error: Exception? = null
 -)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-index a4216cc0a..c8aefac76 100644
+index a4216cc0a..a57a0f87f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
-@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
+@@ -8,0 +9,2 @@ import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
 +import co.electriccoin.zcash.ui.common.datasource.MetadataObservation
-@@ -13,0 +15 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
+@@ -13,0 +16 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
-@@ -14,0 +17 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
+@@ -14,0 +18 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 +import co.electriccoin.zcash.ui.common.model.withPaymentOutcome
-@@ -20,0 +24,3 @@ import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
+@@ -20,0 +25,3 @@ import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 +import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.positiveRefund
-@@ -23,0 +30,2 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+@@ -23,0 +31,2 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -25,0 +34 @@ import co.electriccoin.zcash.ui.design.util.combineToFlow
+@@ -25,0 +35 @@ import co.electriccoin.zcash.ui.design.util.combineToFlow
 +import kotlinx.coroutines.CancellationException
-@@ -30,0 +40 @@ import kotlinx.coroutines.async
+@@ -30,0 +41 @@ import kotlinx.coroutines.async
 +import kotlinx.coroutines.delay
-@@ -44,0 +55 @@ import kotlinx.coroutines.flow.map
+@@ -44,0 +56 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.retryWhen
-@@ -48,0 +60 @@ import kotlinx.coroutines.sync.withLock
-+import java.io.IOException
 @@ -50,0 +63 @@ import java.time.Instant
 +import kotlin.time.toJavaInstant
 @@ -65 +78,3 @@ interface MetadataRepository {
@@ -50347,7 +50383,7 @@ index a4216cc0a..c8aefac76 100644
 +                                    lastContent = observation.content
 +                                    emit(observation.content)
 +                                }
-+                                throw IOException("Metadata read incomplete")
++                                throw MetadataReadUnavailableException()
 +                            }
 @@ -354,10 +455,19 @@ class MetadataRepositoryImpl(
 -    @Suppress("TooGenericExceptionCaught")
@@ -54143,40 +54179,43 @@ index f37946f70..11382bc0e 100644
 +        )
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..42be3131c 100644
+index a33c847ad..d0c945f94 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-@@ -2,0 +3,5 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,6 @@ package co.electriccoin.zcash.ui.common.usecase
 +import android.content.Context
++import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 +import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 +import co.electriccoin.zcash.ui.common.model.AndroidElapsedTimeSource
 +import co.electriccoin.zcash.ui.common.model.ElapsedTimeClock
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
-@@ -3,0 +9,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+@@ -3,0 +10,3 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-@@ -5,0 +13 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -5,0 +15 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -6,0 +15,3 @@ import kotlinx.coroutines.channels.awaitClose
+@@ -6,0 +17,3 @@ import kotlinx.coroutines.channels.awaitClose
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.cancelAndJoin
-@@ -13,0 +25,5 @@ import kotlinx.coroutines.launch
+@@ -13,0 +27,5 @@ import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlin.time.Clock
 +import kotlin.time.Instant
 +import kotlin.time.TimeSource
-@@ -18,0 +35,3 @@ class GetSwapStatusUseCase(
+@@ -18,0 +37,4 @@ class GetSwapStatusUseCase(
 +    context: Context? = null,
 +    clock: Clock = Clock.System,
 +    timeSource: TimeSource = AndroidElapsedTimeSource,
-@@ -19,0 +39,4 @@ class GetSwapStatusUseCase(
++    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+@@ -19,0 +42,4 @@ class GetSwapStatusUseCase(
 +    private val donationPreferences = context?.let(::DonationPreferences)
 +    private val fundingClock = ElapsedTimeClock(clock, timeSource)
 +    private val refreshes = mutableMapOf<String, RefreshLock>()
 +
-@@ -21,0 +45,11 @@ class GetSwapStatusUseCase(
+@@ -21,0 +48,11 @@ class GetSwapStatusUseCase(
 +    internal suspend fun refreshOnce(expected: TransactionSwapMetadata) =
 +        observe(expected.depositAddress, expected).first { !it.isLoading }
 +
@@ -54188,7 +54227,7 @@ index a33c847ad..42be3131c 100644
 +        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> = observe(depositAddress, null, account, canRefresh)
 +
-@@ -23 +57,6 @@ class GetSwapStatusUseCase(
+@@ -23 +60,6 @@ class GetSwapStatusUseCase(
 -    fun observe(depositAddress: String): Flow<SwapQuoteStatusData> =
 +    private fun observe(
 +        depositAddress: String,
@@ -54196,21 +54235,21 @@ index a33c847ad..42be3131c 100644
 +        account: WalletAccount? = null,
 +        canRefresh: (() -> Boolean)? = null,
 +    ): Flow<SwapQuoteStatusData> =
-@@ -32 +71,4 @@ class GetSwapStatusUseCase(
+@@ -32 +74,4 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
 +                val loaded = runCatchingRecoverable {
-+                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
++                    initial ?: metadataRepository.loadExpectedMetadata(depositAddress, account, data, walletWriteAccess)
 +                }
 +                val expectedMetadata = loaded.getOrNull()
-@@ -38 +80,2 @@ class GetSwapStatusUseCase(
+@@ -38 +83,2 @@ class GetSwapStatusUseCase(
 -                            error = IllegalStateException("No metadata for deposit addr")
 +                            error = loaded.exceptionOrNull() as? Exception
 +                                ?: IllegalStateException("No metadata for deposit addr"),
-@@ -43,0 +87,3 @@ class GetSwapStatusUseCase(
+@@ -43,0 +90,3 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
 +                var fundingExpiry: Job? = null
-@@ -46,9 +92,5 @@ class GetSwapStatusUseCase(
+@@ -46,9 +95,5 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -54225,23 +54264,23 @@ index a33c847ad..42be3131c 100644
 +                        donationPreferences?.recordSuccessfulSettlement(saved)
 +                        val fundingUntil = fundingDeadline(result, requestStartedAt)
 +                        fundingExpiry?.cancelAndJoin()
-@@ -57,0 +100 @@ class GetSwapStatusUseCase(
+@@ -57,0 +103 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -59 +102,2 @@ class GetSwapStatusUseCase(
+@@ -59 +105,2 @@ class GetSwapStatusUseCase(
 -                                error = null
 +                                error = null,
 +                                isFundingWindowOpen = fundingUntil != null && fundingUntil > fundingClock.now(),
-@@ -61,0 +106,6 @@ class GetSwapStatusUseCase(
+@@ -61,0 +109,6 @@ class GetSwapStatusUseCase(
 +                        fundingExpiry = fundingUntil?.let { deadline ->
 +                            launch {
 +                                waitForFundingExpiry(deadline)
 +                                data.update { it.copy(isFundingWindowOpen = false) }
 +                            }
 +                        }
-@@ -64,0 +115,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +118,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +118,13 @@ class GetSwapStatusUseCase(
+@@ -66,2 +121,13 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        fundingExpiry?.cancel()
@@ -54257,7 +54296,7 @@ index a33c847ad..42be3131c 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +138,68 @@ class GetSwapStatusUseCase(
+@@ -74,0 +141,89 @@ class GetSwapStatusUseCase(
 +
 +    private fun fundingDeadline(status: SwapQuoteStatus, requestStartedAt: Instant): Instant? =
 +        status.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }?.observedAtProvider?.let { issuedAt ->
@@ -54305,7 +54344,9 @@ index a33c847ad..42be3131c 100644
 +                val result = swapRepository.checkSwapStatus(expected, canRefresh)
 +                check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
 +                val saved = metadataRepository.updateSwap(expected, result)
-+                    ?: throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
++                    ?: throw SwapRefreshNotSavedException(
++                        runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
++                    )
 +                result to saved
 +            }
 +        } finally {
@@ -54324,12 +54365,31 @@ index a33c847ad..42be3131c 100644
 +        IllegalStateException("Swap status refresh was not saved")
 +}
 +
++private suspend fun MetadataRepository.loadExpectedMetadata(
++    depositAddress: String,
++    account: WalletAccount?,
++    data: MutableStateFlow<SwapQuoteStatusData>,
++    walletWriteAccess: WalletWriteAccess,
++): TransactionSwapMetadata? {
++    val generation = walletWriteAccess.token()
++    while (walletWriteAccess.permits(generation)) {
++        try {
++            val saved = getSwapMetadata(depositAddress, account)
++            return saved.takeIf { walletWriteAccess.permits(generation) }
++        } catch (e: MetadataReadUnavailableException) {
++            data.update { it.copy(isLoading = false, error = e) }
++            delay(1.seconds)
++        }
++    }
++    return null
++}
++
 +private fun DonationPreferences.recordSuccessfulSettlement(saved: TransactionSwapMetadata) {
 +    if (saved.status == SwapStatus.SUCCESS) recordSuccessfulTransaction()
-@@ -80,0 +212,2 @@ data class SwapQuoteStatusData(
+@@ -80,0 +236,2 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
 +    val isFundingWindowOpen: Boolean = false,
-@@ -83,0 +217,20 @@ data class SwapQuoteStatusData(
+@@ -83,0 +241,20 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)
@@ -73436,6 +73496,17 @@ index fa3022a69..0b86cd145 100644
 +
 @@ -192,0 +244 @@ private fun LoadingPreview() =
 +                        isLoading = true,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/Activity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/Activity.kt
+index b2b1c6708..8c503b912 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/Activity.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/Activity.kt
+@@ -57 +57 @@ fun Activity(
+-    LaunchedEffect(state.key) {
++    LaunchedEffect(state.key, state.pendingSwapReference) {
+@@ -164 +164,2 @@ data class ActivityState(
+-    val onDisplayed: () -> Unit
++    val onDisplayed: () -> Unit,
++    val pendingSwapReference: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt
 index bda79395f..0f0b74fae 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt
@@ -84117,7 +84188,7 @@ index 000000000..cd3bbbf96
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..a18c868f8 100644
+index aa5a81f8c..8933507bc 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,13 @@ import android.content.Context
@@ -84157,15 +84228,16 @@ index aa5a81f8c..a18c868f8 100644
 +import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 +import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
-@@ -13,0 +44 @@ import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
+@@ -13,0 +44,2 @@ import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
-@@ -15,0 +47,5 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
++import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
+@@ -15,0 +48,5 @@ import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 +import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -18,0 +55,19 @@ import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
+@@ -18,0 +56,19 @@ import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
 +import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
@@ -84185,10 +84257,11 @@ index aa5a81f8c..a18c868f8 100644
 +import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 +import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 +import co.electriccoin.zcash.ui.R
-@@ -20,0 +76 @@ import com.google.crypto.tink.util.SecretBytes
+@@ -20,0 +77 @@ import com.google.crypto.tink.util.SecretBytes
 +import io.mockk.coEvery
-@@ -22,0 +79,8 @@ import io.mockk.mockk
+@@ -22,0 +80,9 @@ import io.mockk.mockk
 +import io.mockk.mockkObject
++import io.mockk.spyk
 +import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
@@ -84196,28 +84269,28 @@ index aa5a81f8c..a18c868f8 100644
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CancellationException
-@@ -23,0 +88,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -23,0 +90,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -27,0 +98 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -27,0 +100 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
-@@ -30,0 +102 @@ import kotlinx.coroutines.test.runTest
+@@ -30,0 +104 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.serialization.json.Json
-@@ -31,0 +104 @@ import java.io.File
+@@ -31,0 +106 @@ import java.io.File
 +import java.io.IOException
-@@ -37,0 +111 @@ import kotlin.test.assertEquals
+@@ -37,0 +113 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
-@@ -38,0 +113 @@ import kotlin.test.assertFalse
+@@ -38,0 +115 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -47,0 +123 @@ import kotlin.test.assertTrue
+@@ -47,0 +125 @@ import kotlin.test.assertTrue
 +@Suppress("LargeClass") // Quote retention uses the same encrypted file, restart, and tracking fixture.
-@@ -55,0 +132 @@ class MetadataDataSourceFileTest {
+@@ -55,0 +134 @@ class MetadataDataSourceFileTest {
 +            directorySync = DirectorySync {},
-@@ -76,0 +154,681 @@ class MetadataDataSourceFileTest {
+@@ -76,0 +156,748 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun anOpenDetailReloadsSettlementAfterAnotherObserverSavedSuccess() = runTest {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -84756,6 +84829,38 @@ index aa5a81f8c..a18c868f8 100644
 +    }
 +
 +    @Test
++    fun anUnreadableAlternateCannotBeTreatedAsAnUnreservedFundingReference() = runTest {
++        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
++        val quote = fundingQuote(SwapType.EXACT_INPUT)
++        val proposal = outgoingProposal(quote, account)
++        assertTrue(markSwap(dataSource(), quote.provider, quote.mode, quote.reviewedIdentity()))
++        val reserved = read(canonicalName)
++        write(legacyName, reserved, metadataKey(1))
++        val clean = metadata(1)
++        write(canonicalName, clean)
++
++        val storage = spyk(storageProvider)
++        val alternate = File(metadataDir, legacyName)
++        var inaccessible = true
++        every { storage.sizeOf(alternate) } answers {
++            if (inaccessible) throw SecurityException("Synthetic tracking read failure")
++            callOriginal()
++        }
++        val process = ProcessSwapTransactionUseCase(repository(metadataProvider, storage = storage), mockk())
++        assertFailsWith<MetadataReadUnavailableException> {
++            process.submitReservedFunding(proposal, {}) { _, _ -> error("SDK must not be entered") }
++        }
++        assertEquals(clean, read(canonicalName))
++        assertTrue(alternate.isFile)
++
++        inaccessible = false
++        assertFailsWith<IllegalStateException> {
++            process.submitReservedFunding(proposal, {}) { _, _ -> error("A tracked deposit cannot be funded again") }
++        }.also { assertTrue(it.message.orEmpty().contains("already tracked")) }
++        assertEquals(reserved.accountMetadata.swaps.swapIds, storedSwaps().swapIds)
++    }
++
++    @Test
 +    fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
 +        val sync = TrackingSync()
 +        val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
@@ -84899,37 +85004,72 @@ index aa5a81f8c..a18c868f8 100644
 +        assertEquals(evidence, saved.last().signedQuoteEvidence)
 +    }
 +
-@@ -83 +841 @@ class MetadataDataSourceFileTest {
++    @Test
++    fun anUnreadableAlternateCannotPublishAnIncompleteSnapshotOrAcknowledgeAnEdit() = runTest {
++        val saved = metadata(lastUpdated = 1, bookmarked = listOf(bookmark("old", 1)))
++        write(canonicalName, saved)
++        val storage = spyk(storageProvider)
++        val alternate = File(metadataDir, legacyName)
++        var inaccessible = true
++        every { storage.sizeOf(alternate) } answers {
++            if (inaccessible) throw SecurityException("Synthetic alternate access failure")
++            callOriginal()
++        }
++        val source = dataSource(storage = storage)
++        val observed = Channel<MetadataObservation?>(Channel.UNLIMITED)
++        backgroundScope.launch { source.observe(key).collect { observed.send(it) } }
++        assertNull(observed.receive())
++        assertEquals(MetadataObservation.Available(saved), observed.receive())
++
++        val later = note("legacy-note", "alternate contents", 2)
++        write(legacyName, metadata(lastUpdated = 2, annotations = listOf(later)), metadataKey(1))
++        assertFailsWith<MetadataReadUnavailableException> { source.read(key) }
++        assertEquals(MetadataObservation.Unavailable(saved), observed.receive())
++        assertFalse(source.setTxBookmark("new", true, key))
++        assertEquals(saved, read(canonicalName))
++        assertTrue(alternate.isFile)
++
++        inaccessible = false
++        val recovered = assertNotNull(source.read(key))
++        assertEquals(listOf(later), recovered.accountMetadata.annotations)
++        assertEquals(MetadataObservation.Available(recovered), observed.receive())
++        assertTrue(source.setTxBookmark("new", true, key))
++        val edited = observed.receive()?.content
++        assertEquals(listOf("old", "new"), edited?.accountMetadata?.bookmarked?.map { it.txId })
++        assertEquals(listOf(later), edited?.accountMetadata?.annotations)
++    }
++
+@@ -83 +910 @@ class MetadataDataSourceFileTest {
 -            val result = dataSource().observe(key).first { it != null }
 +            val result = dataSource().observeContent(key).first { it != null }
-@@ -95 +853 @@ class MetadataDataSourceFileTest {
+@@ -95 +922 @@ class MetadataDataSourceFileTest {
 -            assertEquals(expected, dataSource().observe(key).first { it != null })
 +            assertEquals(expected, dataSource().observeContent(key).first { it != null })
-@@ -118 +876 @@ class MetadataDataSourceFileTest {
+@@ -118 +945 @@ class MetadataDataSourceFileTest {
 -            val merged = dataSource.observe(keyThatDecodesTheOldFile).first { it != null }
 +            val merged = dataSource.observeContent(keyThatDecodesTheOldFile).first { it != null }
-@@ -125 +883 @@ class MetadataDataSourceFileTest {
+@@ -125 +952 @@ class MetadataDataSourceFileTest {
 -    fun deleteWipesEveryFileOfTheKeyAndEmitsNull() =
 +    fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =
-@@ -129,0 +888,3 @@ class MetadataDataSourceFileTest {
+@@ -129,0 +957,3 @@ class MetadataDataSourceFileTest {
 +            val removedKey = metadataKey(9)
 +            write(removedKey.fileIdentifier(), metadata(lastUpdated = 1), removedKey)
 +            val removedEmissions = collectEmissions(dataSource, removedKey)
-@@ -135 +896 @@ class MetadataDataSourceFileTest {
+@@ -135 +965 @@ class MetadataDataSourceFileTest {
 -            dataSource.delete(key)
 +            dataSource.delete()
-@@ -139,0 +901 @@ class MetadataDataSourceFileTest {
+@@ -139,0 +970 @@ class MetadataDataSourceFileTest {
 +            assertNull(removedEmissions.last())
-@@ -143 +905 @@ class MetadataDataSourceFileTest {
+@@ -143 +974 @@ class MetadataDataSourceFileTest {
 -    fun flippingABookmarkTwiceKeepsAnUnbookmarkedEntry() =
 +    fun removingABookmarkKeepsAnUnbookmarkedEntry() =
-@@ -147 +909 @@ class MetadataDataSourceFileTest {
+@@ -147 +978 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", true, key)
-@@ -150 +912 @@ class MetadataDataSourceFileTest {
+@@ -150 +981 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", false, key)
-@@ -154,0 +917,38 @@ class MetadataDataSourceFileTest {
+@@ -154,0 +986,38 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun repeatedBookmarkActionsFinishTheRequestedChangeAfterAnUnacknowledgedRename() = runTest {
 +        val sync = TrackingSync().apply { fail = false }
@@ -84968,7 +85108,7 @@ index aa5a81f8c..a18c868f8 100644
 +        verify(exactly = 2) { showError(any()) }
 +    }
 +
-@@ -167,0 +968,58 @@ class MetadataDataSourceFileTest {
+@@ -167,0 +1037,58 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun noteAndMemoEditsStayWithTheDisplayedAccountAfterSelectionChanges() = runTest {
 +        val owner = AccountUuid.new(ByteArray(16))
@@ -85027,11 +85167,11 @@ index aa5a81f8c..a18c868f8 100644
 +        assertTrue(otherMetadata.read.isEmpty())
 +    }
 +
-@@ -193 +1051,2 @@ class MetadataDataSourceFileTest {
+@@ -193 +1120,2 @@ class MetadataDataSourceFileTest {
 -                amountOutFormatted = BigDecimal.TEN,
 +                amountOutFormatted = BigDecimal.ONE,
 +                executedAmountOut = BigDecimal.TEN,
-@@ -219,0 +1079,45 @@ class MetadataDataSourceFileTest {
+@@ -219,0 +1148,45 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
 +        val reviewedIdentity = "synthetic-reviewed-identity"
@@ -85077,19 +85217,22 @@ index aa5a81f8c..a18c868f8 100644
 +        assertEquals(saved, storedSwaps().swapIds.single())
 +    }
 +
-@@ -253 +1157 @@ class MetadataDataSourceFileTest {
+@@ -253 +1226 @@ class MetadataDataSourceFileTest {
 -            dataSource().observe(key).first { it != null }
 +            dataSource().observeContent(key).first { it != null }
-@@ -259 +1163,4 @@ class MetadataDataSourceFileTest {
+@@ -259 +1232,5 @@ class MetadataDataSourceFileTest {
 -    private fun TestScope.dataSource() =
 +    private fun TestScope.dataSource(
 +        provider: MetadataProviderImpl = metadataProvider,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
++        storage: MetadataStorageProvider = storageProvider,
 +    ) =
-@@ -262 +1169 @@ class MetadataDataSourceFileTest {
+@@ -261,2 +1238,2 @@ class MetadataDataSourceFileTest {
+-            metadataStorageProvider = storageProvider,
 -            metadataProvider = metadataProvider,
++            metadataStorageProvider = storage,
 +            metadataProvider = provider,
-@@ -264 +1171,53 @@ class MetadataDataSourceFileTest {
+@@ -264 +1241,75 @@ class MetadataDataSourceFileTest {
 -            ioDispatcher = StandardTestDispatcher(testScheduler)
 +            ioDispatcher = StandardTestDispatcher(testScheduler),
 +            walletWriteAccess = ownership
@@ -85098,6 +85241,7 @@ index aa5a81f8c..a18c868f8 100644
 +    private fun TestScope.repository(
 +        provider: MetadataProviderImpl,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
++        storage: MetadataStorageProvider = storageProvider,
 +    ): MetadataRepositoryImpl {
 +        val uuid = AccountUuid.new(ByteArray(16))
 +        val wallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -85108,7 +85252,7 @@ index aa5a81f8c..a18c868f8 100644
 +        }
 +        return MetadataRepositoryImpl(
 +            accountDataSource = accounts,
-+            metadataDataSource = dataSource(provider, ownership),
++            metadataDataSource = dataSource(provider, ownership, storage),
 +            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> { coEvery { get(uuid) } returns key },
 +            persistableWalletProvider = mockk(),
 +            simpleSwapAssetProvider = simpleSwapAssetProvider,
@@ -85144,7 +85288,7 @@ index aa5a81f8c..a18c868f8 100644
 +                }
 +            }
 +            """.trimIndent()
-@@ -265,0 +1225,22 @@ class MetadataDataSourceFileTest {
++        )
 +        return NearSwapQuote(
 +            response = response.copy(signedEvidence = evidence),
 +            originAsset = origin,
@@ -85165,12 +85309,12 @@ index aa5a81f8c..a18c868f8 100644
 +                attempts++
 +                if (fail && attempts <= failures) throw IOException("Synthetic metadata directory sync failure")
 +            }
-+        )
+@@ -265,0 +1317 @@ class MetadataDataSourceFileTest {
 +    }
-@@ -274 +1255 @@ class MetadataDataSourceFileTest {
+@@ -274 +1326 @@ class MetadataDataSourceFileTest {
 -            dataSource.observe(key).drop(1).collect { emitted += it }
 +            dataSource.observeContent(key).drop(1).collect { emitted += it }
-@@ -280 +1261,8 @@ class MetadataDataSourceFileTest {
+@@ -280 +1332,8 @@ class MetadataDataSourceFileTest {
 -    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
 +    private suspend fun markSwap(
 +        dataSource: MetadataDataSourceImpl,
@@ -85180,15 +85324,15 @@ index aa5a81f8c..a18c868f8 100644
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        depositAddress: String = "deposit",
 +    ) =
-@@ -282 +1270 @@ class MetadataDataSourceFileTest {
+@@ -282 +1341 @@ class MetadataDataSourceFileTest {
 -            depositAddress = "deposit",
 +            depositAddress = depositAddress,
-@@ -291 +1279,3 @@ class MetadataDataSourceFileTest {
+@@ -291 +1350,3 @@ class MetadataDataSourceFileTest {
 -            key = key
 +            key = key,
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -309,3 +1299,5 @@ class MetadataDataSourceFileTest {
+@@ -309,3 +1370,5 @@ class MetadataDataSourceFileTest {
 -            mockk<SimpleSwapAsset> {
 -                every { tokenTicker } returns token
 -                every { chainTicker } returns chain
@@ -85198,7 +85342,7 @@ index aa5a81f8c..a18c868f8 100644
 +            } else {
 +                SwapAssetTestFixture.simpleAsset(token, chain)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceTest.kt
-index 555126883..a93aeb75a 100644
+index 555126883..c6313d65b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceTest.kt
 @@ -3,0 +4,2 @@ import androidx.compose.ui.graphics.Color
@@ -85335,115 +85479,128 @@ index 555126883..a93aeb75a 100644
 +        assertEquals(BigDecimal.TEN, saved.get().accountMetadata.swaps.swapIds.single().amountOutFormatted)
 +    }
 +
-@@ -616,2 +726,2 @@ class MetadataDataSourceTest {
+@@ -573 +683 @@ class MetadataDataSourceTest {
+-    fun aReadOnlyUpdateEmitsNothing() =
++    fun aReadOnlyUpdateReportsItsAvailabilityWithoutAcknowledgingAnEdit() =
+@@ -581 +691 @@ class MetadataDataSourceTest {
+-            dataSource.markTxMemoAsRead("failed", key)
++            assertFalse(dataSource.markTxMemoAsRead("failed", key))
+@@ -583 +693 @@ class MetadataDataSourceTest {
+-            dataSource.markTxMemoAsRead("after", key)
++            assertTrue(dataSource.markTxMemoAsRead("after", key))
+@@ -586 +696,2 @@ class MetadataDataSourceTest {
+-            assertEquals(listOf(emptyList(), listOf("after")), emitted.map { it.accountMetadata.read })
++            // The middle emission is the incomplete read. It cannot claim the edit succeeded.
++            assertEquals(listOf(emptyList(), emptyList(), listOf("after")), emitted.map { it.accountMetadata.read })
+@@ -616,2 +727,2 @@ class MetadataDataSourceTest {
 -            val first = dataSource.observe(key).first { it != null }
 -            val second = dataSource.observe(key).first { it != null }
 +            val first = dataSource.observeContent(key).first { it != null }
 +            val second = dataSource.observeContent(key).first { it != null }
-@@ -633 +743 @@ class MetadataDataSourceTest {
+@@ -633 +744 @@ class MetadataDataSourceTest {
 -            dataSource().observe(key).first { it != null }
 +            dataSource().observeContent(key).first { it != null }
-@@ -637 +747 @@ class MetadataDataSourceTest {
+@@ -637 +748 @@ class MetadataDataSourceTest {
 -            dataSource().observe(key).first { it != null }
 +            dataSource().observeContent(key).first { it != null }
-@@ -650 +760 @@ class MetadataDataSourceTest {
+@@ -650 +761 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -652 +762 @@ class MetadataDataSourceTest {
+@@ -652 +763 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -654 +764 @@ class MetadataDataSourceTest {
+@@ -654 +765 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -668 +778 @@ class MetadataDataSourceTest {
+@@ -668 +779 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -670 +780 @@ class MetadataDataSourceTest {
+@@ -670 +781 @@ class MetadataDataSourceTest {
 -            val result = dataSource.observe(key).first { it != null }
 +            val result = dataSource.observeContent(key).first { it != null }
-@@ -683 +793 @@ class MetadataDataSourceTest {
+@@ -683 +794 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -685 +795 @@ class MetadataDataSourceTest {
+@@ -685 +796 @@ class MetadataDataSourceTest {
 -            val result = dataSource.observe(key).first { it != null }
 +            val result = dataSource.observeContent(key).first { it != null }
-@@ -705,2 +815,2 @@ class MetadataDataSourceTest {
+@@ -705,2 +816,2 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -727,2 +837,2 @@ class MetadataDataSourceTest {
+@@ -727,2 +838,2 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -772 +882 @@ class MetadataDataSourceTest {
+@@ -772 +883 @@ class MetadataDataSourceTest {
 -            assertTrue(dataSource.flipTxAsBookmarked("tx1", key))
 +            assertTrue(dataSource.setTxBookmark("tx1", true, key))
-@@ -779 +889 @@ class MetadataDataSourceTest {
+@@ -779 +890 @@ class MetadataDataSourceTest {
 -            assertFalse(dataSource.flipTxAsBookmarked("tx1", key))
 +            assertFalse(dataSource.setTxBookmark("tx1", false, key))
-@@ -783 +893 @@ class MetadataDataSourceTest {
+@@ -783 +894 @@ class MetadataDataSourceTest {
 -            assertFalse(
 +            assertNull(
-@@ -833 +943 @@ class MetadataDataSourceTest {
+@@ -833 +944 @@ class MetadataDataSourceTest {
 -    fun aBookmarkFlipKeepsTheStoredAppearance() =
 +    fun aBookmarkChangeKeepsTheStoredAppearance() =
-@@ -837 +947 @@ class MetadataDataSourceTest {
+@@ -837 +948 @@ class MetadataDataSourceTest {
 -            assertTrue(dataSource().flipTxAsBookmarked("tx1", key))
 +            assertTrue(dataSource().setTxBookmark("tx1", true, key))
-@@ -917 +1027 @@ class MetadataDataSourceTest {
+@@ -917 +1028 @@ class MetadataDataSourceTest {
 -                dataSource.observe(key).filterNotNull().collect { metadata ->
 +                dataSource.observeContent(key).filterNotNull().collect { metadata ->
-@@ -944,2 +1054,2 @@ class MetadataDataSourceTest {
+@@ -944,2 +1055,2 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -960 +1070 @@ class MetadataDataSourceTest {
+@@ -960 +1071 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -962 +1072 @@ class MetadataDataSourceTest {
+@@ -962 +1073 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -964 +1074 @@ class MetadataDataSourceTest {
+@@ -964 +1075 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -979 +1089 @@ class MetadataDataSourceTest {
+@@ -979 +1090 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -993,2 +1103,2 @@ class MetadataDataSourceTest {
+@@ -993,2 +1104,2 @@ class MetadataDataSourceTest {
 -            dataSource().observe(key).first { it != null }
 -            dataSource().observe(key).first { it != null }
 +            dataSource().observeContent(key).first { it != null }
 +            dataSource().observeContent(key).first { it != null }
-@@ -1007,2 +1117,2 @@ class MetadataDataSourceTest {
+@@ -1007,2 +1118,2 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).first { it != null }
 -            dataSource.observe(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
 +            dataSource.observeContent(key).first { it != null }
-@@ -1016 +1126 @@ class MetadataDataSourceTest {
+@@ -1016 +1127 @@ class MetadataDataSourceTest {
 -            every { metadataStorageProvider.deleteStorageFiles(key) } just Runs
 +            every { metadataStorageProvider.deleteStorageFiles() } just Runs
-@@ -1019 +1129 @@ class MetadataDataSourceTest {
+@@ -1019 +1130 @@ class MetadataDataSourceTest {
 -            dataSource().delete(key)
 +            dataSource().delete()
-@@ -1021 +1131 @@ class MetadataDataSourceTest {
+@@ -1021 +1132 @@ class MetadataDataSourceTest {
 -            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles(key) }
 +            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles() }
-@@ -1152,2 +1262,2 @@ class MetadataDataSourceTest {
+@@ -1152,2 +1263,2 @@ class MetadataDataSourceTest {
 -        dataSource.observe(key).first { it != null }
 -        dataSource.observe(key).first { it != null }
 +        dataSource.observeContent(key).first { it != null }
 +        dataSource.observeContent(key).first { it != null }
-@@ -1159 +1269,2 @@ class MetadataDataSourceTest {
+@@ -1159 +1270,2 @@ class MetadataDataSourceTest {
 -    private suspend fun TestScope.observe(): MetadataV3 = checkNotNull(dataSource().observe(key).first { it != null })
 +    private suspend fun TestScope.observe(): MetadataV3 =
 +        checkNotNull(dataSource().observeContent(key).first { it != null })
-@@ -1168 +1279 @@ class MetadataDataSourceTest {
+@@ -1168 +1280 @@ class MetadataDataSourceTest {
 -            dataSource.observe(key).filterNotNull().collect { emitted += it }
 +            dataSource.observeContent(key).filterNotNull().collect { emitted += it }
-@@ -1267,0 +1379,2 @@ class MetadataDataSourceTest {
+@@ -1267,0 +1380,2 @@ class MetadataDataSourceTest {
 +
 +internal fun MetadataDataSource.observeContent(key: MetadataKey) = observe(key).map { it?.content }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
@@ -101395,10 +101552,10 @@ index 2c3089d4f..34343dd5a 100644
 -    private inline fun <reified T : WalletAccount> spendable(): T = mockk<T> { every { isSpendable } returns true }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
 new file mode 100644
-index 000000000..c2fbbbde4
+index 000000000..4fbc30d19
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,452 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.TransactionId
@@ -101408,6 +101565,7 @@ index 000000000..c2fbbbde4
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.MetadataReadUnavailableException
 +import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 +import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
 +import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -101440,6 +101598,7 @@ index 000000000..c2fbbbde4
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.launch
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.onEach
@@ -101742,6 +101901,82 @@ index 000000000..c2fbbbde4
 +        advanceTimeBy(1)
 +        runCurrent()
 +        coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond) }
++    }
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun aVisibleSwapRetriesAnUnavailableReadWithoutRedisplaying() = runTest {
++        val pending = swap(SwapStatus.PENDING)
++        val terminal = swap(SwapStatus.SUCCESS)
++        val accounts = mockk<AccountDataSource> {
++            every { selectedAccount } returns MutableStateFlow(owner)
++        }
++        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.SUCCESS }
++        var readable = false
++        val metadata = mockk<MetadataRepository> {
++            coEvery { getSwapMetadata(deposit, owner) } coAnswers {
++                if (!readable) throw MetadataReadUnavailableException()
++                pending
++            }
++            coEvery { updateSwap(pending, result) } returns terminal
++        }
++        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
++        val poll = UpdateSwapActivityMetadataUseCase(
++            accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
++        )
++
++        poll(ActivityData.BySwap(pending))
++        runCurrent()
++        coVerify(exactly = 1) { metadata.getSwapMetadata(deposit, owner) }
++        coVerify(exactly = 0) { swaps.checkSwapStatus(any()) }
++
++        readable = true
++        advanceTimeBy(15_000)
++        runCurrent()
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
++        advanceTimeBy(16_000)
++        runCurrent()
++        coVerify(exactly = 2) { metadata.getSwapMetadata(deposit, owner) }
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
++    }
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun openSwapDetailsRecoversItsExactOwnerAfterATemporaryReadFailure() = runTest {
++        val pending = swap(SwapStatus.PENDING)
++        val terminal = swap(SwapStatus.SUCCESS)
++        val result = mockk<SwapQuoteStatus>(relaxed = true) { every { status } returns SwapStatus.SUCCESS }
++        var readable = false
++        val metadata = mockk<MetadataRepository> {
++            coEvery { getSwapMetadata(deposit, owner) } coAnswers {
++                if (!readable) throw MetadataReadUnavailableException()
++                pending
++            }
++            coEvery { updateSwap(pending, result) } returns terminal
++        }
++        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
++        val status = GetSwapStatusUseCase(metadata, swaps)
++        val observations = mutableListOf<SwapQuoteStatusData>()
++        backgroundScope.launch { status.observeForAccount(deposit, owner).collect { observations += it } }
++        runCurrent()
++        assertIs<MetadataReadUnavailableException>(observations.last().error)
++
++        readable = true
++        advanceTimeBy(1_000)
++        runCurrent()
++        assertEquals(terminal, observations.last().savedMetadata)
++        assertNull(observations.last().error)
++        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
++    }
++
++    @Test
++    fun anExistingTransactionRowGainsAPollIdentityWhenItsSavedSwapAppears() {
++        val initial = activity(confirmed, null)
++        val associated = activity(confirmed, swap(SwapStatus.PENDING))
++        assertEquals(initial.key, associated.key)
++        assertNull(initial.pendingSwapReference)
++        assertEquals(deposit, associated.pendingSwapReference)
++        assertNull(activity(confirmed, swap(SwapStatus.SUCCESS)).pendingSwapReference)
 +    }
 +
 +    private fun swap(status: SwapStatus?) =

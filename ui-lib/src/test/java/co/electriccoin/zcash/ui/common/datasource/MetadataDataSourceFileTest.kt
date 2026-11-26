@@ -42,6 +42,7 @@ import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
+import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
@@ -77,6 +78,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.spyk
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
@@ -689,6 +691,38 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun anUnreadableAlternateCannotBeTreatedAsAnUnreservedFundingReference() = runTest {
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val proposal = outgoingProposal(quote, account)
+        assertTrue(markSwap(dataSource(), quote.provider, quote.mode, quote.reviewedIdentity()))
+        val reserved = read(canonicalName)
+        write(legacyName, reserved, metadataKey(1))
+        val clean = metadata(1)
+        write(canonicalName, clean)
+
+        val storage = spyk(storageProvider)
+        val alternate = File(metadataDir, legacyName)
+        var inaccessible = true
+        every { storage.sizeOf(alternate) } answers {
+            if (inaccessible) throw SecurityException("Synthetic tracking read failure")
+            callOriginal()
+        }
+        val process = ProcessSwapTransactionUseCase(repository(metadataProvider, storage = storage), mockk())
+        assertFailsWith<MetadataReadUnavailableException> {
+            process.submitReservedFunding(proposal, {}) { _, _ -> error("SDK must not be entered") }
+        }
+        assertEquals(clean, read(canonicalName))
+        assertTrue(alternate.isFile)
+
+        inaccessible = false
+        assertFailsWith<IllegalStateException> {
+            process.submitReservedFunding(proposal, {}) { _, _ -> error("A tracked deposit cannot be funded again") }
+        }.also { assertTrue(it.message.orEmpty().contains("already tracked")) }
+        assertEquals(reserved.accountMetadata.swaps.swapIds, storedSwaps().swapIds)
+    }
+
+    @Test
     fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
         val sync = TrackingSync()
         val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
@@ -830,6 +864,41 @@ class MetadataDataSourceFileTest {
         assertEquals(65, saved.size)
         assertEquals(64, saved.count { it.signedQuoteEvidence != null })
         assertEquals(evidence, saved.last().signedQuoteEvidence)
+    }
+
+    @Test
+    fun anUnreadableAlternateCannotPublishAnIncompleteSnapshotOrAcknowledgeAnEdit() = runTest {
+        val saved = metadata(lastUpdated = 1, bookmarked = listOf(bookmark("old", 1)))
+        write(canonicalName, saved)
+        val storage = spyk(storageProvider)
+        val alternate = File(metadataDir, legacyName)
+        var inaccessible = true
+        every { storage.sizeOf(alternate) } answers {
+            if (inaccessible) throw SecurityException("Synthetic alternate access failure")
+            callOriginal()
+        }
+        val source = dataSource(storage = storage)
+        val observed = Channel<MetadataObservation?>(Channel.UNLIMITED)
+        backgroundScope.launch { source.observe(key).collect { observed.send(it) } }
+        assertNull(observed.receive())
+        assertEquals(MetadataObservation.Available(saved), observed.receive())
+
+        val later = note("legacy-note", "alternate contents", 2)
+        write(legacyName, metadata(lastUpdated = 2, annotations = listOf(later)), metadataKey(1))
+        assertFailsWith<MetadataReadUnavailableException> { source.read(key) }
+        assertEquals(MetadataObservation.Unavailable(saved), observed.receive())
+        assertFalse(source.setTxBookmark("new", true, key))
+        assertEquals(saved, read(canonicalName))
+        assertTrue(alternate.isFile)
+
+        inaccessible = false
+        val recovered = assertNotNull(source.read(key))
+        assertEquals(listOf(later), recovered.accountMetadata.annotations)
+        assertEquals(MetadataObservation.Available(recovered), observed.receive())
+        assertTrue(source.setTxBookmark("new", true, key))
+        val edited = observed.receive()?.content
+        assertEquals(listOf("old", "new"), edited?.accountMetadata?.bookmarked?.map { it.txId })
+        assertEquals(listOf(later), edited?.accountMetadata?.annotations)
     }
 
     @Test
@@ -1163,9 +1232,10 @@ class MetadataDataSourceFileTest {
     private fun TestScope.dataSource(
         provider: MetadataProviderImpl = metadataProvider,
         ownership: WalletWriteAccess = WalletWriteAccess(),
+        storage: MetadataStorageProvider = storageProvider,
     ) =
         MetadataDataSourceImpl(
-            metadataStorageProvider = storageProvider,
+            metadataStorageProvider = storage,
             metadataProvider = provider,
             simpleSwapAssetProvider = simpleSwapAssetProvider,
             ioDispatcher = StandardTestDispatcher(testScheduler),
@@ -1175,6 +1245,7 @@ class MetadataDataSourceFileTest {
     private fun TestScope.repository(
         provider: MetadataProviderImpl,
         ownership: WalletWriteAccess = WalletWriteAccess(),
+        storage: MetadataStorageProvider = storageProvider,
     ): MetadataRepositoryImpl {
         val uuid = AccountUuid.new(ByteArray(16))
         val wallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -1185,7 +1256,7 @@ class MetadataDataSourceFileTest {
         }
         return MetadataRepositoryImpl(
             accountDataSource = accounts,
-            metadataDataSource = dataSource(provider, ownership),
+            metadataDataSource = dataSource(provider, ownership, storage),
             metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> { coEvery { get(uuid) } returns key },
             persistableWalletProvider = mockk(),
             simpleSwapAssetProvider = simpleSwapAssetProvider,
