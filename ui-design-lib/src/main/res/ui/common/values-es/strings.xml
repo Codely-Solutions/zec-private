@@ -351,9 +351,8 @@
     <string name="export_data_unable_to_share">No se encontró una aplicación con la cual compartir.</string>
     <!-- ===== feedback ===== -->
     <string name="support_header">Soporte</string>
-    <string name="wallet_seed_recovery_waiting_title">Recuperación de la billetera en curso</string>
     <string name="wallet_seed_recovery_failed_title">La recuperación de la billetera requiere atención</string>
-    <string name="wallet_seed_recovery_failed_message">Abre Soporte para compartir un mensaje sin datos de la billetera.</string>
+    <string name="wallet_seed_recovery_failed_message">Se conservaron los datos de la billetera. Vuelve a abrir la app para reintentar o contacta con Soporte.</string>
     <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
     <string name="support_confirmation_explanation">Elige una aplicación y destinatario para compartir el diagnóstico. Revisa su contenido antes de compartirlo; ningún equipo de soporte lo recibe automáticamente.</string>
     <string name="support_email_part_1">¿Cómo ha sido tu experiencia con ZEC Private?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>

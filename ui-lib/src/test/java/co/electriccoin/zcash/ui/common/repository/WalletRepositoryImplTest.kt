@@ -1343,6 +1343,7 @@ private class FakePersistableWalletProvider(
     private val events: MutableList<String>
 ) : PersistableWalletProvider {
     private val walletFlow = MutableStateFlow(initial)
+    private var setupMode = initial?.walletInitMode?.takeUnless { it == WalletInitMode.ExistingWallet }
     private val writeAccess = WalletWriteAccess()
     var failWrites = false
     var failWritesBeforePublishing = false
@@ -1357,7 +1358,10 @@ private class FakePersistableWalletProvider(
     }
 
     override suspend fun store(persistableWallet: PersistableWallet) =
-        writeAccess.replaceWallet { write(persistableWallet) }
+        writeAccess.replaceWallet {
+            write(persistableWallet)
+            setupMode = persistableWallet.walletInitMode.takeUnless { it == WalletInitMode.ExistingWallet }
+        }
 
     override suspend fun storeIfCurrent(
         expected: PersistableWallet,
@@ -1374,6 +1378,8 @@ private class FakePersistableWalletProvider(
     } ?: false
 
     override suspend fun getPersistableWallet(): PersistableWallet? = walletFlow.value
+
+    override suspend fun getSetupMode(): WalletInitMode? = setupMode
 
     override suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(walletFlow.value)
 

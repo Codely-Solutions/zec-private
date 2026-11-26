@@ -10,7 +10,6 @@ import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.repository.HomeMessageData
 import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
 import co.electriccoin.zcash.ui.design.util.getCausesAsSequence
-import kotlinx.coroutines.flow.StateFlow
 import java.util.UUID
 
 class NavigateToErrorUseCase(
@@ -26,7 +25,7 @@ class NavigateToErrorUseCase(
         val id = UUID.randomUUID().toString()
         val route = when (args) {
             is ErrorArgs.ShieldingError, is ErrorArgs.General, is ErrorArgs.ShieldingGeneralError,
-            ErrorArgs.SeedRecoveryFailed, is ErrorArgs.SeedRecoveryNotice -> ErrorDialog(id)
+            ErrorArgs.SeedRecoveryFailed -> ErrorDialog(id)
             is ErrorArgs.SyncError -> {
                 if (isSyncError(args.synchronizerError)) SyncErrorArgs(id) else ErrorBottomSheet(id)
             }
@@ -104,8 +103,6 @@ sealed interface ErrorRoute
 sealed interface ErrorArgs {
     data object SeedRecoveryFailed : ErrorArgs
 
-    data class SeedRecoveryNotice(val phase: StateFlow<SeedRecoveryPhase>) : ErrorArgs
-
     data class SyncError(
         val synchronizerError: SynchronizerError
     ) : ErrorArgs
@@ -140,5 +137,3 @@ sealed interface ErrorArgs {
         val exception: Exception
     ) : ErrorArgs
 }
-
-enum class SeedRecoveryPhase { WAITING, FAILED, FINISHED }

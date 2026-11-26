@@ -9,9 +9,8 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
-import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
-import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.AddressBookDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSourceImpl
@@ -29,8 +28,6 @@ import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
-import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
@@ -166,7 +163,7 @@ class ResetWalletWriteOwnershipTest {
     }
 
     @Test
-    fun resetDrainsAdmittedSeedRecoveryBeforeErasingAndAllowsAnExplicitRestore() = runBlocking {
+    fun resetDrainsThePendingSdkReopenAndAllowsAnExplicitRestore() = runBlocking {
         val fixture = Fixture()
         val original = originalWallet()
         fixture.walletProvider.store(original)
@@ -195,39 +192,6 @@ class ResetWalletWriteOwnershipTest {
     }
 
     @Test
-    fun seedRecoveryAwaitingItsWalletSnapshotCannotEraseAfterResetAndRestore() = runBlocking {
-        val fixture = Fixture()
-        fixture.walletProvider.store(originalWallet())
-        val beforeReset = fixture.writeAccess.token()
-        val captured = CompletableDeferred<Unit>()
-        val returnSnapshot = CompletableDeferred<Unit>()
-        val stagedRead = object : PersistableWalletProvider by fixture.walletProvider {
-            override suspend fun getPersistableWallet(): PersistableWallet {
-                val original = fixture.walletProvider.requirePersistableWallet()
-                captured.complete(Unit)
-                returnSnapshot.await()
-                return original
-            }
-        }
-        val sdkRecovery = mockk<WalletSeedRecovery>()
-        val recover = RecoverFromSeedMismatchUseCase(
-            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
-        )
-        val recovery = launch { recover(beforeReset) }
-        val replacement = originalWallet().copy(endpoint = LightWalletEndpoint("new.example.invalid", 443, true))
-        try {
-            withTimeout(10.seconds) { captured.await() }
-            fixture.reset()(keepFiles = true)
-            fixture.walletProvider.store(replacement)
-        } finally {
-            returnSnapshot.complete(Unit)
-        }
-        recovery.join()
-        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-        assertEquals(replacement, fixture.walletProvider.requirePersistableWallet())
-    }
-
-    @Test
     fun recoveryCannotOverwriteAnEndpointChangedDuringTheSameWalletGeneration() = runBlocking {
         val fixture = Fixture()
         val provider = fixture.walletProvider
@@ -240,7 +204,7 @@ class ResetWalletWriteOwnershipTest {
         try {
             withTimeout(10.seconds) { erase.started.await() }
             val prepared = provider.requirePersistableWallet()
-            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
+            assertEquals(original.walletInitMode, prepared.walletInitMode)
             assertTrue(provider.storeIfCurrent(prepared, replacement.copy(
                 birthday = prepared.birthday, walletInitMode = prepared.walletInitMode
             ), version))
@@ -252,75 +216,6 @@ class ResetWalletWriteOwnershipTest {
         recovery.join()
 
         assertEquals(replacement.endpoint, provider.requirePersistableWallet().endpoint)
-    }
-
-    @Test
-    fun seedRecoveryPreparesTheEndpointCommittedAfterItsInitialRead() = runBlocking {
-        val fixture = Fixture()
-        val provider = fixture.walletProvider
-        val original = originalWallet()
-        provider.store(original)
-        val version = provider.writeVersion
-        val captured = CompletableDeferred<Unit>()
-        val resume = CompletableDeferred<Unit>()
-        val stagedRead = object : PersistableWalletProvider by provider {
-            override suspend fun getPersistableWallet(): PersistableWallet {
-                val snapshot = provider.requirePersistableWallet()
-                if (captured.complete(Unit)) resume.await()
-                return snapshot
-            }
-        }
-        val endpoint = LightWalletEndpoint("new-server.fixture.invalid", 443, true)
-        val sdkRecovery = seedRecoveryFixture {
-            val prepared = provider.requirePersistableWallet()
-            assertEquals(endpoint, prepared.endpoint)
-            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
-            true
-        }
-        val recover = RecoverFromSeedMismatchUseCase(
-            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
-        )
-        val pending = launch { recover(version) }
-        try {
-            withTimeout(10.seconds) { captured.await() }
-            assertTrue(provider.storeServerSelection(WalletServerSelection(endpoint, false), version))
-        } finally {
-            resume.complete(Unit)
-        }
-        pending.join()
-        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-        assertEquals(endpoint, provider.requirePersistableWallet().endpoint)
-    }
-
-    @Test
-    fun resetWaitsForAnAdmittedRecoveryWriteThenClearsIt() = runBlocking {
-        val fixture = Fixture()
-        fixture.walletProvider.store(originalWallet())
-        val recoveryWriteEntered = CompletableDeferred<Unit>()
-        val finishRecoveryWrite = CompletableDeferred<Unit>()
-        fixture.beforePreferenceWrite = {
-            recoveryWriteEntered.complete(Unit)
-            finishRecoveryWrite.await()
-        }
-        val sdkRecovery = seedRecoveryFixture { true }
-        val recover = RecoverFromSeedMismatchUseCase(
-            fixture.walletProvider, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
-        )
-        val recovery = launch { recover(fixture.writeAccess.token()) }
-        val reset = fixture.reset()
-        try {
-            withTimeout(10.seconds) { recoveryWriteEntered.await() }
-            launch { reset(keepFiles = false) }
-            withTimeout(10.seconds) { fixture.progress.isPending.first { it } }
-            assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progress.getStage())
-            coVerify(exactly = 0) { fixture.sdkData() }
-        } finally {
-            finishRecoveryWrite.complete(Unit)
-        }
-        recovery.join()
-        withTimeout(10.seconds) { fixture.progress.isPending.first { !it } }
-
-        assertNull(fixture.walletProvider.getPersistableWallet())
     }
 
     @Test
@@ -417,7 +312,7 @@ class ResetWalletWriteOwnershipTest {
             started.complete(Unit)
             finish.await()
             true
-        }, access, mockk(relaxed = true))
+        }, access)
     }
 
     private inner class Fixture {
@@ -433,20 +328,8 @@ class ResetWalletWriteOwnershipTest {
             RuntimeEnvironment.getApplication().getSharedPreferences("reset-ownership", Context.MODE_PRIVATE),
             Dispatchers.Unconfined,
         )
-        var beforePreferenceWrite: suspend () -> Unit = {}
-        private val preferences = object : PreferenceProvider by androidPreferences {
-            override suspend fun putString(key: PreferenceKey, value: String?) {
-                beforePreferenceWrite()
-                androidPreferences.putString(key, value)
-            }
-
-            override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) {
-                beforePreferenceWrite()
-                androidPreferences.putStringWithRollback(key, value)
-            }
-        }
         private val encryptedProvider = mockk<EncryptedPreferenceProvider> {
-            coEvery { this@mockk.invoke() } returns preferences
+            coEvery { this@mockk.invoke() } returns androidPreferences
             coEvery { purgeQuarantine() } returns true
         }
         val walletProvider = PersistableWalletProviderImpl(encryptedProvider, writeAccess)

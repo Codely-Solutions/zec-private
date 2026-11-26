@@ -9,14 +9,14 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 @ConsistentCopyVisibility
-data class WalletEnrollmentToken internal constructor(internal val wallet: Long, internal val sdkErasure: Long)
+data class WalletEnrollmentToken internal constructor(internal val wallet: Long)
 
 class WalletEnrollmentAccess(
     private val walletWriteAccess: WalletWriteAccess,
     private val walletCoordinator: WalletCoordinator,
     private val transportGate: WalletSdkTransportGate? = null,
 ) {
-    val ownershipChanges = walletWriteAccess.enrollmentChanges
+    val ownershipChanges = walletWriteAccess.admissionChanges
 
     fun capture(): WalletEnrollmentToken? = walletWriteAccess.enrollmentToken()
 

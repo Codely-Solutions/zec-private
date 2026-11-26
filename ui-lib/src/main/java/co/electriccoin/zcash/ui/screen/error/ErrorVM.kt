@@ -34,20 +34,7 @@ class ErrorVM(
     private val route: ErrorRoute? = null,
 ) : ViewModel() {
     private val reportPermission = reportAccess.bind(viewModelScope)
-    private val mutableState = MutableStateFlow(createState(args))
-    val state: StateFlow<ErrorState> = mutableState.asStateFlow()
-
-    init {
-        if (args is ErrorArgs.SeedRecoveryNotice) {
-            viewModelScope.launch {
-                args.phase.collect {
-                    if (it != SeedRecoveryPhase.FINISHED) {
-                        mutableState.value = createSeedRecoveryErrorState(waiting = it == SeedRecoveryPhase.WAITING)
-                    }
-                }
-            }
-        }
-    }
+    val state: StateFlow<ErrorState> = MutableStateFlow(createState(args)).asStateFlow()
 
     override fun onCleared() {
         route?.let(navigateToErrorBottom::clear)
@@ -59,9 +46,6 @@ class ErrorVM(
     private fun createState(args: ErrorArgs): ErrorState =
         when (args) {
             ErrorArgs.SeedRecoveryFailed -> createSeedRecoveryErrorState()
-            is ErrorArgs.SeedRecoveryNotice -> createSeedRecoveryErrorState(
-                waiting = args.phase.value == SeedRecoveryPhase.WAITING,
-            )
             is ErrorArgs.SyncError -> createSyncErrorState(args)
             is ErrorArgs.ShieldingError -> if (args.error is SubmitResult.GrpcFailure) {
                 createShieldingPendingState(args, args.error)
@@ -74,10 +58,8 @@ class ErrorVM(
             is ErrorArgs.KeystoneAccountUnsupported -> createKeystoneAccountUnsupportedState(args)
         }
 
-    private fun createSeedRecoveryErrorState(waiting: Boolean = false) = ErrorState(
-        title = stringRes(
-            if (waiting) R.string.wallet_seed_recovery_waiting_title else R.string.wallet_seed_recovery_failed_title,
-        ),
+    private fun createSeedRecoveryErrorState() = ErrorState(
+        title = stringRes(R.string.wallet_seed_recovery_failed_title),
         message = stringRes(R.string.wallet_seed_recovery_failed_message),
         positive = ButtonState(
             text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),

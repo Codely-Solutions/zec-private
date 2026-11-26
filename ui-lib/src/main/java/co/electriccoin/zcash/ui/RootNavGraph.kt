@@ -41,7 +41,6 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
-import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
 import co.electriccoin.zcash.ui.screen.error.StoredWalletUnavailableView
 import co.electriccoin.zcash.ui.screen.scan.ScanGenericAddressArgs
 import co.electriccoin.zcash.ui.screen.swap.refundwarning.SwapRefundWarningArgs
@@ -49,10 +48,7 @@ import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import co.electriccoin.zcash.ui.screen.tor.settings.TorRestartRequiredView
 import co.electriccoin.zcash.ui.util.SettingsUtil
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -261,7 +257,6 @@ private fun CollectLaunchRequests(
     }
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
 internal suspend fun LaunchNavigationRequests.deliverOnChanges(
     navController: NavController,
     walletReady: Boolean,
@@ -269,20 +264,12 @@ internal suspend fun LaunchNavigationRequests.deliverOnChanges(
     navigate: suspend (NavigationCommand, () -> Boolean) -> Boolean,
     errors: NavigateToErrorUseCase,
 ) {
-    val recoveryPhase = navController.currentBackStackEntryFlow.flatMapLatest {
-        (navController.currentErrorArgs(errors) as? ErrorArgs.SeedRecoveryNotice)?.phase ?: flowOf(null)
-    }
-    combine(changes, navController.currentBackStackEntryFlow, recoveryPhase) { _, _, _ -> Unit }.collect {
-        val errorArgs = navController.currentErrorArgs(errors)
-        if (errorArgs is ErrorArgs.SeedRecoveryNotice && errorArgs.phase.value == SeedRecoveryPhase.FINISHED) {
-            if (hasAppAccess()) navController.popBackStack()
-            return@collect
-        }
+    combine(changes, navController.currentBackStackEntryFlow) { _, _ -> Unit }.collect {
         deliver(
             walletReady,
             hasAppAccess = {
                 val current = navController.currentErrorArgs(errors)
-                hasAppAccess() && current != ErrorArgs.SeedRecoveryFailed && current !is ErrorArgs.SeedRecoveryNotice
+                hasAppAccess() && current != ErrorArgs.SeedRecoveryFailed
             },
             canPresentRecovery = { navController.currentBackStackEntry?.destination?.hasRoute<HomeArgs>() == true },
             navigate = navigate,

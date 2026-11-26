@@ -486,7 +486,7 @@ class HWEnrollmentVMTest {
         }
 
     @Test
-    fun sdkErasureWithdrawsKeystoneFinishAndAnOldTapRestartsTheScanner() = runTest {
+    fun replacingTheWalletWithdrawsKeystoneFinishAndAnOldTapRestartsTheScanner() = runTest {
         val created = mockk<Account>()
         val accountDataSource = mockk<AccountDataSource> {
             coEvery { importKeystoneAccount(any(), any(), any(), any(), null) } returns created
@@ -514,7 +514,7 @@ class HWEnrollmentVMTest {
         runCurrent()
         val finish = assertNotNull(state.finalization.value).finish
 
-        wallet.onSdkErasureStarting()
+        wallet.replaceWallet {}
         runCurrent()
         assertNull(state.finalization.value)
 

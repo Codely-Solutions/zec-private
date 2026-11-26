@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -14,9 +13,7 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     private val mutex = Mutex()
     private val sdkRecovery = Mutex()
     private val generation = MutableStateFlow(0L)
-    private val sdkErasure = MutableStateFlow(0L)
     val version = generation.asStateFlow()
-    internal val enrollmentChanges = combine(generation, sdkErasure) { _, _ -> Unit }
     internal val admissionChanges = combine(generation, progressStore?.isPending ?: flowOf(false)) { _, _ -> Unit }
     @Volatile private var blocked = false
     @Volatile private var resetting = false
@@ -36,16 +33,10 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
 
     internal fun enrollmentToken(): WalletEnrollmentToken? {
         val wallet = token()
-        return WalletEnrollmentToken(wallet, sdkErasure.value).takeIf(::permitsEnrollment)
+        return WalletEnrollmentToken(wallet).takeIf(::permitsEnrollment)
     }
 
-    internal fun permitsEnrollment(token: WalletEnrollmentToken): Boolean =
-        permits(token.wallet) && sdkErasure.value == token.sdkErasure
-
-    /** Call under the SDK recovery fence before an erase can change the enrolled account IDs. */
-    internal fun onSdkErasureStarting() {
-        sdkErasure.update { it + 1 }
-    }
+    internal fun permitsEnrollment(token: WalletEnrollmentToken): Boolean = permits(token.wallet)
 
     /** Stops admission before draining SDK recovery and writes. Remains closed until explicit setup. */
     suspend fun beginReset() {

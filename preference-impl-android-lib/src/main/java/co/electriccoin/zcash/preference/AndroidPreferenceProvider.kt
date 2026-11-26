@@ -233,9 +233,6 @@ interface AndroidPreferenceFactory {
      * to keep. Run it before SDK initialization or after withdrawing the wallet from the SDK.
      */
     suspend fun ensureEncryptedReadable(context: Context, filename: String)
-
-    /** Checks existing contents before SDK erase, without quarantining the store or replacing its master key. */
-    suspend fun checkExistingEncryptedReadable(context: Context, filename: String)
 }
 
 /**
@@ -272,21 +269,6 @@ private class AndroidPreferenceFactoryImpl : AndroidPreferenceFactory {
 
     override suspend fun ensureEncryptedReadable(context: Context, filename: String) {
         withContext(Dispatchers.IO) { openEncrypted(context, filename, checkContents = true) }
-    }
-
-    override suspend fun checkExistingEncryptedReadable(context: Context, filename: String) {
-        withContext(Dispatchers.IO) {
-            val directory = sharedPreferencesDirectory(context)
-            val preferences = directory.resolve("$filename.xml").toPath()
-            val backup = directory.resolve("$filename.xml.bak").toPath()
-            if (Files.notExists(preferences) && Files.notExists(backup)) return@withContext
-
-            check(androidKeyStore().containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
-                "The existing encrypted preference store has no master key"
-            }
-            // The SDK's encrypted clear reads every entry before committing.
-            createEncryptedSharedPreferences(context, filename).all
-        }
     }
 
     /**

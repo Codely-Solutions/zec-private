@@ -13,9 +13,6 @@ interface SdkEncryptedPreferenceRecoveryProvider {
      * before anything else opens the SDK store.
      */
     suspend fun ensureReadable()
-
-    /** Validates the existing store before a detached SDK erase. Leave repair to an inactive SDK. */
-    suspend fun checkReadableForErase()
 }
 
 internal class SdkEncryptedPreferenceRecoveryProviderImpl(
@@ -23,9 +20,6 @@ internal class SdkEncryptedPreferenceRecoveryProviderImpl(
 ) : SdkEncryptedPreferenceRecoveryProvider {
     override suspend fun ensureReadable() =
         AndroidPreferenceProvider.ensureEncryptedReadable(context, SDK_ENCRYPTED_PREFERENCES_FILENAME)
-
-    override suspend fun checkReadableForErase() =
-        AndroidPreferenceProvider.checkExistingEncryptedReadable(context, SDK_ENCRYPTED_PREFERENCES_FILENAME)
 }
 
 private const val SDK_ENCRYPTED_PREFERENCES_FILENAME = "cash.z.ecc.android.sdk.encrypted"

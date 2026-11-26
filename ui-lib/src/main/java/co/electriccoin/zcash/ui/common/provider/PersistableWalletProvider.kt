@@ -58,7 +58,7 @@ interface PersistableWalletProvider {
 
     suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(getPersistableWallet())
 
-    suspend fun getSetupMode(): WalletInitMode? = getPersistableWallet()?.walletInitMode?.pendingMode()
+    suspend fun getSetupMode(): WalletInitMode? = null
 }
 
 private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
