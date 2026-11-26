@@ -24,7 +24,7 @@ class GetGiftCardDestinationAddressUseCase(
         val engine = synchronizerProvider.synchronizer.value
         val permits = {
             engine != null && appAccess.permits(grant) && walletAccess.permits(generation) &&
-                !walletTransport.isRetired(engine) && synchronizerProvider.synchronizer.value === engine
+                !walletTransport.isRetired(engine) && synchronizerProvider.isCurrentEngine(engine)
         }
         return {
             if (engine == null || !permits()) throw GiftCardException.SubmitFailed()

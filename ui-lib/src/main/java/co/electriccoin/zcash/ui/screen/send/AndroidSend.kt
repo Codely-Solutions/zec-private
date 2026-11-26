@@ -12,7 +12,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.model.toZecString
 import co.electriccoin.zcash.di.koinActivityViewModel
@@ -84,7 +87,8 @@ internal fun WrapSend(args: Send, sendEntryId: String) {
             navigationRouter.forward(
                 ScanArgs(
                     ScanFlow.SEND,
-                    isScanZip321Enabled = args.isScanZip321Enabled
+                    isScanZip321Enabled = args.isScanZip321Enabled,
+                    sendEntryId = sendEntryId,
                 )
             )
         },
@@ -132,6 +136,7 @@ internal fun WrapSend(
 
     val observeClearSend = koinInject<ObserveClearSendUseCase>()
     val prefillSend = koinInject<PrefillSendUseCase>()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     LaunchedEffect(viewModel, sendArguments) {
         viewModel.initializeRecipient(sendArguments)
@@ -195,37 +200,27 @@ internal fun WrapSend(
         }
     }
 
-    LaunchedEffect(Unit) {
-        prefillSend().collect {
-            when (it) {
-                is PrefillSendData.All -> {
-                    setSendStage(SendStage.Form)
-                    setZecSend(null)
-                    viewModel.validateRecipient(it.address.orEmpty())
-
-                    val fee = it.fee
-                    val value =
-                        when {
-                            fee == null -> it.amount
-                            fee > it.amount -> it.amount
-                            else -> it.amount - fee
-                        }
-
-                    setAmountState(
-                        AmountState.newFromZec(
-                            value = stringRes(value, TickerLocation.HIDDEN).getString(context),
-                            fiatValue = "",
-                            isTransparentOrTextRecipient = true,
-                            exchangeRateState = exchangeRateState,
+    LaunchedEffect(sendEntryId, sendArguments.prefillToken, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            prefillSend.observe(sendEntryId, sendArguments.prefillToken).collect {
+                setSendStage(SendStage.Form)
+                setZecSend(null)
+                when (it) {
+                    is PrefillSendData.All -> {
+                        viewModel.validateRecipient(it.address.orEmpty())
+                        val fee = it.fee
+                        val value = if (fee != null && fee <= it.amount) it.amount - fee else it.amount
+                        setAmountState(
+                            AmountState.newFromZec(
+                                value = stringRes(value, TickerLocation.HIDDEN).getString(context),
+                                fiatValue = "",
+                                isTransparentOrTextRecipient = true,
+                                exchangeRateState = exchangeRateState,
+                            )
                         )
-                    )
-                    setMemoState(MemoState.new(it.memos?.firstOrNull().orEmpty()))
-                }
-
-                is PrefillSendData.FromAddressScan -> {
-                    setSendStage(SendStage.Form)
-                    setZecSend(null)
-                    viewModel.validateRecipient(it.address)
+                        setMemoState(MemoState.new(it.memos?.firstOrNull().orEmpty()))
+                    }
+                    is PrefillSendData.FromAddressScan -> viewModel.validateRecipient(it.address)
                 }
             }
         }

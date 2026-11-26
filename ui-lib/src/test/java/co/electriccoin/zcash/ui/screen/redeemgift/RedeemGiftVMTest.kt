@@ -244,6 +244,7 @@ class RedeemGiftVMTest {
         }
         val provider = mockk<SynchronizerProvider> {
             every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
+            every { isCurrentEngine(synchronizer) } returns true
         }
         val env = Env(this)
         val vm = env.newVm(
@@ -287,6 +288,7 @@ class RedeemGiftVMTest {
         }
         val provider = mockk<SynchronizerProvider> {
             every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
+            every { isCurrentEngine(synchronizer) } returns true
         }
         val env = Env(this)
         val vm = env.newVm(getDestinationAddress = giftDestination(provider))
@@ -315,7 +317,10 @@ class RedeemGiftVMTest {
             val engine = MutableStateFlow<Synchronizer?>(mockk {
                 coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } returns ORCHARD_ADDRESS
             })
-            val provider = mockk<SynchronizerProvider> { every { synchronizer } returns engine }
+            val provider = mockk<SynchronizerProvider> {
+                every { synchronizer } returns engine
+                every { isCurrentEngine(any()) } answers { firstArg<Synchronizer>() === engine.value }
+            }
             val env = Env(this)
             val admission = CompletableDeferred<Unit>()
             env.dataSource.admissionGate = admission

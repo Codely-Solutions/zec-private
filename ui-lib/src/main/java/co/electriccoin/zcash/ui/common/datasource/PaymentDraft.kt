@@ -21,6 +21,7 @@ sealed interface PaymentDraft {
 class PaymentDraftOwner(
     val account: WalletAccount,
     internal val entryId: String?,
+    internal val permitsWallet: () -> Boolean = { false },
     internal val permits: () -> Boolean,
 ) {
     fun requireCurrent() {

@@ -62,6 +62,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -132,9 +133,10 @@ class Zip321MemoScanTest {
     )
     private val router = mockk<NavigationRouter>(relaxed = true)
     private val prefill = PrefillSendUseCase()
+    private val review = paymentReviewFixture(accounts, router, repository)
     private val error = NavigateToErrorUseCase(router)
     private val scan = OnZip321ScannedUseCase(
-        review = paymentReviewFixture(accounts, router, repository),
+        review = review,
         navigationRouter = router,
         prefillSend = prefill,
         navigateToErrorUseCase = error,
@@ -160,7 +162,7 @@ class Zip321MemoScanTest {
             assertSame(sdkProposal, assertNotNull(repository.transactionProposal.value).proposal)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalBinaryUri) }
             verify(exactly = 1) { router.replace(ofType<ReviewTransactionArgs>()) }
-            verify(exactly = 0) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
+            verify(exactly = 0) { router.replace(ofType<Send>(), ofType<ReviewTransactionArgs>()) }
             withContext(Dispatchers.Default) { assertNoDraft() }
 
             val textBytes = fixture.TEXT.encodeToByteArray().copyOf(512)
@@ -171,8 +173,11 @@ class Zip321MemoScanTest {
             val textMessage = assertNotNull(vm.state.value).items.filterIsInstance<MessageState>().single()
             assertEquals(stringRes(fixture.TEXT), textMessage.message)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalTextUri) }
-            verify(exactly = 1) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
-            val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
+            val send = slot<Send>()
+            verify(exactly = 1) { router.replace(capture(send), ofType<ReviewTransactionArgs>()) }
+            assertNoDraft()
+            val token = assertNotNull(send.captured.prefillToken)
+            val draft = withTimeout(5_000) { prefill.observe("new-send-entry", token).first() }
             assertEquals(expectedTextDraft, draft)
         } finally {
             store.clear()
@@ -313,7 +318,7 @@ class Zip321MemoScanTest {
         }
 
         verify(exactly = 2) { router.forward(ofType<ErrorDialog>()) }
-        verify(exactly = 0) { router.replace(Send()) }
+        verify(exactly = 0) { router.replace(ofType<Send>()) }
         verify(exactly = 0) { router.back() }
         assertNoDraft()
     }
@@ -415,10 +420,10 @@ class Zip321MemoScanTest {
             val uri = fixture.uri(fixture.binary)
             coEvery { synchronizer.validateAddress(uri) } returns AddressType.Invalid("Not a raw address")
             val scanner = ScanZashiAddressVM(
-                args = ScanArgs(ScanFlow.SEND, isScanZip321Enabled = false),
+                args = ScanArgs(ScanFlow.SEND, isScanZip321Enabled = false, sendEntryId = "owned-form"),
                 synchronizerProvider = provider,
                 zip321ParseUriValidationUseCase = Zip321ParseUriValidationUseCase(provider),
-                onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk()),
+                onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk(), review),
                 zip321Scanned = scan,
                 navigateToRedeemGiftCard = navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
                 navigationRouter = router,
@@ -444,7 +449,8 @@ class Zip321MemoScanTest {
             scanner.onScanned(fixture.RECIPIENT).join()
 
             verify(exactly = 2) { router.back() }
-            val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
+            assertNoDraft()
+            val draft = withTimeout(5_000) { prefill.observe("owned-form", null).first() }
             assertEquals(PrefillSendData.FromAddressScan(fixture.RECIPIENT), draft)
             assertEquals(ScanValidationState.VALID, scanner.state.value)
         } finally {
@@ -475,7 +481,7 @@ class Zip321MemoScanTest {
             )
             val scanner = ScanZashiAddressVM(
                 ScanArgs(ScanFlow.SEND), provider, Zip321ParseUriValidationUseCase(provider),
-                OnAddressScannedUseCase(router, prefill, mockk()), hardwareScan,
+                OnAddressScannedUseCase(router, prefill, mockk(), review), hardwareScan,
                 navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
                 navigationRouter = router,
             )
@@ -502,22 +508,22 @@ class Zip321MemoScanTest {
     fun directPrefillRefusesNonTextAndKeepsStrictPaddedText() = runBlocking {
         for (bytes in listOf(fixture.binary, fixture.invalidUtf8)) {
             val request = parse(bytes)
-            assertFailsWith<UneditableZip321MemoException> { prefill.requestFromZip321(request.payment) }
+            assertFailsWith<UneditableZip321MemoException> { request.payment.toEditableSendDraft() }
         }
         assertNoDraft()
 
         val text = parse(fixture.TEXT.encodeToByteArray().copyOf(512))
-        val job = prefill.requestFromZip321(text.payment)
-        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
-        job.join()
+        assertEquals(expectedTextDraft, text.payment.toEditableSendDraft())
     }
 
     @Test
     fun textProposalFailureStillPrefillsAnEditableDraft() = runBlocking {
         coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws IllegalStateException()
         scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.HOMEPAGE))
-        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
-        verify(exactly = 1) { router.replace(Send()) }
+        val send = slot<Send>()
+        verify(exactly = 1) { router.replace(capture(send)) }
+        val token = assertNotNull(send.captured.prefillToken)
+        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill.observe("new-send-entry", token).first() })
         verify(exactly = 0) { router.forward(ofType<ErrorDialog>()) }
     }
 
@@ -526,7 +532,7 @@ class Zip321MemoScanTest {
     )
 
     private suspend fun assertNoDraft() {
-        assertNull(withTimeoutOrNull(250) { prefill().first() })
+        assertNull(withTimeoutOrNull(50) { prefill.observe("unrelated-send", null).first() })
     }
 
     private fun sendNavigationController() = NavHostController(RuntimeEnvironment.getApplication()).apply {

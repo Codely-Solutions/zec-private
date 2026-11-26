@@ -4,10 +4,12 @@ import android.content.Context
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.TransferResult
+import co.electriccoin.zcash.migration.BuildConfig
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.model.migration.isTestnetBuildFlavor
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
@@ -22,7 +24,7 @@ import kotlin.time.Duration.Companion.seconds
  * AUTOMATIC plan — the exact `MigrationReviewVM.confirmAutomatic` path minus the UI and the
  * biometric gate — so an automated harness can start a full background migration from `adb`
  * without a human tapping through Review. Triggered from MainActivity by the
- * [EXTRA_START_MIGRATION] intent extra, which is honored only in debug builds.
+ * [EXTRA_START_MIGRATION] intent extra, which is honored only in debug testnet builds.
  *
  * The reset half mirrors the Debug screen's "Migration restart" action (DebugVM), including all
  * the side-state that action clears; the commit half mirrors confirmAutomatic including the
@@ -39,6 +41,7 @@ class DebugStartMigrationE2EUseCase(
     private val context: Context,
 ) {
     suspend operator fun invoke() {
+        check(isAllowed) { "The migration fixture requires a debug testnet build" }
         migrationLog("E2E: start requested — waiting for the SDK")
         val sdk =
             waitForSdk() ?: run {
@@ -131,8 +134,10 @@ class DebugStartMigrationE2EUseCase(
         withTimeoutOrNull(SDK_WAIT_DELAY * SDK_WAIT_ATTEMPTS) { getOrchardMigrationSdk() }
 
     companion object {
-        /** Intent extra checked by MainActivity; honored only in debug builds. */
+        /** Intent extra checked by MainActivity in debug testnet builds. */
         const val EXTRA_START_MIGRATION = "co.electriccoin.zcash.debug.E2E_START_MIGRATION"
+
+        internal val isAllowed get() = BuildConfig.DEBUG && isTestnetBuildFlavor()
 
         private const val SDK_WAIT_ATTEMPTS = 36
         private val SDK_WAIT_DELAY = 5.seconds

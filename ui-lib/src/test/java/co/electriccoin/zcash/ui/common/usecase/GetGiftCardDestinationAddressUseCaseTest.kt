@@ -29,7 +29,10 @@ class GetGiftCardDestinationAddressUseCaseTest {
     private val mainSynchronizer = mockk<Synchronizer>()
 
     private val synchronizerProvider =
-        mockk<SynchronizerProvider> { every { synchronizer } returns MutableStateFlow(mainSynchronizer) }
+        mockk<SynchronizerProvider> {
+            every { synchronizer } returns MutableStateFlow(mainSynchronizer)
+            every { isCurrentEngine(mainSynchronizer) } returns true
+        }
 
     @Test
     fun theDestinationIsTheReviewedAccountsOrchardOnlyAddress() =

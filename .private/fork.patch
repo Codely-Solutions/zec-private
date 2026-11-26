@@ -5065,7 +5065,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..35bb8c2df 100644
+index 294506ed1..e4fc9db25 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -5121,9 +5121,11 @@ index 294506ed1..35bb8c2df 100644
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
 +    private val migrationReadouts: MigrationTransferStateRepository,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
-@@ -145,0 +174,2 @@ class MigrationAppHooksImpl(
+@@ -146 +174,3 @@ class MigrationAppHooksImpl(
+-            BuildConfig.DEBUG &&
 +            resetProgress.isPending.value -> false
 +
++            DebugStartMigrationE2EUseCase.isAllowed &&
 @@ -153,8 +183,7 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
 -                // replaceAll ensures Home is always on the back stack regardless of how the app
@@ -6354,35 +6356,50 @@ index 9451c3bae..27f797eb9 100644
 - * [CheckMigrationRecoveryUseCase]'s app-open trigger needs.
 + * The sync and app-open recovery paths reconcile the fallback of a scheduled worker.
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt
-index b0b3f2cd0..e6611ffbf 100644
+index b0b3f2cd0..2858d7759 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCase.kt
-@@ -58 +58 @@ class DebugStartMigrationE2EUseCase(
+@@ -6,0 +7 @@ import cash.z.ecc.android.sdk.TransferResult
++import co.electriccoin.zcash.migration.BuildConfig
+@@ -10,0 +12 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
++import co.electriccoin.zcash.ui.common.model.migration.isTestnetBuildFlavor
+@@ -25 +27 @@ import kotlin.time.Duration.Companion.seconds
+- * [EXTRA_START_MIGRATION] intent extra, which is honored only in debug builds.
++ * [EXTRA_START_MIGRATION] intent extra, which is honored only in debug testnet builds.
+@@ -41,0 +44 @@ class DebugStartMigrationE2EUseCase(
++        check(isAllowed) { "The migration fixture requires a debug testnet build" }
+@@ -58 +61 @@ class DebugStartMigrationE2EUseCase(
 -        restartMigrationScheduleRepository.consume(accountKeyId)
 +        restartMigrationScheduleRepository.clearOwner(accountKeyId)
-@@ -71 +71 @@ class DebugStartMigrationE2EUseCase(
+@@ -71 +74 @@ class DebugStartMigrationE2EUseCase(
 -                                "(${it.message}) — retrying in $PROPOSE_RETRY_DELAY"
 +                                "(${it.javaClass.simpleName}) — retrying in $PROPOSE_RETRY_DELAY"
-@@ -89 +89 @@ class DebugStartMigrationE2EUseCase(
+@@ -89 +92 @@ class DebugStartMigrationE2EUseCase(
 -                    migrationLog("E2E: note split failed ($splitResult) — aborting")
 +                    migrationLog("E2E: note split failed (${splitResult.javaClass.simpleName}).")
-@@ -96 +96 @@ class DebugStartMigrationE2EUseCase(
+@@ -96 +99 @@ class DebugStartMigrationE2EUseCase(
 -        signAndFinalizeWithStaleRetry(sdk, scheduleToSign)
 +        signAndFinalizeWithStaleRetry(sdk, scheduleToSign, accountKeyId)
-@@ -100 +100,5 @@ class DebugStartMigrationE2EUseCase(
+@@ -100 +103,5 @@ class DebugStartMigrationE2EUseCase(
 -    private suspend fun signAndFinalizeWithStaleRetry(sdk: OrchardMigrationSdk, schedule: MigrationSchedule) {
 +    private suspend fun signAndFinalizeWithStaleRetry(
 +        sdk: OrchardMigrationSdk,
 +        schedule: MigrationSchedule,
 +        accountKeyId: String,
 +    ) {
-@@ -109 +113 @@ class DebugStartMigrationE2EUseCase(
+@@ -109 +116 @@ class DebugStartMigrationE2EUseCase(
 -                finalizeMigrationSchedule(toSign, MigrationMode.AUTOMATIC)
 +                finalizeMigrationSchedule(toSign, MigrationMode.AUTOMATIC, accountKeyId)
-@@ -118 +122 @@ class DebugStartMigrationE2EUseCase(
+@@ -118 +125 @@ class DebugStartMigrationE2EUseCase(
 -                        "(${e.message?.take(ERROR_MESSAGE_PREVIEW_LENGTH)}) — re-proposing"
 +                        "(${e.javaClass.simpleName}) — re-proposing"
-@@ -143 +146,0 @@ class DebugStartMigrationE2EUseCase(
+@@ -130 +137 @@ class DebugStartMigrationE2EUseCase(
+-        /** Intent extra checked by MainActivity; honored only in debug builds. */
++        /** Intent extra checked by MainActivity in debug testnet builds. */
+@@ -132,0 +140,2 @@ class DebugStartMigrationE2EUseCase(
++        internal val isAllowed get() = BuildConfig.DEBUG && isTestnetBuildFlavor()
++
+@@ -143 +151,0 @@ class DebugStartMigrationE2EUseCase(
 -        private const val ERROR_MESSAGE_PREVIEW_LENGTH = 120
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCase.kt
 index a0d1b229d..014117e9a 100644
@@ -12910,6 +12927,37 @@ index 05231840e..92da583c6 100644
 @@ -447 +706 @@ class CheckMigrationRecoveryUseCaseTest {
 -                scheduleNow = { scheduledAccountKeyIds += it },
 +                scheduleNow = { owner, _ -> scheduledAccountKeyIds += owner },
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCaseTest.kt
+new file mode 100644
+index 000000000..9a8649c63
+--- /dev/null
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/DebugStartMigrationE2EUseCaseTest.kt
+@@ -0,0 +1,25 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import co.electriccoin.zcash.migration.BuildConfig
++import io.mockk.coVerify
++import io.mockk.mockk
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++
++class DebugStartMigrationE2EUseCaseTest {
++    @Test
++    fun onlyDebugTestnetHasFixtureAuthority() = runTest {
++        val expected = BuildConfig.DEBUG && BuildConfig.FLAVOR.contains("testnet", ignoreCase = true)
++        assertEquals(expected, DebugStartMigrationE2EUseCase.isAllowed)
++        if (!expected) {
++            val sdk = mockk<GetOrchardMigrationSdkUseCase>()
++            val fixture = DebugStartMigrationE2EUseCase(
++                sdk, mockk(), mockk(), mockk(), mockk(), mockk(), mockk(), mockk(),
++            )
++            assertFailsWith<IllegalStateException> { fixture() }
++            coVerify(exactly = 0) { sdk() }
++        }
++    }
++}
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
 index 860a02aa2..404a54496 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/FinalizeMigrationScheduleUseCaseTest.kt
@@ -41502,7 +41550,7 @@ index 000000000..8e929c6bf
 +    return !migrationHasPriority && any { it === request }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
-index 048340e48..dba26f6b2 100644
+index 048340e48..fd3692713 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/MainActivity.kt
 @@ -44,0 +45 @@ import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
@@ -41610,7 +41658,7 @@ index 048340e48..dba26f6b2 100644
 +        private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
 +        private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
 +        private const val PENDING_MIGRATION_STEP = "pending_migration_step"
-+        private const val NAVIGATION_STATE_VERSION = 17
++        private const val NAVIGATION_STATE_VERSION = 18
 +
 +        internal fun stampNavigationState(state: Bundle) {
 +            state.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
@@ -42691,7 +42739,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..bd78418ca 100644
+index 4d388e80f..9bcbe11be 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -42802,11 +42850,12 @@ index 4d388e80f..bd78418ca 100644
 +            walletTransport.authorityChanges,
 +        ) { _, synchronizer, _ -> synchronizer }
 +
-@@ -219,0 +286,17 @@ class AccountDataSourceImpl(
+@@ -219,0 +286,18 @@ class AccountDataSourceImpl(
 +    override suspend fun confirmSelection(account: WalletAccount) = withContext(Dispatchers.IO) {
 +        val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
 +        runCatchingRecoverable {
 +            val selection = selectedAccountUUIDProvider.captureSelection()
++            if (!synchronizerProvider.isCurrentEngine(sync)) return@runCatchingRecoverable null
 +            val accounts = sync.getAccounts()
 +            val expected = accounts.firstOrNull { it.accountUuid == account.sdkAccount.accountUuid }
 +            val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
@@ -42814,15 +42863,15 @@ index 4d388e80f..bd78418ca 100644
 +            ConfirmedAccountSelection(
 +                isSameSelection = { selectedAccountUUIDProvider.isCurrent(selection) },
 +                usesCurrentSynchronizer = {
-+                    !walletTransport.isRetired(sync) && synchronizerProvider.synchronizer.value === sync
++                    !walletTransport.isRetired(sync) && synchronizerProvider.isCurrentEngine(sync)
 +                },
 +            ).takeIf { selected && it.canOperate() }
 +        }.getOrNull()
 +    }
 +
-@@ -230,0 +314 @@ class AccountDataSourceImpl(
+@@ -230,0 +315 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -237,15 +321,13 @@ class AccountDataSourceImpl(
+@@ -237,15 +322,13 @@ class AccountDataSourceImpl(
 -            synchronizerProvider
 -                .getSynchronizer()
 -                .importAccountByUfvk(
@@ -42851,18 +42900,18 @@ index 4d388e80f..bd78418ca 100644
 +                    birthday = birthday,
 +                ),
 +            )
-@@ -262,0 +345 @@ class AccountDataSourceImpl(
+@@ -262,0 +346 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -267 +349,0 @@ class AccountDataSourceImpl(
+@@ -267 +350,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -284 +366 @@ class AccountDataSourceImpl(
+@@ -284 +367 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
-@@ -303,0 +386 @@ class AccountDataSourceImpl(
+@@ -303,0 +387 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -309 +391,0 @@ class AccountDataSourceImpl(
+@@ -309 +392,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -354,0 +437,10 @@ class AccountDataSourceImpl(
+@@ -354,0 +438,10 @@ class AccountDataSourceImpl(
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String? {
 +        val requestedAccount = account ?: allAccounts.value?.firstOrNull { it.isSelected }
 +        val address = requestedAccount?.let { rotateShieldedAddress(it) }
@@ -42873,7 +42922,7 @@ index 4d388e80f..bd78418ca 100644
 +        }
 +    }
 +
-@@ -356,22 +448,17 @@ class AccountDataSourceImpl(
+@@ -356,22 +449,17 @@ class AccountDataSourceImpl(
 -    override suspend fun requestNextShieldedAddress(): String {
 -        var result: String? = null
 -        scope
@@ -42913,7 +42962,7 @@ index 4d388e80f..bd78418ca 100644
 +            null
 +        } finally {
 +            responseChannel.close()
-@@ -391,7 +478,3 @@ class AccountDataSourceImpl(
+@@ -391,7 +479,3 @@ class AccountDataSourceImpl(
 -     * Between the cleared selection and the caller's next one there is a short window in which no
 -     * account UUID is stored and the selection falls back to the default account. DisconnectUseCase
 -     * and RemoveViewOnlyAccountUseCase close it by selecting the Zodl account right after this
@@ -42924,43 +42973,43 @@ index 4d388e80f..bd78418ca 100644
 +     * With no surviving selected UUID, the account flow falls back to the default account.
 +     * Clearing the deleted UUID and explicit account selections serialize so a newer selection
 +     * survives account removal.
-@@ -415,3 +498 @@ class AccountDataSourceImpl(
+@@ -415,3 +499 @@ class AccountDataSourceImpl(
 -                if (selectedAccountUUIDProvider.getUUID() == accountUuid) {
 -                    selectedAccountUUIDProvider.clearUUID()
 -                }
 +                selectedAccountUUIDProvider.clearIfSelected(accountUuid)
-@@ -446 +527 @@ class AccountDataSourceImpl(
+@@ -446 +528 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +564 @@ class AccountDataSourceImpl(
+@@ -483 +565 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -487 +568 @@ class AccountDataSourceImpl(
+@@ -487 +569 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -497 +578 @@ class AccountDataSourceImpl(
+@@ -497 +579 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -501 +582 @@ class AccountDataSourceImpl(
+@@ -501 +583 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -515 +596 @@ class AccountDataSourceImpl(
+@@ -515 +597 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -526 +607 @@ class AccountDataSourceImpl(
+@@ -526 +608 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -532 +613 @@ class AccountDataSourceImpl(
+@@ -532 +614 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -536,0 +618 @@ class AccountDataSourceImpl(
+@@ -536,0 +619 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -539 +621,3 @@ class AccountDataSourceImpl(
+@@ -539 +622,3 @@ class AccountDataSourceImpl(
 -            ledgerAccountBindingProvider.observe(sdkAccount.accountUuid)
 +            accountPreferenceReads.flatMapLatest {
 +                ledgerAccountBindingProvider.observe(sdkAccount.accountUuid).recoverableReads().map { it.getOrNull() }
 +            }
-@@ -549,12 +633,20 @@ class AccountDataSourceImpl(
+@@ -549,12 +634,20 @@ class AccountDataSourceImpl(
 -    private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
 -        selectedAccountUUIDProvider
 -            .uuid
@@ -42993,13 +43042,13 @@ index 4d388e80f..bd78418ca 100644
 +    private fun isSelected(sdkAccount: Account, uuid: AccountUuid?, count: Int, currentAccountList: Boolean) =
 +        sdkAccount.accountUuid == uuid ||
 +            (currentAccountList && (count == 1 || (uuid == null && !isOrchardOnlyAccount(sdkAccount))))
-@@ -565 +657 @@ class AccountDataSourceImpl(
+@@ -565 +658 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +668 @@ class AccountDataSourceImpl(
+@@ -576 +669 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -598,6 +690,2 @@ class AccountDataSourceImpl(
+@@ -598,6 +691,2 @@ class AccountDataSourceImpl(
 -                        try {
 -                            it.responseChannel.send(address)
 -                            it.responseChannel.close()
@@ -43008,14 +43057,14 @@ index 4d388e80f..bd78418ca 100644
 -                        }
 +                        it.responseChannel.trySend(address)
 +                        it.responseChannel.close()
-@@ -610,2 +698 @@ class AccountDataSourceImpl(
+@@ -610,2 +699 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +713 @@ class AccountDataSourceImpl(
+@@ -626 +714 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +715,12 @@ class AccountDataSourceImpl(
+@@ -628 +716,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -43029,7 +43078,7 @@ index 4d388e80f..bd78418ca 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -655,0 +754,12 @@ private data class AddressRequest(
+@@ -655,0 +755,12 @@ private data class AddressRequest(
 +private data class SelectedAccountRead(val generation: Long, val result: Result<AccountUuid?>)
 +
 +private data class AccountRows(val generation: Long, val accounts: List<WalletAccount>)
@@ -43042,12 +43091,12 @@ index 4d388e80f..bd78418ca 100644
 +        is ViewOnlyAccount -> copy(isSelected = selected)
 +    }
 +
-@@ -659 +769 @@ private data class AccountSnapshot(
+@@ -659 +770 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -661 +770,0 @@ private data class AccountSnapshot(
+@@ -661 +771,0 @@ private data class AccountSnapshot(
 -    val isSelected: Boolean,
-@@ -665,0 +775,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +776,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -43063,7 +43112,7 @@ index 4d388e80f..bd78418ca 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -667,5 +791,2 @@ private const val RETRY_DELAY = 3L
+@@ -667,5 +792,2 @@ private const val RETRY_DELAY = 3L
 - * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
 - * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
 - * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
@@ -43071,7 +43120,7 @@ index 4d388e80f..bd78418ca 100644
 - * address.
 + * Bounds both submission to the rotation collector and delivery of the address. Receive can
 + * use the current address on timeout. A swap that requires a new address must get one first.
-@@ -720,0 +842,3 @@ class AccountDeletionException(
+@@ -720,0 +843,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -44209,10 +44258,10 @@ index a5bcffdcd..62c03e61d 100644
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/PaymentDraft.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/PaymentDraft.kt
 new file mode 100644
-index 000000000..953f0e656
+index 000000000..c5b33634f
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/PaymentDraft.kt
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,79 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.model.ZecSend
@@ -44236,6 +44285,7 @@ index 000000000..953f0e656
 +class PaymentDraftOwner(
 +    val account: WalletAccount,
 +    internal val entryId: String?,
++    internal val permitsWallet: () -> Boolean = { false },
 +    internal val permits: () -> Boolean,
 +) {
 +    fun requireCurrent() {
@@ -49272,7 +49322,7 @@ index 4b2a09ed5..78ef2e276 100644
 @@ -77,0 +80 @@ class SwapAssetCacheProviderImpl(
 +        val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
-index 5ca17bee4..c5dc64901 100644
+index 5ca17bee4..64daaaee4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
 @@ -4,0 +5 @@ import cash.z.ecc.android.sdk.WalletCoordinator
@@ -49285,18 +49335,21 @@ index 5ca17bee4..c5dc64901 100644
 +import kotlinx.coroutines.delay
 @@ -20,0 +25 @@ import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.collectLatest
-@@ -32,0 +38 @@ import kotlinx.coroutines.withContext
+@@ -32,0 +38,2 @@ import kotlinx.coroutines.withContext
++import java.lang.ref.WeakReference
 +import kotlin.time.Duration.Companion.seconds
-@@ -40,0 +47,3 @@ interface SynchronizerProvider {
+@@ -40,0 +48,5 @@ interface SynchronizerProvider {
++    fun isCurrentEngine(engine: Synchronizer): Boolean = synchronizer.value === engine
++
 +    /** True after wallet-global activity for this engine's observed synced state was recorded. */
 +    fun hasRecordedSync(engine: Synchronizer): Boolean = false
 +
-@@ -64,0 +74,4 @@ class SynchronizerProviderImpl(
+@@ -64,0 +77,4 @@ class SynchronizerProviderImpl(
 +    migrationSyncGate: WalletMigrationSyncGate,
 +    private val lastNetworkActivity: LastNetworkActivityStorageProvider,
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
 +    provisioning: WalletProvisioning? = null,
-@@ -66,3 +79,4 @@ class SynchronizerProviderImpl(
+@@ -66,3 +82,4 @@ class SynchronizerProviderImpl(
 -    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 -
 -    override val error = MutableStateFlow<SynchronizerError?>(null)
@@ -49304,21 +49357,27 @@ index 5ca17bee4..c5dc64901 100644
 +    override val error = combine(engineError, migrationSyncGate.error) { engine, migration ->
 +        migration ?: engine
 +    }.stateIn(scope, SharingStarted.Eagerly, null)
-@@ -71,0 +86,10 @@ class SynchronizerProviderImpl(
+@@ -71,0 +89,16 @@ class SynchronizerProviderImpl(
++    @Volatile
++    private var rebuildingEngine: WeakReference<Synchronizer>? = null
++
++    override fun isCurrentEngine(engine: Synchronizer): Boolean =
++        walletCoordinator.synchronizer.value === engine && rebuildingEngine?.get() !== engine
++
 +    @Volatile
 +    private var recordedSync: SyncObservation? = null
 +
 +    override fun hasRecordedSync(engine: Synchronizer): Boolean {
 +        val observed = recordedSync ?: return false
-+        return observed.engine === engine && walletCoordinator.synchronizer.value === engine &&
++        return observed.engine === engine && isCurrentEngine(engine) &&
 +            observed.networkHeight == engine.networkHeight.value &&
 +            observed.scannedHeight == engine.fullyScannedHeight.value
 +    }
 +
-@@ -83 +107 @@ class SynchronizerProviderImpl(
+@@ -83 +116 @@ class SynchronizerProviderImpl(
 -                                error.update { new }
 +                                engineError.update { new }
-@@ -102,0 +127,19 @@ class SynchronizerProviderImpl(
+@@ -102,0 +136,19 @@ class SynchronizerProviderImpl(
 +        if (provisioning != null) {
 +            scope.launch(Dispatchers.IO) {
 +                synchronizer.flatMapLatest { engine ->
@@ -49327,7 +49386,7 @@ index 5ca17bee4..c5dc64901 100644
 +                    repeat(2) { attempt ->
 +                        val confirmation = runCatchingRecoverable {
 +                            provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
-+                                synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
++                                isCurrentEngine(engine)
 +                            })
 +                        }
 +                        if (confirmation.isSuccess) return@collectLatest
@@ -49338,11 +49397,11 @@ index 5ca17bee4..c5dc64901 100644
 +            }
 +        }
 +        val pendingReconciliation = Channel<Synchronizer>(Channel.CONFLATED)
-@@ -104,2 +147,20 @@ class SynchronizerProviderImpl(
+@@ -104,2 +156,20 @@ class SynchronizerProviderImpl(
 -            synchronizer
 -                .flatMapLatest { s -> s?.status ?: emptyFlow() }
 +            for (engine in pendingReconciliation) {
-+                if (walletCoordinator.synchronizer.value === engine) {
++                if (isCurrentEngine(engine)) {
 +                    runCatchingRecoverable { migrationSyncedHook.value.onSynced() }.onFailure {
 +                        Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
 +                    }
@@ -49361,7 +49420,7 @@ index 5ca17bee4..c5dc64901 100644
 +                        ) { status, tip, scanned -> status to SyncObservation(engine, tip, scanned) }
 +                    }
 +                }
-@@ -107,4 +168,14 @@ class SynchronizerProviderImpl(
+@@ -107,4 +177,14 @@ class SynchronizerProviderImpl(
 -                .collect { status ->
 -                    if (status == Synchronizer.Status.SYNCED) {
 -                        runCatching { migrationSyncedHook.value.onSynced() }
@@ -49372,7 +49431,7 @@ index 5ca17bee4..c5dc64901 100644
 +                    val updatedStatus = engine to status
 +                    val reachedSynced = previousStatus != updatedStatus && status == Synchronizer.Status.SYNCED
 +                    previousStatus = updatedStatus
-+                    if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
++                    if (status == Synchronizer.Status.SYNCED && isCurrentEngine(engine)) {
 +                        val outcome = runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
 +                            Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
 +                        }
@@ -49380,13 +49439,18 @@ index 5ca17bee4..c5dc64901 100644
 +                            recordedSync = observation
 +                        }
 +                        if (reachedSynced) pendingReconciliation.trySend(engine)
-@@ -148 +219 @@ class SynchronizerProviderImpl(
+@@ -120 +200 @@ class SynchronizerProviderImpl(
+-                .first()
++                .first { isCurrentEngine(it) }
+@@ -135,0 +216 @@ class SynchronizerProviderImpl(
++        rebuildingEngine = walletCoordinator.synchronizer.value?.let(::WeakReference)
+@@ -148 +229 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Processor: $error" }
 +            Twig.error { "Wallet processor failed" }
-@@ -157 +228 @@ class SynchronizerProviderImpl(
+@@ -157 +238 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Setup: $error" }
 +            Twig.error { "Wallet synchronizer setup failed" }
-@@ -219,0 +291,7 @@ internal fun SynchronizerProvider.rawWalletBalances(): Flow<Map<AccountUuid, Acc
+@@ -219,0 +301,7 @@ internal fun SynchronizerProvider.rawWalletBalances(): Flow<Map<AccountUuid, Acc
 +
 +
 +private data class SyncObservation(
@@ -55357,7 +55421,7 @@ index 84d9fd0c0..000000000
 -    DISABLED
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
-index cb0d758f8..878c0567f 100644
+index cb0d758f8..b7537a631 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
 @@ -4 +4,4 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
@@ -55390,7 +55454,7 @@ index cb0d758f8..878c0567f 100644
 +        val engine = synchronizerProvider.synchronizer.value
 +        val permits = {
 +            engine != null && appAccess.permits(grant) && walletAccess.permits(generation) &&
-+                !walletTransport.isRetired(engine) && synchronizerProvider.synchronizer.value === engine
++                !walletTransport.isRetired(engine) && synchronizerProvider.isCurrentEngine(engine)
 +        }
 +        return {
 +            if (engine == null || !permits()) throw GiftCardException.SubmitFailed()
@@ -56845,7 +56909,7 @@ index 546900ef8..9b0cd9881 100644
 +                launchNavigation.updateSeedRecoveryError(failure, stillApplies)
 +            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
-index e9a9371db..abb4df855 100644
+index e9a9371db..a0d217e72 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnAddressScannedUseCase.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.type.AddressType
@@ -56853,26 +56917,28 @@ index e9a9371db..abb4df855 100644
 @@ -4,0 +6,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.whileAtEntry
-@@ -24,2 +27,3 @@ class OnAddressScannedUseCase(
+@@ -15,0 +19 @@ class OnAddressScannedUseCase(
++    private val review: PreparePaymentReviewUseCase,
+@@ -24,2 +28,3 @@ class OnAddressScannedUseCase(
 -        scanArgs: ScanArgs
 -    ) {
 +        scanArgs: ScanArgs,
 +        sourceEntryId: String? = null,
 +    ): Boolean {
-@@ -28,2 +32,2 @@ class OnAddressScannedUseCase(
+@@ -28,5 +33,2 @@ class OnAddressScannedUseCase(
 -        when (scanArgs.flow) {
 -            SEND -> {
-+        return when (scanArgs.flow) {
-+            SEND -> navigationRouter.commitFrom(sourceEntryId) {
-@@ -31 +35 @@ class OnAddressScannedUseCase(
+-                prefillSend.request(PrefillSendData.FromAddressScan(address = address))
 -                navigationRouter.back()
-+                NavigationCommand.Back
-@@ -34,2 +38,2 @@ class OnAddressScannedUseCase(
+-            }
++        return when (scanArgs.flow) {
++            SEND -> returnToSend(scanArgs, address, sourceEntryId)
+@@ -34,2 +36,2 @@ class OnAddressScannedUseCase(
 -            ADDRESS_BOOK -> {
 -                navigationRouter.replace(AddZashiABContactArgs(address))
 +            ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
 +                NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
-@@ -38,14 +42,16 @@ class OnAddressScannedUseCase(
+@@ -38,14 +40,26 @@ class OnAddressScannedUseCase(
 -            HOMEPAGE -> {
 -                if (rejectIfSelectedAccountCannotSpend { replace(it) }) return
 -                navigationRouter.replace(
@@ -56891,6 +56957,16 @@ index e9a9371db..abb4df855 100644
 +        }
 +    }
 +
++    private suspend fun returnToSend(scanArgs: ScanArgs, address: String, sourceEntryId: String?): Boolean {
++        val sendEntryId = scanArgs.sendEntryId
++        val owner = review.captureWalletOwner()
++        if (sendEntryId == null || owner == null) return false
++        return navigationRouter.commitFrom(sourceEntryId, owner) {
++            prefillSend.forExistingSend(sendEntryId, PrefillSendData.FromAddressScan(address), owner)
++            NavigationCommand.Back
++        }
++    }
++
 +    private suspend fun openSend(address: String, addressType: AddressType.Valid, sourceEntryId: String?): Boolean {
 +        var errorRoute: Any? = null
 +        val rejected = navigationRouter.whileAtEntry(sourceEntryId) {
@@ -56903,9 +56979,9 @@ index e9a9371db..abb4df855 100644
 +                AddressType.Tex -> cash.z.ecc.sdk.model.AddressType.TEX
 +                AddressType.Transparent -> cash.z.ecc.sdk.model.AddressType.TRANSPARENT
 +                else -> cash.z.ecc.sdk.model.AddressType.UNIFIED
-@@ -52,0 +59 @@ class OnAddressScannedUseCase(
+@@ -52,0 +67 @@ class OnAddressScannedUseCase(
 +            Send(address, type)
-@@ -53,0 +61 @@ class OnAddressScannedUseCase(
+@@ -53,0 +69 @@ class OnAddressScannedUseCase(
 +        return route != null && navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Replace(listOf(route)) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnUserSavedWalletBackupUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnUserSavedWalletBackupUseCase.kt
 index 9afb3168c..c008bcf6e 100644
@@ -56922,7 +56998,7 @@ index 9afb3168c..c008bcf6e 100644
 -        navigationRouter.backToRoot()
 +        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
-index eab9cf9da..14360adb6 100644
+index eab9cf9da..34c3aa1e3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -56982,16 +57058,16 @@ index eab9cf9da..14360adb6 100644
 +                    NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
 +                }
 +                SEND -> if (scanArgs.isScanZip321Enabled) {
-+                    prepareFlow(zip321, sourceEntryId, fromHome = false)
++                    prepareFlow(zip321, scanArgs, sourceEntryId)
 @@ -48 +55 @@ class OnZip321ScannedUseCase(
 -                    sendFlowWithDisabledZip321(zip321)
-+                    sendAddressOnly(zip321, sourceEntryId)
++                    sendAddressOnly(zip321, scanArgs.sendEntryId, sourceEntryId)
 @@ -50,4 +57 @@ class OnZip321ScannedUseCase(
 -            }
 -
 -            HOMEPAGE -> {
 -                homepageFlow(zip321)
-+                HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
++                HOMEPAGE -> prepareFlow(zip321, scanArgs, sourceEntryId)
 @@ -56,10 +59,0 @@ class OnZip321ScannedUseCase(
 -    }
 -
@@ -57003,7 +57079,7 @@ index eab9cf9da..14360adb6 100644
 -            )
 -        )
 -    }
-@@ -68,23 +62,19 @@ class OnZip321ScannedUseCase(
+@@ -68,23 +62,24 @@ class OnZip321ScannedUseCase(
 -    private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid) {
 -        try {
 -            val proposal =
@@ -57029,24 +57105,29 @@ index eab9cf9da..14360adb6 100644
 -                    }
 +    private suspend fun prepareFlow(
 +        zip321: Zip321ParseUriValidation.Valid,
++        scanArgs: ScanArgs,
 +        sourceEntryId: String?,
-+        fromHome: Boolean,
 +    ): Boolean {
++        val fromHome = scanArgs.flow == HOMEPAGE
 +        val owner = review.capture(sourceEntryId) ?: return false
++        val walletPermit = owner.permitsWallet
 +        return try {
 +            review.open(owner, PaymentDraft.Zip321(zip321.zip321Uri)) { route, prepared ->
 +                val proposal = prepared as Zip321TransactionProposal
-+                val editable = proposal.binaryMemoByteCount == null
-+                if (editable) {
-+                    prefillSend.request(
++                val send = if (proposal.binaryMemoByteCount == null) {
++                    stageEditableDraft(
 +                        PrefillSendData.All(
 +                            amount = proposal.amount,
 +                            address = proposal.destination.address,
 +                            fee = null,
 +                            memos = proposal.memo.value.takeIf { it.isNotEmpty() }?.let { listOf(it) },
-+                        )
++                        ),
++                        scanArgs,
++                        walletPermit,
 +                    )
-@@ -92,13 +82,2 @@ class OnZip321ScannedUseCase(
++                } else {
++                    null
+@@ -92,13 +87,2 @@ class OnZip321ScannedUseCase(
 -
 -            prefillSend.request(
 -                PrefillSendData.All(
@@ -57060,9 +57141,9 @@ index eab9cf9da..14360adb6 100644
 -                )
 -            )
 -            navigationRouter.replace(Send(), ReviewTransactionArgs)
-+                NavigationCommand.Replace(if (fromHome && editable) listOf(Send(), route) else listOf(route))
++                NavigationCommand.Replace(listOfNotNull(send, route))
 +            }
-@@ -106,5 +85,4 @@ class OnZip321ScannedUseCase(
+@@ -106,5 +90,4 @@ class OnZip321ScannedUseCase(
 -            val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
 -            navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
 -            keystoneProposalRepository.clear()
@@ -57072,7 +57153,7 @@ index eab9cf9da..14360adb6 100644
 +                NavigationCommand.Forward(listOf(TEXUnsupportedArgs(isLedger = owner.account is LedgerAccount)))
 +            }
 +            false
-@@ -112,4 +90,3 @@ class OnZip321ScannedUseCase(
+@@ -112,4 +95,3 @@ class OnZip321ScannedUseCase(
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
@@ -57080,7 +57161,7 @@ index eab9cf9da..14360adb6 100644
 +            navigationRouter.commitFrom(sourceEntryId, owner.permits) {
 +                NavigationCommand.Replace(listOf(InsufficientFundsArgs))
 +            }
-@@ -117,10 +94,7 @@ class OnZip321ScannedUseCase(
+@@ -117,10 +99,7 @@ class OnZip321ScannedUseCase(
 -            prefillSend.requestFromZip321(zip321.payment)
 -            navigationRouter.replace(Send())
 -            zashiProposalRepository.clear()
@@ -57091,14 +57172,14 @@ index eab9cf9da..14360adb6 100644
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
-+            editUnpreparedPayment(zip321, sourceEntryId, fromHome, owner.permits)
++            editUnpreparedPayment(zip321, scanArgs, sourceEntryId, owner.permits, walletPermit)
 +        } catch (error: CancellationException) {
 +            throw error
 +        } catch (error: Exception) {
 +            showError(
 +                sourceEntryId, ErrorArgs.General(error), replaceScanner = !fromHome, isStillAllowed = owner.permits,
 +            ) && !fromHome
-@@ -130,53 +104,8 @@ class OnZip321ScannedUseCase(
+@@ -130,20 +109,13 @@ class OnZip321ScannedUseCase(
 -    @Suppress("TooGenericExceptionCaught")
 -    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid) {
 -        try {
@@ -57119,12 +57200,34 @@ index eab9cf9da..14360adb6 100644
 -                    is ViewOnlyAccount -> {
 -                        throw AccountOperationUnsupportedException.viewOnly()
 -                    }
--
++    private suspend fun editUnpreparedPayment(
++        zip321: Zip321ParseUriValidation.Valid,
++        scanArgs: ScanArgs,
++        sourceEntryId: String?,
++        isStillAllowed: () -> Boolean,
++        walletPermit: () -> Boolean,
++    ): Boolean {
++        if (!isStillAllowed() || !canEdit(zip321, sourceEntryId, isStillAllowed)) return false
++        return navigationRouter.commitFrom(sourceEntryId, { isStillAllowed() && walletPermit() }) {
++            val send = stageEditableDraft(zip321.payment.toEditableSendDraft(), scanArgs, walletPermit)
++            if (send == null) NavigationCommand.Back else NavigationCommand.Replace(listOf(send))
++        }
++    }
+@@ -151,4 +123,9 @@ class OnZip321ScannedUseCase(
 -                    is ZodlAccount -> {
 -                        zashiProposalRepository.createZip321Proposal(zip321.zip321Uri)
 -                    }
 -                }
--
++    private fun stageEditableDraft(
++        draft: PrefillSendData.All,
++        scanArgs: ScanArgs,
++        walletPermit: () -> Boolean,
++    ): Send? {
++        if (scanArgs.flow == HOMEPAGE) return Send(prefillToken = prefillSend.forNewSend(draft, walletPermit))
++        scanArgs.sendEntryId?.let { prefillSend.forExistingSend(it, draft, walletPermit) }
++        return null
++    }
+@@ -156,34 +133,11 @@ class OnZip321ScannedUseCase(
 -            prefillSend.request(
 -                PrefillSendData.All(
 -                    amount = proposal.amount,
@@ -57152,23 +57255,25 @@ index eab9cf9da..14360adb6 100644
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
-+    private suspend fun editUnpreparedPayment(
-+        zip321: Zip321ParseUriValidation.Valid,
-+        sourceEntryId: String?,
-+        fromHome: Boolean,
-+        isStillAllowed: () -> Boolean,
-+    ): Boolean {
-+        if (!isStillAllowed() || !canEdit(zip321, sourceEntryId, isStillAllowed)) return false
-+        return navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
-@@ -184,6 +113 @@ class OnZip321ScannedUseCase(
+-            prefillSend.requestFromZip321(zip321.payment)
 -            navigationRouter.back()
 -        } catch (e: Exception) {
 -            zashiProposalRepository.clear()
 -            keystoneProposalRepository.clear()
 -            ledgerProposalPipeline.clear()
 -            navigateToErrorUseCase(ErrorArgs.General(e)) { replace(it) }
-+            if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
-@@ -193,9 +117,28 @@ class OnZip321ScannedUseCase(
++    private suspend fun sendAddressOnly(
++        zip321: Zip321ParseUriValidation.Valid,
++        sendEntryId: String?,
++        sourceEntryId: String?,
++    ): Boolean {
++        val walletPermit = review.captureWalletOwner()
++        if (!canEdit(zip321, sourceEntryId) || sendEntryId == null || walletPermit == null) return false
++        return navigationRouter.commitFrom(sourceEntryId, walletPermit) {
++            val address = zip321.payment.payments.single().recipientAddress.value
++            prefillSend.forExistingSend(sendEntryId, PrefillSendData.FromAddressScan(address), walletPermit)
++            NavigationCommand.Back
+@@ -193,9 +147,19 @@ class OnZip321ScannedUseCase(
 -    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid) {
 -        prefillSend.request(
 -            PrefillSendData.FromAddressScan(
@@ -57178,15 +57283,6 @@ index eab9cf9da..14360adb6 100644
 -            )
 -        )
 -        navigationRouter.back()
-+    private suspend fun sendAddressOnly(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
-+        if (!canEdit(zip321, sourceEntryId)) return false
-+        return navigationRouter.commitFrom(sourceEntryId) {
-+            val address = zip321.payment.payments.single().recipientAddress.value
-+            prefillSend.request(PrefillSendData.FromAddressScan(address))
-+            NavigationCommand.Back
-+        }
-+    }
-+
 +    private suspend fun canEdit(
 +        zip321: Zip321ParseUriValidation.Valid,
 +        sourceEntryId: String?,
@@ -57493,34 +57589,53 @@ index 9c8b54fdb..88436202d 100644
 +
 +internal class ServerSelectionWalletBusyException : IOException("A wallet operation is still running")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCase.kt
-index 37853a3b4..7603c8e8f 100644
+index 37853a3b4..7e720cf30 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCase.kt
-@@ -4,0 +5,2 @@ import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -5,6 +5,4 @@ import cash.z.ecc.android.sdk.model.Zatoshi
+-import kotlinx.coroutines.CoroutineScope
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.SupervisorJob
+-import kotlinx.coroutines.channels.Channel
+-import kotlinx.coroutines.flow.receiveAsFlow
+-import kotlinx.coroutines.launch
 +import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 +import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
-@@ -5,0 +8 @@ import kotlinx.coroutines.CoroutineScope
-+import kotlinx.coroutines.CoroutineStart
-@@ -6,0 +10 @@ import kotlinx.coroutines.Dispatchers
-+import kotlinx.coroutines.Job
-@@ -20,3 +24,11 @@ class PrefillSendUseCase {
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.mapNotNull
+@@ -11,0 +10 @@ import org.zecdev.zip321.model.PaymentRequest
++import java.util.UUID
+@@ -14 +13,3 @@ class PrefillSendUseCase {
+-    private val bus = Channel<PrefillSendData>()
++    private val lock = Any()
++    private var lastRequest = 0L
++    private val pending = MutableStateFlow<Map<Target, Draft>>(emptyMap())
+@@ -16 +17,10 @@ class PrefillSendUseCase {
+-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
++    internal fun observe(entryId: String, routeToken: String?) = pending.mapNotNull {
++        synchronized(lock) {
++            val entry = Target.Entry(entryId)
++            val route = routeToken?.let { Target.Route(it) }
++            val draft = (pending.value[entry] ?: route?.let { pending.value[it] }) ?: return@synchronized null
++            // A new scan supersedes a pending initial draft for the same form.
++            pending.value -= listOfNotNull(entry, route).toSet()
++            draft.data.takeIf { draft.permits() }
++        }
++    }
+@@ -18 +28 @@ class PrefillSendUseCase {
+-    operator fun invoke() = bus.receiveAsFlow()
++    fun pendingThrough(): Long = synchronized(lock) { lastRequest }
+@@ -20,3 +30,5 @@ class PrefillSendUseCase {
 -    fun clear() {
 -        while (bus.tryReceive().isSuccess) {
 -            // Drain the channel
-+    private val lock = Any()
-+    private var lastRequest = 0L
-+    private val pending = mutableMapOf<Long, Job>()
-+
-+    fun pendingThrough(): Long = synchronized(lock) { lastRequest }
-+
 +    fun clear() = clearThrough(pendingThrough())
 +
 +    fun clearThrough(lastOwnedRequest: Long) {
-+        val discarded = synchronized(lock) {
-+            pending.filterKeys { it <= lastOwnedRequest }.values.toList()
-@@ -23,0 +36 @@ class PrefillSendUseCase {
-+        discarded.forEach { it.cancel() }
-@@ -27,8 +40,7 @@ class PrefillSendUseCase {
++        synchronized(lock) {
++            pending.value = pending.value.filterValues { it.id > lastOwnedRequest }
+@@ -26,11 +38,21 @@ class PrefillSendUseCase {
+-    fun requestFromTransactionDetail(value: DetailedTransactionData) =
 -        scope.launch {
 -            bus.send(
 -                PrefillSendData.All(
@@ -57529,17 +57644,30 @@ index 37853a3b4..7603c8e8f 100644
 -                    fee = value.transaction.fee,
 -                    memos = value.memos
 -                )
-+        request(
+-            )
+-        }
++    internal fun requestFromTransactionDetail(value: DetailedTransactionData, permits: () -> Boolean) =
++        forNewSend(
 +            PrefillSendData.All(
 +                amount = value.transaction.amount,
 +                address = value.recipient?.address,
 +                fee = value.transaction.fee,
 +                // The SDK exposes a memo list without the recipient of each output.
 +                memos = value.memos?.takeIf { value.transaction.transactionOutputs.size == 1 }
-@@ -36 +48 @@ class PrefillSendUseCase {
--        }
++            ),
++            permits,
 +        )
-@@ -38,22 +50,3 @@ class PrefillSendUseCase {
++
++    internal fun forNewSend(data: PrefillSendData, permits: () -> Boolean): String {
++        val token = UUID.randomUUID().toString()
++        store(Target.Route(token), data, permits)
++        return token
++    }
++
++    internal fun forExistingSend(entryId: String, data: PrefillSendData, permits: () -> Boolean) {
++        store(Target.Entry(entryId), data, permits)
++    }
+@@ -38,22 +60,8 @@ class PrefillSendUseCase {
 -    fun requestFromZip321(value: PaymentRequest) =
 -        scope.launch {
 -            val request = value.payments.firstOrNull()
@@ -57562,44 +57690,45 @@ index 37853a3b4..7603c8e8f 100644
 -                            ?.let { listOf(it) }
 -                )
 -            )
-+    fun requestFromZip321(value: PaymentRequest): Job {
-+        val memo = value.payments.firstOrNull()?.memo?.data?.let {
-+            it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException()
-@@ -60,0 +54,15 @@ class PrefillSendUseCase {
-+        val payment = value.payments.firstOrNull()
-+        return request(
-+            PrefillSendData.All(
-+                amount =
-+                    payment
-+                        ?.nonNegativeAmount
-+                        ?.toZecValueString()
-+                        ?.toBigDecimal()
-+                        ?.convertZecToZatoshi() ?: Zatoshi(0),
-+                address = payment?.recipientAddress?.value,
-+                fee = null,
-+                memos = memo?.let { listOf(it) }
-+            )
-+        )
++    private fun store(target: Target, data: PrefillSendData, permits: () -> Boolean) {
++        synchronized(lock) {
++            if (!permits()) return
++            val retained = pending.value.filterValues { it.permits() }.toMutableMap()
++            retained.remove(target)
++            if (retained.size >= MAX_PENDING_DRAFTS) retained.remove(retained.keys.first())
++            retained[target] = Draft(++lastRequest, data, permits)
++            pending.value = retained
+@@ -60,0 +69,13 @@ class PrefillSendUseCase {
 +    }
-@@ -62 +70,11 @@ class PrefillSendUseCase {
++
++    private data class Draft(val id: Long, val data: PrefillSendData, val permits: () -> Boolean)
++
++    private sealed interface Target {
++        data class Entry(val id: String) : Target
++        data class Route(val token: String) : Target
++    }
++
++    private companion object {
++        const val MAX_PENDING_DRAFTS = 8
++    }
++}
+@@ -62 +83,9 @@ class PrefillSendUseCase {
 -    fun request(value: PrefillSendData) = scope.launch { bus.send(value) }
-+    fun request(value: PrefillSendData): Job {
-+        val job = synchronized(lock) {
-+            val id = ++lastRequest
-+            scope.launch(start = CoroutineStart.LAZY) { bus.send(value) }.also { sender ->
-+                pending[id] = sender
-+                sender.invokeOnCompletion { synchronized(lock) { pending.remove(id) } }
-+            }
-+        }
-+        job.start()
-+        return job
-+    }
++internal fun PaymentRequest.toEditableSendDraft(): PrefillSendData.All {
++    val payment = payments.firstOrNull()
++    val memo = payment?.memo?.data?.let { it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException() }
++    return PrefillSendData.All(
++        amount = payment?.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.convertZecToZatoshi() ?: Zatoshi(0),
++        address = payment?.recipientAddress?.value,
++        fee = null,
++        memos = memo?.let(::listOf),
++    )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt
 new file mode 100644
-index 000000000..1f1b6e9cd
+index 000000000..0556da10a
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCase.kt
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,109 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.AccountUuid
@@ -57644,13 +57773,22 @@ index 000000000..1f1b6e9cd
 +            expectedOwner == null || expectedOwner == it.sdkAccount.accountUuid
 +        } ?: return null
 +        val id = account.sdkAccount.accountUuid
++        return captureWalletOwner(id)?.let { walletPermit ->
++            val permitted = { router.isAtEntry(entryId) && isCurrentDraft() && walletPermit() }
++            PaymentDraftOwner(account, entryId, walletPermit, permitted).takeIf { permitted() }
++        }
++    }
++
++    internal fun captureWalletOwner(expected: AccountUuid? = null): (() -> Boolean)? {
++        val id = selectedAccount()?.sdkAccount?.accountUuid?.takeIf { expected == null || it == expected }
++            ?: return null
 +        val grant = appAccess.grant.value
 +        val wallet = walletWriteAccess.token()
-+        val permitted = {
-+            router.isAtEntry(entryId) && isCurrentDraft() && appAccess.permits(grant) &&
-+                walletWriteAccess.permits(wallet) && selectedAccount()?.sdkAccount?.accountUuid == id
++        val permits = {
++            appAccess.permits(grant) && walletWriteAccess.permits(wallet) &&
++                selectedAccount()?.sdkAccount?.accountUuid == id
 +        }
-+        return PaymentDraftOwner(account, entryId, permitted).takeIf { permitted() }
++        return permits.takeIf { it() }
 +    }
 +
 +    internal suspend fun open(
@@ -58877,21 +59015,23 @@ index b63a9a929..000000000
 -    }
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCase.kt
-index 5c148d4ed..e451af747 100644
+index 5c148d4ed..28fe9c5e3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -3,0 +5,5 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -3,0 +5,6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.isAtEntry
 +import co.electriccoin.zcash.ui.stageResultFrom
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
-@@ -9,0 +16,2 @@ class SendTransactionAgainUseCase(
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+@@ -9,0 +17,3 @@ class SendTransactionAgainUseCase(
 +    private val accounts: AccountDataSource,
 +    private val appAccess: AppAccessSession,
-@@ -11,12 +19,18 @@ class SendTransactionAgainUseCase(
++    private val walletAccess: WalletWriteAccess,
+@@ -11,12 +21,20 @@ class SendTransactionAgainUseCase(
 -    /**
 -     * An account that cannot spend gets the unsupported-operation error instead of a prefilled send
 -     * form.
@@ -58909,20 +59049,22 @@ index 5c148d4ed..e451af747 100644
 +        val owner = selectedAccountId() ?: return
 +        val transactionOwner = value.transaction.accountUuid
 +        val grant = appAccess.grant.value
-+        val isAllowed = {
-+            navigationRouter.isAtEntry(sourceEntryId) && appAccess.permits(grant) && selectedAccountId() == owner &&
++        val generation = walletAccess.token()
++        val walletPermit = {
++            appAccess.permits(grant) && walletAccess.permits(generation) && selectedAccountId() == owner &&
 +                (transactionOwner == null || transactionOwner == owner)
 +        }
++        val isAllowed = { navigationRouter.isAtEntry(sourceEntryId) && walletPermit() }
 +        if (isAllowed() && !rejectIfSelectedAccountCannotSpend { route ->
 +                stageResultFrom(sourceEntryId, isAllowed) { NavigationCommand.Forward(listOf(route)) }
 +            } && isAllowed()
 +        ) {
 +            navigationRouter.commitFrom(sourceEntryId, isAllowed) {
-+                prefillSendUseCase.requestFromTransactionDetail(value)
-+                NavigationCommand.Forward(listOf(Send(isScanZip321Enabled = false)))
++                val token = prefillSendUseCase.requestFromTransactionDetail(value, walletPermit)
++                NavigationCommand.Forward(listOf(Send(isScanZip321Enabled = false, prefillToken = token)))
 +            }
 +        }
-@@ -23,0 +38,3 @@ class SendTransactionAgainUseCase(
+@@ -23,0 +42,3 @@ class SendTransactionAgainUseCase(
 +
 +    private fun selectedAccountId() =
 +        accounts.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
@@ -68922,7 +69064,7 @@ index 7cbe1420c..9a991bdb3 100644
 -    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args) }
 +    fun onBack() = viewModelScope.launch { navigateToScanAddress.onScanCancelled(args, sourceEntryId) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt
-index aaaf70d12..a41f9edec 100644
+index aaaf70d12..be7967e63 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressScreen.kt
 @@ -9,0 +10 @@ import androidx.compose.ui.platform.LocalContext
@@ -68954,6 +69096,10 @@ index aaaf70d12..a41f9edec 100644
 @@ -46 +59 @@ internal fun ScanZashiAddressScreen(args: ScanArgs) {
 -            onBack = { navigationRouter.back() },
 +            onBack = onBack,
+@@ -75 +88,2 @@ data class ScanArgs(
+-    val isScanZip321Enabled: Boolean = true
++    val isScanZip321Enabled: Boolean = true,
++    val sendEntryId: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt
 index 3ce660e34..e2ce4cba3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanZashiAddressVM.kt
@@ -69385,45 +69531,56 @@ index ced2a1fd1..aaa5bfc2d 100644
 -        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.ur)))
 +        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.sessionId)))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
-index ab537808f..b99dc013e 100644
+index ab537808f..21d1c0cc4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
 @@ -13 +12,0 @@ import androidx.compose.runtime.remember
 -import androidx.compose.runtime.rememberCoroutineScope
-@@ -19 +17,0 @@ import cash.z.ecc.android.sdk.model.toZecString
+@@ -15,0 +15,2 @@ import androidx.compose.ui.platform.LocalContext
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.compose.LocalLifecycleOwner
+@@ -16,0 +18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.repeatOnLifecycle
+@@ -19 +20,0 @@ import cash.z.ecc.android.sdk.model.toZecString
 -import cash.z.ecc.android.sdk.type.AddressType
-@@ -30 +27,0 @@ import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
+@@ -30 +30,0 @@ import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ValidateAddressUseCase
-@@ -42,0 +40 @@ import co.electriccoin.zcash.ui.screen.send.ext.Saver
+@@ -42,0 +43 @@ import co.electriccoin.zcash.ui.screen.send.ext.Saver
 +import co.electriccoin.zcash.ui.screen.send.model.AmountField
-@@ -48,2 +45,0 @@ import co.electriccoin.zcash.ui.screen.send.view.Send
+@@ -48,2 +48,0 @@ import co.electriccoin.zcash.ui.screen.send.view.Send
 -import kotlinx.coroutines.Job
 -import kotlinx.coroutines.launch
-@@ -55 +51 @@ import org.koin.core.parameter.parametersOf
+@@ -55 +54 @@ import org.koin.core.parameter.parametersOf
 -internal fun WrapSend(args: Send) {
 +internal fun WrapSend(args: Send, sendEntryId: String) {
-@@ -83,2 +78,0 @@ internal fun WrapSend(args: Send) {
+@@ -83,2 +81,0 @@ internal fun WrapSend(args: Send) {
 -    BackHandler { navigationRouter.back() }
 -
-@@ -85,0 +80 @@ internal fun WrapSend(args: Send) {
+@@ -85,0 +83 @@ internal fun WrapSend(args: Send) {
 +        sendEntryId = sendEntryId,
-@@ -106,0 +102 @@ internal fun WrapSend(
+@@ -92 +90,2 @@ internal fun WrapSend(args: Send) {
+-                    isScanZip321Enabled = args.isScanZip321Enabled
++                    isScanZip321Enabled = args.isScanZip321Enabled,
++                    sendEntryId = sendEntryId,
+@@ -106,0 +106 @@ internal fun WrapSend(
 +    sendEntryId: String,
-@@ -115,3 +111 @@ internal fun WrapSend(
+@@ -115,3 +115 @@ internal fun WrapSend(
 -    val scope = rememberCoroutineScope()
 -
 -    val viewModel = koinViewModel<SendViewModel>()
 +    val viewModel = koinViewModel<SendViewModel> { parametersOf(sendEntryId) }
-@@ -119 +113,4 @@ internal fun WrapSend(
+@@ -119 +117,4 @@ internal fun WrapSend(
 -    val validateAddress = koinInject<ValidateAddressUseCase>()
 +    BackHandler {
 +        viewModel.cancelProposalPreparation()
 +        goBack()
 +    }
-@@ -134 +131 @@ internal fun WrapSend(
+@@ -134 +135 @@ internal fun WrapSend(
 -    val recipientAddressState by viewModel.recipientAddressState.collectAsStateWithLifecycle()
 +    val recipientAddressState = viewModel.recipientAddressState.collectAsStateWithLifecycle().value
-@@ -139,12 +136,2 @@ internal fun WrapSend(
+@@ -137,0 +139 @@ internal fun WrapSend(
++    val lifecycle = LocalLifecycleOwner.current.lifecycle
+@@ -139,12 +141,2 @@ internal fun WrapSend(
 -    if (sendArguments.recipientAddress != null && sendArguments.recipientAddressType != null) {
 -        viewModel.onRecipientAddressChanged(
 -            RecipientAddressState.new(
@@ -69438,18 +69595,18 @@ index ab537808f..b99dc013e 100644
 -        )
 +    LaunchedEffect(viewModel, sendArguments) {
 +        viewModel.initializeRecipient(sendArguments)
-@@ -153,2 +140 @@ internal fun WrapSend(
+@@ -153,2 +145 @@ internal fun WrapSend(
 -    // Amount computation:
 -    val (amountState, setAmountState) =
 +    val amountDraftState =
-@@ -156 +141,0 @@ internal fun WrapSend(
+@@ -156 +146,0 @@ internal fun WrapSend(
 -            // Default amount state
-@@ -161,3 +146 @@ internal fun WrapSend(
+@@ -161,3 +151 @@ internal fun WrapSend(
 -                    isTransparentOrTextRecipient =
 -                        recipientAddressState.type?.let { it == AddressType.Transparent }
 -                            ?: false,
 +                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
-@@ -168,7 +151,4 @@ internal fun WrapSend(
+@@ -168,7 +156,4 @@ internal fun WrapSend(
 -    // New amount state based on the recipient address type (e.g. shielded supports zero funds sending and
 -    // transparent not)
 -    LaunchedEffect(recipientAddressState, exchangeRateState) {
@@ -69461,7 +69618,7 @@ index ab537808f..b99dc013e 100644
 +    val amountState =
 +        remember(amountDraft, recipientAddressState, exchangeRateState, context) {
 +            if (amountDraft.lastFieldChangedByUser == AmountField.ZEC) {
-@@ -176,5 +156,3 @@ internal fun WrapSend(
+@@ -176,5 +161,3 @@ internal fun WrapSend(
 -                    value = amountState.value.getString(context),
 -                    fiatValue = amountState.fiatValue.getString(context),
 -                    isTransparentOrTextRecipient =
@@ -69470,10 +69627,10 @@ index ab537808f..b99dc013e 100644
 +                    value = amountDraft.value.getString(context),
 +                    fiatValue = amountDraft.fiatValue.getString(context),
 +                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
-@@ -182 +160 @@ internal fun WrapSend(
+@@ -182 +165 @@ internal fun WrapSend(
 -                    lastFieldChangedByUser = amountState.lastFieldChangedByUser,
 +                    requireFreshRate = true,
-@@ -186,5 +164,3 @@ internal fun WrapSend(
+@@ -186,5 +169,3 @@ internal fun WrapSend(
 -                    value = amountState.value.getString(context),
 -                    fiatValue = amountState.fiatValue.getString(context),
 -                    isTransparentOrTextRecipient =
@@ -69482,61 +69639,100 @@ index ab537808f..b99dc013e 100644
 +                    value = amountDraft.value.getString(context),
 +                    fiatValue = amountDraft.fiatValue.getString(context),
 +                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
-@@ -191,0 +168,2 @@ internal fun WrapSend(
+@@ -191,0 +173,2 @@ internal fun WrapSend(
 +                    fiatCurrency = amountDraft.fiatCurrency,
 +                    requireFreshRate = true,
-@@ -194,2 +172 @@ internal fun WrapSend(
+@@ -194,2 +177 @@ internal fun WrapSend(
 -        )
 -    }
 +        }
-@@ -198 +175 @@ internal fun WrapSend(
+@@ -198 +180 @@ internal fun WrapSend(
 -    val (memoState, setMemoState) =
 +    val memoDraftState =
-@@ -201,0 +179 @@ internal fun WrapSend(
+@@ -201,0 +184 @@ internal fun WrapSend(
 +    val (memoState, setMemoState) = memoDraftState
-@@ -224 +201,0 @@ internal fun WrapSend(
+@@ -220,41 +203,17 @@ internal fun WrapSend(
+-    LaunchedEffect(Unit) {
+-        prefillSend().collect {
+-            when (it) {
+-                is PrefillSendData.All -> {
 -                    val type = validateAddress(it.address.orEmpty())
-@@ -227,6 +204 @@ internal fun WrapSend(
+-                    setSendStage(SendStage.Form)
+-                    setZecSend(null)
 -                    viewModel.onRecipientAddressChanged(
 -                        RecipientAddressState.new(
 -                            address = it.address.orEmpty(),
 -                            type = type
 -                        )
 -                    )
-+                    viewModel.validateRecipient(it.address.orEmpty())
-@@ -245,2 +217,2 @@ internal fun WrapSend(
+-
+-                    val fee = it.fee
+-                    val value =
+-                        when {
+-                            fee == null -> it.amount
+-                            fee > it.amount -> it.amount
+-                            else -> it.amount - fee
+-                        }
+-
+-                    setAmountState(
+-                        AmountState.newFromZec(
+-                            value = stringRes(value, TickerLocation.HIDDEN).getString(context),
 -                            fiatValue = amountState.fiatValue.getString(context),
 -                            isTransparentOrTextRecipient = type == AddressType.Transparent,
-+                            fiatValue = "",
-+                            isTransparentOrTextRecipient = true,
-@@ -254 +225,0 @@ internal fun WrapSend(
+-                            exchangeRateState = exchangeRateState,
+-                        )
+-                    )
+-                    setMemoState(MemoState.new(it.memos?.firstOrNull().orEmpty()))
+-                }
+-
+-                is PrefillSendData.FromAddressScan -> {
 -                    val type = validateAddress(it.address)
-@@ -257,6 +228 @@ internal fun WrapSend(
+-                    setSendStage(SendStage.Form)
+-                    setZecSend(null)
 -                    viewModel.onRecipientAddressChanged(
 -                        RecipientAddressState.new(
 -                            address = it.address,
 -                            type = type
--                        )
++    LaunchedEffect(sendEntryId, sendArguments.prefillToken, lifecycle) {
++        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
++            prefillSend.observe(sendEntryId, sendArguments.prefillToken).collect {
++                setSendStage(SendStage.Form)
++                setZecSend(null)
++                when (it) {
++                    is PrefillSendData.All -> {
++                        viewModel.validateRecipient(it.address.orEmpty())
++                        val fee = it.fee
++                        val value = if (fee != null && fee <= it.amount) it.amount - fee else it.amount
++                        setAmountState(
++                            AmountState.newFromZec(
++                                value = stringRes(value, TickerLocation.HIDDEN).getString(context),
++                                fiatValue = "",
++                                isTransparentOrTextRecipient = true,
++                                exchangeRateState = exchangeRateState,
++                            )
+@@ -262 +221,3 @@ internal fun WrapSend(
 -                    )
-+                    viewModel.validateRecipient(it.address)
-@@ -270,0 +237 @@ internal fun WrapSend(
++                        setMemoState(MemoState.new(it.memos?.firstOrNull().orEmpty()))
++                    }
++                    is PrefillSendData.FromAddressScan -> viewModel.validateRecipient(it.address)
+@@ -270,0 +232 @@ internal fun WrapSend(
 +                viewModel.cancelProposalPreparation()
-@@ -284,2 +250,0 @@ internal fun WrapSend(
+@@ -284,2 +245,0 @@ internal fun WrapSend(
 -    val recipientValidationJob = remember { mutableStateOf<Job?>(null) }
 -
-@@ -295,0 +261,3 @@ internal fun WrapSend(
+@@ -295,0 +256,3 @@ internal fun WrapSend(
 +                if (amountDraftState.value != amountDraft || memoDraftState.value != memoState) {
 +                    return@Send
 +                }
-@@ -298,0 +267 @@ internal fun WrapSend(
+@@ -298,0 +262 @@ internal fun WrapSend(
 +                    renderedRecipient = recipientAddressState,
-@@ -303 +272,4 @@ internal fun WrapSend(
+@@ -303 +267,4 @@ internal fun WrapSend(
 -            onQrScannerOpen = goToQrScanner,
 +            onQrScannerOpen = {
 +                viewModel.cancelProposalPreparation()
 +                goToQrScanner()
 +            },
-@@ -306,13 +278,4 @@ internal fun WrapSend(
+@@ -306,13 +273,4 @@ internal fun WrapSend(
 -            onRecipientAddressChange = { newAddress ->
 -                recipientValidationJob.value?.cancel()
 -                recipientValidationJob.value =
@@ -69554,14 +69750,22 @@ index ab537808f..b99dc013e 100644
 +            setAmountState = {
 +                if (amountDraftState.value != it) viewModel.cancelProposalPreparation()
 +                setAmountState(it)
-@@ -320 +282,0 @@ internal fun WrapSend(
+@@ -320 +277,0 @@ internal fun WrapSend(
 -            setAmountState = setAmountState,
-@@ -322 +284,4 @@ internal fun WrapSend(
+@@ -322 +279,4 @@ internal fun WrapSend(
 -            setMemoState = setMemoState,
 +            setMemoState = {
 +                if (memoDraftState.value != it) viewModel.cancelProposalPreparation()
 +                setMemoState(it)
 +            },
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/Send.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/Send.kt
+index 234076c05..eab3910b3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/Send.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/Send.kt
+@@ -10 +10,2 @@ data class Send(
+-    val isScanZip321Enabled: Boolean = true
++    val isScanZip321Enabled: Boolean = true,
++    val prefillToken: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
 index fd16f97b7..4666e264a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
@@ -84262,7 +84466,7 @@ index 4e28ba3d9..7ffa64524 100644
 -                coEvery { isFlexaAvailable() } returns false
 -            },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
-index 5c72d78d5..25da0a348 100644
+index 5c72d78d5..aec4e3d92 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt
 @@ -10,0 +11,4 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
@@ -84506,9 +84710,11 @@ index 5c72d78d5..25da0a348 100644
 +            every { uuid } returns MutableStateFlow(null)
 +            coEvery { getUUID() } returns null
 +        },
-@@ -506,0 +710 @@ class AccountDataSourceImplTest {
+@@ -504,0 +708 @@ class AccountDataSourceImplTest {
++                every { isCurrentEngine(any()) } answers { firstArg<Synchronizer>() === synchronizer }
+@@ -506,0 +711 @@ class AccountDataSourceImplTest {
 +            walletTransport = WalletTransportAccess(),
-@@ -508,5 +712 @@ class AccountDataSourceImplTest {
+@@ -508,5 +713 @@ class AccountDataSourceImplTest {
 -            selectedAccountUUIDProvider =
 -                mockk {
 -                    every { uuid } returns MutableStateFlow(null)
@@ -93222,10 +93428,10 @@ index 000000000..57a4d0d8f
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
 new file mode 100644
-index 000000000..725ea20d8
+index 000000000..73847af9a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,160 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -93238,6 +93444,7 @@ index 000000000..725ea20d8
 +import io.mockk.coVerifyOrder
 +import io.mockk.every
 +import io.mockk.mockk
++import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -93249,12 +93456,41 @@ index 000000000..725ea20d8
 +import org.robolectric.shadows.ShadowLog
 +import kotlin.test.Test
 +import kotlin.test.assertFalse
++import kotlin.test.assertSame
 +import kotlin.test.assertTrue
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +@RunWith(RobolectricTestRunner::class)
 +@Config(sdk = [34])
 +class SynchronizerProviderMigrationDiagnosticsTest {
++    @Test
++    fun admissionReadsTheCoordinatorBeforeTheDisplayProjectionCatchesUp() = runTest {
++        val engine = mockk<Synchronizer>(relaxed = true)
++        val replacement = mockk<Synchronizer>()
++        val current = MutableStateFlow<Synchronizer?>(engine)
++        val coordinator = mockk<WalletCoordinator> {
++            every { synchronizer } returns current
++            every { isSeedMismatch } returns MutableStateFlow(false)
++            every { resetSynchronizer() } returns Unit
++        }
++        val provider = SynchronizerProviderImpl(
++            coordinator, mockk(), lazyOf(mockk()), WalletMigrationSyncGate(), mockk(), backgroundScope,
++        )
++        assertSame(engine, provider.synchronizer.value)
++        assertTrue(provider.isCurrentEngine(engine))
++
++        current.value = null
++        assertSame(engine, provider.synchronizer.value)
++        assertFalse(provider.isCurrentEngine(engine))
++
++        current.value = engine
++        provider.resetSynchronizer()
++        verify(exactly = 1) { coordinator.resetSynchronizer() }
++        assertFalse(provider.isCurrentEngine(engine))
++        current.value = replacement
++        assertTrue(provider.isCurrentEngine(replacement))
++    }
++
 +    @Test
 +    fun aNewSyncRemainsUnrecordedUntilItsWalletActivityIsStamped() = runTest {
 +        val status = MutableStateFlow(Synchronizer.Status.SYNCING)
@@ -99236,7 +99472,7 @@ index 000000000..f5205772e
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
-index 1e55b67e9..3bed01398 100644
+index 1e55b67e9..14d17a25c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
 @@ -6 +6 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
@@ -99256,13 +99492,16 @@ index 1e55b67e9..3bed01398 100644
 @@ -26,2 +28,0 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -    private val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns walletAccount }
 -
-@@ -31 +32 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -31 +32,4 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -        mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns mainSynchronizer }
-+        mockk<SynchronizerProvider> { every { synchronizer } returns MutableStateFlow(mainSynchronizer) }
-@@ -34 +35 @@ class GetGiftCardDestinationAddressUseCaseTest {
++        mockk<SynchronizerProvider> {
++            every { synchronizer } returns MutableStateFlow(mainSynchronizer)
++            every { isCurrentEngine(mainSynchronizer) } returns true
++        }
+@@ -34 +38 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -    fun theDestinationIsTheSelectedAccountsOrchardOnlyAddress() =
 +    fun theDestinationIsTheReviewedAccountsOrchardOnlyAddress() =
-@@ -39 +40,6 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -39 +43,6 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -            val address = GetGiftCardDestinationAddressUseCase(accountDataSource, synchronizerProvider)()
 +            val destination = GetGiftCardDestinationAddressUseCase(
 +                synchronizerProvider,
@@ -99270,7 +99509,7 @@ index 1e55b67e9..3bed01398 100644
 +                WalletWriteAccess(),
 +                WalletTransportAccess(),
 +            )(walletAccount)()
-@@ -41 +47,2 @@ class GetGiftCardDestinationAddressUseCaseTest {
+@@ -41 +50,2 @@ class GetGiftCardDestinationAddressUseCaseTest {
 -            assertEquals(ORCHARD_ADDRESS, address)
 +            assertEquals(ORCHARD_ADDRESS, destination.address)
 +            assertTrue(destination.permitsSubmission())
@@ -100897,40 +101136,65 @@ index 5db80f520..38b53b030 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCaseTest.kt
 new file mode 100644
-index 000000000..b18df1a7e
+index 000000000..9239d917e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PrefillSendUseCaseTest.kt
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,57 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import kotlinx.coroutines.flow.first
-+import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.withTimeout
++import kotlinx.coroutines.withTimeoutOrNull
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
-+import kotlin.test.assertTrue
++import kotlin.test.assertNull
 +
 +class PrefillSendUseCaseTest {
 +    @Test
-+    fun anOlderSubmissionCanDiscardItsPrefillWithoutDrainingTheNextReview() = runBlocking {
++    fun anOlderSubmissionCanDiscardItsPrefillWithoutDrainingTheNextReview() = runTest {
 +        val prefill = PrefillSendUseCase()
-+        val abandoned = prefill.request(PrefillSendData.FromAddressScan("synthetic-old"))
++        val abandoned = prefill.forNewSend(PrefillSendData.FromAddressScan("synthetic-old")) { true }
 +        val beforeSubmission = prefill.pendingThrough()
 +        val successor = PrefillSendData.FromAddressScan("synthetic-successor")
-+        val sender = prefill.request(successor)
++        val next = prefill.forNewSend(successor) { true }
 +
 +        prefill.clearThrough(beforeSubmission)
 +
 +        try {
 +            withTimeout(5_000) {
-+                abandoned.join()
-+                assertTrue(abandoned.isCancelled)
-+                assertEquals(successor, prefill().first())
-+                sender.join()
++                assertNull(withTimeoutOrNull(50) { prefill.observe("old-entry", abandoned).first() })
++                assertEquals(successor, prefill.observe("next-entry", next).first())
 +            }
 +        } finally {
 +            prefill.clear()
 +        }
++    }
++
++    @Test
++    fun anAbandonedDraftDoesNotReachAnotherFormAndOnlyItsOwnerCanConsumeIt() = runTest {
++        val prefill = PrefillSendUseCase()
++        val draft = PrefillSendData.FromAddressScan("fixture-owned")
++        val route = prefill.forNewSend(draft) { true }
++        assertNull(withTimeoutOrNull(50) { prefill.observe("other-entry", null).first() })
++        assertEquals(draft, withTimeout(500) { prefill.observe("owned-entry", route).first() })
++        assertNull(withTimeoutOrNull(50) { prefill.observe("owned-entry", route).first() })
++    }
++
++    @Test
++    fun aScanReplacesOnlyItsFormAndAccessIsRecheckedOnDelivery() = runTest {
++        val prefill = PrefillSendUseCase()
++        var permitted = true
++        val stale = prefill.forNewSend(PrefillSendData.FromAddressScan("fixture-stale")) { permitted }
++        permitted = false
++        assertNull(withTimeoutOrNull(50) { prefill.observe("restored-entry", stale).first() })
++
++        val initial = prefill.forNewSend(PrefillSendData.FromAddressScan("fixture-initial")) { true }
++        val scan = PrefillSendData.FromAddressScan("fixture-new")
++        prefill.forExistingSend("own-entry", scan) { true }
++        assertNull(withTimeoutOrNull(50) { prefill.observe("other-entry", null).first() })
++        assertEquals(scan, withTimeout(500) { prefill.observe("own-entry", initial).first() })
++        assertNull(withTimeoutOrNull(50) { prefill.observe("own-entry", initial).first() })
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PreparePaymentReviewUseCaseTest.kt
@@ -102509,16 +102773,17 @@ index 46c7cddae..ec993c1c1 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCaseTest.kt
 new file mode 100644
-index 000000000..837115518
+index 000000000..c668a4972
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendTransactionAgainUseCaseTest.kt
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,72 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import io.mockk.coEvery
 +import io.mockk.every
 +import io.mockk.mockk
@@ -102536,12 +102801,12 @@ index 000000000..837115518
 +        val prefill = mockk<PrefillSendUseCase>(relaxed = true)
 +        val accounts = mockk<AccountDataSource>()
 +        val again = SendTransactionAgainUseCase(
-+            prefill, router, mockk(), accounts, AppAccessSession().apply { unlock() },
++            prefill, router, mockk(), accounts, AppAccessSession().apply { unlock() }, WalletWriteAccess(),
 +        )
 +
 +        again(mockk { every { canSendAgain } returns false }, "detail")
 +
-+        verify(exactly = 0) { prefill.requestFromTransactionDetail(any()) }
++        verify(exactly = 0) { prefill.requestFromTransactionDetail(any(), any()) }
 +        verify(exactly = 0) { router.custom(any()) }
 +    }
 +
@@ -102566,7 +102831,7 @@ index 000000000..837115518
 +        val prefill = mockk<PrefillSendUseCase>(relaxed = true)
 +        val sendAgain = SendTransactionAgainUseCase(
 +            prefill, router, RejectIfSelectedAccountCannotSpendUseCase(accounts, mockk()),
-+            accounts, AppAccessSession().apply { unlock() },
++            accounts, AppAccessSession().apply { unlock() }, WalletWriteAccess(),
 +        )
 +        val detail = mockk<DetailedTransactionData> {
 +            every { canSendAgain } returns true
@@ -102579,7 +102844,7 @@ index 000000000..837115518
 +        allowLookup.complete(Unit)
 +        pending.join()
 +
-+        verify(exactly = 0) { prefill.requestFromTransactionDetail(any()) }
++        verify(exactly = 0) { prefill.requestFromTransactionDetail(any(), any()) }
 +        verify(exactly = 0) { router.forward(*anyVararg()) }
 +        verify(exactly = 0) { router.custom(any()) }
 +    }
@@ -104448,7 +104713,7 @@ index 9e55e6f64..8d0846800 100644
 +        coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
-index 1d445dd11..5f522778a 100644
+index 1d445dd11..2bff5b64f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 @@ -6 +6 @@ import cash.z.ecc.android.sdk.type.AddressType
@@ -104579,40 +104844,48 @@ index 1d445dd11..5f522778a 100644
 @@ -263 +266 @@ class ViewOnlySpendGuardTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.getTransactionProposal() }
 +            verify(exactly = 0) { zashiProposalRepository.transactionProposal }
-@@ -351,2 +354,7 @@ class ViewOnlySpendGuardTest {
+@@ -342 +345,2 @@ class ViewOnlySpendGuardTest {
+-                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError)
++                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError),
++                review = mockk(),
+@@ -351,2 +355,8 @@ class ViewOnlySpendGuardTest {
 -                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError)
 -            )(mockk())
 +                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError),
 +                accountDataSource,
 +                co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
++                co.electriccoin.zcash.ui.common.provider.WalletWriteAccess(),
 +            )(mockk {
 +                every { canSendAgain } returns true
 +                every { transaction } returns mockk { every { accountUuid } returns null }
 +            }, "fixture-send")
-@@ -368,2 +376 @@ class ViewOnlySpendGuardTest {
+@@ -357 +367 @@ class ViewOnlySpendGuardTest {
+-            verify(exactly = 0) { prefillSend.requestFromTransactionDetail(any()) }
++            verify(exactly = 0) { prefillSend.requestFromTransactionDetail(any(), any()) }
+@@ -368,2 +378 @@ class ViewOnlySpendGuardTest {
 -                    isServerSelectionAutomaticProvider = mockk(),
 -                    persistableWalletProvider = mockk(),
 +                    walletServerSelectionProvider = mockk(),
-@@ -373 +380 @@ class ViewOnlySpendGuardTest {
+@@ -373 +382 @@ class ViewOnlySpendGuardTest {
 -            assertViewOnly(assertFailsWith { dataSource.createShieldProposal(viewOnly) })
 +            assertViewOnly(assertFailsWith { dataSource.createShieldProposal(ShieldingApproval(viewOnly) { true }) })
-@@ -387,2 +394 @@ class ViewOnlySpendGuardTest {
+@@ -387,2 +396 @@ class ViewOnlySpendGuardTest {
 -                    isServerSelectionAutomaticProvider = mockk(),
 -                    persistableWalletProvider = mockk(),
 +                    walletServerSelectionProvider = mockk(),
-@@ -416,0 +423,3 @@ class ViewOnlySpendGuardTest {
+@@ -416,0 +425,3 @@ class ViewOnlySpendGuardTest {
 +        coVerify(exactly = 0) { zashiProposalRepository.preparePayment(any(), any()) }
 +        coVerify(exactly = 0) { keystoneProposalRepository.preparePayment(any(), any()) }
 +        coVerify(exactly = 0) { ledgerProposalPipeline.preparePayment(any(), any()) }
-@@ -419 +428 @@ class ViewOnlySpendGuardTest {
+@@ -419 +430 @@ class ViewOnlySpendGuardTest {
 -        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..d2444edbb
+index 000000000..396e2701c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,586 @@
+@@ -0,0 +1,592 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
@@ -104677,6 +104950,7 @@ index 000000000..d2444edbb
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
++import io.mockk.slot
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -104747,9 +105021,10 @@ index 000000000..d2444edbb
 +    )
 +    private val router = mockk<NavigationRouter>(relaxed = true)
 +    private val prefill = PrefillSendUseCase()
++    private val review = paymentReviewFixture(accounts, router, repository)
 +    private val error = NavigateToErrorUseCase(router)
 +    private val scan = OnZip321ScannedUseCase(
-+        review = paymentReviewFixture(accounts, router, repository),
++        review = review,
 +        navigationRouter = router,
 +        prefillSend = prefill,
 +        navigateToErrorUseCase = error,
@@ -104775,7 +105050,7 @@ index 000000000..d2444edbb
 +            assertSame(sdkProposal, assertNotNull(repository.transactionProposal.value).proposal)
 +            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalBinaryUri) }
 +            verify(exactly = 1) { router.replace(ofType<ReviewTransactionArgs>()) }
-+            verify(exactly = 0) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
++            verify(exactly = 0) { router.replace(ofType<Send>(), ofType<ReviewTransactionArgs>()) }
 +            withContext(Dispatchers.Default) { assertNoDraft() }
 +
 +            val textBytes = fixture.TEXT.encodeToByteArray().copyOf(512)
@@ -104786,8 +105061,11 @@ index 000000000..d2444edbb
 +            val textMessage = assertNotNull(vm.state.value).items.filterIsInstance<MessageState>().single()
 +            assertEquals(stringRes(fixture.TEXT), textMessage.message)
 +            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, originalTextUri) }
-+            verify(exactly = 1) { router.replace(Send(), ofType<ReviewTransactionArgs>()) }
-+            val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
++            val send = slot<Send>()
++            verify(exactly = 1) { router.replace(capture(send), ofType<ReviewTransactionArgs>()) }
++            assertNoDraft()
++            val token = assertNotNull(send.captured.prefillToken)
++            val draft = withTimeout(5_000) { prefill.observe("new-send-entry", token).first() }
 +            assertEquals(expectedTextDraft, draft)
 +        } finally {
 +            store.clear()
@@ -104928,7 +105206,7 @@ index 000000000..d2444edbb
 +        }
 +
 +        verify(exactly = 2) { router.forward(ofType<ErrorDialog>()) }
-+        verify(exactly = 0) { router.replace(Send()) }
++        verify(exactly = 0) { router.replace(ofType<Send>()) }
 +        verify(exactly = 0) { router.back() }
 +        assertNoDraft()
 +    }
@@ -105030,10 +105308,10 @@ index 000000000..d2444edbb
 +            val uri = fixture.uri(fixture.binary)
 +            coEvery { synchronizer.validateAddress(uri) } returns AddressType.Invalid("Not a raw address")
 +            val scanner = ScanZashiAddressVM(
-+                args = ScanArgs(ScanFlow.SEND, isScanZip321Enabled = false),
++                args = ScanArgs(ScanFlow.SEND, isScanZip321Enabled = false, sendEntryId = "owned-form"),
 +                synchronizerProvider = provider,
 +                zip321ParseUriValidationUseCase = Zip321ParseUriValidationUseCase(provider),
-+                onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk()),
++                onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk(), review),
 +                zip321Scanned = scan,
 +                navigateToRedeemGiftCard = navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
 +                navigationRouter = router,
@@ -105059,7 +105337,8 @@ index 000000000..d2444edbb
 +            scanner.onScanned(fixture.RECIPIENT).join()
 +
 +            verify(exactly = 2) { router.back() }
-+            val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
++            assertNoDraft()
++            val draft = withTimeout(5_000) { prefill.observe("owned-form", null).first() }
 +            assertEquals(PrefillSendData.FromAddressScan(fixture.RECIPIENT), draft)
 +            assertEquals(ScanValidationState.VALID, scanner.state.value)
 +        } finally {
@@ -105090,7 +105369,7 @@ index 000000000..d2444edbb
 +            )
 +            val scanner = ScanZashiAddressVM(
 +                ScanArgs(ScanFlow.SEND), provider, Zip321ParseUriValidationUseCase(provider),
-+                OnAddressScannedUseCase(router, prefill, mockk()), hardwareScan,
++                OnAddressScannedUseCase(router, prefill, mockk(), review), hardwareScan,
 +                navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
 +                navigationRouter = router,
 +            )
@@ -105117,22 +105396,22 @@ index 000000000..d2444edbb
 +    fun directPrefillRefusesNonTextAndKeepsStrictPaddedText() = runBlocking {
 +        for (bytes in listOf(fixture.binary, fixture.invalidUtf8)) {
 +            val request = parse(bytes)
-+            assertFailsWith<UneditableZip321MemoException> { prefill.requestFromZip321(request.payment) }
++            assertFailsWith<UneditableZip321MemoException> { request.payment.toEditableSendDraft() }
 +        }
 +        assertNoDraft()
 +
 +        val text = parse(fixture.TEXT.encodeToByteArray().copyOf(512))
-+        val job = prefill.requestFromZip321(text.payment)
-+        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
-+        job.join()
++        assertEquals(expectedTextDraft, text.payment.toEditableSendDraft())
 +    }
 +
 +    @Test
 +    fun textProposalFailureStillPrefillsAnEditableDraft() = runBlocking {
 +        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws IllegalStateException()
 +        scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.HOMEPAGE))
-+        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
-+        verify(exactly = 1) { router.replace(Send()) }
++        val send = slot<Send>()
++        verify(exactly = 1) { router.replace(capture(send)) }
++        val token = assertNotNull(send.captured.prefillToken)
++        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill.observe("new-send-entry", token).first() })
 +        verify(exactly = 0) { router.forward(ofType<ErrorDialog>()) }
 +    }
 +
@@ -105141,7 +105420,7 @@ index 000000000..d2444edbb
 +    )
 +
 +    private suspend fun assertNoDraft() {
-+        assertNull(withTimeoutOrNull(250) { prefill().first() })
++        assertNull(withTimeoutOrNull(50) { prefill.observe("unrelated-send", null).first() })
 +    }
 +
 +    private fun sendNavigationController() = NavHostController(RuntimeEnvironment.getApplication()).apply {
@@ -112522,7 +112801,7 @@ index 461fb8fbb..a16681c3d 100644
 +        restored.restoreExternalScans(saved)
 +        assertTrue(restored.changes.value.isEmpty())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
-index 1dec990ab..b44ec49b9 100644
+index 1dec990ab..28010e5c3 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.ViewModelStore
@@ -112562,7 +112841,7 @@ index 1dec990ab..b44ec49b9 100644
 +            val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
 +            assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, account.name), ready.disclaimer)
 +            assertTrue(ready.redeemButton.isEnabled)
-@@ -202,0 +224,126 @@ class RedeemGiftVMTest {
+@@ -202,0 +224,131 @@ class RedeemGiftVMTest {
 +    @Test
 +    fun redemptionUsesTheAccountNamedByTheTappedReadyStateAcrossSelectionChanges() = runTest(dispatcher) {
 +        val reviewed = zashiAccount()
@@ -112586,6 +112865,7 @@ index 1dec990ab..b44ec49b9 100644
 +        }
 +        val provider = mockk<SynchronizerProvider> {
 +            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
++            every { isCurrentEngine(synchronizer) } returns true
 +        }
 +        val env = Env(this)
 +        val vm = env.newVm(
@@ -112629,6 +112909,7 @@ index 1dec990ab..b44ec49b9 100644
 +        }
 +        val provider = mockk<SynchronizerProvider> {
 +            every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
++            every { isCurrentEngine(synchronizer) } returns true
 +        }
 +        val env = Env(this)
 +        val vm = env.newVm(getDestinationAddress = giftDestination(provider))
@@ -112657,7 +112938,10 @@ index 1dec990ab..b44ec49b9 100644
 +            val engine = MutableStateFlow<Synchronizer?>(mockk {
 +                coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } returns ORCHARD_ADDRESS
 +            })
-+            val provider = mockk<SynchronizerProvider> { every { synchronizer } returns engine }
++            val provider = mockk<SynchronizerProvider> {
++                every { synchronizer } returns engine
++                every { isCurrentEngine(any()) } answers { firstArg<Synchronizer>() === engine.value }
++            }
 +            val env = Env(this)
 +            val admission = CompletableDeferred<Unit>()
 +            env.dataSource.admissionGate = admission
@@ -112689,15 +112973,15 @@ index 1dec990ab..b44ec49b9 100644
 +        }
 +    }
 +
-@@ -743 +890 @@ class RedeemGiftVMTest {
+@@ -743 +895 @@ class RedeemGiftVMTest {
 -        private val account: WalletAccount? = zashiAccount(),
 +        account: WalletAccount? = zashiAccount(),
-@@ -747,0 +895 @@ class RedeemGiftVMTest {
+@@ -747,0 +900 @@ class RedeemGiftVMTest {
 +        val selectedAccount = MutableStateFlow(account)
-@@ -761,0 +910,2 @@ class RedeemGiftVMTest {
+@@ -761,0 +915,2 @@ class RedeemGiftVMTest {
 +        suspend fun quiesceForWalletReset() = repository.quiesceForWalletReset()
 +
-@@ -766,18 +916,15 @@ class RedeemGiftVMTest {
+@@ -766,18 +921,15 @@ class RedeemGiftVMTest {
 -        fun newVm(linkId: String = this.linkId): RedeemGiftVM {
 -            val accounts: Flow<WalletAccount?> = MutableStateFlow(account)
 -            val getSelectedWalletAccount =
@@ -112731,7 +113015,7 @@ index 1dec990ab..b44ec49b9 100644
 +            navigationRouter = router,
 +            getSelectedWalletAccount = getSelectedWalletAccount,
 +        )
-@@ -785,0 +933,6 @@ class RedeemGiftVMTest {
+@@ -785,0 +938,6 @@ class RedeemGiftVMTest {
 +    private fun giftDestination(
 +        provider: SynchronizerProvider,
 +        appAccess: AppAccessSession = AppAccessSession().apply { unlock() },
@@ -114866,7 +115150,7 @@ index 000000000..db35a7bfd
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt
 new file mode 100644
-index 000000000..344357642
+index 000000000..8fdb28335
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt
 @@ -0,0 +1,312 @@
@@ -115062,7 +115346,7 @@ index 000000000..344357642
 +            }
 +
 +            assertRecipient(original, AddressType.Unified)
-+            prefill.request(PrefillSendData.FromAddressScan(scan))
++            prefill.forExistingSend("fixture-send", PrefillSendData.FromAddressScan(scan)) { true }
 +            assertRecipient(scan, AddressType.Transparent)
 +
 +            pickedRecipient.onContactPicked(

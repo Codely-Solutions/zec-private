@@ -173,7 +173,7 @@ class MigrationAppHooksImpl(
         when {
             resetProgress.isPending.value -> false
 
-            BuildConfig.DEBUG &&
+            DebugStartMigrationE2EUseCase.isAllowed &&
                 intent.getBooleanExtra(DebugStartMigrationE2EUseCase.EXTRA_START_MIGRATION, false) -> {
                 // Debug-only E2E driver: reset + commit a fresh AUTOMATIC plan from adb, no UI taps.
                 scope.launch { debugStartMigrationE2E() }

@@ -705,6 +705,7 @@ class AccountDataSourceImplTest {
             mockk<SynchronizerProvider> {
                 every { this@mockk.synchronizer } returns MutableStateFlow(synchronizer)
                 coEvery { getSynchronizer() } returns synchronizer
+                every { isCurrentEngine(any()) } answers { firstArg<Synchronizer>() === synchronizer }
             }
         return AccountDataSourceImpl(
             walletTransport = WalletTransportAccess(),

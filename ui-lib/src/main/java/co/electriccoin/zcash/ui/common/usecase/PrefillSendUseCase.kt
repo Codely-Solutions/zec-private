@@ -4,80 +4,91 @@ import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.mapNotNull
 import org.zecdev.zip321.model.PaymentRequest
+import java.util.UUID
 
 class PrefillSendUseCase {
-    private val bus = Channel<PrefillSendData>()
-
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    operator fun invoke() = bus.receiveAsFlow()
-
     private val lock = Any()
     private var lastRequest = 0L
-    private val pending = mutableMapOf<Long, Job>()
+    private val pending = MutableStateFlow<Map<Target, Draft>>(emptyMap())
+
+    internal fun observe(entryId: String, routeToken: String?) = pending.mapNotNull {
+        synchronized(lock) {
+            val entry = Target.Entry(entryId)
+            val route = routeToken?.let { Target.Route(it) }
+            val draft = (pending.value[entry] ?: route?.let { pending.value[it] }) ?: return@synchronized null
+            // A new scan supersedes a pending initial draft for the same form.
+            pending.value -= listOfNotNull(entry, route).toSet()
+            draft.data.takeIf { draft.permits() }
+        }
+    }
 
     fun pendingThrough(): Long = synchronized(lock) { lastRequest }
 
     fun clear() = clearThrough(pendingThrough())
 
     fun clearThrough(lastOwnedRequest: Long) {
-        val discarded = synchronized(lock) {
-            pending.filterKeys { it <= lastOwnedRequest }.values.toList()
+        synchronized(lock) {
+            pending.value = pending.value.filterValues { it.id > lastOwnedRequest }
         }
-        discarded.forEach { it.cancel() }
     }
 
-    fun requestFromTransactionDetail(value: DetailedTransactionData) =
-        request(
+    internal fun requestFromTransactionDetail(value: DetailedTransactionData, permits: () -> Boolean) =
+        forNewSend(
             PrefillSendData.All(
                 amount = value.transaction.amount,
                 address = value.recipient?.address,
                 fee = value.transaction.fee,
                 // The SDK exposes a memo list without the recipient of each output.
                 memos = value.memos?.takeIf { value.transaction.transactionOutputs.size == 1 }
-            )
+            ),
+            permits,
         )
 
-    fun requestFromZip321(value: PaymentRequest): Job {
-        val memo = value.payments.firstOrNull()?.memo?.data?.let {
-            it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException()
-        }
-        val payment = value.payments.firstOrNull()
-        return request(
-            PrefillSendData.All(
-                amount =
-                    payment
-                        ?.nonNegativeAmount
-                        ?.toZecValueString()
-                        ?.toBigDecimal()
-                        ?.convertZecToZatoshi() ?: Zatoshi(0),
-                address = payment?.recipientAddress?.value,
-                fee = null,
-                memos = memo?.let { listOf(it) }
-            )
-        )
+    internal fun forNewSend(data: PrefillSendData, permits: () -> Boolean): String {
+        val token = UUID.randomUUID().toString()
+        store(Target.Route(token), data, permits)
+        return token
     }
 
-    fun request(value: PrefillSendData): Job {
-        val job = synchronized(lock) {
-            val id = ++lastRequest
-            scope.launch(start = CoroutineStart.LAZY) { bus.send(value) }.also { sender ->
-                pending[id] = sender
-                sender.invokeOnCompletion { synchronized(lock) { pending.remove(id) } }
-            }
-        }
-        job.start()
-        return job
+    internal fun forExistingSend(entryId: String, data: PrefillSendData, permits: () -> Boolean) {
+        store(Target.Entry(entryId), data, permits)
     }
+
+    private fun store(target: Target, data: PrefillSendData, permits: () -> Boolean) {
+        synchronized(lock) {
+            if (!permits()) return
+            val retained = pending.value.filterValues { it.permits() }.toMutableMap()
+            retained.remove(target)
+            if (retained.size >= MAX_PENDING_DRAFTS) retained.remove(retained.keys.first())
+            retained[target] = Draft(++lastRequest, data, permits)
+            pending.value = retained
+        }
+    }
+
+    private data class Draft(val id: Long, val data: PrefillSendData, val permits: () -> Boolean)
+
+    private sealed interface Target {
+        data class Entry(val id: String) : Target
+        data class Route(val token: String) : Target
+    }
+
+    private companion object {
+        const val MAX_PENDING_DRAFTS = 8
+    }
+}
+
+internal fun PaymentRequest.toEditableSendDraft(): PrefillSendData.All {
+    val payment = payments.firstOrNull()
+    val memo = payment?.memo?.data?.let { it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException() }
+    return PrefillSendData.All(
+        amount = payment?.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.convertZecToZatoshi() ?: Zatoshi(0),
+        address = payment?.recipientAddress?.value,
+        fee = null,
+        memos = memo?.let(::listOf),
+    )
 }
 
 sealed interface PrefillSendData {

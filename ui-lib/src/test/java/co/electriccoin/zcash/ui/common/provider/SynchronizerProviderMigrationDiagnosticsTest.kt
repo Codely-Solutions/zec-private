@@ -10,6 +10,7 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,12 +22,41 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SynchronizerProviderMigrationDiagnosticsTest {
+    @Test
+    fun admissionReadsTheCoordinatorBeforeTheDisplayProjectionCatchesUp() = runTest {
+        val engine = mockk<Synchronizer>(relaxed = true)
+        val replacement = mockk<Synchronizer>()
+        val current = MutableStateFlow<Synchronizer?>(engine)
+        val coordinator = mockk<WalletCoordinator> {
+            every { synchronizer } returns current
+            every { isSeedMismatch } returns MutableStateFlow(false)
+            every { resetSynchronizer() } returns Unit
+        }
+        val provider = SynchronizerProviderImpl(
+            coordinator, mockk(), lazyOf(mockk()), WalletMigrationSyncGate(), mockk(), backgroundScope,
+        )
+        assertSame(engine, provider.synchronizer.value)
+        assertTrue(provider.isCurrentEngine(engine))
+
+        current.value = null
+        assertSame(engine, provider.synchronizer.value)
+        assertFalse(provider.isCurrentEngine(engine))
+
+        current.value = engine
+        provider.resetSynchronizer()
+        verify(exactly = 1) { coordinator.resetSynchronizer() }
+        assertFalse(provider.isCurrentEngine(engine))
+        current.value = replacement
+        assertTrue(provider.isCurrentEngine(replacement))
+    }
+
     @Test
     fun aNewSyncRemainsUnrecordedUntilItsWalletActivityIsStamped() = runTest {
         val status = MutableStateFlow(Synchronizer.Status.SYNCING)

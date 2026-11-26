@@ -287,6 +287,7 @@ class AccountDataSourceImpl(
         val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
         runCatchingRecoverable {
             val selection = selectedAccountUUIDProvider.captureSelection()
+            if (!synchronizerProvider.isCurrentEngine(sync)) return@runCatchingRecoverable null
             val accounts = sync.getAccounts()
             val expected = accounts.firstOrNull { it.accountUuid == account.sdkAccount.accountUuid }
             val uuid = selection.uuid?.takeIf { stored -> accounts.any { it.accountUuid == stored } }
@@ -294,7 +295,7 @@ class AccountDataSourceImpl(
             ConfirmedAccountSelection(
                 isSameSelection = { selectedAccountUUIDProvider.isCurrent(selection) },
                 usesCurrentSynchronizer = {
-                    !walletTransport.isRetired(sync) && synchronizerProvider.synchronizer.value === sync
+                    !walletTransport.isRetired(sync) && synchronizerProvider.isCurrentEngine(sync)
                 },
             ).takeIf { selected && it.canOperate() }
         }.getOrNull()

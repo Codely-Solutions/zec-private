@@ -42,13 +42,22 @@ class PreparePaymentReviewUseCase(
             expectedOwner == null || expectedOwner == it.sdkAccount.accountUuid
         } ?: return null
         val id = account.sdkAccount.accountUuid
+        return captureWalletOwner(id)?.let { walletPermit ->
+            val permitted = { router.isAtEntry(entryId) && isCurrentDraft() && walletPermit() }
+            PaymentDraftOwner(account, entryId, walletPermit, permitted).takeIf { permitted() }
+        }
+    }
+
+    internal fun captureWalletOwner(expected: AccountUuid? = null): (() -> Boolean)? {
+        val id = selectedAccount()?.sdkAccount?.accountUuid?.takeIf { expected == null || it == expected }
+            ?: return null
         val grant = appAccess.grant.value
         val wallet = walletWriteAccess.token()
-        val permitted = {
-            router.isAtEntry(entryId) && isCurrentDraft() && appAccess.permits(grant) &&
-                walletWriteAccess.permits(wallet) && selectedAccount()?.sdkAccount?.accountUuid == id
+        val permits = {
+            appAccess.permits(grant) && walletWriteAccess.permits(wallet) &&
+                selectedAccount()?.sdkAccount?.accountUuid == id
         }
-        return PaymentDraftOwner(account, entryId, permitted).takeIf { permitted() }
+        return permits.takeIf { it() }
     }
 
     internal suspend fun open(

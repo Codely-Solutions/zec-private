@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.lang.ref.WeakReference
 import kotlin.time.Duration.Companion.seconds
 
 interface SynchronizerProvider {
@@ -43,6 +44,8 @@ interface SynchronizerProvider {
     val synchronizer: StateFlow<Synchronizer?>
 
     val isSeedMismatch: StateFlow<Boolean>
+
+    fun isCurrentEngine(engine: Synchronizer): Boolean = synchronizer.value === engine
 
     /** True after wallet-global activity for this engine's observed synced state was recorded. */
     fun hasRecordedSync(engine: Synchronizer): Boolean = false
@@ -84,11 +87,17 @@ class SynchronizerProviderImpl(
     override val isSeedMismatch: StateFlow<Boolean> = walletCoordinator.isSeedMismatch
 
     @Volatile
+    private var rebuildingEngine: WeakReference<Synchronizer>? = null
+
+    override fun isCurrentEngine(engine: Synchronizer): Boolean =
+        walletCoordinator.synchronizer.value === engine && rebuildingEngine?.get() !== engine
+
+    @Volatile
     private var recordedSync: SyncObservation? = null
 
     override fun hasRecordedSync(engine: Synchronizer): Boolean {
         val observed = recordedSync ?: return false
-        return observed.engine === engine && walletCoordinator.synchronizer.value === engine &&
+        return observed.engine === engine && isCurrentEngine(engine) &&
             observed.networkHeight == engine.networkHeight.value &&
             observed.scannedHeight == engine.fullyScannedHeight.value
     }
@@ -132,7 +141,7 @@ class SynchronizerProviderImpl(
                     repeat(2) { attempt ->
                         val confirmation = runCatchingRecoverable {
                             provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
-                                synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
+                                isCurrentEngine(engine)
                             })
                         }
                         if (confirmation.isSuccess) return@collectLatest
@@ -145,7 +154,7 @@ class SynchronizerProviderImpl(
         val pendingReconciliation = Channel<Synchronizer>(Channel.CONFLATED)
         scope.launch {
             for (engine in pendingReconciliation) {
-                if (walletCoordinator.synchronizer.value === engine) {
+                if (isCurrentEngine(engine)) {
                     runCatchingRecoverable { migrationSyncedHook.value.onSynced() }.onFailure {
                         Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
                     }
@@ -171,7 +180,7 @@ class SynchronizerProviderImpl(
                     val updatedStatus = engine to status
                     val reachedSynced = previousStatus != updatedStatus && status == Synchronizer.Status.SYNCED
                     previousStatus = updatedStatus
-                    if (status == Synchronizer.Status.SYNCED && walletCoordinator.synchronizer.value === engine) {
+                    if (status == Synchronizer.Status.SYNCED && isCurrentEngine(engine)) {
                         val outcome = runCatchingRecoverable { lastNetworkActivity.stampNow() }.onFailure {
                             Twig.warn { "Wallet network activity unavailable (${it.javaClass.simpleName})" }
                         }
@@ -188,7 +197,7 @@ class SynchronizerProviderImpl(
         withContext(Dispatchers.IO) {
             synchronizer
                 .filterNotNull()
-                .first()
+                .first { isCurrentEngine(it) }
         }
 
     override suspend fun getSynchronizerOrNull(): Synchronizer? =
@@ -204,6 +213,7 @@ class SynchronizerProviderImpl(
         getSynchronizer().getWalletDbPathForVoting()
 
     override fun resetSynchronizer() {
+        rebuildingEngine = walletCoordinator.synchronizer.value?.let(::WeakReference)
         walletCoordinator.resetSynchronizer()
     }
 

@@ -50,36 +50,41 @@ class OnZip321ScannedUseCase(
                     NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
                 }
                 SEND -> if (scanArgs.isScanZip321Enabled) {
-                    prepareFlow(zip321, sourceEntryId, fromHome = false)
+                    prepareFlow(zip321, scanArgs, sourceEntryId)
                 } else {
-                    sendAddressOnly(zip321, sourceEntryId)
+                    sendAddressOnly(zip321, scanArgs.sendEntryId, sourceEntryId)
                 }
-                HOMEPAGE -> prepareFlow(zip321, sourceEntryId, fromHome = true)
+                HOMEPAGE -> prepareFlow(zip321, scanArgs, sourceEntryId)
             }
         }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun prepareFlow(
         zip321: Zip321ParseUriValidation.Valid,
+        scanArgs: ScanArgs,
         sourceEntryId: String?,
-        fromHome: Boolean,
     ): Boolean {
+        val fromHome = scanArgs.flow == HOMEPAGE
         val owner = review.capture(sourceEntryId) ?: return false
+        val walletPermit = owner.permitsWallet
         return try {
             review.open(owner, PaymentDraft.Zip321(zip321.zip321Uri)) { route, prepared ->
                 val proposal = prepared as Zip321TransactionProposal
-                val editable = proposal.binaryMemoByteCount == null
-                if (editable) {
-                    prefillSend.request(
+                val send = if (proposal.binaryMemoByteCount == null) {
+                    stageEditableDraft(
                         PrefillSendData.All(
                             amount = proposal.amount,
                             address = proposal.destination.address,
                             fee = null,
                             memos = proposal.memo.value.takeIf { it.isNotEmpty() }?.let { listOf(it) },
-                        )
+                        ),
+                        scanArgs,
+                        walletPermit,
                     )
+                } else {
+                    null
                 }
-                NavigationCommand.Replace(if (fromHome && editable) listOf(Send(), route) else listOf(route))
+                NavigationCommand.Replace(listOfNotNull(send, route))
             }
         } catch (_: TexUnsupportedOnKSException) {
             navigationRouter.commitFrom(sourceEntryId, owner.permits) {
@@ -91,7 +96,7 @@ class OnZip321ScannedUseCase(
                 NavigationCommand.Replace(listOf(InsufficientFundsArgs))
             }
         } catch (_: TransactionProposalNotCreatedException) {
-            editUnpreparedPayment(zip321, sourceEntryId, fromHome, owner.permits)
+            editUnpreparedPayment(zip321, scanArgs, sourceEntryId, owner.permits, walletPermit)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -103,22 +108,38 @@ class OnZip321ScannedUseCase(
 
     private suspend fun editUnpreparedPayment(
         zip321: Zip321ParseUriValidation.Valid,
+        scanArgs: ScanArgs,
         sourceEntryId: String?,
-        fromHome: Boolean,
         isStillAllowed: () -> Boolean,
+        walletPermit: () -> Boolean,
     ): Boolean {
         if (!isStillAllowed() || !canEdit(zip321, sourceEntryId, isStillAllowed)) return false
-        return navigationRouter.commitFrom(sourceEntryId, isStillAllowed) {
-            prefillSend.requestFromZip321(zip321.payment)
-            if (fromHome) NavigationCommand.Replace(listOf(Send())) else NavigationCommand.Back
+        return navigationRouter.commitFrom(sourceEntryId, { isStillAllowed() && walletPermit() }) {
+            val send = stageEditableDraft(zip321.payment.toEditableSendDraft(), scanArgs, walletPermit)
+            if (send == null) NavigationCommand.Back else NavigationCommand.Replace(listOf(send))
         }
     }
 
-    private suspend fun sendAddressOnly(zip321: Zip321ParseUriValidation.Valid, sourceEntryId: String?): Boolean {
-        if (!canEdit(zip321, sourceEntryId)) return false
-        return navigationRouter.commitFrom(sourceEntryId) {
+    private fun stageEditableDraft(
+        draft: PrefillSendData.All,
+        scanArgs: ScanArgs,
+        walletPermit: () -> Boolean,
+    ): Send? {
+        if (scanArgs.flow == HOMEPAGE) return Send(prefillToken = prefillSend.forNewSend(draft, walletPermit))
+        scanArgs.sendEntryId?.let { prefillSend.forExistingSend(it, draft, walletPermit) }
+        return null
+    }
+
+    private suspend fun sendAddressOnly(
+        zip321: Zip321ParseUriValidation.Valid,
+        sendEntryId: String?,
+        sourceEntryId: String?,
+    ): Boolean {
+        val walletPermit = review.captureWalletOwner()
+        if (!canEdit(zip321, sourceEntryId) || sendEntryId == null || walletPermit == null) return false
+        return navigationRouter.commitFrom(sourceEntryId, walletPermit) {
             val address = zip321.payment.payments.single().recipientAddress.value
-            prefillSend.request(PrefillSendData.FromAddressScan(address))
+            prefillSend.forExistingSend(sendEntryId, PrefillSendData.FromAddressScan(address), walletPermit)
             NavigationCommand.Back
         }
     }

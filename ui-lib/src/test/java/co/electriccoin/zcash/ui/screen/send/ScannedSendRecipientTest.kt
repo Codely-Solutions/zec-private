@@ -190,7 +190,7 @@ class ScannedSendRecipientTest {
             }
 
             assertRecipient(original, AddressType.Unified)
-            prefill.request(PrefillSendData.FromAddressScan(scan))
+            prefill.forExistingSend("fixture-send", PrefillSendData.FromAddressScan(scan)) { true }
             assertRecipient(scan, AddressType.Transparent)
 
             pickedRecipient.onContactPicked(

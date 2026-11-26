@@ -342,7 +342,8 @@ class ViewOnlySpendGuardTest {
             OnAddressScannedUseCase(
                 navigationRouter,
                 prefillSend,
-                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError)
+                RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError),
+                review = mockk(),
             )(
                 address = "t1address",
                 addressType = AddressType.Transparent,
@@ -354,6 +355,7 @@ class ViewOnlySpendGuardTest {
                 RejectIfSelectedAccountCannotSpendUseCase(accountDataSource, navigateToError),
                 accountDataSource,
                 co.electriccoin.zcash.ui.common.model.AppAccessSession().apply { unlock() },
+                co.electriccoin.zcash.ui.common.provider.WalletWriteAccess(),
             )(mockk {
                 every { canSendAgain } returns true
                 every { transaction } returns mockk { every { accountUuid } returns null }
@@ -362,7 +364,7 @@ class ViewOnlySpendGuardTest {
             verify(exactly = 2) { navigateToError(match { it.isViewOnlyError() }, any()) }
             verify(exactly = 0) { navigationRouter.replace(*anyVararg()) }
             verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
-            verify(exactly = 0) { prefillSend.requestFromTransactionDetail(any()) }
+            verify(exactly = 0) { prefillSend.requestFromTransactionDetail(any(), any()) }
         }
 
     @Test

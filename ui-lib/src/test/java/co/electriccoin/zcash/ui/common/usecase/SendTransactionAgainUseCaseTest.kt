@@ -4,6 +4,7 @@ import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -21,12 +22,12 @@ class SendTransactionAgainUseCaseTest {
         val prefill = mockk<PrefillSendUseCase>(relaxed = true)
         val accounts = mockk<AccountDataSource>()
         val again = SendTransactionAgainUseCase(
-            prefill, router, mockk(), accounts, AppAccessSession().apply { unlock() },
+            prefill, router, mockk(), accounts, AppAccessSession().apply { unlock() }, WalletWriteAccess(),
         )
 
         again(mockk { every { canSendAgain } returns false }, "detail")
 
-        verify(exactly = 0) { prefill.requestFromTransactionDetail(any()) }
+        verify(exactly = 0) { prefill.requestFromTransactionDetail(any(), any()) }
         verify(exactly = 0) { router.custom(any()) }
     }
 
@@ -51,7 +52,7 @@ class SendTransactionAgainUseCaseTest {
         val prefill = mockk<PrefillSendUseCase>(relaxed = true)
         val sendAgain = SendTransactionAgainUseCase(
             prefill, router, RejectIfSelectedAccountCannotSpendUseCase(accounts, mockk()),
-            accounts, AppAccessSession().apply { unlock() },
+            accounts, AppAccessSession().apply { unlock() }, WalletWriteAccess(),
         )
         val detail = mockk<DetailedTransactionData> {
             every { canSendAgain } returns true
@@ -64,7 +65,7 @@ class SendTransactionAgainUseCaseTest {
         allowLookup.complete(Unit)
         pending.join()
 
-        verify(exactly = 0) { prefill.requestFromTransactionDetail(any()) }
+        verify(exactly = 0) { prefill.requestFromTransactionDetail(any(), any()) }
         verify(exactly = 0) { router.forward(*anyVararg()) }
         verify(exactly = 0) { router.custom(any()) }
     }

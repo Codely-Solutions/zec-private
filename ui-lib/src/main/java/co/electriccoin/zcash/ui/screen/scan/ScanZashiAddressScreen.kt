@@ -85,7 +85,8 @@ internal fun ScanZashiAddressScreen(args: ScanArgs, sourceEntryId: String) {
 @Serializable
 data class ScanArgs(
     val flow: ScanFlow,
-    val isScanZip321Enabled: Boolean = true
+    val isScanZip321Enabled: Boolean = true,
+    val sendEntryId: String? = null,
 )
 
 enum class ScanFlow {

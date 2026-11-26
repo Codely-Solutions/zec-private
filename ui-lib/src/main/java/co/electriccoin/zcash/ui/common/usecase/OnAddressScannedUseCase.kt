@@ -16,6 +16,7 @@ class OnAddressScannedUseCase(
     private val navigationRouter: NavigationRouter,
     private val prefillSend: PrefillSendUseCase,
     private val rejectIfSelectedAccountCannotSpend: RejectIfSelectedAccountCannotSpendUseCase,
+    private val review: PreparePaymentReviewUseCase,
 ) {
     /**
      * An address scanned from home opens the send form, so an account that cannot spend gets the
@@ -30,16 +31,23 @@ class OnAddressScannedUseCase(
         require(addressType is AddressType.Valid)
 
         return when (scanArgs.flow) {
-            SEND -> navigationRouter.commitFrom(sourceEntryId) {
-                prefillSend.request(PrefillSendData.FromAddressScan(address = address))
-                NavigationCommand.Back
-            }
+            SEND -> returnToSend(scanArgs, address, sourceEntryId)
 
             ADDRESS_BOOK -> navigationRouter.commitFrom(sourceEntryId) {
                 NavigationCommand.Replace(listOf(AddZashiABContactArgs(address)))
             }
 
             HOMEPAGE -> openSend(address, addressType, sourceEntryId)
+        }
+    }
+
+    private suspend fun returnToSend(scanArgs: ScanArgs, address: String, sourceEntryId: String?): Boolean {
+        val sendEntryId = scanArgs.sendEntryId
+        val owner = review.captureWalletOwner()
+        if (sendEntryId == null || owner == null) return false
+        return navigationRouter.commitFrom(sourceEntryId, owner) {
+            prefillSend.forExistingSend(sendEntryId, PrefillSendData.FromAddressScan(address), owner)
+            NavigationCommand.Back
         }
     }
 
