@@ -114958,7 +114958,7 @@ index e415d74b4..05ef10590 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
-index c923a2c47..1694e3ac9 100644
+index c923a2c47..dee7780f6 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 @@ -3,0 +4,4 @@ import androidx.navigation.NavBackStackEntry
@@ -114982,7 +114982,7 @@ index c923a2c47..1694e3ac9 100644
 +import java.io.IOException
 @@ -30,0 +43 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -258,0 +272,69 @@ class ThemeDarkLookVMTest {
+@@ -258,0 +272,71 @@ class ThemeDarkLookVMTest {
 +    @Test
 +    fun theDelayedSaveQueuesOnlyForItsOwnAppearanceDialog() = runTest(dispatcher) {
 +        val router = NavigationRouterImpl()
@@ -115015,7 +115015,8 @@ index c923a2c47..1694e3ac9 100644
 +        val expected = mapOf<PreferenceKey, String?>(mode to "DARK", oled to "true")
 +        var reject = true
 +        val preference = mockk<PreferenceProvider> {
-+            coEvery { getString(any()) } answers { stored[firstArg()] }
++            coEvery { getString(mode) } answers { stored[mode] }
++            coEvery { getString(oled) } answers { stored[oled] }
 +            coEvery { putStringsWithRollback(expected) } coAnswers {
 +                if (reject) throw IOException("Synthetic preference commit failure")
 +                stored.putAll(expected)
@@ -115049,10 +115050,11 @@ index c923a2c47..1694e3ac9 100644
 +        assertFalse(assertNotNull(vm.state.value).hasSaveError)
 +        assertEquals(MoreArgs::class, router.backToRoute)
 +        coVerify(exactly = 2) { preference.putStringsWithRollback(expected) }
-+        coVerify(exactly = 0) { preference.putString(any(), any()) }
++        coVerify(exactly = 0) { preference.putString(mode, "DARK") }
++        coVerify(exactly = 0) { preference.putString(oled, "true") }
 +    }
 +
-@@ -261,3 +343,4 @@ class ThemeDarkLookVMTest {
+@@ -261,3 +345,4 @@ class ThemeDarkLookVMTest {
 -        modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
 -        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 -        router: FakeNavigationRouter = FakeNavigationRouter(),
@@ -115060,25 +115062,25 @@ index c923a2c47..1694e3ac9 100644
 +        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 +        router: NavigationRouter = FakeNavigationRouter(),
 +        sourceEntryId: String? = null,
-@@ -264,0 +348 @@ class ThemeDarkLookVMTest {
+@@ -264,0 +350 @@ class ThemeDarkLookVMTest {
 +        if (modeProvider is FakeAppearanceModeStorageProvider) modeProvider.storeOled = oledProvider::store
-@@ -271 +355,2 @@ class ThemeDarkLookVMTest {
+@@ -271 +357,2 @@ class ThemeDarkLookVMTest {
 -                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
 +                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider),
 +                sourceEntryId = sourceEntryId,
-@@ -285,0 +371 @@ private class FakeAppearanceModeStorageProvider(
+@@ -285,0 +373 @@ private class FakeAppearanceModeStorageProvider(
 +    lateinit var storeOled: suspend (Boolean) -> Unit
-@@ -292,0 +379,5 @@ private class FakeAppearanceModeStorageProvider(
+@@ -292,0 +381,5 @@ private class FakeAppearanceModeStorageProvider(
 +    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
 +        storeOled(isOledEnabled)
 +        store(mode)
 +    }
 +
-@@ -301 +392,2 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -301 +394,2 @@ private class FakeIsOledEnabledStorageProvider(
 -    stored: Boolean?
 +    stored: Boolean?,
 +    private val beforeStore: suspend () -> Unit = {},
-@@ -310,0 +403 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -310,0 +405 @@ private class FakeIsOledEnabledStorageProvider(
 +        beforeStore()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
 index abf7abb01..9174975d9 100644

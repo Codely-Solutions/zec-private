@@ -301,7 +301,8 @@ class ThemeDarkLookVMTest {
         val expected = mapOf<PreferenceKey, String?>(mode to "DARK", oled to "true")
         var reject = true
         val preference = mockk<PreferenceProvider> {
-            coEvery { getString(any()) } answers { stored[firstArg()] }
+            coEvery { getString(mode) } answers { stored[mode] }
+            coEvery { getString(oled) } answers { stored[oled] }
             coEvery { putStringsWithRollback(expected) } coAnswers {
                 if (reject) throw IOException("Synthetic preference commit failure")
                 stored.putAll(expected)
@@ -335,7 +336,8 @@ class ThemeDarkLookVMTest {
         assertFalse(assertNotNull(vm.state.value).hasSaveError)
         assertEquals(MoreArgs::class, router.backToRoute)
         coVerify(exactly = 2) { preference.putStringsWithRollback(expected) }
-        coVerify(exactly = 0) { preference.putString(any(), any()) }
+        coVerify(exactly = 0) { preference.putString(mode, "DARK") }
+        coVerify(exactly = 0) { preference.putString(oled, "true") }
     }
 
     private fun TestScope.startedVm(
