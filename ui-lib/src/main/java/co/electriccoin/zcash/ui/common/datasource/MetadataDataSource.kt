@@ -190,7 +190,8 @@ class MetadataDataSourceImpl(
                 when (canonical) {
                     is FileRead.Decoded -> canonical.metadata.also { metadata ->
                         if (metadata != content) unavailableRead(key, content)
-                        metadataProvider.syncDirectoryOf(checkNotNull(canonicalFile))
+                        runCatchingRecoverable { metadataProvider.syncDirectoryOf(checkNotNull(canonicalFile)) }
+                            .getOrElse { unavailableRead(key, content) }
                         metadataUpdatePipeline.emit(key to MetadataObservation.Available(metadata))
                     }
                     null, FileRead.Absent, FileRead.Empty -> {
@@ -242,9 +243,9 @@ class MetadataDataSourceImpl(
 
     override suspend fun readTxNote(txId: String, key: MetadataKey): String? =
         mutex.withLock {
-            val content = readMetadata(key)
-            if (!content.isWritable) throw IOException("Transaction metadata is unavailable")
-            content.metadata.accountMetadata.annotations.find { it.txId == txId }?.content
+            val read = readMetadata(key)
+            if (!read.isComplete) unavailableRead(key, read.metadata)
+            read.metadata.accountMetadata.annotations.find { it.txId == txId }?.content
         }
 
     override suspend fun createOrUpdateTxNote(txId: String, note: String, key: MetadataKey) =
@@ -528,7 +529,7 @@ class MetadataDataSourceImpl(
             if (!setAsideIfUndecodable(canonicalRead, canonicalFile)) {
                 return@withContext MetadataRead(
                     metadata = decodedOthers.map { it.second.metadata }.mergeOrDefault(),
-                    isWritable = false
+                    isComplete = false
                 )
             }
 
@@ -539,7 +540,6 @@ class MetadataDataSourceImpl(
             if (decodedOthers.isEmpty()) {
                 return@withContext MetadataRead(
                     metadata = canonicalMetadata ?: defaultMetadata(),
-                    isWritable = true,
                     isComplete = complete
                 )
             }
@@ -549,7 +549,7 @@ class MetadataDataSourceImpl(
             if (writeToLocalStorage(merged, key)) {
                 retireMergedFiles(canonicalFile, decodedOthers)
             }
-            MetadataRead(metadata = merged, isWritable = true, isComplete = complete)
+            MetadataRead(metadata = merged, isComplete = complete)
         }
 
     /**
@@ -586,7 +586,7 @@ class MetadataDataSourceImpl(
                         val fingerprint = keyFingerprint.takeIf { file.name != canonicalName }
                         readWithRetry(file, key, fingerprint).decoded()
                     }.mergeOrDefault(),
-            isWritable = false
+            isComplete = false
         )
     }
 
@@ -853,14 +853,12 @@ private data class FileSignature(
 )
 
 /**
- * The metadata a read produced and whether it may be written back, which it may not when the
- * files could not be listed, the canonical file could not be created, the canonical file does not
- * decode and could not be set aside, or the canonical file stayed unreadable.
+ * The metadata a read produced and whether all required files could be accessed. An incomplete
+ * read can provide presentation context but cannot establish absence or acknowledge an edit.
  */
 private data class MetadataRead(
     val metadata: MetadataV3,
-    val isWritable: Boolean,
-    val isComplete: Boolean = isWritable,
+    val isComplete: Boolean,
 ) {
     fun observe(): MetadataObservation =
         if (isComplete) MetadataObservation.Available(metadata) else MetadataObservation.Unavailable(metadata)

@@ -75,6 +75,7 @@ import co.electriccoin.zcash.ui.R
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -99,6 +100,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -867,6 +869,29 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun openDetailsRetriesARealDirectorySyncFailureWithoutReopening() = runTest {
+        assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
+        val sync = TrackingSync(failures = 1)
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val providerFailure = IOException("Synthetic settlement transport delay")
+        val swaps = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(any()) } throws providerFailure
+        }
+        val status = GetSwapStatusUseCase(repository(sync.provider), swaps, timeSource = testScheduler.timeSource)
+        val observed = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch { status.observeForAccount("deposit", account).collect { observed += it } }
+        runCurrent()
+
+        assertTrue(observed.last().error is MetadataReadUnavailableException)
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any()) }
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals("deposit", observed.last().savedMetadata?.depositAddress)
+        assertEquals(providerFailure, observed.last().error)
+        coVerify(exactly = 1) { swaps.checkSwapStatus(any()) }
+    }
+
+    @Test
     fun anUnreadableAlternateCannotPublishAnIncompleteSnapshotOrAcknowledgeAnEdit() = runTest {
         val saved = metadata(lastUpdated = 1, bookmarked = listOf(bookmark("old", 1)))
         write(canonicalName, saved)
@@ -887,6 +912,7 @@ class MetadataDataSourceFileTest {
         write(legacyName, metadata(lastUpdated = 2, annotations = listOf(later)), metadataKey(1))
         assertFailsWith<MetadataReadUnavailableException> { source.read(key) }
         assertEquals(MetadataObservation.Unavailable(saved), observed.receive())
+        assertFailsWith<MetadataReadUnavailableException> { source.readTxNote("legacy-note", key) }
         assertFalse(source.setTxBookmark("new", true, key))
         assertEquals(saved, read(canonicalName))
         assertTrue(alternate.isFile)
@@ -894,6 +920,7 @@ class MetadataDataSourceFileTest {
         inaccessible = false
         val recovered = assertNotNull(source.read(key))
         assertEquals(listOf(later), recovered.accountMetadata.annotations)
+        assertEquals(later.content, source.readTxNote("legacy-note", key))
         assertEquals(MetadataObservation.Available(recovered), observed.receive())
         assertTrue(source.setTxBookmark("new", true, key))
         val edited = observed.receive()?.content

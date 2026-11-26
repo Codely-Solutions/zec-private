@@ -304,3 +304,5 @@ Migration wake tests distinguish successive attempts of one worker request and r
 Temporary encrypted metadata read failures preserve the last complete Activity snapshot. Pending swap rows and open details retry the bound read. An unavailable alternate store cannot establish a missing funding reference or acknowledge an edit.
 
 Migration replan tests cover the hosted origin beneath the custom-server warning and picker, the same retained schedule after a server change, and the exact handoff identity. Retry and completion tests reject stale worker-attempt reads, arm a background retry and withdraw the fallback for an authoritatively completed plan. The manual crossing check combines its last status read with the latest observed sync timestamp.
+
+Real encrypted-file fixtures exercise automatic Swap Details recovery after a temporary directory flush failure. Note editing waits for a complete read before it shows an empty draft.

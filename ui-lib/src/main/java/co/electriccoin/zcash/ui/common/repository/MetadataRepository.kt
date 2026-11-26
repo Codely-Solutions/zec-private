@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentToken
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.design.util.combineToFlow
 import kotlinx.coroutines.CancellationException
@@ -383,7 +384,11 @@ class MetadataRepositoryImpl(
     override suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount?): TransactionSwapMetadata? {
         val token = walletWriteAccess.token()
         val (owner, content) = if (account != null) {
-            val key = getMetadataKey(account, token)
+            val key = runCatchingRecoverable { getMetadataKey(account, token) }.getOrElse { failure ->
+                if (!walletWriteAccess.permits(token)) return null
+                Twig.warn { "Bound metadata key unavailable (${failure.javaClass.simpleName})" }
+                throw MetadataReadUnavailableException()
+            }
             val saved = mutex.withLock { walletWriteAccess.write(token) { metadataDataSource.read(key) } }
             account to saved
         } else {
