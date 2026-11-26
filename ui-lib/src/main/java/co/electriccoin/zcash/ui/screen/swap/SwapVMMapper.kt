@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_FROM_ZEC
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_INTO_ZEC
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.design.component.AssetCardState
@@ -165,20 +166,13 @@ internal class SwapVMMapper {
         val originAmount = state.getOriginTokenAmount()
         return SwapAmountTextFieldState(
             title = stringRes(R.string.swapAndPay_from),
-            error =
-                when (state.swapDirection) {
-                    SWAP_FROM_ZEC -> {
-                        if (originAmount != null && state.canSpend(originAmount.convertZecToZatoshi()) == false) {
-                            stringRes(R.string.send_error_insufficientFunds)
-                        } else {
-                            null
-                        }
-                    }
-
-                    SWAP_INTO_ZEC -> {
-                        null
-                    }
-                },
+            error = when {
+                state.hasUnrepresentableTokenAmount -> stringRes(DesignR.string.send_error_invalidAmount)
+                state.swapDirection == SWAP_FROM_ZEC && originAmount != null &&
+                    state.canSpend(originAmount.convertZecToZatoshi()) == false ->
+                    stringRes(R.string.send_error_insufficientFunds)
+                else -> null
+            },
             token =
                 when (state.swapDirection) {
                     SWAP_FROM_ZEC -> {
@@ -485,7 +479,7 @@ internal class SwapVMMapper {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedContact?.address ?: state.addressText
-                    amount?.takeIf { it.signum() > 0 }?.let {
+                    amount?.takeIf { it.signum() > 0 && !state.hasUnrepresentableTokenAmount }?.let {
                         onRequestSwapQuoteClick(it, state.getOriginFiatAmount(), address)
                     }
                 }
@@ -660,6 +654,14 @@ private data class SwapInternalState(
             }
         }
     }
+
+    val hasUnrepresentableTokenAmount: Boolean
+        get() {
+            val amount = amountTextState.amount
+            val decimals = originAsset?.decimals
+            return currencyType == TOKEN && amount != null && amount.signum() > 0 &&
+                decimals != null && amount.toExactNearQuoteAmountOrNull(decimals) == null
+        }
 
     fun getDestinationAssetAmount(): BigDecimal? {
         val amountToken = getOriginTokenAmount()

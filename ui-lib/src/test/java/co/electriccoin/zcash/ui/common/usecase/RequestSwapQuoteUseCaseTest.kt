@@ -131,6 +131,20 @@ class RequestSwapQuoteUseCaseTest {
     }
 
     @Test
+    fun fractionalInputCannotReachAddressAllocationOrQuoteInEitherDirection() = runBlocking {
+        val instance = useCase(swapQuote(zec, btc))
+        val address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+        for (amount in listOf(BigDecimal("0.100000009"), BigDecimal("0.000000009"))) {
+            instance.requestExactInput(amount, address, btc, BigDecimal.ONE, { true })
+            instance.requestFlexInputIntoZec(amount, address, btc, BigDecimal.ONE, { true })
+        }
+
+        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any(), any()) }
+        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun resultIsConsumedOnlyWhenItsExactFormReceivesTheNavigation() = runTest(dispatcher) {
         val result = SwapQuoteData.Success(flexQuote())
         val instance = useCase(result)

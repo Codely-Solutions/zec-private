@@ -998,7 +998,7 @@ class WalletRepositoryImplTest {
         backgroundScope.launch {
             gate.walletInput(gate.walletDecisions(generation.map {
                 co.electriccoin.zcash.ui.common.provider.WalletSdkRead(it, wallet)
-            }, generation)).collect()
+            }, generation), generation).collect()
         }
         backgroundScope.launch {
             gate.transportInput(
@@ -1350,7 +1350,7 @@ private class FakePersistableWalletProvider(
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
     override val writeVersion get() = writeAccess.token()
 
-    override fun retryRead() {
+    override fun retryRead(recoveredWallet: PersistableWallet?) {
         readRetries++
     }
 

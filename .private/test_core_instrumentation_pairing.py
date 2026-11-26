@@ -53,7 +53,7 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
         for expected_tor, sdk_ready, passes in ((True, False, True), (False, True, True), (True, True, False)):
             with self.subTest(tor=expected_tor, sdk=sdk_ready):
                 shell = Mock(return_value='1 64 REJECT')
-                observation = dict(direct_tls=True, sdk_endpoint_ready=sdk_ready)
+                observation = dict(sdk_request_entered=True, direct_tls=True, sdk_endpoint_ready=sdk_ready)
                 with patch.object(driver, 'wait_for_guest_marker', side_effect=[ready, observation]):
                     if passes:
                         proof = attest_tor_mode_route(Mock(), Mock(), shell, 10012, expected_tor)

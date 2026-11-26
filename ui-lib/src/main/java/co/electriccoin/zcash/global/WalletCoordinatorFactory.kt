@@ -32,7 +32,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
     )
     return WalletCoordinator(
         context = context,
-        persistableWallet = transportGate.walletInput(walletDecisions),
+        persistableWallet = transportGate.walletInput(walletDecisions, generation),
         accountName = context.getString(R.string.accounts_zashi),
         keySource = "zashi",
         isTorEnabled = transportGate.transportInput(isTorEnabledStorageProvider.observe(), generation),

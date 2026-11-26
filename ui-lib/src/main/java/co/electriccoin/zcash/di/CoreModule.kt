@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationRouterImpl
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
 import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
@@ -22,6 +23,7 @@ val coreModule =
         singleOf(WalletCoordinator::invoke)
         singleOf(::WalletMigrationSyncGate)
         singleOf(::WalletSdkTransportGate)
+        singleOf(::WalletSeedRecovery)
         singleOf(::StandardPreferenceProvider)
         singleOf(::EncryptedPreferenceProvider)
         single { BiometricManager.from(get()) }

@@ -4,6 +4,7 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -16,6 +17,7 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     private val sdkErasure = MutableStateFlow(0L)
     val version = generation.asStateFlow()
     internal val enrollmentChanges = combine(generation, sdkErasure) { _, _ -> Unit }
+    internal val admissionChanges = combine(generation, progressStore?.isPending ?: flowOf(false)) { _, _ -> Unit }
     @Volatile private var blocked = false
     @Volatile private var resetting = false
 

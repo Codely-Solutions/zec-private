@@ -65,6 +65,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -1372,8 +1373,10 @@ class CoreWalletAcceptance {
         val walletProvider = dependency<PersistableWalletProvider>()
         val preference = dependency<IsTorEnabledStorageProvider>()
         val synchronizer = dependency<SynchronizerProvider>()
+        val state = fixture()
         check(preference.observe().first() == originalTor) { "Unexpected original stored Tor choice" }
         if (walletProvider.getPersistableWallet() == null) {
+            check(!originalTor && !state.has("torModeWalletId")) { "Test wallet disappeared during the mode change" }
             val repository = dependency<WalletRepository>()
             repository.markIronwoodAnnouncementShown()
             repository.createNewWallet()
@@ -1384,6 +1387,11 @@ class CoreWalletAcceptance {
                 it == co.electriccoin.zcash.ui.common.viewmodel.SecretState.READY
             }
             torModeWalletId(synchronizer.getSynchronizer())
+        }
+        if (originalTor) {
+            check(state.getString("torModeWalletId") == walletId) { "Wallet changed before the reverse transition" }
+        } else {
+            check(!state.has("torModeWalletId")) { "An initial Tor transition wallet was already recorded" }
         }
         check(dependency<HttpClientProvider>().supportsKtorTimeouts() == !originalTor)
         waitUi("Receive", "tor_mode_wallet_ready")
@@ -1399,7 +1407,7 @@ class CoreWalletAcceptance {
         check(runCatching { dependency<HttpClientProvider>().supportsKtorTimeouts() }.isFailure) {
             "A new request was admitted before restarting the wallet"
         }
-        save(fixture().put("torModeWalletId", walletId))
+        if (!originalTor) save(state.put("torModeWalletId", walletId))
     }
 
     private suspend fun verifyTorModeAfterRestart(usesTor: Boolean) {
@@ -1428,9 +1436,12 @@ class CoreWalletAcceptance {
             File(context.filesDir, "core-mode-ready.json").writeText(JSONObject()
                 .put("public_testnet_endpoint", true).put("addresses", JSONArray(addresses)).toString())
             awaitModeMarker("core-mode-interrupted")
+            check(dependency<SynchronizerProvider>().synchronizer.value === sync)
             val reached = java.util.concurrent.atomic.AtomicBoolean(false)
+            val requestEntered = CompletableDeferred<Unit>()
             val metadata = launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
+                    requestEntered.complete(Unit)
                     reached.set(sync.validateServerEndpoint(context, endpoint) == ServerValidation.Valid)
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
@@ -1439,14 +1450,18 @@ class CoreWalletAcceptance {
                 }
             }
             try {
+                withTimeout(5_000) { requestEntered.await() }
                 if (usesTor) delay(8_000)
                 checkPublicEndpointTls(endpoint, java.net.InetSocketAddress(endpoint.host, endpoint.port))
                 if (!usesTor) withTimeout(8_000) { metadata.join() }
                 check(reached.get() == !usesTor) { "SDK metadata did not distinguish the applied route" }
                 File(context.filesDir, "core-mode-checked.json").writeText(JSONObject()
+                    .put("sdk_request_entered", true)
                     .put("direct_tls", true).put("sdk_endpoint_ready", reached.get()).toString())
                 awaitModeMarker("core-mode-restored")
                 requireEndpointReady(sync, "after_tor_mode_interruption")
+                check(dependency<SynchronizerProvider>().synchronizer.value === sync)
+                check(dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint == endpoint)
             } finally {
                 metadata.cancel()
             }

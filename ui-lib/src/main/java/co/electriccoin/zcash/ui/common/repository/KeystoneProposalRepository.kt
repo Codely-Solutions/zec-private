@@ -188,10 +188,13 @@ class KeystoneProposalRepositoryImpl(
     private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
     override val submitState = hardwareProposal.submissionState
 
-    override val signingPreparationIds = combine(
-        transactionProposal, hardwareProposal.approved, appAccessSession.grant,
-    ) { _, _, _ ->
-        signingPreparationId()
+    override val signingPreparationIds: Flow<String?> by lazy {
+        combine(
+            transactionProposal, hardwareProposal.approved, appAccessSession.grant,
+            walletWriteAccess.admissionChanges, accountDataSource.signingAuthorityChanges,
+        ) { _, _, _, _, _ ->
+            signingPreparationId()
+        }
     }
 
     override fun signingPreparationId(): String? = hardwareProposal.getApproved(transactionProposal.value)?.id

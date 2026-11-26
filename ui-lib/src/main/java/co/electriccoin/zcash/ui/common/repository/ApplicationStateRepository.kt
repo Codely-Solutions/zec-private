@@ -4,6 +4,7 @@ import androidx.lifecycle.Lifecycle
 import cash.z.ecc.android.sdk.Synchronizer
 import androidx.lifecycle.LifecycleEventObserver
 import co.electriccoin.zcash.global.WalletMigrationSyncGate
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
@@ -13,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 interface ApplicationStateRepository {
@@ -25,6 +27,7 @@ class ApplicationStateRepositoryImpl(
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationSyncGate: WalletMigrationSyncGate,
     private val resetProgressStore: ResetProgressStore,
+    private val transportGate: WalletSdkTransportGate,
 ) : ApplicationStateRepository {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -48,6 +51,7 @@ class ApplicationStateRepositoryImpl(
                 applicationStateProvider.isInForeground,
                 migrationSyncGate.isBlocked,
                 resetProgressStore.isPending,
+                transportGate.inputSuspension,
             )
         }
     }
@@ -58,11 +62,11 @@ internal suspend fun relaySynchronizerLifecycle(
     applicationForeground: Flow<Boolean>,
     migrationBlocked: Flow<Boolean>,
     resetPending: Flow<Boolean>,
+    transportSuspended: Flow<Boolean> = flowOf(false),
 ) {
-    // Withhold app-requested starts while a migration or reset owns the wallet.
-    combine(synchronizers, applicationForeground, migrationBlocked, resetPending) {
-        sync, foreground, migration, reset ->
-        sync to (foreground && !migration && !reset)
+    combine(synchronizers, applicationForeground, migrationBlocked, resetPending, transportSuspended) {
+        sync, foreground, migration, reset, suspended ->
+        sync to (foreground && !migration && !reset && !suspended)
     }.distinctUntilChanged()
         .collect { (synchronizer, runInForeground) ->
             if (runInForeground) {

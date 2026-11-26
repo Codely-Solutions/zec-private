@@ -4,7 +4,6 @@ import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
-import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
@@ -12,6 +11,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
@@ -28,7 +28,6 @@ import kotlin.test.Test
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -204,20 +203,18 @@ class ObserveSeedMismatchUseCaseTest {
         val mismatch = MutableStateFlow(true)
         val entered = CompletableDeferred<Unit>()
         val finishErase = CompletableDeferred<Unit>()
-        val coordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flow {
-                entered.complete(Unit)
-                mismatch.value = false
-                finishErase.await()
-                emit(true)
-            }
+        val sdkRecovery = seedRecoveryFixture {
+            entered.complete(Unit)
+            mismatch.value = false
+            finishErase.await()
+            true
         }
         val synchronizer = mockk<SynchronizerProvider> {
             every { isSeedMismatch } returns mismatch
         }
         val initial = existingTestWallet()
         val wallet = RecoveryWallet(initial)
-        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
+        val recover = RecoverFromSeedMismatchUseCase(wallet, sdkRecovery, walletWriteAccess, mockk(relaxed = true))
         val observe = ObserveSeedMismatchUseCase(
             synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
         )
@@ -234,12 +231,10 @@ class ObserveSeedMismatchUseCaseTest {
 
     @Test
     fun restoreWriteFailureAfterReportedEraseOffersSupportBeforeDelay() = runTest {
-        val coordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flow { emit(true) }
-        }
+        val sdkRecovery = seedRecoveryFixture { true }
         val initial = existingTestWallet()
         val wallet = RecoveryWallet(initial, failRestoreWrite = true)
-        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
+        val recover = RecoverFromSeedMismatchUseCase(wallet, sdkRecovery, walletWriteAccess, mockk(relaxed = true))
         val observe = ObserveSeedMismatchUseCase(
             synchronizerProvider, recover, navigateToError, launchNavigation, walletWriteAccess,
         )

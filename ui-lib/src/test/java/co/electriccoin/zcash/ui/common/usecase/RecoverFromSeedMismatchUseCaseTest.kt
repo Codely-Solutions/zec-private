@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.PersistableWallet
@@ -10,17 +9,15 @@ import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
+import co.electriccoin.zcash.ui.common.provider.eraseResult
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -42,9 +39,9 @@ class RecoverFromSeedMismatchUseCaseTest {
     )
     private val access = WalletWriteAccess()
     private val walletProvider = RecordingWalletProvider(wallet, access)
-    private val walletCoordinator = mockk<WalletCoordinator>()
+    private val sdkRecovery = mockk<WalletSeedRecovery>()
     private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxed = true)
-    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access, preferenceRecovery)
+    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, sdkRecovery, access, preferenceRecovery)
 
     private suspend fun useCase() = recovery(access.token())
 
@@ -52,9 +49,9 @@ class RecoverFromSeedMismatchUseCaseTest {
     fun destructiveRecoveryExpiresAnImportedReceiptEvenWhenTheWalletGenerationStaysTheSame() = runTest {
         val originalGeneration = access.token()
         val pendingImport = assertNotNull(access.enrollmentToken())
-        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
+        sdkRecovery.eraseResult {
             assertFalse(access.permitsEnrollment(pendingImport))
-            emit(true)
+            true
         }
 
         useCase()
@@ -66,18 +63,19 @@ class RecoverFromSeedMismatchUseCaseTest {
 
     @Test
     fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
+        sdkRecovery.eraseResult {
             assertTrue(walletProvider.replacements.isEmpty())
-            emit(true)
+            true
         }
 
         useCase()
 
-        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertEquals(
             listOf(wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)),
             walletProvider.replacements,
         )
+        assertEquals(1, walletProvider.readRetries)
     }
 
     @Test
@@ -86,13 +84,26 @@ class RecoverFromSeedMismatchUseCaseTest {
 
         useCase()
 
-        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertTrue(walletProvider.replacements.isEmpty())
     }
 
     @Test
+    fun aLegacyWalletWithNoBirthdayRestoresFromTheEarliestSupportedHeight() = runTest {
+        walletProvider.persistableWallet.value = wallet.copy(birthday = null)
+        sdkRecovery.eraseResult { true }
+
+        useCase()
+
+        val restored = walletProvider.replacements.single()
+        assertEquals(wallet.network.saplingActivationHeight, restored.birthday)
+        assertEquals(WalletInitMode.RestoreWallet, restored.walletInitMode)
+        assertEquals(wallet.seedPhrase, restored.seedPhrase)
+    }
+
+    @Test
     fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        sdkRecovery.eraseResult { false }
 
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 
@@ -104,7 +115,7 @@ class RecoverFromSeedMismatchUseCaseTest {
         coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
 
         assertEquals(1, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
-        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         coVerify(exactly = 0) { preferenceRecovery.ensureReadable() }
         assertEquals(wallet, walletProvider.persistableWallet.value)
         assertTrue(walletProvider.replacements.isEmpty())
@@ -113,30 +124,30 @@ class RecoverFromSeedMismatchUseCaseTest {
     @Test
     fun recoveryRetriesAReadFailureBeforeEnteringTheSdkOnce() = runTest {
         coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unavailable") andThen Unit
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+        sdkRecovery.eraseResult { true }
 
         useCase()
 
         coVerify(exactly = 2) { preferenceRecovery.checkReadableForErase() }
-        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertEquals(WalletInitMode.RestoreWallet, walletProvider.persistableWallet.value?.walletInitMode)
     }
 
     @Test
     fun repeatedFailuresAreCappedAndStopHittingTheSdk() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        sdkRecovery.eraseResult { false }
 
         repeat(5) {
             assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         }
 
-        verify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertTrue(walletProvider.replacements.isEmpty())
     }
 
     @Test
     fun replacementWalletGetsItsOwnRecoveryAttempts() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        sdkRecovery.eraseResult { false }
         repeat(3) { assertFailsWith<SeedMismatchRecoveryException> { useCase() } }
         val old = access.token()
         access.replaceWallet { walletProvider.persistableWallet.value = wallet.copy() }
@@ -145,24 +156,24 @@ class RecoverFromSeedMismatchUseCaseTest {
         val firstFailure = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 
         assertEquals(1, firstFailure.failedAttempts)
-        verify(exactly = 4) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 4) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
     }
 
     @Test
     fun successAfterPriorFailuresResetsTheCounter() = runTest {
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        sdkRecovery.eraseResult { false }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+        sdkRecovery.eraseResult { true }
         useCase()
 
         assertEquals(1, walletProvider.replacements.size)
 
-        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
+        sdkRecovery.eraseResult { false }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-        verify(exactly = 5) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 5) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertEquals(1, walletProvider.replacements.size)
     }
 
@@ -170,7 +181,7 @@ class RecoverFromSeedMismatchUseCaseTest {
     @Test
     fun delayedEraseOffersHelpButKeepsWalletReplacementFencedUntilCompletion() = runTest {
         val sdkResult = CompletableDeferred<Boolean>()
-        every { walletCoordinator.deleteSdkDataFlow() } returns flow { emit(sdkResult.await()) }
+        sdkRecovery.eraseResult { sdkResult.await() }
         val delayed = CompletableDeferred<Unit>()
         val recovering = launch { recovery(access.token()) { delayed.complete(Unit) } }
         val replacing = launch { access.replaceWallet { walletProvider.persistableWallet.value = wallet } }
@@ -186,7 +197,7 @@ class RecoverFromSeedMismatchUseCaseTest {
         recovering.join()
         replacing.join()
         assertEquals(wallet, walletProvider.persistableWallet.value)
-        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
     }
 
     private class RecordingWalletProvider(
@@ -196,6 +207,12 @@ class RecoverFromSeedMismatchUseCaseTest {
         override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
         override val writeVersion get() = access.token()
         val replacements = mutableListOf<PersistableWallet>()
+        var readRetries = 0
+
+        override fun retryRead(recoveredWallet: PersistableWallet?) {
+            assertEquals(replacements.last(), assertNotNull(recoveredWallet))
+            readRetries += 1
+        }
 
         override suspend fun store(persistableWallet: PersistableWallet): Unit =
             error("Recovery must compare the original wallet and version before storing")

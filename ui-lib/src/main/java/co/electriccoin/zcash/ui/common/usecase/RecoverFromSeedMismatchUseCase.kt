@@ -2,30 +2,31 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
+import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]) by erasing the SDK
- * databases through the lockout-aware [WalletCoordinator.deleteSdkDataFlow] (wallet secrets are untouched)
- * and re-storing the wallet with [WalletInitMode.RestoreWallet] so the next synchronizer build rescans.
+ * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]). Withdraws
+ * the SDK input, erases the inactive wallet data and re-stores the existing wallet with
+ * [WalletInitMode.RestoreWallet] before the next synchronizer build.
  * A reported failure throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
  * failures no further erase is attempted for that wallet generation. Wallet reset and replacement drain
  * admitted SDK erases. Re-storing also verifies that the wallet snapshot is current.
  */
 class RecoverFromSeedMismatchUseCase(
     private val persistableWalletProvider: PersistableWalletProvider,
-    private val walletCoordinator: WalletCoordinator,
+    private val sdkRecovery: WalletSeedRecovery,
     private val walletWriteAccess: WalletWriteAccess,
     private val preferenceRecovery: SdkEncryptedPreferenceRecoveryProvider,
 ) {
@@ -34,14 +35,12 @@ class RecoverFromSeedMismatchUseCase(
 
     suspend operator fun invoke(version: Long, onEraseDelayed: () -> Unit = {}) {
         val wallet = persistableWalletProvider.getPersistableWallet() ?: return
-        walletWriteAccess.withSdkRecovery(version) { eraseSdkData(version, onEraseDelayed) } ?: return
-        val recoveryWallet = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
-        if (!persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
-            Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
+        walletWriteAccess.withSdkRecovery(version) {
+            eraseSdkData(wallet, version, onEraseDelayed)
         }
     }
 
-    private suspend fun eraseSdkData(version: Long, onEraseDelayed: () -> Unit) {
+    private suspend fun eraseSdkData(wallet: PersistableWallet, version: Long, onEraseDelayed: () -> Unit) {
         if (attemptVersion != version) {
             attemptVersion = version
             failedAttempts = 0
@@ -54,7 +53,8 @@ class RecoverFromSeedMismatchUseCase(
         }
 
         val readable = canReadSdkPreferences()
-        if (!readable || !waitForErase(onEraseDelayed)) {
+        val erased = if (readable) waitForErase(wallet, version, onEraseDelayed) else false
+        if (erased == false) {
             failedAttempts += 1
             Twig.error {
                 val stage = if (readable) "SDK erase failed" else "SDK encrypted preferences unreadable"
@@ -63,7 +63,7 @@ class RecoverFromSeedMismatchUseCase(
             throw SeedMismatchRecoveryException(failedAttempts)
         }
 
-        failedAttempts = 0
+        if (erased == true) failedAttempts = 0
     }
 
     private suspend fun canReadSdkPreferences(): Boolean {
@@ -74,17 +74,30 @@ class RecoverFromSeedMismatchUseCase(
         return false
     }
 
-    private suspend fun waitForErase(onEraseDelayed: () -> Unit): Boolean = coroutineScope {
+    private suspend fun waitForErase(
+        wallet: PersistableWallet,
+        version: Long,
+        onEraseDelayed: () -> Unit,
+    ): Boolean? = coroutineScope {
         val notice = launch {
             delay(ERASE_NOTICE_DELAY)
             Twig.info { "Seed-mismatch recovery: waiting for the SDK erase result" }
             onEraseDelayed()
         }
         try {
-            // SDK 6.0.0 starts the erase on its own wallet scope. Keep the app fence until it reports completion.
             withContext(NonCancellable) {
-                walletWriteAccess.onSdkErasureStarting()
-                walletCoordinator.deleteSdkDataFlow().first()
+                sdkRecovery.eraseAndRestore(wallet.network, walletWriteAccess::onSdkErasureStarting) {
+                    val recoveryWallet = wallet.copy(
+                        birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
+                        walletInitMode = WalletInitMode.RestoreWallet,
+                    )
+                    if (persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
+                        // Withdraw the cached pre-recovery input until a fresh wallet decode carries RestoreWallet.
+                        persistableWalletProvider.retryRead(recoveredWallet = recoveryWallet)
+                    } else {
+                        Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
+                    }
+                }
             }
         } finally {
             notice.cancel()

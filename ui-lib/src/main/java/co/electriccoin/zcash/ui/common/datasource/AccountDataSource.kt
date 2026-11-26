@@ -75,6 +75,8 @@ interface AccountDataSource {
 
     val selectedAccount: Flow<WalletAccount?>
 
+    val signingAuthorityChanges: Flow<*> get() = flowOf(Unit)
+
     val accountSelectionReadState: Flow<AccountSelectionAvailability>
         get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 
@@ -263,6 +265,13 @@ class AccountDataSourceImpl(
             .map { account ->
                 account?.firstOrNull { it.isSelected }
             }.distinctUntilChanged()
+
+    override val signingAuthorityChanges: Flow<*>
+        get() = combine(
+            selectedAccountUUIDProvider.selectionChanges,
+            synchronizerProvider.synchronizer,
+            walletTransport.authorityChanges,
+        ) { _, synchronizer, _ -> synchronizer }
 
     override val zashiAccount: Flow<ZodlAccount?> =
         allAccounts

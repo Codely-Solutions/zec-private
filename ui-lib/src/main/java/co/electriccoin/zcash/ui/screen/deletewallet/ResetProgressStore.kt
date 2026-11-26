@@ -52,9 +52,12 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
         }
     }
 
-    internal suspend fun <T> withMigrationInputStopped(block: suspend () -> T): T =
+    internal suspend fun <T> withMigrationInputStopped(
+        isInputSuppressed: () -> Boolean = { sdkInputSuppressed.value },
+        block: suspend () -> T,
+    ): T =
         migrationInput.withLock {
-            check(sdkInputSuppressed.value) { "Wait for SDK input suppression before erasing" }
+            check(isInputSuppressed()) { "Wait for SDK input suppression before erasing" }
             block()
         }
 

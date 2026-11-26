@@ -23,6 +23,37 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletSdkTransportGateTest {
     @Test
+    fun recoveryDoesNotReopenTheCachedWalletBeforeFreshDecode() = runTest {
+        val gate = WalletSdkTransportGate()
+        val generation = MutableStateFlow(0L)
+        val old = mockk<PersistableWallet>()
+        val restored = mockk<PersistableWallet>()
+        val reads = MutableStateFlow(WalletSdkRead(0L, old))
+        val observed = mutableListOf<PersistableWallet?>()
+        backgroundScope.launch {
+            gate.walletInput(gate.walletDecisions(reads, generation), generation).collect { observed += it }
+        }
+        backgroundScope.launch { gate.transportInput(MutableStateFlow(false), generation).collect {} }
+        runCurrent()
+        assertEquals(old, observed.last())
+        val beforeRecovery = observed.size
+        gate.whileRecoveringSeed {
+            runCurrent()
+            assertNull(observed.last())
+            generation.value = 1L
+        }
+        runCurrent()
+        assertNull(observed.last())
+
+        // Even a precomputed decision cannot re-admit the preceding read generation.
+        assertNull(gate.walletInput(flow { emit(WalletSdkRead(0L, old)) }, generation).first())
+        reads.value = WalletSdkRead(1L, restored)
+        runCurrent()
+        assertEquals(restored, observed.last())
+        assertTrue(observed.drop(beforeRecovery).none { it === old })
+    }
+
+    @Test
     fun walletlessSetupCanSwitchTheVerifiedTorChoiceBeforeFirstWalletAdmission() = runTest {
         val gate = WalletSdkTransportGate()
         val newWallet = mockk<PersistableWallet>()
@@ -32,7 +63,7 @@ class WalletSdkTransportGateTest {
         val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
         backgroundScope.launch {
             combine(
-                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
                 gate.transportInput(useTor, generation),
             ) { wallet, tor -> wallet to tor }.collect { sdkInputs += it }
         }
@@ -59,7 +90,7 @@ class WalletSdkTransportGateTest {
         val observed = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
         backgroundScope.launch {
             combine(
-                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
                 gate.transportInput(preference, generation),
             ) { wallet, tor -> wallet to tor }.collect { observed += it }
         }
@@ -90,7 +121,7 @@ class WalletSdkTransportGateTest {
             val observed = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
             val collector = backgroundScope.launch {
                 combine(
-                    gate.walletInput(gate.walletDecisions(wallets, generation)),
+                    gate.walletInput(gate.walletDecisions(wallets, generation), generation),
                     gate.transportInput(preference, generation),
                 ) { wallet, tor -> wallet to tor }.collect { observed += it }
             }
@@ -122,7 +153,7 @@ class WalletSdkTransportGateTest {
         val stored = MutableStateFlow(false)
         val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
         fun inputs(owner: WalletSdkTransportGate) = combine(
-            owner.walletInput(owner.walletDecisions(wallets, generation)),
+            owner.walletInput(owner.walletDecisions(wallets, generation), generation),
             owner.transportInput(stored, generation),
         ) { savedWallet, tor -> savedWallet to tor }
         backgroundScope.launch { inputs(gate).collect { sdkInputs += it } }
@@ -169,7 +200,7 @@ class WalletSdkTransportGateTest {
 
         backgroundScope.launch {
             combine(
-                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
                 gate.transportInput(transportReads, generation),
             ) {
                 sdkWallet, tor -> sdkWallet to tor

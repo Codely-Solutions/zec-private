@@ -143,6 +143,35 @@ class WalletSdkInputCommitTest {
         assertEquals("{synthetic-unreadable}", storage.durable)
     }
 
+    @Test
+    fun recoveredSdkInputUsesExplicitRestoreModeForTheCurrentWallet() = runTest {
+        val storage = CommitFixture().apply { failCommit = false }
+        val walletProvider = provider(storage)
+        val sdkWallets = observeSdkInput(walletProvider)
+        walletProvider.store(candidate)
+        runCurrent()
+        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
+
+        val original = walletProvider.requirePersistableWallet()
+        val restored = original.copy(walletInitMode = WalletInitMode.RestoreWallet)
+        assertTrue(walletProvider.storeIfCurrent(original, restored, walletProvider.writeVersion))
+        walletProvider.retryRead(recoveredWallet = restored)
+        // Another SDK model construction can replace the pinned SDK's process-global mode.
+        candidate.copy(walletInitMode = WalletInitMode.ExistingWallet)
+        runCurrent()
+        assertEquals(WalletInitMode.RestoreWallet, sdkWallets.last()?.walletInitMode)
+
+        val newWallet = candidate.copy(
+            endpoint = LightWalletEndpoint("different.fixture.invalid", 443, true),
+            seedPhrase = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { "ability" }),
+            walletInitMode = WalletInitMode.NewWallet,
+        )
+        walletProvider.store(newWallet)
+        runCurrent()
+        assertEquals(newWallet.endpoint, sdkWallets.last()?.endpoint)
+        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
+    }
+
     private suspend fun TestScope.assertUncommitted(
         walletProvider: PersistableWalletProviderImpl,
         sdkWallets: List<PersistableWallet?>,

@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.DEFAULT_SLIPPAGE
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
+import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -16,6 +17,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -78,6 +80,28 @@ class SwapVMMapperChangeModeTest {
 
         assertNotNull(screen.primaryButton).onClick()
         assertEquals(listOf(BigDecimal("0.99999999")), requested)
+    }
+
+    @Test
+    fun typedOverprecisionIsVisibleAndCannotRequestAQuoteInEitherDirection() {
+        val safeCallbacks = callbacks.copy(onRequestSwapQuoteClick = { _, _, _ -> error("Unexpected quote") })
+        SwapDirection.entries.forEach { direction ->
+            listOf("0.100000009", "0.000000009").forEach { text ->
+                val input = internalState(account(isSpendable = true)).copy(
+                    swapDirection = direction,
+                    amountTextState = NumberTextFieldInnerState.fromAmount(BigDecimal(text)),
+                    addressText = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
+                )
+                val screen = mapper.createState(input, safeCallbacks)
+                assertEquals(
+                    stringRes(co.electriccoin.zcash.ui.design.R.string.send_error_invalidAmount),
+                    screen.amountTextField.error,
+                )
+                val quote = assertNotNull(screen.primaryButton)
+                assertFalse(quote.isEnabled)
+                quote.onClick()
+            }
+        }
     }
 
     private fun account(isSpendable: Boolean): WalletAccount =

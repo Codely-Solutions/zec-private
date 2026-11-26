@@ -496,6 +496,12 @@ class AcceptancePolicyTest(unittest.TestCase):
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'gradle.properties': 'changed'}, True),
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
                                       'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'settings.gradle.kts': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
+                                      'ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
+                                      'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt':
+                                      'changed'}, True),
             ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'docs/WALLET-GUIDE.md': 'changed'}, False),
             ({TOR_MODE_GATE: 'old'}, {TOR_MODE_GATE: 'changed'}, True),
             ({TOR_MODE_GATE: 'old'}, {}, True),
@@ -517,7 +523,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                               saved_mode=not tor if saving else tor, wallet_preserved=True, process_id=pid,
                               admission_blocked_until_restart=saving, role='candidate', installed_hash_verified=True))
             if not saving:
-                steps[-1]['network_probe'] = dict(direct_tls=True, sdk_endpoint_ready_during_interruption=not tor,
+                steps[-1]['network_probe'] = dict(sdk_request_entered=True, direct_tls=True,
+                                                  sdk_endpoint_ready_during_interruption=not tor,
                                                   sdk_endpoint_recovered=True, blocked_tcp_packets=int(tor))
         probe = dict(installed_apk_sha256=installed, steps=steps)
         validate_tor_mode_transition(probe, candidate, apk, preparations)
@@ -530,7 +537,8 @@ class AcceptancePolicyTest(unittest.TestCase):
             with self.subTest(field=field, invalid=invalid), self.assertRaises(ValueError):
                 mismatched = [steps[0], dict(steps[1], **{field: invalid}), *steps[2:]]
                 validate_tor_mode_transition(dict(probe, steps=mismatched), candidate, apk, preparations)
-        for index, field, invalid in ((1, 'sdk_endpoint_ready_during_interruption', True),
+        for index, field, invalid in ((1, 'sdk_request_entered', False),
+                                       (1, 'sdk_endpoint_ready_during_interruption', True),
                                        (1, 'blocked_tcp_packets', 0), (1, 'sdk_endpoint_recovered', False),
                                        (3, 'sdk_endpoint_ready_during_interruption', False), (3, 'direct_tls', False)):
             with self.subTest(index=index, field=field), self.assertRaises(ValueError):
@@ -538,6 +546,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                 observed = dict(steps[index]['network_probe'], **{field: invalid})
                 modified[index] = dict(steps[index], network_probe=observed)
                 validate_tor_mode_transition(dict(probe, steps=modified), candidate, apk, preparations)
+        with self.assertRaisesRegex(ValueError, 'did not restart'):
+            reused_pid = [*steps[:2], dict(steps[2], process_id=steps[1]['process_id']), steps[3]]
+            validate_tor_mode_transition(dict(probe, steps=reused_pid), candidate, apk, preparations)
 
     def test_guarded_local_promotion_rejects_a_missing_tor_transition(self):
         receipt = dict(runtime_input_fingerprint='runtime', baseline_source_sha='a'*40,

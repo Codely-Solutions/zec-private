@@ -75,7 +75,7 @@ class TorProtectionSaveTest {
         val admitted = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
         backgroundScope.launch {
             combine(
-                gate.walletInput(gate.walletDecisions(wallets, generation)),
+                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
                 gate.transportInput(preference.observe(), generation),
             ) { current, tor -> current to tor }.collect { admitted += it }
         }

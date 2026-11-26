@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
-import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.PersistableWallet
@@ -30,6 +29,8 @@ import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
+import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
@@ -50,7 +51,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +59,6 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -209,9 +208,9 @@ class ResetWalletWriteOwnershipTest {
                 return original
             }
         }
-        val coordinator = mockk<WalletCoordinator>()
+        val sdkRecovery = mockk<WalletSeedRecovery>()
         val recover = RecoverFromSeedMismatchUseCase(
-            stagedRead, coordinator, fixture.writeAccess, mockk(relaxed = true),
+            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
         )
         val recovery = launch { recover(beforeReset) }
         val replacement = originalWallet().copy(endpoint = LightWalletEndpoint("new.example.invalid", 443, true))
@@ -223,7 +222,7 @@ class ResetWalletWriteOwnershipTest {
             returnSnapshot.complete(Unit)
         }
         recovery.join()
-        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
         assertEquals(replacement, fixture.walletProvider.requirePersistableWallet())
     }
 
@@ -260,11 +259,9 @@ class ResetWalletWriteOwnershipTest {
             recoveryWriteEntered.complete(Unit)
             finishRecoveryWrite.await()
         }
-        val recoveryCoordinator = mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flowOf(true)
-        }
+        val sdkRecovery = seedRecoveryFixture { true }
         val recover = RecoverFromSeedMismatchUseCase(
-            fixture.walletProvider, recoveryCoordinator, fixture.writeAccess, mockk(relaxed = true),
+            fixture.walletProvider, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
         )
         val recovery = launch { recover(fixture.writeAccess.token()) }
         val reset = fixture.reset()
@@ -373,12 +370,10 @@ class ResetWalletWriteOwnershipTest {
     private class PausedRecovery(provider: PersistableWalletProvider, access: WalletWriteAccess) {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
-        val recover = RecoverFromSeedMismatchUseCase(provider, mockk<WalletCoordinator> {
-            every { deleteSdkDataFlow() } returns flow {
-                started.complete(Unit)
-                finish.await()
-                emit(true)
-            }
+        val recover = RecoverFromSeedMismatchUseCase(provider, seedRecoveryFixture {
+            started.complete(Unit)
+            finish.await()
+            true
         }, access, mockk(relaxed = true))
     }
 

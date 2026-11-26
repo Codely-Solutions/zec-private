@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.exception.PcztException
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Proposal
@@ -17,13 +18,18 @@ import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -32,7 +38,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class KeystoneProposalRepositoryTest {
-    private val accountDataSource = mockk<AccountDataSource>()
+    private val accountDataSource = mockk<AccountDataSource> {
+        every { signingAuthorityChanges } returns flowOf(Unit)
+    }
     private val proposalDataSource = mockk<ProposalDataSource>()
     private val signer = mockk<KeystoneSDKProvider>()
     private val appAccess = AppAccessSession()
@@ -173,6 +181,33 @@ class KeystoneProposalRepositoryTest {
         assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
         coVerify(exactly = 0) { signer.generatePczt(any()) }
         repository.clear()
+    }
+
+    @Test
+    fun retiringTheSynchronizerWithdrawsTheObservedApprovalWithoutReplacingTheDraft() = runBlocking {
+        val transport = WalletTransportAccess()
+        val synchronizer = mockk<Synchronizer>()
+        every { accountDataSource.signingAuthorityChanges } returns transport.authorityChanges
+        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
+        val proposal = repository.getTransactionProposal()
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
+        repository.createPCZTFromProposal()
+        repository.approveForSigning(proposal, canSign = { !transport.isRetired(synchronizer) })
+        val ready = CompletableDeferred<String>()
+        val invalidated = async {
+            repository.signingPreparationIds.onEach { id -> if (id != null) ready.complete(id) }.first { it == null }
+        }
+
+        withTimeout(2_000) {
+            assertEquals(repository.signingPreparationId(), ready.await())
+            transport.retire(synchronizer)
+            assertNull(invalidated.await())
+        }
+
+        assertEquals(proposal, repository.transactionProposal.value)
+        assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
+        coVerify(exactly = 0) { signer.generatePczt(any()) }
     }
 
     private suspend fun givenCurrentProposalPays(destination: WalletAddress) {

@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.model.PersistableWallet
+import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.security.MessageDigest
 
 interface PersistableWalletProvider {
     val persistableWallet: Flow<PersistableWallet?>
@@ -41,7 +44,7 @@ interface PersistableWalletProvider {
     val sdkWalletReads: Flow<WalletSdkRead>
         get() = persistableWallet.map { WalletSdkRead(readGeneration.value, it) }
 
-    fun retryRead() = Unit
+    fun retryRead(recoveredWallet: PersistableWallet? = null) = Unit
 
     suspend fun store(persistableWallet: PersistableWallet)
 
@@ -93,6 +96,7 @@ class PersistableWalletProviderImpl(
     private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
 
     private val readRequests = MutableStateFlow(0L)
+    @Volatile private var seedRestoreRead: SeedRestoreRead? = null
     override val readGeneration = readRequests.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -124,9 +128,15 @@ class PersistableWalletProviderImpl(
 
     override val sdkWalletReads = records.map { (generation, result) ->
         val wallet = result.getOrNull()?.wallet
+        val restore = wallet?.let {
+            seedRestoreRead?.matches(it, generation, writeVersion)
+        } == true
         WalletSdkRead(
             generation,
-            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
+            wallet?.copy(
+                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() }),
+                walletInitMode = if (restore) WalletInitMode.RestoreWallet else wallet.walletInitMode,
+            ),
         )
     }
 
@@ -135,7 +145,15 @@ class PersistableWalletProviderImpl(
     override val serverSelection =
         records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
 
-    override fun retryRead() = readRequests.update { it + 1 }
+    override fun retryRead(recoveredWallet: PersistableWallet?) {
+        if (recoveredWallet != null) {
+            // The pinned SDK's JSON omits its process-wide initialization mode.
+            seedRestoreRead = SeedRestoreRead(
+                writeVersion, readRequests.value + 1, recoveredWallet.network, recoveredWallet.seedDigest(),
+            )
+        }
+        readRequests.update { it + 1 }
+    }
 
     override suspend fun getServerSelection() = currentRecord()?.serverSelection()
 
@@ -203,6 +221,19 @@ class PersistableWalletProviderImpl(
 private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
     network == expected.network && seedPhrase == expected.seedPhrase &&
         birthday == expected.birthday && endpoint == expected.endpoint
+
+private class SeedRestoreRead(
+    private val owner: Long,
+    private val firstRead: Long,
+    private val network: ZcashNetwork,
+    private val seed: ByteArray,
+) {
+    fun matches(wallet: PersistableWallet, read: Long, version: Long): Boolean =
+        version == owner && read >= firstRead && wallet.network == network && seed.contentEquals(wallet.seedDigest())
+}
+
+private fun PersistableWallet.seedDigest(): ByteArray =
+    MessageDigest.getInstance("SHA-256").digest(seedPhrase.split.joinToString(" ") { it.trim() }.encodeToByteArray())
 
 private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault(
     PreferenceKey("is_server_selection_automatic")

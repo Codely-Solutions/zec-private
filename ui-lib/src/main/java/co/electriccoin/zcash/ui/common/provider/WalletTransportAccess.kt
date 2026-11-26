@@ -4,24 +4,26 @@ import cash.z.ecc.android.sdk.Synchronizer
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 
 /** Keeps endpoint writes disjoint from admitted wallet operations and their broadcasts. */
 class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? = null) {
     private val endpointWrite = Mutex()
     private val activeOperations = MutableStateFlow(0)
-    private val retired = AtomicReference<WeakReference<Synchronizer>?>(null)
+    private val retired = MutableStateFlow<WeakReference<Synchronizer>?>(null)
+    internal val authorityChanges = combine(retired, transportGate?.inputSuspension ?: flowOf(false)) { _, _ -> Unit }
 
     internal suspend fun <T> whileOperating(block: suspend (Lease) -> T): T {
         val lease = endpointWrite.withLock {
-            if (restartPending()) throw CancellationException("Wallet transport change pending restart")
+            if (transportUnavailable()) throw CancellationException("Wallet transport is temporarily unavailable")
             retain()
         }
         return try {
@@ -34,17 +36,17 @@ class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? =
     internal suspend fun <T> ifIdleSwitch(block: suspend () -> T): T? {
         if (!endpointWrite.tryLock()) return null
         try {
-            return if (!restartPending() && activeOperations.value == 0) block() else null
+            return if (!transportUnavailable() && activeOperations.value == 0) block() else null
         } finally {
             endpointWrite.unlock()
         }
     }
 
     internal suspend fun switchWhenIdle(block: suspend () -> Unit) {
-        while (!restartPending()) {
+        while (!transportUnavailable()) {
             activeOperations.first { it == 0 }
             endpointWrite.withLock {
-                if (restartPending()) return
+                if (transportUnavailable()) return
                 if (activeOperations.value == 0) {
                     block()
                     return
@@ -54,20 +56,20 @@ class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? =
     }
 
     internal fun retire(synchronizer: Synchronizer?) {
-        retired.set(synchronizer?.let(::WeakReference))
+        retired.value = synchronizer?.let(::WeakReference)
     }
 
     internal fun isRetired(synchronizer: Synchronizer): Boolean =
-        restartPending() || retired.get()?.get() === synchronizer
+        transportUnavailable() || retired.value?.get() === synchronizer
 
     internal fun awaitingEndpointReplacement(current: Synchronizer?): Boolean {
-        val previous = retired.get() ?: return false
+        val previous = retired.value ?: return false
         return current == null || current === previous.get()
     }
 
     internal suspend fun current(provider: SynchronizerProvider, waitForInitial: Boolean = true): Synchronizer? {
-        if (restartPending()) return null
-        val retirement = retired.get()
+        if (transportUnavailable()) return null
+        val retirement = retired.value
         val old = retirement?.get()
         return when {
             old == null && waitForInitial -> provider.getSynchronizer()
@@ -78,7 +80,7 @@ class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? =
         }
     }
 
-    private fun restartPending() = transportGate?.restartRequired?.value == true
+    private fun transportUnavailable() = transportGate?.inputSuspended == true
 
     private fun retain(): Lease {
         activeOperations.update { it + 1 }

@@ -9,18 +9,22 @@ import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import cash.z.ecc.android.sdk.Synchronizer
-import cash.z.ecc.android.sdk.model.PercentDecimal
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.migration.MigrationGate
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atTime
@@ -52,33 +56,26 @@ class SyncWorker(
     private val migrationGate: MigrationGate by inject()
     private val resetProgressStore: ResetProgressStore by inject()
     private val lastNetworkActivity: LastNetworkActivityStorageProvider by inject()
+    private val transportGate: WalletSdkTransportGate by inject()
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun doWork(): Result {
-        if (resetProgressStore.isPending.value || migrationGate.isMigrationActive()) {
-            Twig.debug { "BG Sync: wallet migration or reset owns sync; skipping" }
+        if (resetProgressStore.isPending.value || transportGate.inputSuspended || migrationGate.isMigrationActive()) {
+            Twig.debug { "BG Sync: wallet input is paused; skipping" }
             return Result.success()
         }
 
         Twig.debug { "BG Sync: starting..." }
 
-        synchronizerProvider.synchronizer
-            .flatMapLatest {
-                Twig.debug { "BG Sync: synchronizer: $it" }
-
-                it?.status?.combine(it.progress) { status, progress ->
-                    StatusAndProgress(status, progress).also {
-                        Twig.debug { "BG Sync: result: $it" }
-                    }
-                } ?: emptyFlow()
-            }.takeWhile {
-                it.status != Synchronizer.Status.DISCONNECTED &&
-                    it.status != Synchronizer.Status.SYNCED
-            }.collect()
+        val suspended = combine(resetProgressStore.isPending, transportGate.inputSuspension) { reset, transport ->
+            reset || transport
+        }
+        val terminal = awaitBackgroundSync(synchronizerProvider.synchronizer, suspended)
 
         Twig.debug { "BG Sync: terminating..." }
 
-        lastNetworkActivity.stampNow()
+        if (terminal && !resetProgressStore.isPending.value && !transportGate.inputSuspended) {
+            lastNetworkActivity.stampNow()
+        }
         return Result.success()
     }
 
@@ -139,8 +136,14 @@ class SyncWorker(
     }
 }
 
-// Enhancement to this implementation would be returning a better status information
-private data class StatusAndProgress(
-    val status: Synchronizer.Status,
-    val progress: PercentDecimal
-)
+@OptIn(ExperimentalCoroutinesApi::class)
+internal suspend fun awaitBackgroundSync(synchronizers: Flow<Synchronizer?>, suspended: Flow<Boolean>): Boolean =
+    suspended.distinctUntilChanged().flatMapLatest { interrupted ->
+        if (interrupted) {
+            flowOf(false)
+        } else {
+            synchronizers.flatMapLatest { it?.status ?: emptyFlow() }
+                .filter { it == Synchronizer.Status.DISCONNECTED || it == Synchronizer.Status.SYNCED }
+                .map { true }
+        }
+    }.first()

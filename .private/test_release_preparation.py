@@ -292,6 +292,7 @@ class ReleaseTests(unittest.TestCase):
              patch.object(assembly,'selected_baseline', return_value={k: v for k, v in BASELINE.items() if k != 'apk_sha256'}), \
              patch.object(assembly,'input_fingerprint',side_effect=fingerprint), \
              patch('acceptance_policy.input_fingerprint',side_effect=fingerprint), \
+             patch('acceptance_policy.input_manifest',return_value={}), \
              patch('acceptance_policy.validate_core',side_effect=isolated_validate):
             assembly.main()
         self.assertEqual(core_raw,(out/'.private/core-acceptance.json').read_bytes())

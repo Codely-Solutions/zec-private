@@ -25,14 +25,16 @@ TOR_MODE_STAGES = (('torModeSave', False), ('torModeResume', True),
 TOR_MODE_INPUTS = {
     TOR_MODE_GATE,
     'gradle.properties',
-    'gradle/libs.versions.toml',
+    'settings.gradle.kts',
     'ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsTorEnabledStorageProvider.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OptInExchangeRateAndTorUseCase.kt',
 }
 TOR_MODE_SETTINGS_PATH = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/tor/settings/'
@@ -102,13 +104,14 @@ def validate_tor_mode_transition(probe, candidate, original_apk, preparations):
             raise ValueError('Wrong stage or candidate in installed wallet Tor transition')
         if not saving:
             network = step.get('network_probe')
-            if (not isinstance(network, dict) or network.get('direct_tls') is not True or
+            if (not isinstance(network, dict) or network.get('sdk_request_entered') is not True or
+                    network.get('direct_tls') is not True or
                     network.get('sdk_endpoint_ready_during_interruption') is not (not tor) or
                     network.get('sdk_endpoint_recovered') is not True or
                     type(network.get('blocked_tcp_packets')) is not int or
                     network['blocked_tcp_packets'] < int(tor)):
                 raise ValueError('Installed SDK route did not pass the scoped interruption check')
-    if any(steps[i]['process_id'] == steps[i + 1]['process_id'] for i in (0, 2)):
+    if len({step['process_id'] for step in steps}) != len(TOR_MODE_STAGES):
         raise ValueError('Installed wallet Tor transition did not restart the Android process')
 
 

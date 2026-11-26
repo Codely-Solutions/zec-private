@@ -140,8 +140,9 @@ def attest_tor_mode_route(adb, operation, shell, app_uid, expected_tor):
             cleanup.append((binary, '-D', 'OUTPUT', *jump))
         shell('run-as', PACKAGE, 'touch', 'files/core-mode-interrupted')
         checked = wait_for_guest_marker(adb, operation, 'core-mode-checked.json', 27)
-        if not isinstance(checked, dict) or checked.get('direct_tls') is not True or (
-                checked.get('sdk_endpoint_ready') is not (not expected_tor)):
+        if (not isinstance(checked, dict) or checked.get('sdk_request_entered') is not True
+                or checked.get('direct_tls') is not True
+                or checked.get('sdk_endpoint_ready') is not (not expected_tor)):
             raise RuntimeError('Installed SDK did not distinguish Tor interruption from direct access')
         for binary in ('iptables', 'ip6tables'):
             rows = shell(binary, '-L', chain, '-n', '-v', '-x').splitlines()
@@ -153,7 +154,7 @@ def attest_tor_mode_route(adb, operation, shell, app_uid, expected_tor):
         for command in reversed(cleanup):
             shell(*command)
     shell('run-as', PACKAGE, 'touch', 'files/core-mode-restored')
-    return dict(direct_tls=True, sdk_endpoint_ready_during_interruption=not expected_tor,
+    return dict(sdk_request_entered=True, direct_tls=True, sdk_endpoint_ready_during_interruption=not expected_tor,
                 blocked_tcp_packets=blocked)
 
 

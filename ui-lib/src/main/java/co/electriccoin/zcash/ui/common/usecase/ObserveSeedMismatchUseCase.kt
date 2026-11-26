@@ -25,7 +25,7 @@ class ObserveSeedMismatchUseCase(
     private val walletWriteAccess: WalletWriteAccess,
 ) {
     suspend operator fun invoke() {
-        // The SDK clears the flag as it enters the recovery lockout.
+        // Withdrawing the SDK input clears the previous coordinator's mismatch signal.
         synchronizerProvider.isSeedMismatch
             .collect { if (it) runRecovery() }
     }

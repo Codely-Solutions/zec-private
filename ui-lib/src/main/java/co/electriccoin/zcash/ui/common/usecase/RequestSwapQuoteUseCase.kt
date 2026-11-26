@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.ext.Conversions.ZEC_FORMATTER
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.forwardFrom
@@ -127,6 +128,7 @@ class RequestSwapQuoteUseCase(
         contactNetwork: String? = null,
         sourceEntryId: String? = null,
     ) = runRequest(sourceEntryId) {
+        if (!isValidQuoteAmount(amount, ZEC_FORMATTER.maximumFractionDigits, canNavigateToSwapQuote)) return@runRequest
         val recipient = validatedRecipient(
             address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
@@ -157,16 +159,9 @@ class RequestSwapQuoteUseCase(
         contactNetwork: String? = null,
         sourceEntryId: String? = null,
     ) = runRequest(sourceEntryId) {
-        val recipient =
-            if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) != null) {
-                validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
-            } else {
-                if (canNavigateToSwapQuote()) {
-                    val failure = IllegalArgumentException("Quote amount must be a positive whole number of base units")
-                    error(ErrorArgs.General(failure))
-                }
-                null
-            } ?: return@runRequest
+        if (!isValidQuoteAmount(amount, selectedAsset.decimals, canNavigateToSwapQuote)) return@runRequest
+        val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
+            ?: return@runRequest
         val owner = fundingOwner()
         val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
         if (!walletWriteAccess.permits(owner.writeToken)) return@runRequest
@@ -194,6 +189,7 @@ class RequestSwapQuoteUseCase(
         contactNetwork: String? = null,
         sourceEntryId: String? = null,
     ) = runRequest(sourceEntryId) {
+        if (!isValidQuoteAmount(amount, selectedAsset.decimals, canNavigateToSwapQuote)) return@runRequest
         val refund = validatedRecipient(
             refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
@@ -220,6 +216,19 @@ class RequestSwapQuoteUseCase(
     private suspend fun fundingOwner(): FundingOwner {
         val token = walletWriteAccess.token()
         return FundingOwner(accountDataSource.getSelectedAccount(), token)
+    }
+
+    private suspend fun QuoteNavigation.isValidQuoteAmount(
+        amount: BigDecimal,
+        decimals: Int,
+        canNavigate: suspend () -> Boolean,
+    ): Boolean {
+        if (amount.toExactNearQuoteAmountOrNull(decimals) != null) return true
+        if (canNavigate()) {
+            val failure = IllegalArgumentException("Quote amount must be a positive whole number of base units")
+            error(ErrorArgs.General(failure))
+        }
+        return false
     }
 
     private suspend fun QuoteNavigation.requestFreshAddress(

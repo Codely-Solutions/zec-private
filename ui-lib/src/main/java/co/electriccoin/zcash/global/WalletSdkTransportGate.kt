@@ -27,8 +27,10 @@ class WalletSdkTransportGate {
     private val withdrawal = MutableStateFlow<Withdrawal?>(null)
     private val withdrawn = MutableStateFlow<Withdrawal?>(null)
     private val restart = MutableStateFlow(false)
+    private val seedRecovery = MutableStateFlow<Withdrawal?>(null)
+    private val withdrawnForRecovery = MutableStateFlow<Withdrawal?>(null)
     private val requiredMode = MutableStateFlow<Boolean?>(null)
-    private val admissionChanges = combine(requiredMode, restart) { _, _ -> Unit }
+    private val admissionChanges = combine(requiredMode, restart, seedRecovery) { _, _, _ -> Unit }
     private val modeLock = Any()
     private val transportDelivery = Mutex()
     @Volatile private var applied: Boolean? = null
@@ -37,6 +39,10 @@ class WalletSdkTransportGate {
 
     val readiness = transportRead.asStateFlow()
     val restartRequired = restart.asStateFlow()
+    internal val inputSuspension = combine(restart, seedRecovery) { restarting, recovery ->
+        restarting || recovery != null
+    }
+    internal val inputSuspended get() = restart.value || seedRecovery.value != null
 
     /** Admit a newly restored wallet only with its durably stored choice. */
     internal fun requireWalletMode(usesTor: Boolean) = synchronized(modeLock) {
@@ -49,7 +55,7 @@ class WalletSdkTransportGate {
     }
 
     internal fun checkTransportAvailable() {
-        check(!restart.value && !savingChoice) { "The Tor setting is changing" }
+        check(!inputSuspended && !savingChoice) { "Wallet transport is temporarily unavailable" }
     }
 
     internal suspend fun <T> whileSavingChoice(block: suspend () -> T): T {
@@ -61,8 +67,23 @@ class WalletSdkTransportGate {
         }
     }
 
+    /** Call under the wallet recovery fence. Leave persisted wallet and transport preferences intact. */
+    internal suspend fun <T> whileRecoveringSeed(block: suspend () -> T): T {
+        check(seedRecovery.compareAndSet(expect = null, update = Withdrawal()))
+        return try {
+            block()
+        } finally {
+            seedRecovery.value = null
+        }
+    }
+
+    internal suspend fun awaitSeedRecoveryWithdrawal() {
+        val request = checkNotNull(seedRecovery.value)
+        withdrawnForRecovery.first { it === request }
+    }
+
     internal fun requireDirectHttpAllowed() {
-        val changing = savingChoice || restart.value
+        val changing = savingChoice || inputSuspended
         if (changing || applied == true || requiredMode.value == true) {
             throw DirectHttpTransportUnavailable()
         }
@@ -88,15 +109,19 @@ class WalletSdkTransportGate {
         }
 
     /** Only the coordinator's own wallet collector acknowledges delivery. */
-    internal fun walletInput(decisions: Flow<WalletSdkRead>): Flow<PersistableWallet?> =
+    internal fun walletInput(decisions: Flow<WalletSdkRead>, generation: StateFlow<Long>): Flow<PersistableWallet?> =
         decisions.transform { decision ->
             val waiting = withdrawal.value
+            val recovery = seedRecovery.value
             val wallet = synchronized(modeLock) {
-                decision.wallet?.takeIf { canAdmitWallet() && matchesMode(applied, deliveredMode) }
+                val current = decision.generation == generation.value &&
+                    transportRead.value == WalletSdkTransportRead(decision.generation, verified = true)
+                decision.wallet?.takeIf { current && canAdmitWallet() && matchesMode(applied, deliveredMode) }
                     ?.also { applied = deliveredMode }
             }
             emit(wallet)
             if (wallet == null && waiting != null) withdrawn.value = waiting
+            if (wallet == null && recovery != null) withdrawnForRecovery.value = recovery
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -164,7 +189,7 @@ class WalletSdkTransportGate {
     }
 
     private fun canAdmitWallet() =
-        withdrawal.value == null && !restart.value && matchesMode(requiredMode.value, deliveredMode)
+        withdrawal.value == null && !inputSuspended && matchesMode(requiredMode.value, deliveredMode)
 
     private fun matchesMode(expected: Boolean?, actual: Boolean) = expected == null || expected == actual
 

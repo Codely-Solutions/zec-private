@@ -36884,7 +36884,7 @@ z-o8muEG^gtP&FBR6~cdpHORCK3u^AzpD<lFaOjTI15l$CSU{Si^IAL%|G3P~Usl@(
 uiUl-_fP<e$fdu)#fBx?|{C^PyWHra@ZwzDt=1M@&LpQXIv`RJX!~PG`gvXWu
 
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt
-index abd227feb..4d509be29 100644
+index abd227feb..31d041e2b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt
 @@ -5,0 +6,2 @@ import co.electriccoin.zcash.configuration.AndroidConfigurationFactory
@@ -36892,13 +36892,15 @@ index abd227feb..4d509be29 100644
 +import co.electriccoin.zcash.global.WalletSdkTransportGate
 @@ -8,0 +11 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
-@@ -10,0 +14,2 @@ import co.electriccoin.zcash.ui.NavigationRouterImpl
+@@ -10,0 +14,3 @@ import co.electriccoin.zcash.ui.NavigationRouterImpl
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
++import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
-@@ -17,0 +23,2 @@ val coreModule =
+@@ -17,0 +24,3 @@ val coreModule =
 +        singleOf(::WalletMigrationSyncGate)
 +        singleOf(::WalletSdkTransportGate)
-@@ -20,0 +28,3 @@ val coreModule =
++        singleOf(::WalletSeedRecovery)
+@@ -20,0 +30,3 @@ val coreModule =
 +        singleOf(::AppAccessSession)
 +        singleOf(::LaunchNavigationRequests)
 +        singleOf(::KeystoneEnrollmentSession)
@@ -37166,7 +37168,7 @@ index 50bcc0da8..72da86ccc 100644
 +            )
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
-index 7ae52a552..a67fbf540 100644
+index 7ae52a552..a1381c84e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 @@ -5,0 +6 @@ import cash.z.ecc.android.sdk.WalletCoordinator
@@ -37193,7 +37195,7 @@ index 7ae52a552..a67fbf540 100644
 +    return WalletCoordinator(
 @@ -22 +35 @@ internal operator fun WalletCoordinator.Companion.invoke(
 -        persistableWallet = persistableWalletProvider.persistableWallet,
-+        persistableWallet = transportGate.walletInput(walletDecisions),
++        persistableWallet = transportGate.walletInput(walletDecisions, generation),
 @@ -25 +38 @@ internal operator fun WalletCoordinator.Companion.invoke(
 -        isTorEnabled = isTorEnabledStorageProvider.observe(),
 +        isTorEnabled = transportGate.transportInput(isTorEnabledStorageProvider.observe(), generation),
@@ -37325,10 +37327,10 @@ index 000000000..f59abbf79
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletSdkTransportGate.kt b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletSdkTransportGate.kt
 new file mode 100644
-index 000000000..f8330b8b7
+index 000000000..76dba7e7c
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletSdkTransportGate.kt
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,203 @@
 +package co.electriccoin.zcash.global
 +
 +import cash.z.ecc.android.sdk.model.PersistableWallet
@@ -37358,8 +37360,10 @@ index 000000000..f8330b8b7
 +    private val withdrawal = MutableStateFlow<Withdrawal?>(null)
 +    private val withdrawn = MutableStateFlow<Withdrawal?>(null)
 +    private val restart = MutableStateFlow(false)
++    private val seedRecovery = MutableStateFlow<Withdrawal?>(null)
++    private val withdrawnForRecovery = MutableStateFlow<Withdrawal?>(null)
 +    private val requiredMode = MutableStateFlow<Boolean?>(null)
-+    private val admissionChanges = combine(requiredMode, restart) { _, _ -> Unit }
++    private val admissionChanges = combine(requiredMode, restart, seedRecovery) { _, _, _ -> Unit }
 +    private val modeLock = Any()
 +    private val transportDelivery = Mutex()
 +    @Volatile private var applied: Boolean? = null
@@ -37368,6 +37372,10 @@ index 000000000..f8330b8b7
 +
 +    val readiness = transportRead.asStateFlow()
 +    val restartRequired = restart.asStateFlow()
++    internal val inputSuspension = combine(restart, seedRecovery) { restarting, recovery ->
++        restarting || recovery != null
++    }
++    internal val inputSuspended get() = restart.value || seedRecovery.value != null
 +
 +    /** Admit a newly restored wallet only with its durably stored choice. */
 +    internal fun requireWalletMode(usesTor: Boolean) = synchronized(modeLock) {
@@ -37380,7 +37388,7 @@ index 000000000..f8330b8b7
 +    }
 +
 +    internal fun checkTransportAvailable() {
-+        check(!restart.value && !savingChoice) { "The Tor setting is changing" }
++        check(!inputSuspended && !savingChoice) { "Wallet transport is temporarily unavailable" }
 +    }
 +
 +    internal suspend fun <T> whileSavingChoice(block: suspend () -> T): T {
@@ -37392,8 +37400,23 @@ index 000000000..f8330b8b7
 +        }
 +    }
 +
++    /** Call under the wallet recovery fence. Leave persisted wallet and transport preferences intact. */
++    internal suspend fun <T> whileRecoveringSeed(block: suspend () -> T): T {
++        check(seedRecovery.compareAndSet(expect = null, update = Withdrawal()))
++        return try {
++            block()
++        } finally {
++            seedRecovery.value = null
++        }
++    }
++
++    internal suspend fun awaitSeedRecoveryWithdrawal() {
++        val request = checkNotNull(seedRecovery.value)
++        withdrawnForRecovery.first { it === request }
++    }
++
 +    internal fun requireDirectHttpAllowed() {
-+        val changing = savingChoice || restart.value
++        val changing = savingChoice || inputSuspended
 +        if (changing || applied == true || requiredMode.value == true) {
 +            throw DirectHttpTransportUnavailable()
 +        }
@@ -37419,15 +37442,19 @@ index 000000000..f8330b8b7
 +        }
 +
 +    /** Only the coordinator's own wallet collector acknowledges delivery. */
-+    internal fun walletInput(decisions: Flow<WalletSdkRead>): Flow<PersistableWallet?> =
++    internal fun walletInput(decisions: Flow<WalletSdkRead>, generation: StateFlow<Long>): Flow<PersistableWallet?> =
 +        decisions.transform { decision ->
 +            val waiting = withdrawal.value
++            val recovery = seedRecovery.value
 +            val wallet = synchronized(modeLock) {
-+                decision.wallet?.takeIf { canAdmitWallet() && matchesMode(applied, deliveredMode) }
++                val current = decision.generation == generation.value &&
++                    transportRead.value == WalletSdkTransportRead(decision.generation, verified = true)
++                decision.wallet?.takeIf { current && canAdmitWallet() && matchesMode(applied, deliveredMode) }
 +                    ?.also { applied = deliveredMode }
 +            }
 +            emit(wallet)
 +            if (wallet == null && waiting != null) withdrawn.value = waiting
++            if (wallet == null && recovery != null) withdrawnForRecovery.value = recovery
 +        }
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
@@ -37495,7 +37522,7 @@ index 000000000..f8330b8b7
 +    }
 +
 +    private fun canAdmitWallet() =
-+        withdrawal.value == null && !restart.value && matchesMode(requiredMode.value, deliveredMode)
++        withdrawal.value == null && !inputSuspended && matchesMode(requiredMode.value, deliveredMode)
 +
 +    private fun matchesMode(expected: Boolean?, actual: Boolean) = expected == null || expected == actual
 +
@@ -38879,7 +38906,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..5e4a78edb 100644
+index 4d388e80f..bd78418ca 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -38898,28 +38925,30 @@ index 4d388e80f..5e4a78edb 100644
 -import kotlinx.coroutines.channels.ClosedSendChannelException
 @@ -45,0 +52 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -70,0 +78,3 @@ interface AccountDataSource {
+@@ -70,0 +78,5 @@ interface AccountDataSource {
++    val signingAuthorityChanges: Flow<*> get() = flowOf(Unit)
++
 +    val accountSelectionReadState: Flow<AccountSelectionAvailability>
 +        get() = flowOf(AccountSelectionAvailability(null, AccountSelectionReadState.VERIFIED))
 +
-@@ -76,0 +87,3 @@ interface AccountDataSource {
+@@ -76,0 +89,3 @@ interface AccountDataSource {
 +    /** Verifies the selected account against the SDK before approving an operation. */
 +    suspend fun confirmSelection(account: WalletAccount): ConfirmedAccountSelection?
 +
-@@ -83,0 +97 @@ interface AccountDataSource {
+@@ -83,0 +99 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -94,0 +109 @@ interface AccountDataSource {
+@@ -94,0 +111 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -113,0 +129 @@ interface AccountDataSource {
+@@ -113,0 +131 @@ interface AccountDataSource {
 +        synchronizer: Synchronizer,
-@@ -119 +135,5 @@ interface AccountDataSource {
+@@ -119 +137,5 @@ interface AccountDataSource {
 -    suspend fun requestNextShieldedAddress(): String
 +    /**
 +     * A best-effort request uses the selected account if it is ready, or returns null while it
 +     * loads. A strict request throws when it cannot obtain a fresh address from the requested account.
 +     */
 +    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String?
-@@ -135,0 +156,11 @@ interface AccountDataSource {
+@@ -135,0 +158,11 @@ interface AccountDataSource {
 +data class AccountSelectionAvailability(val generation: Long?, val state: AccountSelectionReadState)
 +
 +enum class AccountSelectionReadState { CHECKING, VERIFIED, UNAVAILABLE }
@@ -38931,15 +38960,15 @@ index 4d388e80f..5e4a78edb 100644
 +    fun canOperate(): Boolean = isSameSelection() && usesCurrentSynchronizer()
 +}
 +
-@@ -143,0 +175,5 @@ class AccountDataSourceImpl(
+@@ -143,0 +177,5 @@ class AccountDataSourceImpl(
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 +    private val accountPreferenceReads: StateFlow<Long> = MutableStateFlow(0L),
 +    accountWalletAvailability: Flow<StoredWalletAvailabilityRead> =
 +        flowOf(StoredWalletAvailabilityRead(null, StoredWalletAvailability.PRESENT)),
 +    private val walletTransport: WalletTransportAccess,
-@@ -146 +181,0 @@ class AccountDataSourceImpl(
+@@ -146 +183,0 @@ class AccountDataSourceImpl(
 -    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-@@ -149,0 +185,24 @@ class AccountDataSourceImpl(
+@@ -149,0 +187,24 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    private val selectedAccountRead = combine(accountWalletAvailability, accountPreferenceReads, ::Pair)
 +        .flatMapLatest { (wallet, generation) ->
@@ -38964,23 +38993,31 @@ index 4d388e80f..5e4a78edb 100644
 +        AccountSelectionAvailability(read?.generation ?: accountPreferenceReads.value, state)
 +    }.distinctUntilChanged()
 +
-@@ -160,0 +220 @@ class AccountDataSourceImpl(
+@@ -160,0 +222 @@ class AccountDataSourceImpl(
 +                val generation = accountPreferenceReads.value
-@@ -173 +232,0 @@ class AccountDataSourceImpl(
+@@ -173 +234,0 @@ class AccountDataSourceImpl(
 -                                        observeIsSelected(sdkAccount, allSdkAccounts),
-@@ -179 +237,0 @@ class AccountDataSourceImpl(
+@@ -179 +239,0 @@ class AccountDataSourceImpl(
 -                                        isSelected,
-@@ -186 +243,0 @@ class AccountDataSourceImpl(
+@@ -186 +245,0 @@ class AccountDataSourceImpl(
 -                                            isSelected = isSelected,
-@@ -193 +250 @@ class AccountDataSourceImpl(
+@@ -193 +252 @@ class AccountDataSourceImpl(
 -                            }.combineToFlow()
 +                            }.combineToFlow().map { AccountRows(generation, it) }
-@@ -196,2 +253,2 @@ class AccountDataSourceImpl(
+@@ -196,2 +255,2 @@ class AccountDataSourceImpl(
 -            }.map { it?.sortedDescending() }
 -            .retainWhileWalletExists(persistableWalletProvider)
 +            }.retainWhileWalletExists(persistableWalletProvider)
 +            .combine(currentSelection) { snapshot, read -> applyAccountSelection(snapshot, read) }
-@@ -219,0 +277,17 @@ class AccountDataSourceImpl(
+@@ -209,0 +269,7 @@ class AccountDataSourceImpl(
++    override val signingAuthorityChanges: Flow<*>
++        get() = combine(
++            selectedAccountUUIDProvider.selectionChanges,
++            synchronizerProvider.synchronizer,
++            walletTransport.authorityChanges,
++        ) { _, synchronizer, _ -> synchronizer }
++
+@@ -219,0 +286,17 @@ class AccountDataSourceImpl(
 +    override suspend fun confirmSelection(account: WalletAccount) = withContext(Dispatchers.IO) {
 +        val sync = walletTransport.current(synchronizerProvider, waitForInitial = false) ?: return@withContext null
 +        runCatchingRecoverable {
@@ -38998,9 +39035,9 @@ index 4d388e80f..5e4a78edb 100644
 +        }.getOrNull()
 +    }
 +
-@@ -230,0 +305 @@ class AccountDataSourceImpl(
+@@ -230,0 +314 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -237,15 +312,13 @@ class AccountDataSourceImpl(
+@@ -237,15 +321,13 @@ class AccountDataSourceImpl(
 -            synchronizerProvider
 -                .getSynchronizer()
 -                .importAccountByUfvk(
@@ -39029,18 +39066,18 @@ index 4d388e80f..5e4a78edb 100644
 +                    birthday = birthday,
 +                ),
 +            )
-@@ -262,0 +336 @@ class AccountDataSourceImpl(
+@@ -262,0 +345 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -267 +340,0 @@ class AccountDataSourceImpl(
+@@ -267 +349,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -284 +357 @@ class AccountDataSourceImpl(
+@@ -284 +366 @@ class AccountDataSourceImpl(
 -                        .onFailure { log("failed to roll back the Ledger account import", it) }
 +                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
-@@ -303,0 +377 @@ class AccountDataSourceImpl(
+@@ -303,0 +386 @@ class AccountDataSourceImpl(
 +        synchronizer: Synchronizer,
-@@ -309 +382,0 @@ class AccountDataSourceImpl(
+@@ -309 +391,0 @@ class AccountDataSourceImpl(
 -            val synchronizer = synchronizerProvider.getSynchronizer()
-@@ -354,0 +428,10 @@ class AccountDataSourceImpl(
+@@ -354,0 +437,10 @@ class AccountDataSourceImpl(
 +    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String? {
 +        val requestedAccount = account ?: allAccounts.value?.firstOrNull { it.isSelected }
 +        val address = requestedAccount?.let { rotateShieldedAddress(it) }
@@ -39051,7 +39088,7 @@ index 4d388e80f..5e4a78edb 100644
 +        }
 +    }
 +
-@@ -356,22 +439,17 @@ class AccountDataSourceImpl(
+@@ -356,22 +448,17 @@ class AccountDataSourceImpl(
 -    override suspend fun requestNextShieldedAddress(): String {
 -        var result: String? = null
 -        scope
@@ -39091,7 +39128,7 @@ index 4d388e80f..5e4a78edb 100644
 +            null
 +        } finally {
 +            responseChannel.close()
-@@ -391,7 +469,3 @@ class AccountDataSourceImpl(
+@@ -391,7 +478,3 @@ class AccountDataSourceImpl(
 -     * Between the cleared selection and the caller's next one there is a short window in which no
 -     * account UUID is stored and the selection falls back to the default account. DisconnectUseCase
 -     * and RemoveViewOnlyAccountUseCase close it by selecting the Zodl account right after this
@@ -39102,43 +39139,43 @@ index 4d388e80f..5e4a78edb 100644
 +     * With no surviving selected UUID, the account flow falls back to the default account.
 +     * Clearing the deleted UUID and explicit account selections serialize so a newer selection
 +     * survives account removal.
-@@ -415,3 +489 @@ class AccountDataSourceImpl(
+@@ -415,3 +498 @@ class AccountDataSourceImpl(
 -                if (selectedAccountUUIDProvider.getUUID() == accountUuid) {
 -                    selectedAccountUUIDProvider.clearUUID()
 -                }
 +                selectedAccountUUIDProvider.clearIfSelected(accountUuid)
-@@ -446 +518 @@ class AccountDataSourceImpl(
+@@ -446 +527 @@ class AccountDataSourceImpl(
 -            log(failureMessage, e)
 +            log("$failureMessage (${e.javaClass.simpleName})")
-@@ -483 +555 @@ class AccountDataSourceImpl(
+@@ -483 +564 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -487 +559 @@ class AccountDataSourceImpl(
+@@ -487 +568 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -497 +569 @@ class AccountDataSourceImpl(
+@@ -497 +578 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -501 +573 @@ class AccountDataSourceImpl(
+@@ -501 +582 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -515 +587 @@ class AccountDataSourceImpl(
+@@ -515 +596 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -526 +598 @@ class AccountDataSourceImpl(
+@@ -526 +607 @@ class AccountDataSourceImpl(
 -                    transparentAddress = snapshot.transparentAddress,
 +                    transparentAddress = requireNotNull(snapshot.transparentAddress),
-@@ -532 +604 @@ class AccountDataSourceImpl(
+@@ -532 +613 @@ class AccountDataSourceImpl(
 -                    isSelected = snapshot.isSelected,
 +                    isSelected = false,
-@@ -536,0 +609 @@ class AccountDataSourceImpl(
+@@ -536,0 +618 @@ class AccountDataSourceImpl(
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -539 +612,3 @@ class AccountDataSourceImpl(
+@@ -539 +621,3 @@ class AccountDataSourceImpl(
 -            ledgerAccountBindingProvider.observe(sdkAccount.accountUuid)
 +            accountPreferenceReads.flatMapLatest {
 +                ledgerAccountBindingProvider.observe(sdkAccount.accountUuid).recoverableReads().map { it.getOrNull() }
 +            }
-@@ -549,12 +624,20 @@ class AccountDataSourceImpl(
+@@ -549,12 +633,20 @@ class AccountDataSourceImpl(
 -    private fun observeIsSelected(sdkAccount: Account, allAccounts: List<Account>) =
 -        selectedAccountUUIDProvider
 -            .uuid
@@ -39171,13 +39208,13 @@ index 4d388e80f..5e4a78edb 100644
 +    private fun isSelected(sdkAccount: Account, uuid: AccountUuid?, count: Int, currentAccountList: Boolean) =
 +        sdkAccount.accountUuid == uuid ||
 +            (currentAccountList && (count == 1 || (uuid == null && !isOrchardOnlyAccount(sdkAccount))))
-@@ -565 +648 @@ class AccountDataSourceImpl(
+@@ -565 +657 @@ class AccountDataSourceImpl(
 -            log("deriving unified address for ${sdkAccount.accountUuid}")
 +            log("deriving a unified address")
-@@ -576 +659 @@ class AccountDataSourceImpl(
+@@ -576 +668 @@ class AccountDataSourceImpl(
 -            log("derived address $address for ${sdkAccount.accountUuid}")
 +            log("derived a unified address")
-@@ -598,6 +681,2 @@ class AccountDataSourceImpl(
+@@ -598,6 +690,2 @@ class AccountDataSourceImpl(
 -                        try {
 -                            it.responseChannel.send(address)
 -                            it.responseChannel.close()
@@ -39186,14 +39223,14 @@ index 4d388e80f..5e4a78edb 100644
 -                        }
 +                        it.responseChannel.trySend(address)
 +                        it.responseChannel.close()
-@@ -610,2 +689 @@ class AccountDataSourceImpl(
+@@ -610,2 +698 @@ class AccountDataSourceImpl(
 -                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
 -                cause as? Exception
 +                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
-@@ -626 +704 @@ class AccountDataSourceImpl(
+@@ -626 +713 @@ class AccountDataSourceImpl(
 -    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
 +    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
-@@ -628 +706,12 @@ class AccountDataSourceImpl(
+@@ -628 +715,12 @@ class AccountDataSourceImpl(
 -            emit(synchronizer.getTransparentAddress(sdkAccount))
 +            emit(resolveTransparentReceiver(
 +                mayOmit = isViewOnlyAccount(sdkAccount),
@@ -39207,7 +39244,7 @@ index 4d388e80f..5e4a78edb 100644
 +                    components.hasP2pkh
 +                },
 +            ))
-@@ -655,0 +745,12 @@ private data class AddressRequest(
+@@ -655,0 +754,12 @@ private data class AddressRequest(
 +private data class SelectedAccountRead(val generation: Long, val result: Result<AccountUuid?>)
 +
 +private data class AccountRows(val generation: Long, val accounts: List<WalletAccount>)
@@ -39220,12 +39257,12 @@ index 4d388e80f..5e4a78edb 100644
 +        is ViewOnlyAccount -> copy(isSelected = selected)
 +    }
 +
-@@ -659 +760 @@ private data class AccountSnapshot(
+@@ -659 +769 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -661 +761,0 @@ private data class AccountSnapshot(
+@@ -661 +770,0 @@ private data class AccountSnapshot(
 -    val isSelected: Boolean,
-@@ -665,0 +766,15 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +775,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
 +// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
 +@Suppress("TooGenericExceptionCaught")
@@ -39241,7 +39278,7 @@ index 4d388e80f..5e4a78edb 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -667,5 +782,2 @@ private const val RETRY_DELAY = 3L
+@@ -667,5 +791,2 @@ private const val RETRY_DELAY = 3L
 - * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for
 - * [AccountDataSourceImpl.observeUnifiedAddress]'s collector to deliver a rotated address. The
 - * collector can be unsubscribed during a [kotlinx.coroutines.flow.retryWhen] backoff, so an
@@ -39249,7 +39286,7 @@ index 4d388e80f..5e4a78edb 100644
 - * address.
 + * Bounds both submission to the rotation collector and delivery of the address. Receive can
 + * use the current address on timeout. A swap that requires a new address must get one first.
-@@ -720,0 +833,3 @@ class AccountDeletionException(
+@@ -720,0 +842,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -44390,21 +44427,24 @@ index 000000000..85f546267
 +        BigInteger(1, bytes.copyOfRange(start, end).reversedArray())
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-index c85256529..ad9bd6744 100644
+index c85256529..b57bd2297 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-@@ -3,0 +4 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.provider
++import cash.z.ecc.android.sdk.WalletInitMode
+@@ -3,0 +5,2 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
++import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-@@ -5,0 +7 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
+@@ -5,0 +9 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 +import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDefault
-@@ -7,0 +10,6 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+@@ -7,0 +12,6 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -8,0 +17,9 @@ import kotlinx.coroutines.flow.Flow
+@@ -8,0 +19,9 @@ import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
@@ -44414,10 +44454,12 @@ index c85256529..ad9bd6744 100644
 +import kotlinx.coroutines.flow.distinctUntilChanged
 +import kotlinx.coroutines.flow.flatMapLatest
 +import kotlinx.coroutines.flow.flowOf
-@@ -9,0 +27,2 @@ import kotlinx.coroutines.flow.map
+@@ -9,0 +29,2 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.withContext
-@@ -13,0 +33,12 @@ interface PersistableWalletProvider {
+@@ -10,0 +32 @@ import org.json.JSONObject
++import java.security.MessageDigest
+@@ -13,0 +36,12 @@ interface PersistableWalletProvider {
 +    val availability: Flow<StoredWalletAvailability>
 +        get() = persistableWallet.map { wallet ->
 +            if (wallet == null) StoredWalletAvailability.ABSENT else StoredWalletAvailability.PRESENT
@@ -44429,12 +44471,12 @@ index c85256529..ad9bd6744 100644
 +    val sdkWalletReads: Flow<WalletSdkRead>
 +        get() = persistableWallet.map { WalletSdkRead(readGeneration.value, it) }
 +
-+    fun retryRead() = Unit
-@@ -16,0 +48,3 @@ interface PersistableWalletProvider {
++    fun retryRead(recoveredWallet: PersistableWallet? = null) = Unit
+@@ -16,0 +51,3 @@ interface PersistableWalletProvider {
 +    /** Writes only while the persisted snapshot and wallet generation match. */
 +    suspend fun storeIfCurrent(expected: PersistableWallet, replacement: PersistableWallet, version: Long): Boolean
 +
-@@ -21,0 +56,29 @@ interface PersistableWalletProvider {
+@@ -21,0 +59,29 @@ interface PersistableWalletProvider {
 +private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
 +
 +data class WalletSdkRead(val generation: Long, val wallet: PersistableWallet?)
@@ -44464,21 +44506,27 @@ index c85256529..ad9bd6744 100644
 +    ): Boolean
 +}
 +
-@@ -23,2 +86,4 @@ class PersistableWalletProviderImpl(
+@@ -23,2 +89,4 @@ class PersistableWalletProviderImpl(
 -    preferenceHolder: EncryptedPreferenceProvider
 -) : PersistableWalletProvider {
 +    private val preferenceHolder: EncryptedPreferenceProvider,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 +    resetProgressStore: ResetProgressStore? = null,
 +) : PersistableWalletProvider, WalletServerSelectionProvider {
-@@ -25,0 +91,6 @@ class PersistableWalletProviderImpl(
+@@ -25,0 +94,12 @@ class PersistableWalletProviderImpl(
 +    override val writeVersion get() = walletWriteAccess.token()
 +
 +    private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
 +
 +    private val readRequests = MutableStateFlow(0L)
++    @Volatile private var seedRestoreRead: SeedRestoreRead? = null
 +    override val readGeneration = readRequests.asStateFlow()
-@@ -27,7 +98,12 @@ class PersistableWalletProviderImpl(
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
++        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
++        .buffer(0)
+@@ -27,7 +107,7 @@ class PersistableWalletProviderImpl(
 -    override val persistableWallet: Flow<PersistableWallet?> =
 -        persistableWalletStorageProvider
 -            .observe()
@@ -44486,11 +44534,6 @@ index c85256529..ad9bd6744 100644
 -                wallet?.copy(
 -                    seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
 -                )
-+    @OptIn(ExperimentalCoroutinesApi::class)
-+    private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
-+        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
-+        .buffer(0)
-+
 +    private fun observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
 +        if (suppressed) {
 +            flowOf(Result.success(null))
@@ -44498,7 +44541,7 @@ index c85256529..ad9bd6744 100644
 +            persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
 +                if (failure !is Exception || failure is CancellationException) throw failure
 +                emit(Result.failure(failure))
-@@ -34,0 +111,30 @@ class PersistableWalletProviderImpl(
+@@ -34,0 +115,44 @@ class PersistableWalletProviderImpl(
 +        }
 +
 +    override val availabilityRead = combine(records, readRequests) { (generation, result), _ ->
@@ -44515,9 +44558,15 @@ index c85256529..ad9bd6744 100644
 +
 +    override val sdkWalletReads = records.map { (generation, result) ->
 +        val wallet = result.getOrNull()?.wallet
++        val restore = wallet?.let {
++            seedRestoreRead?.matches(it, generation, writeVersion)
++        } == true
 +        WalletSdkRead(
 +            generation,
-+            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
++            wallet?.copy(
++                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() }),
++                walletInitMode = if (restore) WalletInitMode.RestoreWallet else wallet.walletInitMode,
++            ),
 +        )
 +    }
 +
@@ -44526,14 +44575,22 @@ index c85256529..ad9bd6744 100644
 +    override val serverSelection =
 +        records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
 +
-+    override fun retryRead() = readRequests.update { it + 1 }
++    override fun retryRead(recoveredWallet: PersistableWallet?) {
++        if (recoveredWallet != null) {
++            // The pinned SDK's JSON omits its process-wide initialization mode.
++            seedRestoreRead = SeedRestoreRead(
++                writeVersion, readRequests.value + 1, recoveredWallet.network, recoveredWallet.seedDigest(),
++            )
++        }
++        readRequests.update { it + 1 }
++    }
 +
 +    override suspend fun getServerSelection() = currentRecord()?.serverSelection()
-@@ -37 +143 @@ class PersistableWalletProviderImpl(
+@@ -37 +161,17 @@ class PersistableWalletProviderImpl(
 -        persistableWalletStorageProvider.store(persistableWallet)
 +        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
-@@ -40 +146,44 @@ class PersistableWalletProviderImpl(
--    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
++    }
++
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
@@ -44548,8 +44605,8 @@ index c85256529..ad9bd6744 100644
 +                true
 +            }
 +        } ?: false
-+    }
-+
+@@ -40 +180,33 @@ class PersistableWalletProviderImpl(
+-    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
 +    override suspend fun storeServerSelection(
 +        selection: WalletServerSelection,
 +        version: Long,
@@ -44578,23 +44635,36 @@ index c85256529..ad9bd6744 100644
 +        } ?: false
 +
 +    override suspend fun getPersistableWallet() = currentRecord()?.wallet
-@@ -42 +191,10 @@ class PersistableWalletProviderImpl(
--    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
++
 +    override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
 +
 +    private suspend fun currentRecord() =
 +        if (readsSuppressed?.value == true) null else persistableWalletStorageProvider.get()
-+
+@@ -42 +214,5 @@ class PersistableWalletProviderImpl(
+-    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
 +    private suspend fun WalletRecord.serverSelection() =
 +        WalletServerSelection(
 +            endpoint = wallet.endpoint,
 +            isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
 +        )
-@@ -45 +203,11 @@ class PersistableWalletProviderImpl(
+@@ -45 +221,24 @@ class PersistableWalletProviderImpl(
 -private interface PersistableWalletStorageProvider : NullableStorageProvider<PersistableWallet>
 +private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
 +    network == expected.network && seedPhrase == expected.seedPhrase &&
 +        birthday == expected.birthday && endpoint == expected.endpoint
++
++private class SeedRestoreRead(
++    private val owner: Long,
++    private val firstRead: Long,
++    private val network: ZcashNetwork,
++    private val seed: ByteArray,
++) {
++    fun matches(wallet: PersistableWallet, read: Long, version: Long): Boolean =
++        version == owner && read >= firstRead && wallet.network == network && seed.contentEquals(wallet.seedDigest())
++}
++
++private fun PersistableWallet.seedDigest(): ByteArray =
++    MessageDigest.getInstance("SHA-256").digest(seedPhrase.split.joinToString(" ") { it.trim() }.encodeToByteArray())
 +
 +private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault(
 +    PreferenceKey("is_server_selection_automatic")
@@ -44603,14 +44673,14 @@ index c85256529..ad9bd6744 100644
 +private const val SERVER_SELECTION_AUTOMATIC = "server_selection_automatic"
 +
 +private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
-@@ -49,2 +217 @@ private class PersistableWalletStorageProviderImpl(
+@@ -49,2 +248 @@ private class PersistableWalletStorageProviderImpl(
 -) : BaseNullableStorageProvider<PersistableWallet>(),
 -    PersistableWalletStorageProvider {
 +) : BaseNullableStorageProvider<WalletRecord>() {
-@@ -56 +223 @@ private class PersistableWalletPreferenceDefault(
+@@ -56 +254 @@ private class PersistableWalletPreferenceDefault(
 -) : PreferenceDefault<PersistableWallet?> {
 +) : PreferenceDefault<WalletRecord?> {
-@@ -58 +225,9 @@ private class PersistableWalletPreferenceDefault(
+@@ -58 +256,9 @@ private class PersistableWalletPreferenceDefault(
 -        preferenceProvider.getString(key)?.let { PersistableWallet.from(JSONObject(it)) }
 +        preferenceProvider.getString(key)?.let { serialized ->
 +            runCatchingRecoverable {
@@ -44621,7 +44691,7 @@ index c85256529..ad9bd6744 100644
 +                throw StoredWalletDecodeException()
 +            }
 +        }
-@@ -62,2 +237,7 @@ private class PersistableWalletPreferenceDefault(
+@@ -62,2 +268,7 @@ private class PersistableWalletPreferenceDefault(
 -        newValue: PersistableWallet?
 -    ) = preferenceProvider.putString(key, newValue?.toJson()?.toString())
 +        newValue: WalletRecord?
@@ -44631,7 +44701,7 @@ index c85256529..ad9bd6744 100644
 +        }
 +        preferenceProvider.putStringWithRollback(key, value)
 +    }
-@@ -64,0 +245,2 @@ private class PersistableWalletPreferenceDefault(
+@@ -64,0 +276,2 @@ private class PersistableWalletPreferenceDefault(
 +
 +internal class StoredWalletDecodeException : IllegalStateException("Could not read the stored wallet record")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt
@@ -44877,62 +44947,70 @@ index 70f6f06e3..51b7cd9a5 100644
 +    override suspend fun checkReadableForErase() =
 +        AndroidPreferenceProvider.checkExistingEncryptedReadable(context, SDK_ENCRYPTED_PREFERENCES_FILENAME)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SelectedAccountUUIDProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SelectedAccountUUIDProvider.kt
-index cb28fbc1d..9385507c0 100644
+index cb28fbc1d..672274901 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SelectedAccountUUIDProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SelectedAccountUUIDProvider.kt
-@@ -10,0 +11,3 @@ import kotlinx.coroutines.flow.flow
+@@ -8,0 +9 @@ import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -10,0 +12,5 @@ import kotlinx.coroutines.flow.flow
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
-+import java.util.concurrent.atomic.AtomicLong
-@@ -18,0 +22,4 @@ interface SelectedAccountUUIDProvider {
+@@ -16,0 +23,2 @@ interface SelectedAccountUUIDProvider {
++    val selectionChanges: Flow<Unit> get() = flowOf(Unit)
++
+@@ -18,0 +27,4 @@ interface SelectedAccountUUIDProvider {
 +    suspend fun captureSelection(): SelectedAccountSelection
 +
 +    fun isCurrent(selection: SelectedAccountSelection): Boolean
 +
-@@ -21,0 +29,2 @@ interface SelectedAccountUUIDProvider {
+@@ -21,0 +34,2 @@ interface SelectedAccountUUIDProvider {
 +
 +    suspend fun clearIfSelected(uuid: AccountUuid)
-@@ -23,0 +33,2 @@ interface SelectedAccountUUIDProvider {
+@@ -23,0 +38,2 @@ interface SelectedAccountUUIDProvider {
 +class SelectedAccountSelection internal constructor(val uuid: AccountUuid?, internal val version: Long)
 +
-@@ -27,0 +39,2 @@ class SelectedAccountUUIDProviderImpl(
+@@ -27,0 +44,3 @@ class SelectedAccountUUIDProviderImpl(
 +    private val selectionWrites = Mutex()
-+    private val selectionVersion = AtomicLong()
-@@ -36 +49,9 @@ class SelectedAccountUUIDProviderImpl(
++    private val selectionVersion = MutableStateFlow(0L)
++    override val selectionChanges = selectionVersion.map { Unit }
+@@ -36 +55,9 @@ class SelectedAccountUUIDProviderImpl(
 -    override suspend fun setUUID(uuid: AccountUuid) {
 +    override suspend fun captureSelection(): SelectedAccountSelection = selectionWrites.withLock {
-+        SelectedAccountSelection(getUUID(), selectionVersion.get())
++        SelectedAccountSelection(getUUID(), selectionVersion.value)
 +    }
 +
 +    override fun isCurrent(selection: SelectedAccountSelection): Boolean =
-+        selectionVersion.get() == selection.version
++        selectionVersion.value == selection.version
 +
 +    override suspend fun setUUID(uuid: AccountUuid) = selectionWrites.withLock {
-+        selectionVersion.incrementAndGet()
-@@ -40 +61,2 @@ class SelectedAccountUUIDProviderImpl(
++        selectionVersion.update { it + 1 }
+@@ -40 +67,2 @@ class SelectedAccountUUIDProviderImpl(
 -    override suspend fun clearUUID() {
 +    override suspend fun clearUUID() = selectionWrites.withLock {
-+        selectionVersion.incrementAndGet()
-@@ -42,0 +65,8 @@ class SelectedAccountUUIDProviderImpl(
++        selectionVersion.update { it + 1 }
+@@ -42,0 +71,8 @@ class SelectedAccountUUIDProviderImpl(
 +
 +    override suspend fun clearIfSelected(uuid: AccountUuid) = selectionWrites.withLock {
 +        val preferences = encryptedPreferenceProvider()
 +        if (default.getValue(preferences) == uuid) {
-+            selectionVersion.incrementAndGet()
++            selectionVersion.update { it + 1 }
 +            default.putValue(preferences, null)
 +        }
 +    }
-@@ -49 +79,5 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
+@@ -49 +85,5 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
 -        preferenceProvider.getString(key)?.decode()?.let { AccountUuid.new(it) }
 +        preferenceProvider.getString(key)?.let { encoded ->
 +            runCatchingRecoverable { AccountUuid.new(encoded.decode()) }.getOrElse {
 +                error("Could not read the selected account")
 +            }
 +        }
-@@ -54 +88 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
+@@ -54 +94 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
 -    ) = preferenceProvider.putString(key, newValue?.value?.encode())
 +    ) = preferenceProvider.putStringWithRollback(key, newValue?.value?.encode())
-@@ -60,6 +94 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
+@@ -60,6 +100 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
 -    private fun String?.decode() =
 -        if (this != null) {
 -            Base64.decode(this)
@@ -45054,36 +45132,97 @@ index 000000000..cb205b67b
 +    suspend fun <T> stage(token: WalletEnrollmentToken, block: () -> T): T? =
 +        walletWriteAccess.withSdkRecovery(token.wallet) { if (permits(token)) block() else null }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt
+new file mode 100644
+index 000000000..6d3687611
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt
+@@ -0,0 +1,53 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import android.content.Context
++import cash.z.ecc.android.sdk.WalletCoordinator
++import cash.z.ecc.android.sdk.model.ZcashNetwork
++import co.electriccoin.zcash.global.WalletSdkTransportGate
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeoutOrNull
++import kotlin.time.Duration.Companion.seconds
++
++/** Erases only the inactive SDK database while the app retains the encrypted wallet record. */
++class WalletSeedRecovery(
++    private val context: Context,
++    private val coordinator: WalletCoordinator,
++    private val transportGate: WalletSdkTransportGate,
++    private val resetProgressStore: ResetProgressStore,
++) {
++    // Call under the SDK recovery fence. The public erasers also check native ownership.
++    internal suspend fun eraseAndRestore(
++        network: ZcashNetwork,
++        beforeErase: () -> Unit,
++        restoreWallet: suspend () -> Unit,
++    ): Boolean? {
++        if (transportGate.restartRequired.value || !coordinator.isSeedMismatch.value) return null
++        return transportGate.whileRecoveringSeed {
++            val inactive = withTimeoutOrNull(5.seconds) {
++                transportGate.awaitSeedRecoveryWithdrawal()
++                coordinator.isSeedMismatch.first { !it }
++                coordinator.synchronizer.first { it == null }
++                true
++            }
++            if (inactive != true) return@whileRecoveringSeed false
++            withContext(Dispatchers.IO) {
++                var erased = false
++                withTimeoutOrNull(30.seconds) {
++                    resetProgressStore.withMigrationInputStopped({ transportGate.inputSuspended }) {
++                        // Bound preparation. An admitted erase drains and records its result.
++                        withContext(NonCancellable) {
++                            beforeErase()
++                            erased = runCatchingRecoverable { eraseInactiveSdkData(context, network) }.isSuccess
++                            if (erased) restoreWallet()
++                        }
++                    }
++                }
++                erased
++            }
++        }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
 new file mode 100644
-index 000000000..65578c688
+index 000000000..2daf70fc6
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletTransportAccess.kt
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,101 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
 +import co.electriccoin.zcash.global.WalletSdkTransportGate
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.withTimeoutOrNull
 +import java.lang.ref.WeakReference
-+import java.util.concurrent.atomic.AtomicReference
 +import kotlin.time.Duration.Companion.seconds
 +
 +/** Keeps endpoint writes disjoint from admitted wallet operations and their broadcasts. */
 +class WalletTransportAccess(private val transportGate: WalletSdkTransportGate? = null) {
 +    private val endpointWrite = Mutex()
 +    private val activeOperations = MutableStateFlow(0)
-+    private val retired = AtomicReference<WeakReference<Synchronizer>?>(null)
++    private val retired = MutableStateFlow<WeakReference<Synchronizer>?>(null)
++    internal val authorityChanges = combine(retired, transportGate?.inputSuspension ?: flowOf(false)) { _, _ -> Unit }
 +
 +    internal suspend fun <T> whileOperating(block: suspend (Lease) -> T): T {
 +        val lease = endpointWrite.withLock {
-+            if (restartPending()) throw CancellationException("Wallet transport change pending restart")
++            if (transportUnavailable()) throw CancellationException("Wallet transport is temporarily unavailable")
 +            retain()
 +        }
 +        return try {
@@ -45096,17 +45235,17 @@ index 000000000..65578c688
 +    internal suspend fun <T> ifIdleSwitch(block: suspend () -> T): T? {
 +        if (!endpointWrite.tryLock()) return null
 +        try {
-+            return if (!restartPending() && activeOperations.value == 0) block() else null
++            return if (!transportUnavailable() && activeOperations.value == 0) block() else null
 +        } finally {
 +            endpointWrite.unlock()
 +        }
 +    }
 +
 +    internal suspend fun switchWhenIdle(block: suspend () -> Unit) {
-+        while (!restartPending()) {
++        while (!transportUnavailable()) {
 +            activeOperations.first { it == 0 }
 +            endpointWrite.withLock {
-+                if (restartPending()) return
++                if (transportUnavailable()) return
 +                if (activeOperations.value == 0) {
 +                    block()
 +                    return
@@ -45116,20 +45255,20 @@ index 000000000..65578c688
 +    }
 +
 +    internal fun retire(synchronizer: Synchronizer?) {
-+        retired.set(synchronizer?.let(::WeakReference))
++        retired.value = synchronizer?.let(::WeakReference)
 +    }
 +
 +    internal fun isRetired(synchronizer: Synchronizer): Boolean =
-+        restartPending() || retired.get()?.get() === synchronizer
++        transportUnavailable() || retired.value?.get() === synchronizer
 +
 +    internal fun awaitingEndpointReplacement(current: Synchronizer?): Boolean {
-+        val previous = retired.get() ?: return false
++        val previous = retired.value ?: return false
 +        return current == null || current === previous.get()
 +    }
 +
 +    internal suspend fun current(provider: SynchronizerProvider, waitForInitial: Boolean = true): Synchronizer? {
-+        if (restartPending()) return null
-+        val retirement = retired.get()
++        if (transportUnavailable()) return null
++        val retirement = retired.value
 +        val old = retirement?.get()
 +        return when {
 +            old == null && waitForInitial -> provider.getSynchronizer()
@@ -45140,7 +45279,7 @@ index 000000000..65578c688
 +        }
 +    }
 +
-+    private fun restartPending() = transportGate?.restartRequired?.value == true
++    private fun transportUnavailable() = transportGate?.inputSuspended == true
 +
 +    private fun retain(): Lease {
 +        activeOperations.update { it + 1 }
@@ -45161,16 +45300,17 @@ index 000000000..65578c688
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
 new file mode 100644
-index 000000000..5899ffa96
+index 000000000..69cf08a00
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,73 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
@@ -45183,6 +45323,7 @@ index 000000000..5899ffa96
 +    private val sdkErasure = MutableStateFlow(0L)
 +    val version = generation.asStateFlow()
 +    internal val enrollmentChanges = combine(generation, sdkErasure) { _, _ -> Unit }
++    internal val admissionChanges = combine(generation, progressStore?.isPending ?: flowOf(false)) { _, _ -> Unit }
 +    @Volatile private var blocked = false
 +    @Volatile private var resetting = false
 +
@@ -45370,26 +45511,29 @@ index c8f5b4cbd..cfed1dcda 100644
 +                addressBookKeyStorageProvider.storeAddressBookKey(newKey)
 +            }) { "Wallet changed before its contact key could be saved" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepository.kt
-index 926e60d9c..0240ac487 100644
+index 926e60d9c..f6bc0a33d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepository.kt
 @@ -3,0 +4 @@ import androidx.lifecycle.Lifecycle
 +import cash.z.ecc.android.sdk.Synchronizer
-@@ -4,0 +6 @@ import androidx.lifecycle.LifecycleEventObserver
+@@ -4,0 +6,2 @@ import androidx.lifecycle.LifecycleEventObserver
 +import co.electriccoin.zcash.global.WalletMigrationSyncGate
-@@ -6,0 +9 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.global.WalletSdkTransportGate
+@@ -6,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -9,0 +13 @@ import kotlinx.coroutines.SupervisorJob
+@@ -9,0 +14 @@ import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.flow.Flow
-@@ -10,0 +15 @@ import kotlinx.coroutines.flow.combine
+@@ -10,0 +16,2 @@ import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.distinctUntilChanged
-@@ -20,0 +26,2 @@ class ApplicationStateRepositoryImpl(
++import kotlinx.coroutines.flow.flowOf
+@@ -20,0 +28,3 @@ class ApplicationStateRepositoryImpl(
 +    private val migrationSyncGate: WalletMigrationSyncGate,
 +    private val resetProgressStore: ResetProgressStore,
-@@ -39 +46 @@ class ApplicationStateRepositoryImpl(
++    private val transportGate: WalletSdkTransportGate,
+@@ -39 +49 @@ class ApplicationStateRepositoryImpl(
 -            combine(
 +            relaySynchronizerLifecycle(
-@@ -42,8 +49,3 @@ class ApplicationStateRepositoryImpl(
+@@ -42,8 +52,4 @@ class ApplicationStateRepositoryImpl(
 -            ) { synchronizer, isInForeground -> synchronizer to isInForeground }
 -                .collect { (synchronizer, isInForeground) ->
 -                    if (isInForeground) {
@@ -45400,19 +45544,20 @@ index 926e60d9c..0240ac487 100644
 -                }
 +                migrationSyncGate.isBlocked,
 +                resetProgressStore.isPending,
++                transportGate.inputSuspension,
 +            )
-@@ -52,0 +55,20 @@ class ApplicationStateRepositoryImpl(
+@@ -52,0 +59,20 @@ class ApplicationStateRepositoryImpl(
 +
 +internal suspend fun relaySynchronizerLifecycle(
 +    synchronizers: Flow<Synchronizer?>,
 +    applicationForeground: Flow<Boolean>,
 +    migrationBlocked: Flow<Boolean>,
 +    resetPending: Flow<Boolean>,
++    transportSuspended: Flow<Boolean> = flowOf(false),
 +) {
-+    // Withhold app-requested starts while a migration or reset owns the wallet.
-+    combine(synchronizers, applicationForeground, migrationBlocked, resetPending) {
-+        sync, foreground, migration, reset ->
-+        sync to (foreground && !migration && !reset)
++    combine(synchronizers, applicationForeground, migrationBlocked, resetPending, transportSuspended) {
++        sync, foreground, migration, reset, suspended ->
++        sync to (foreground && !migration && !reset && !suspended)
 +    }.distinctUntilChanged()
 +        .collect { (synchronizer, runInForeground) ->
 +            if (runInForeground) {
@@ -46421,7 +46566,7 @@ index 6c3044c28..c707fbcb7 100644
 +        val zatoshi: Zatoshi,
 +        val account: WalletAccount,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
-index f9a562c53..8ee11ffa6 100644
+index f9a562c53..b8fcef5ee 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.exception.PcztException
@@ -46512,21 +46657,24 @@ index f9a562c53..8ee11ffa6 100644
 +    appAccessSession: AppAccessSession = AppAccessSession(),
 @@ -141 +186,0 @@ class KeystoneProposalRepositoryImpl(
 -    override val submitState = MutableStateFlow<SubmitProposalState?>(null)
-@@ -143,3 +188,10 @@ class KeystoneProposalRepositoryImpl(
+@@ -143,3 +188,13 @@ class KeystoneProposalRepositoryImpl(
 -    private val pcztWithProofs = MutableStateFlow(PcztState(isLoading = false, pczt = null))
 -    private var proposalPczt: Pczt? = null
 -    private var pcztWithSignatures: Pczt? = null
 +    private val hardwareProposal = HardwareProposalBinding(walletWriteAccess)
 +    override val submitState = hardwareProposal.submissionState
 +
-+    override val signingPreparationIds = combine(
-+        transactionProposal, hardwareProposal.approved, appAccessSession.grant,
-+    ) { _, _, _ ->
-+        signingPreparationId()
++    override val signingPreparationIds: Flow<String?> by lazy {
++        combine(
++            transactionProposal, hardwareProposal.approved, appAccessSession.grant,
++            walletWriteAccess.admissionChanges, accountDataSource.signingAuthorityChanges,
++        ) { _, _, _, _, _ ->
++            signingPreparationId()
++        }
 +    }
 +
 +    override fun signingPreparationId(): String? = hardwareProposal.getApproved(transactionProposal.value)?.id
-@@ -148,0 +201,12 @@ class KeystoneProposalRepositoryImpl(
+@@ -148,0 +204,12 @@ class KeystoneProposalRepositoryImpl(
 +    override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
 +        val previous = transactionProposal.value
 +        val proposal = proposalDataSource.preparePayment(owner, draft)
@@ -46539,20 +46687,20 @@ index f9a562c53..8ee11ffa6 100644
 +        return proposal
 +    }
 +
-@@ -160,0 +225 @@ class KeystoneProposalRepositoryImpl(
+@@ -160,0 +228 @@ class KeystoneProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -164 +229 @@ class KeystoneProposalRepositoryImpl(
+@@ -164 +232 @@ class KeystoneProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -172,0 +238 @@ class KeystoneProposalRepositoryImpl(
+@@ -172,0 +241 @@ class KeystoneProposalRepositoryImpl(
 +        account: WalletAccount,
-@@ -176 +242 @@ class KeystoneProposalRepositoryImpl(
+@@ -176 +245 @@ class KeystoneProposalRepositoryImpl(
 -                account = accountDataSource.getSelectedAccount(),
 +                account = account,
-@@ -183 +249 @@ class KeystoneProposalRepositoryImpl(
+@@ -183 +252 @@ class KeystoneProposalRepositoryImpl(
 -        createProposalInternal {
 +        createProposalInternal(includeFailureCause = false) {
-@@ -190,5 +256,8 @@ class KeystoneProposalRepositoryImpl(
+@@ -190,5 +259,8 @@ class KeystoneProposalRepositoryImpl(
 -    override suspend fun createShieldProposal() {
 -        createProposalInternal {
 -            proposalDataSource.createShieldProposal(
@@ -46566,15 +46714,15 @@ index f9a562c53..8ee11ffa6 100644
 +        approval.requireCurrent()
 +        check(transactionProposal.value === preceding && transactionProposal.compareAndSet(preceding, shield)) {
 +            "The transaction changed during shielding preparation."
-@@ -195,0 +265 @@ class KeystoneProposalRepositoryImpl(
+@@ -195,0 +268 @@ class KeystoneProposalRepositoryImpl(
 +        return shield
-@@ -198,3 +268,2 @@ class KeystoneProposalRepositoryImpl(
+@@ -198,3 +271,2 @@ class KeystoneProposalRepositoryImpl(
 -    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
 -        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
 -    }
 +    override fun setMigrationSweepProposal(proposal: Proposal): MigrationSweepTransactionProposal =
 +        MigrationSweepTransactionProposal(proposal).also { sweep -> transactionProposal.update { sweep } }
-@@ -202,13 +271,17 @@ class KeystoneProposalRepositoryImpl(
+@@ -202,13 +274,17 @@ class KeystoneProposalRepositoryImpl(
 -    override suspend fun createPCZTFromProposal() {
 -        val transactionProposal = getTransactionProposal()
 -        val result =
@@ -46605,7 +46753,7 @@ index f9a562c53..8ee11ffa6 100644
 +        check(transactionProposal.value === current) { "The transaction changed during preparation." }
 +        current.requireCurrentShieldingApproval()
 +        prepareSigning(current, result, owner)
-@@ -217,2 +290,10 @@ class KeystoneProposalRepositoryImpl(
+@@ -217,2 +293,10 @@ class KeystoneProposalRepositoryImpl(
 -    private fun TransactionProposal.paysTexAddress(): Boolean =
 -        this is SendTransactionProposal && destination is WalletAddress.Tex
 +    private suspend fun createReviewPczt(
@@ -46618,11 +46766,11 @@ index f9a562c53..8ee11ffa6 100644
 +        } catch (e: PcztException.MultiStepProposalUnsupportedException) {
 +            if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
 +        }
-@@ -220 +301,2 @@ class KeystoneProposalRepositoryImpl(
+@@ -220 +304,2 @@ class KeystoneProposalRepositoryImpl(
 -    private fun addProofsToPczt(proposalPczt: Pczt) {
 +    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
 +        val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
-@@ -222,10 +304,3 @@ class KeystoneProposalRepositoryImpl(
+@@ -222,10 +307,3 @@ class KeystoneProposalRepositoryImpl(
 -        pcztWithProofsJob =
 -            scope.launch {
 -                pcztWithProofs.update { PcztState(isLoading = true, pczt = null) }
@@ -46636,9 +46784,9 @@ index f9a562c53..8ee11ffa6 100644
 +        pcztWithProofsJob = prepared.startProofs(scope) { pczt ->
 +            proposalDataSource.addProofsToPczt(pczt) {
 +                hardwareProposal.requireProofOwner(prepared, transactionProposal.value)
-@@ -232,0 +308 @@ class KeystoneProposalRepositoryImpl(
+@@ -232,0 +311 @@ class KeystoneProposalRepositoryImpl(
 +        }
-@@ -235 +311,10 @@ class KeystoneProposalRepositoryImpl(
+@@ -235 +314,10 @@ class KeystoneProposalRepositoryImpl(
 -    @Suppress("UseCheckOrError")
 +
 +    override fun approveForSigning(
@@ -46650,29 +46798,29 @@ index f9a562c53..8ee11ffa6 100644
 +    private fun TransactionProposal.paysTexAddress(): Boolean =
 +        this is SendTransactionProposal && destination is WalletAddress.Tex
 +
-@@ -238,2 +323,2 @@ class KeystoneProposalRepositoryImpl(
+@@ -238,2 +326,2 @@ class KeystoneProposalRepositoryImpl(
 -            val pczt = proposalPczt ?: throw IllegalStateException("Proposal not created")
 -            val redactedPczt = proposalDataSource.redactPcztForSigner(pczt.clonePczt())
 +            val prepared = hardwareProposal.requireApproved(transactionProposal.value)
 +            val redactedPczt = proposalDataSource.redactPcztForSigner(prepared.pczt.clonePczt())
-@@ -240,0 +326,3 @@ class KeystoneProposalRepositoryImpl(
+@@ -240,0 +329,3 @@ class KeystoneProposalRepositoryImpl(
 +                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
 +                    "The reviewed transaction changed before signing."
 +                }
-@@ -247 +335 @@ class KeystoneProposalRepositoryImpl(
+@@ -247 +338 @@ class KeystoneProposalRepositoryImpl(
 -    override suspend fun parsePCZT(ur: UR) =
 +    override suspend fun parsePCZT(ur: UR, preparationId: String) =
-@@ -248,0 +337,2 @@ class KeystoneProposalRepositoryImpl(
+@@ -248,0 +340,2 @@ class KeystoneProposalRepositoryImpl(
 +            val prepared = hardwareProposal.getApproved(transactionProposal.value)
 +                ?.takeIf { it.id == preparationId } ?: throw MissingKeystoneSigningPreparation()
-@@ -270 +360,5 @@ class KeystoneProposalRepositoryImpl(
+@@ -270 +363,5 @@ class KeystoneProposalRepositoryImpl(
 -            pcztWithSignatures = Pczt(parsed)
 +            if (hardwareProposal.getApproved(transactionProposal.value) !== prepared) {
 +                throw MissingKeystoneSigningPreparation()
 +            }
 +            prepared.signatures = Pczt(parsed)
 +            prepared.proposal
-@@ -273,35 +367,18 @@ class KeystoneProposalRepositoryImpl(
+@@ -273,35 +370,18 @@ class KeystoneProposalRepositoryImpl(
 -    @Suppress("UseCheckOrError", "ThrowingExceptionsWithoutMessageOrCause", "TooGenericExceptionCaught")
 -    override suspend fun submit(): SubmitResult =
 -        scope
@@ -46726,7 +46874,7 @@ index f9a562c53..8ee11ffa6 100644
 +                    if (proposal is SwapTransactionProposal) {
 +                        proposal.requireFundingApproval(prepared.reviewedQuote)
 +                        ZecSwapComposition.validate(proposal.quote)
-@@ -310 +387,32 @@ class KeystoneProposalRepositoryImpl(
+@@ -310 +390,32 @@ class KeystoneProposalRepositoryImpl(
 -            }.await()
 +                val submit: suspend (() -> Unit, () -> Unit) -> SubmitResult = { beforeCreation, beforeSubmission ->
 +                    proposalDataSource.submitTransaction(
@@ -46760,31 +46908,31 @@ index f9a562c53..8ee11ffa6 100644
 +            "The reviewed transaction changed before submission."
 +        }
 +    }
-@@ -314 +422 @@ class KeystoneProposalRepositoryImpl(
+@@ -314 +425 @@ class KeystoneProposalRepositoryImpl(
 -    override fun getProposalPCZT(): Pczt? = proposalPczt
 +    override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
-@@ -316 +424,4 @@ class KeystoneProposalRepositoryImpl(
+@@ -316 +427,4 @@ class KeystoneProposalRepositoryImpl(
 -    override fun clear() {
 +    override fun clear(expected: TransactionProposal?) {
 +        if (expected != null && (transactionProposal.value !== expected ||
 +                !transactionProposal.compareAndSet(expected, null))
 +        ) return
-@@ -319 +429,0 @@ class KeystoneProposalRepositoryImpl(
+@@ -319 +432,0 @@ class KeystoneProposalRepositoryImpl(
 -        pcztWithProofs.update { PcztState(isLoading = false, pczt = null) }
-@@ -321,4 +431,2 @@ class KeystoneProposalRepositoryImpl(
+@@ -321,4 +434,2 @@ class KeystoneProposalRepositoryImpl(
 -        transactionProposal.update { null }
 -        submitState.update { null }
 -        proposalPczt = null
 -        pcztWithSignatures = null
 +        if (expected == null) transactionProposal.update { null }
 +        hardwareProposal.clear()
-@@ -327 +435,4 @@ class KeystoneProposalRepositoryImpl(
+@@ -327 +438,4 @@ class KeystoneProposalRepositoryImpl(
 -    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
 +    private suspend inline fun <T : TransactionProposal> createProposalInternal(
 +        includeFailureCause: Boolean = true,
 +        block: () -> T,
 +    ): T {
-@@ -332 +443,6 @@ class KeystoneProposalRepositoryImpl(
+@@ -332 +446,6 @@ class KeystoneProposalRepositoryImpl(
 -                Twig.error(e) { "Unable to create proposal" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -46792,7 +46940,7 @@ index f9a562c53..8ee11ffa6 100644
 +                } else {
 +                    Twig.error { "Unable to create ZIP321 proposal" }
 +                }
-@@ -336 +452,6 @@ class KeystoneProposalRepositoryImpl(
+@@ -336 +455,6 @@ class KeystoneProposalRepositoryImpl(
 -                Twig.error(e) { "Insufficient funds" }
 +                currentCoroutineContext().ensureActive()
 +                if (includeFailureCause) {
@@ -46800,9 +46948,9 @@ index f9a562c53..8ee11ffa6 100644
 +                } else {
 +                    Twig.error { "Insufficient funds for ZIP321 proposal" }
 +                }
-@@ -339,0 +461 @@ class KeystoneProposalRepositoryImpl(
+@@ -339,0 +464 @@ class KeystoneProposalRepositoryImpl(
 +        currentCoroutineContext().ensureActive()
-@@ -344,6 +465,0 @@ class KeystoneProposalRepositoryImpl(
+@@ -344,6 +468,0 @@ class KeystoneProposalRepositoryImpl(
 -
 -private data class PcztState(
 -    val isLoading: Boolean,
@@ -51908,7 +52056,7 @@ index e9705b8e7..c1f3fdc00 100644
 +
 +    internal fun observeSendReview() = observeNullable().map { it as? SendTransactionProposal }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
-index 546900ef8..d6abfc2cf 100644
+index 546900ef8..236a8d5d9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.spackle.Twig
@@ -51931,7 +52079,7 @@ index 546900ef8..d6abfc2cf 100644
 +    private val launchNavigation: LaunchNavigationRequests,
 +    private val walletWriteAccess: WalletWriteAccess,
 @@ -21,0 +28 @@ class ObserveSeedMismatchUseCase(
-+        // The SDK clears the flag as it enters the recovery lockout.
++        // Withdrawing the SDK input clears the previous coordinator's mismatch signal.
 @@ -23,2 +30 @@ class ObserveSeedMismatchUseCase(
 -            .filter { it }
 -            .collect { runRecovery() }
@@ -53045,53 +53193,58 @@ index eb7d61b0d..9a718a545 100644
 +            null
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
-index 4ed2d4b85..5c1cde852 100644
+index 4ed2d4b85..bdc72c516 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
-@@ -5 +4,0 @@ import cash.z.ecc.android.sdk.WalletInitMode
--import cash.z.ecc.android.sdk.model.PersistableWallet
-@@ -8 +7,6 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+@@ -8,3 +8,9 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 -import kotlinx.coroutines.TimeoutCancellationException
+-import kotlinx.coroutines.flow.first
+-import kotlinx.coroutines.withTimeout
 +import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
++import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.delay
-@@ -10 +14,2 @@ import kotlinx.coroutines.flow.first
--import kotlinx.coroutines.withTimeout
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withContext
-@@ -17,3 +22,3 @@ import kotlin.time.Duration.Companion.seconds
+@@ -14,6 +20,6 @@ import kotlin.time.Duration.Companion.seconds
+- * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]) by erasing the SDK
+- * databases through the lockout-aware [WalletCoordinator.deleteSdkDataFlow] (wallet secrets are untouched)
+- * and re-storing the wallet with [WalletInitMode.RestoreWallet] so the next synchronizer build rescans.
 - * A failed or timed-out erase throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
 - * failures no further erase is attempted. The store is skipped when the persisted wallet changed during
 - * the erase (concurrent Reset Zashi or wallet restore).
++ * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]). Withdraws
++ * the SDK input, erases the inactive wallet data and re-stores the existing wallet with
++ * [WalletInitMode.RestoreWallet] before the next synchronizer build.
 + * A reported failure throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
 + * failures no further erase is attempted for that wallet generation. Wallet reset and replacement drain
 + * admitted SDK erases. Re-storing also verifies that the wallet snapshot is current.
-@@ -23,0 +29,2 @@ class RecoverFromSeedMismatchUseCase(
+@@ -23 +29,3 @@ class RecoverFromSeedMismatchUseCase(
+-    private val walletCoordinator: WalletCoordinator,
++    private val sdkRecovery: WalletSeedRecovery,
 +    private val walletWriteAccess: WalletWriteAccess,
 +    private val preferenceRecovery: SdkEncryptedPreferenceRecoveryProvider,
-@@ -24,0 +32 @@ class RecoverFromSeedMismatchUseCase(
+@@ -24,0 +33 @@ class RecoverFromSeedMismatchUseCase(
 +    private var attemptVersion: Long? = null
-@@ -27,2 +35 @@ class RecoverFromSeedMismatchUseCase(
+@@ -27,2 +36 @@ class RecoverFromSeedMismatchUseCase(
 -    @Suppress("ThrowsCount")
 -    suspend operator fun invoke() {
 +    suspend operator fun invoke(version: Long, onEraseDelayed: () -> Unit = {}) {
-@@ -29,0 +37,6 @@ class RecoverFromSeedMismatchUseCase(
-+        walletWriteAccess.withSdkRecovery(version) { eraseSdkData(version, onEraseDelayed) } ?: return
-+        val recoveryWallet = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
-+        if (!persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
-+            Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
+@@ -29,0 +38,4 @@ class RecoverFromSeedMismatchUseCase(
++        walletWriteAccess.withSdkRecovery(version) {
++            eraseSdkData(wallet, version, onEraseDelayed)
 +        }
 +    }
-@@ -30,0 +44,5 @@ class RecoverFromSeedMismatchUseCase(
-+    private suspend fun eraseSdkData(version: Long, onEraseDelayed: () -> Unit) {
+@@ -30,0 +43,5 @@ class RecoverFromSeedMismatchUseCase(
++    private suspend fun eraseSdkData(wallet: PersistableWallet, version: Long, onEraseDelayed: () -> Unit) {
 +        if (attemptVersion != version) {
 +            attemptVersion = version
 +            failedAttempts = 0
 +        }
-@@ -38,14 +56,2 @@ class RecoverFromSeedMismatchUseCase(
+@@ -38,14 +55,3 @@ class RecoverFromSeedMismatchUseCase(
 -        val recoveryWallet = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
 -
 -        val erased =
@@ -53107,13 +53260,16 @@ index 4ed2d4b85..5c1cde852 100644
 -            }
 -        if (!erased) {
 +        val readable = canReadSdkPreferences()
-+        if (!readable || !waitForErase(onEraseDelayed)) {
++        val erased = if (readable) waitForErase(wallet, version, onEraseDelayed) else false
++        if (erased == false) {
 @@ -54,2 +60,2 @@ class RecoverFromSeedMismatchUseCase(
 -                "Seed-mismatch recovery: deleteSdkDataFlow reported failure " +
 -                    "(attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
 +                val stage = if (readable) "SDK erase failed" else "SDK encrypted preferences unreadable"
 +                "Seed-mismatch recovery: $stage (attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
-@@ -60,0 +67 @@ class RecoverFromSeedMismatchUseCase(
+@@ -60 +66,2 @@ class RecoverFromSeedMismatchUseCase(
+-        failedAttempts = 0
++        if (erased == true) failedAttempts = 0
 +    }
 @@ -62,7 +69,4 @@ class RecoverFromSeedMismatchUseCase(
 -        val currentWallet = persistableWalletProvider.getPersistableWallet()
@@ -53130,28 +53286,41 @@ index 4ed2d4b85..5c1cde852 100644
 @@ -69,0 +74,2 @@ class RecoverFromSeedMismatchUseCase(
 +        return false
 +    }
-@@ -71 +77,15 @@ class RecoverFromSeedMismatchUseCase(
+@@ -71 +77,28 @@ class RecoverFromSeedMismatchUseCase(
 -        persistableWalletProvider.store(recoveryWallet)
-+    private suspend fun waitForErase(onEraseDelayed: () -> Unit): Boolean = coroutineScope {
++    private suspend fun waitForErase(
++        wallet: PersistableWallet,
++        version: Long,
++        onEraseDelayed: () -> Unit,
++    ): Boolean? = coroutineScope {
 +        val notice = launch {
 +            delay(ERASE_NOTICE_DELAY)
 +            Twig.info { "Seed-mismatch recovery: waiting for the SDK erase result" }
 +            onEraseDelayed()
 +        }
 +        try {
-+            // SDK 6.0.0 starts the erase on its own wallet scope. Keep the app fence until it reports completion.
 +            withContext(NonCancellable) {
-+                walletWriteAccess.onSdkErasureStarting()
-+                walletCoordinator.deleteSdkDataFlow().first()
++                sdkRecovery.eraseAndRestore(wallet.network, walletWriteAccess::onSdkErasureStarting) {
++                    val recoveryWallet = wallet.copy(
++                        birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
++                        walletInitMode = WalletInitMode.RestoreWallet,
++                    )
++                    if (persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
++                        // Withdraw the cached pre-recovery input until a fresh wallet decode carries RestoreWallet.
++                        persistableWalletProvider.retryRead(recoveredWallet = recoveryWallet)
++                    } else {
++                        Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
++                    }
++                }
 +            }
 +        } finally {
 +            notice.cancel()
 +        }
-@@ -76 +96,2 @@ class RecoverFromSeedMismatchUseCase(
+@@ -76 +109,2 @@ class RecoverFromSeedMismatchUseCase(
 -        private val ERASE_TIMEOUT = 30.seconds
 +        private const val PREFERENCE_READ_ATTEMPTS = 3
 +        private val ERASE_NOTICE_DELAY = 30.seconds
-@@ -81,8 +102 @@ class RecoverFromSeedMismatchUseCase(
+@@ -81,8 +115 @@ class RecoverFromSeedMismatchUseCase(
 - * Wallet identity is network plus seed phrase. `walletInitMode` is excluded because it is not serialized
 - * and reflects process state rather than identity.
 - */
@@ -53176,48 +53345,50 @@ index a3cd22c34..f3ae7d1b9 100644
 -        navigationRouter.backToRoot()
 +        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackToRoot }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..eb38c8bdb 100644
+index 76c590a49..6d1c15ead 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.ecc.android.sdk.ext.Conversions.ZEC_FORMATTER
+@@ -8,0 +10 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.forwardFrom
-@@ -9,0 +11 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+@@ -9,0 +12 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
-@@ -20,0 +23 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
+@@ -20,0 +24 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
-@@ -22,0 +26 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
+@@ -22,0 +27 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
-@@ -23,0 +28,4 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
+@@ -23,0 +29,4 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
 +import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestStage
-@@ -24,0 +33 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -24,0 +34 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.repository.IncomingSwapOwner
-@@ -25,0 +35,2 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+@@ -25,0 +36,2 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -26,0 +38 @@ import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+@@ -26,0 +39 @@ import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 +import co.electriccoin.zcash.ui.common.repository.SwapAssetsUnavailableException
-@@ -35,0 +48,5 @@ import kotlinx.coroutines.Dispatchers
+@@ -35,0 +49,5 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -36,0 +54,3 @@ import kotlinx.coroutines.flow.first
+@@ -36,0 +55,3 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.filterNotNull
 +import kotlinx.coroutines.job
 +import kotlinx.coroutines.launch
-@@ -38,0 +59 @@ import java.math.BigDecimal
+@@ -38,0 +60 @@ import java.math.BigDecimal
 +import java.util.concurrent.atomic.AtomicReference
-@@ -39,0 +61,2 @@ import java.math.BigDecimal
+@@ -39,0 +62,2 @@ import java.math.BigDecimal
 +// Keeps the three request modes and their common admission and proposal paths together.
 +@Suppress("TooManyFunctions")
-@@ -48,0 +72,2 @@ class RequestSwapQuoteUseCase(
+@@ -48,0 +73,2 @@ class RequestSwapQuoteUseCase(
 +    private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -49,0 +75,46 @@ class RequestSwapQuoteUseCase(
+@@ -49,0 +76,46 @@ class RequestSwapQuoteUseCase(
 +    private val latestRequest = AtomicReference<RequestOwner?>()
 +
 +    internal fun captureNavigationOwnership(caller: Job?): () -> Boolean {
@@ -53264,7 +53435,7 @@ index 76c590a49..eb38c8bdb 100644
 +
 +    private data class FundingOwner(val account: WalletAccount, val writeToken: Long)
 +
-@@ -55,3 +126,10 @@ class RequestSwapQuoteUseCase(
+@@ -55,3 +127,11 @@ class RequestSwapQuoteUseCase(
 -        canNavigateToSwapQuote: () -> Boolean
 -    ) {
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
@@ -53272,19 +53443,20 @@ index 76c590a49..eb38c8bdb 100644
 +        contactNetwork: String? = null,
 +        sourceEntryId: String? = null,
 +    ) = runRequest(sourceEntryId) {
++        if (!isValidQuoteAmount(amount, ZEC_FORMATTER.maximumFractionDigits, canNavigateToSwapQuote)) return@runRequest
 +        val recipient = validatedRecipient(
 +            address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
 +        ) ?: return@runRequest
 +        val owner = fundingOwner()
 +        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
 +        if (!walletWriteAccess.permits(owner.writeToken)) return@runRequest
-@@ -62 +140 @@ class RequestSwapQuoteUseCase(
+@@ -62 +142 @@ class RequestSwapQuoteUseCase(
 -                    address = address,
 +                    address = recipient,
-@@ -68 +146 @@ class RequestSwapQuoteUseCase(
+@@ -68 +148 @@ class RequestSwapQuoteUseCase(
 -            createProposal = true,
 +            fundingOwner = owner,
-@@ -78,3 +156,17 @@ class RequestSwapQuoteUseCase(
+@@ -78,3 +158,10 @@ class RequestSwapQuoteUseCase(
 -        canNavigateToSwapQuote: () -> Boolean
 -    ) {
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
@@ -53292,26 +53464,19 @@ index 76c590a49..eb38c8bdb 100644
 +        contactNetwork: String? = null,
 +        sourceEntryId: String? = null,
 +    ) = runRequest(sourceEntryId) {
-+        val recipient =
-+            if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) != null) {
-+                validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
-+            } else {
-+                if (canNavigateToSwapQuote()) {
-+                    val failure = IllegalArgumentException("Quote amount must be a positive whole number of base units")
-+                    error(ErrorArgs.General(failure))
-+                }
-+                null
-+            } ?: return@runRequest
++        if (!isValidQuoteAmount(amount, selectedAsset.decimals, canNavigateToSwapQuote)) return@runRequest
++        val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
++            ?: return@runRequest
 +        val owner = fundingOwner()
 +        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
 +        if (!walletWriteAccess.permits(owner.writeToken)) return@runRequest
-@@ -85 +177 @@ class RequestSwapQuoteUseCase(
+@@ -85 +172 @@ class RequestSwapQuoteUseCase(
 -                    address = address,
 +                    address = recipient,
-@@ -91 +183 @@ class RequestSwapQuoteUseCase(
+@@ -91 +178 @@ class RequestSwapQuoteUseCase(
 -            createProposal = true,
 +            fundingOwner = owner,
-@@ -101,3 +193,11 @@ class RequestSwapQuoteUseCase(
+@@ -101,3 +188,12 @@ class RequestSwapQuoteUseCase(
 -        canNavigateToSwapQuote: () -> Boolean
 -    ) {
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
@@ -53319,6 +53484,7 @@ index 76c590a49..eb38c8bdb 100644
 +        contactNetwork: String? = null,
 +        sourceEntryId: String? = null,
 +    ) = runRequest(sourceEntryId) {
++        if (!isValidQuoteAmount(amount, selectedAsset.decimals, canNavigateToSwapQuote)) return@runRequest
 +        val refund = validatedRecipient(
 +            refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
 +        ) ?: return@runRequest
@@ -53326,23 +53492,36 @@ index 76c590a49..eb38c8bdb 100644
 +        val owner = IncomingSwapOwner(accountDataSource.getSelectedAccount(), token)
 +        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
 +        if (!walletWriteAccess.permits(token)) return@runRequest
-@@ -109 +209 @@ class RequestSwapQuoteUseCase(
+@@ -109 +205 @@ class RequestSwapQuoteUseCase(
 -                        refundAddress = refundAddress,
 +                        refundAddress = refund,
-@@ -112 +212,2 @@ class RequestSwapQuoteUseCase(
+@@ -112 +208,2 @@ class RequestSwapQuoteUseCase(
 -                        slippage = slippage
 +                        slippage = slippage,
 +                        owner = owner,
-@@ -115,2 +216 @@ class RequestSwapQuoteUseCase(
+@@ -115,2 +212 @@ class RequestSwapQuoteUseCase(
 -            createProposal = false,
 -            canNavigateToSwapQuote = canNavigateToSwapQuote
 +            canNavigateToSwapQuote = { canNavigateToSwapQuote() && walletWriteAccess.permits(token) }
-@@ -120,2 +220,47 @@ class RequestSwapQuoteUseCase(
+@@ -120,2 +216,60 @@ class RequestSwapQuoteUseCase(
 -    @Suppress("TooGenericExceptionCaught")
 -    private suspend fun requestQuote(
 +    private suspend fun fundingOwner(): FundingOwner {
 +        val token = walletWriteAccess.token()
 +        return FundingOwner(accountDataSource.getSelectedAccount(), token)
++    }
++
++    private suspend fun QuoteNavigation.isValidQuoteAmount(
++        amount: BigDecimal,
++        decimals: Int,
++        canNavigate: suspend () -> Boolean,
++    ): Boolean {
++        if (amount.toExactNearQuoteAmountOrNull(decimals) != null) return true
++        if (canNavigate()) {
++            val failure = IllegalArgumentException("Quote amount must be a positive whole number of base units")
++            error(ErrorArgs.General(failure))
++        }
++        return false
 +    }
 +
 +    private suspend fun QuoteNavigation.requestFreshAddress(
@@ -53387,7 +53566,7 @@ index 76c590a49..eb38c8bdb 100644
 +    }
 +
 +    private suspend fun QuoteNavigation.requestQuote(
-@@ -123,3 +268,4 @@ class RequestSwapQuoteUseCase(
+@@ -123,3 +277,4 @@ class RequestSwapQuoteUseCase(
 -        createProposal: Boolean,
 -        canNavigateToSwapQuote: () -> Boolean
 -    ) = withContext(Dispatchers.Default) {
@@ -53395,11 +53574,11 @@ index 76c590a49..eb38c8bdb 100644
 +        fundingOwner: FundingOwner? = null,
 +    ) {
 +        currentCoroutineContext().ensureActive()
-@@ -128 +274,2 @@ class RequestSwapQuoteUseCase(
+@@ -128 +283,2 @@ class RequestSwapQuoteUseCase(
 -        val result = swapRepository.quote.first { it !in listOf(null, SwapQuoteData.Loading) }
 +        val result = swapRepository.quote.filterNotNull().first { it != SwapQuoteData.Loading }
 +        currentCoroutineContext().ensureActive()
-@@ -133,2 +280,6 @@ class RequestSwapQuoteUseCase(
+@@ -133,2 +289,6 @@ class RequestSwapQuoteUseCase(
 -                swapRepository.clearQuote()
 -                navigationRouter.forward(mismatchArgs)
 +                forward {
@@ -53408,10 +53587,10 @@ index 76c590a49..eb38c8bdb 100644
 +                        mismatchArgs
 +                    }
 +                }
-@@ -136 +287 @@ class RequestSwapQuoteUseCase(
+@@ -136 +296 @@ class RequestSwapQuoteUseCase(
 -            return@withContext
 +            return
-@@ -139,19 +290,33 @@ class RequestSwapQuoteUseCase(
+@@ -139,19 +299,33 @@ class RequestSwapQuoteUseCase(
 -        if (result is SwapQuoteData.Success && createProposal) {
 -            try {
 -                createProposal(result.quote)
@@ -53464,17 +53643,18 @@ index 76c590a49..eb38c8bdb 100644
 +            true
 +        } catch (e: IllegalArgumentException) {
 +            if (canNavigate() && swapRepository.quote.value === result) {
-@@ -159,5 +324,22 @@ class RequestSwapQuoteUseCase(
+@@ -159,5 +333 @@ class RequestSwapQuoteUseCase(
 -                zashiProposalRepository.clear()
 -                keystoneProposalRepository.clear()
 -                ledgerProposalPipeline.clear()
 -                navigateToErrorUseCase(ErrorArgs.General(e))
 -                return@withContext
 +                error(ErrorArgs.General(e))
-+            }
+@@ -164,0 +335 @@ class RequestSwapQuoteUseCase(
 +            false
-+        }
-+
+@@ -167,2 +338,63 @@ class RequestSwapQuoteUseCase(
+-        if (canNavigateToSwapQuote()) {
+-            navigationRouter.forward(SwapQuoteArgs)
 +    @Suppress("TooGenericExceptionCaught")
 +    private suspend fun QuoteNavigation.prepareProposal(
 +        result: SwapQuoteData.Success,
@@ -53492,7 +53672,7 @@ index 76c590a49..eb38c8bdb 100644
 +            val isLedger = owner.account is LedgerAccount
 +            onPreparationFailure(result, canNavigate) {
 +                forward { TEXUnsupportedArgs(isLedger = isLedger) }
-@@ -164,0 +347,7 @@ class RequestSwapQuoteUseCase(
++            }
 +            false
 +        } catch (_: InsufficientFundsException) {
 +            onPreparationFailure(result, canNavigate) { forward { InsufficientFundsArgs } }
@@ -53500,9 +53680,8 @@ index 76c590a49..eb38c8bdb 100644
 +        } catch (e: Exception) {
 +            onPreparationFailure(result, canNavigate) { error(ErrorArgs.General(e)) }
 +            false
-@@ -167,2 +356,36 @@ class RequestSwapQuoteUseCase(
--        if (canNavigateToSwapQuote()) {
--            navigationRouter.forward(SwapQuoteArgs)
++        }
++
 +    private suspend fun onPreparationFailure(
 +        result: SwapQuoteData,
 +        canNavigate: suspend () -> Boolean,
@@ -53539,7 +53718,7 @@ index 76c590a49..eb38c8bdb 100644
 +                val ownerMatches = result !is SwapQuoteData.Success || owner?.matchesCurrentSelection() != false
 +                if (ownerMatches && swapRepository.consumeReview(result) != null) SwapQuoteArgs else null
 +            }
-@@ -172,4 +395,12 @@ class RequestSwapQuoteUseCase(
+@@ -172,4 +404,12 @@ class RequestSwapQuoteUseCase(
 -    /**
 -     * Spends from the selected account, so an account that cannot spend is refused before anything
 -     * is derived from the quote.
@@ -53556,30 +53735,30 @@ index 76c590a49..eb38c8bdb 100644
 +        current != null && walletWriteAccess.permits(writeToken) &&
 +            (current === account || current.sdkAccount.accountUuid == account.sdkAccount.accountUuid)
 +
-@@ -177,2 +408,2 @@ class RequestSwapQuoteUseCase(
+@@ -177,2 +417,2 @@ class RequestSwapQuoteUseCase(
 -    private suspend fun createProposal(quote: SwapQuote) {
 -        val account = accountDataSource.getSelectedAccount().requireSpendable()
 +    private suspend fun createProposal(quote: SwapQuote, account: WalletAccount) {
 +        account.requireSpendable()
-@@ -190,2 +421,2 @@ class RequestSwapQuoteUseCase(
+@@ -190,2 +430,2 @@ class RequestSwapQuoteUseCase(
 -                    EXACT_INPUT -> keystoneProposalRepository.createExactInputSwapProposal(send, quote)
 -                    EXACT_OUTPUT -> keystoneProposalRepository.createExactOutputSwapProposal(send, quote)
 +                    EXACT_INPUT -> keystoneProposalRepository.createExactInputSwapProposal(send, quote, account)
 +                    EXACT_OUTPUT -> keystoneProposalRepository.createExactOutputSwapProposal(send, quote, account)
-@@ -194 +425 @@ class RequestSwapQuoteUseCase(
+@@ -194 +434 @@ class RequestSwapQuoteUseCase(
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.createPCZTFromProposal(account)
-@@ -199,2 +430,2 @@ class RequestSwapQuoteUseCase(
+@@ -199,2 +439,2 @@ class RequestSwapQuoteUseCase(
 -                    EXACT_INPUT -> ledgerProposalPipeline.createExactInputSwapProposal(send, quote)
 -                    EXACT_OUTPUT -> ledgerProposalPipeline.createExactOutputSwapProposal(send, quote)
 +                    EXACT_INPUT -> ledgerProposalPipeline.createExactInputSwapProposal(send, quote, account)
 +                    EXACT_OUTPUT -> ledgerProposalPipeline.createExactOutputSwapProposal(send, quote, account)
-@@ -212,2 +443,2 @@ class RequestSwapQuoteUseCase(
+@@ -212,2 +452,2 @@ class RequestSwapQuoteUseCase(
 -                    EXACT_INPUT -> zashiProposalRepository.createExactInputSwapProposal(send, quote)
 -                    EXACT_OUTPUT -> zashiProposalRepository.createExactOutputSwapProposal(send, quote)
 +                    EXACT_INPUT -> zashiProposalRepository.createExactInputSwapProposal(send, quote, account)
 +                    EXACT_OUTPUT -> zashiProposalRepository.createExactOutputSwapProposal(send, quote, account)
-@@ -229,0 +461,2 @@ class RequestSwapQuoteUseCase(
+@@ -229,0 +470,2 @@ class RequestSwapQuoteUseCase(
 +private const val QUOTE_ACCOUNT_CHANGED = "The wallet account for this quote changed. Request a new quote."
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RescanQrUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RescanQrUseCase.kt
@@ -57372,10 +57551,10 @@ index cf8c8cf1c..0fe34e81a 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
 new file mode 100644
-index 000000000..8e13e41b6
+index 000000000..d20a6d1ef
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,105 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -57430,9 +57609,12 @@ index 000000000..8e13e41b6
 +        }
 +    }
 +
-+    internal suspend fun <T> withMigrationInputStopped(block: suspend () -> T): T =
++    internal suspend fun <T> withMigrationInputStopped(
++        isInputSuppressed: () -> Boolean = { sdkInputSuppressed.value },
++        block: suspend () -> T,
++    ): T =
 +        migrationInput.withLock {
-+            check(sdkInputSuppressed.value) { "Wait for SDK input suppression before erasing" }
++            check(isInputSuppressed()) { "Wait for SDK input suppression before erasing" }
 +            block()
 +        }
 +
@@ -66069,7 +66251,7 @@ index 79f574053..aeaa86d7a 100644
 @@ -452,0 +559 @@ internal data class InternalStateImpl(
 +    val selectedAssetId: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
-index d7080a80c..f2edc13de 100644
+index d7080a80c..730fd71a4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 @@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
@@ -66077,20 +66259,22 @@ index d7080a80c..f2edc13de 100644
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 @@ -8,0 +11 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
-@@ -14 +16,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+@@ -12,0 +16 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
+@@ -14 +17,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 -import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
-@@ -40,0 +43 @@ import java.math.MathContext
+@@ -40,0 +44 @@ import java.math.MathContext
 +import java.math.RoundingMode
-@@ -41,0 +45 @@ import kotlin.math.absoluteValue
+@@ -41,0 +46 @@ import kotlin.math.absoluteValue
 +import co.electriccoin.zcash.ui.design.R as DesignR
-@@ -84 +88,3 @@ internal class SwapVMMapper {
+@@ -84 +89,3 @@ internal class SwapVMMapper {
 -                    onClick = callbacks.onSwapInfoClick
 +                    contentDescription = stringRes(DesignR.string.accessibility_swap_help),
 +                    onClick = callbacks.onSwapInfoClick,
 +                    isEnabled = !state.isRequestingQuote,
-@@ -117,0 +124 @@ internal class SwapVMMapper {
+@@ -117,0 +125 @@ internal class SwapVMMapper {
 +                    contentDescription = stringRes(DesignR.string.accessibility_swap_direction),
-@@ -121,5 +128,3 @@ internal class SwapVMMapper {
+@@ -121,5 +129,3 @@ internal class SwapVMMapper {
 -            onAddressClick =
 -                when (state.swapDirection) {
 -                    SWAP_FROM_ZEC -> null
@@ -66099,40 +66283,62 @@ index d7080a80c..f2edc13de 100644
 +            onAddressClick = callbacks.onAddressClick.takeIf {
 +                state.swapDirection == SWAP_INTO_ZEC && !state.isRequestingQuote
 +            },
-@@ -248,0 +254,5 @@ internal class SwapVMMapper {
+@@ -163,14 +169,7 @@ internal class SwapVMMapper {
+-            error =
+-                when (state.swapDirection) {
+-                    SWAP_FROM_ZEC -> {
+-                        if (originAmount != null && state.canSpend(originAmount.convertZecToZatoshi()) == false) {
+-                            stringRes(R.string.send_error_insufficientFunds)
+-                        } else {
+-                            null
+-                        }
+-                    }
+-
+-                    SWAP_INTO_ZEC -> {
+-                        null
+-                    }
+-                },
++            error = when {
++                state.hasUnrepresentableTokenAmount -> stringRes(DesignR.string.send_error_invalidAmount)
++                state.swapDirection == SWAP_FROM_ZEC && originAmount != null &&
++                    state.canSpend(originAmount.convertZecToZatoshi()) == false ->
++                    stringRes(R.string.send_error_insufficientFunds)
++                else -> null
++            },
+@@ -248,0 +248,5 @@ internal class SwapVMMapper {
 +            swapChangeDescription = when (state.currencyType) {
 +                TOKEN -> stringRes(R.string.amount_switch_to_fiat)
 +                FIAT -> state.originAsset?.tokenTicker?.let { stringRes(R.string.amount_switch_to_asset, it) }
 +                    ?: stringRes(R.string.amount_switch_unit)
 +            },
-@@ -448 +458,2 @@ internal class SwapVMMapper {
+@@ -448 +452,2 @@ internal class SwapVMMapper {
 -        val amount = textField.textField.innerState.amount
 +        val amount = state.getOriginTokenAmount()
 +        val shouldRetryPrices = state.swapAssets.shouldRetryPrices(state.swapAsset)
-@@ -451 +462 @@ internal class SwapVMMapper {
+@@ -451 +456 @@ internal class SwapVMMapper {
 -                (state.swapAsset?.usdPrice == null || state.swapAssets.zecAsset?.usdPrice == null)
 +                (state.swapAsset.positiveUsdPrice == null || state.swapAssets.zecAsset.positiveUsdPrice == null)
-@@ -459 +470 @@ internal class SwapVMMapper {
+@@ -459 +464 @@ internal class SwapVMMapper {
 -                    state.swapAssets.error != null -> {
 +                    shouldRetryPrices -> {
-@@ -471 +482 @@ internal class SwapVMMapper {
+@@ -471 +476 @@ internal class SwapVMMapper {
 -            style = if (state.swapAssets.error != null) ButtonStyle.DESTRUCTIVE1 else null,
 +            style = if (shouldRetryPrices) ButtonStyle.DESTRUCTIVE1 else null,
-@@ -473 +484 @@ internal class SwapVMMapper {
+@@ -473 +478 @@ internal class SwapVMMapper {
 -                if (state.swapAssets.error != null) {
 +                if (shouldRetryPrices) {
-@@ -477 +488 @@ internal class SwapVMMapper {
+@@ -477 +482 @@ internal class SwapVMMapper {
 -                    state.getOriginTokenAmount()?.let {
-+                    amount?.takeIf { it.signum() > 0 }?.let {
-@@ -488 +499 @@ internal class SwapVMMapper {
++                    amount?.takeIf { it.signum() > 0 && !state.hasUnrepresentableTokenAmount }?.let {
+@@ -488 +493 @@ internal class SwapVMMapper {
 -                    state.swapAssets.error != null -> {
 +                    shouldRetryPrices -> {
-@@ -495,2 +506,2 @@ internal class SwapVMMapper {
+@@ -495,2 +500,2 @@ internal class SwapVMMapper {
 -                            state.swapAsset.usdPrice != null &&
 -                            state.swapAssets.zecAsset?.usdPrice != null &&
 +                            state.swapAsset.positiveUsdPrice != null &&
 +                            state.swapAssets.zecAsset.positiveUsdPrice != null &&
-@@ -501 +512,8 @@ internal class SwapVMMapper {
+@@ -501 +506,8 @@ internal class SwapVMMapper {
 -                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
 +                            validateSwapRecipient(
 +                                state.selectedContact?.address ?: state.addressText,
@@ -66142,7 +66348,7 @@ index d7080a80c..f2edc13de 100644
 +                                allowPaymentAmount = false,
 +                                tokenContract = state.swapAsset.contractAddress,
 +                            ).isValid &&
-@@ -517,6 +535,8 @@ internal class SwapVMMapper {
+@@ -517,6 +529,8 @@ internal class SwapVMMapper {
 -                when {
 -                    text.isEmpty() -> null
 -                    text.isBlank() -> stringRes("")
@@ -66157,28 +66363,37 @@ index d7080a80c..f2edc13de 100644
 +                    allowPaymentAmount = false,
 +                    tokenContract = state.swapAsset?.contractAddress,
 +                ).errorText(state.swapAsset?.chainTicker),
-@@ -602 +622 @@ private data class SwapInternalState(
+@@ -602 +616 @@ private data class SwapInternalState(
 -        if (swapAssets.zecAsset?.usdPrice == null) return BigDecimal(0)
 +        val zecPrice = swapAssets.zecAsset.positiveUsdPrice ?: return BigDecimal.ZERO
-@@ -605 +625 @@ private data class SwapInternalState(
+@@ -605 +619 @@ private data class SwapInternalState(
 -            .multiply(swapAssets.zecAsset.usdPrice, MathContext.DECIMAL128)
 +            .multiply(zecPrice, MathContext.DECIMAL128)
-@@ -612 +632 @@ private data class SwapInternalState(
+@@ -612 +626 @@ private data class SwapInternalState(
 -                val usdPrice = originAsset?.usdPrice
 +                val usdPrice = originAsset.positiveUsdPrice
-@@ -633 +653,2 @@ private data class SwapInternalState(
+@@ -633 +647,2 @@ private data class SwapInternalState(
 -                val usdPrice = originAsset?.usdPrice
 +                val asset = originAsset ?: return null
 +                val usdPrice = asset.positiveUsdPrice
-@@ -637 +658 @@ private data class SwapInternalState(
+@@ -637 +652 @@ private data class SwapInternalState(
 -                    fiatAmount.divide(usdPrice, MathContext.DECIMAL128)
 +                    fiatAmount.divide(usdPrice, asset.decimals, RoundingMode.DOWN)
-@@ -645,2 +666,2 @@ private data class SwapInternalState(
+@@ -642,0 +658,8 @@ private data class SwapInternalState(
++    val hasUnrepresentableTokenAmount: Boolean
++        get() {
++            val amount = amountTextState.amount
++            val decimals = originAsset?.decimals
++            return currencyType == TOKEN && amount != null && amount.signum() > 0 &&
++                decimals != null && amount.toExactNearQuoteAmountOrNull(decimals) == null
++        }
++
+@@ -645,2 +668,2 @@ private data class SwapInternalState(
 -        val originUsdPrice = originAsset?.usdPrice
 -        val destinationUsdPrice = destinationAsset?.usdPrice
 +        val originUsdPrice = originAsset.positiveUsdPrice
 +        val destinationUsdPrice = destinationAsset.positiveUsdPrice
-@@ -657,22 +678,6 @@ private data class SwapInternalState(
+@@ -657,22 +680,6 @@ private data class SwapInternalState(
 -        if (originAsset == null || destinationAsset == null) return null
 -
 -        return when (swapDirection) {
@@ -71353,18 +71568,77 @@ index 000000000..bf45e534a
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/work/SyncWorker.kt b/ui-lib/src/main/java/co/electriccoin/zcash/work/SyncWorker.kt
-index a78f2bce2..d46df5175 100644
+index a78f2bce2..4a41c2592 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/work/SyncWorker.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/work/SyncWorker.kt
+@@ -12 +12 @@ import cash.z.ecc.android.sdk.Synchronizer
+-import cash.z.ecc.android.sdk.model.PercentDecimal
++import co.electriccoin.zcash.global.WalletSdkTransportGate
 @@ -16,0 +17 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -51,0 +53 @@ class SyncWorker(
+@@ -18 +19 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+-import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.flow.Flow
+@@ -19,0 +21 @@ import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.distinctUntilChanged
+@@ -20,0 +23,2 @@ import kotlinx.coroutines.flow.emptyFlow
++import kotlinx.coroutines.flow.filter
++import kotlinx.coroutines.flow.first
+@@ -22 +26,2 @@ import kotlinx.coroutines.flow.flatMapLatest
+-import kotlinx.coroutines.flow.takeWhile
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.flow.map
+@@ -51,0 +57 @@ class SyncWorker(
 +    private val resetProgressStore: ResetProgressStore by inject()
-@@ -56,2 +58,2 @@ class SyncWorker(
+@@ -52,0 +59 @@ class SyncWorker(
++    private val transportGate: WalletSdkTransportGate by inject()
+@@ -54 +60,0 @@ class SyncWorker(
+-    @OptIn(ExperimentalCoroutinesApi::class)
+@@ -56,2 +62,2 @@ class SyncWorker(
 -        if (migrationGate.isMigrationActive()) {
 -            Twig.debug { "BG Sync: migration active — Lane A supersedes, skipping." }
-+        if (resetProgressStore.isPending.value || migrationGate.isMigrationActive()) {
-+            Twig.debug { "BG Sync: wallet migration or reset owns sync; skipping" }
++        if (resetProgressStore.isPending.value || transportGate.inputSuspended || migrationGate.isMigrationActive()) {
++            Twig.debug { "BG Sync: wallet input is paused; skipping" }
+@@ -63,13 +69,4 @@ class SyncWorker(
+-        synchronizerProvider.synchronizer
+-            .flatMapLatest {
+-                Twig.debug { "BG Sync: synchronizer: $it" }
+-
+-                it?.status?.combine(it.progress) { status, progress ->
+-                    StatusAndProgress(status, progress).also {
+-                        Twig.debug { "BG Sync: result: $it" }
+-                    }
+-                } ?: emptyFlow()
+-            }.takeWhile {
+-                it.status != Synchronizer.Status.DISCONNECTED &&
+-                    it.status != Synchronizer.Status.SYNCED
+-            }.collect()
++        val suspended = combine(resetProgressStore.isPending, transportGate.inputSuspension) { reset, transport ->
++            reset || transport
++        }
++        val terminal = awaitBackgroundSync(synchronizerProvider.synchronizer, suspended)
+@@ -79 +76,3 @@ class SyncWorker(
+-        lastNetworkActivity.stampNow()
++        if (terminal && !resetProgressStore.isPending.value && !transportGate.inputSuspended) {
++            lastNetworkActivity.stampNow()
++        }
+@@ -140,5 +139,11 @@ class SyncWorker(
+-// Enhancement to this implementation would be returning a better status information
+-private data class StatusAndProgress(
+-    val status: Synchronizer.Status,
+-    val progress: PercentDecimal
+-)
++@OptIn(ExperimentalCoroutinesApi::class)
++internal suspend fun awaitBackgroundSync(synchronizers: Flow<Synchronizer?>, suspended: Flow<Boolean>): Boolean =
++    suspended.distinctUntilChanged().flatMapLatest { interrupted ->
++        if (interrupted) {
++            flowOf(false)
++        } else {
++            synchronizers.flatMapLatest { it?.status ?: emptyFlow() }
++                .filter { it == Synchronizer.Status.DISCONNECTED || it == Synchronizer.Status.SYNCED }
++                .map { true }
++        }
++    }.first()
 diff --git a/ui-lib/src/main/res/ui/about/drawable-night/ic_terms_of_use.xml b/ui-lib/src/main/res/ui/about/drawable-night/ic_terms_of_use.xml
 deleted file mode 100644
 index d6ddfbdf7..000000000
@@ -87011,6 +87285,180 @@ index 000000000..5e6bd1665
 +        coVerify(exactly = 2) { hook.onSynced() }
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt
+new file mode 100644
+index 000000000..8038fd769
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt
+@@ -0,0 +1,16 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import io.mockk.coEvery
++import io.mockk.mockk
++
++internal fun seedRecoveryFixture(erase: suspend () -> Boolean): WalletSeedRecovery =
++    mockk<WalletSeedRecovery>().apply { eraseResult(erase) }
++
++internal fun WalletSeedRecovery.eraseResult(erase: suspend () -> Boolean) {
++    coEvery { eraseAndRestore(any(), any(), any()) } coAnswers {
++        secondArg<() -> Unit>().invoke()
++        val erased = erase()
++        if (erased) thirdArg<suspend () -> Unit>().invoke()
++        erased
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt
+new file mode 100644
+index 000000000..84a4e021e
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt
+@@ -0,0 +1,146 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import android.content.Context
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletCoordinator
++import cash.z.ecc.android.sdk.model.PersistableWallet
++import cash.z.ecc.android.sdk.model.ZcashNetwork
++import co.electriccoin.zcash.global.WalletSdkTransportGate
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import com.zodl.slipstream.SlipstreamSynchronizer
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import io.mockk.verify
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.Rule
++import org.junit.rules.TemporaryFolder
++import java.io.File
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class WalletSeedRecoveryTest {
++    @get:Rule val directory = TemporaryFolder()
++
++    private val network = ZcashNetwork.Testnet
++    private val gate = WalletSdkTransportGate()
++    private val selected = MutableStateFlow<Synchronizer?>(null)
++    private val mismatch = MutableStateFlow(true)
++    private val coordinator = mockk<WalletCoordinator> {
++        every { synchronizer } returns selected
++        every { isSeedMismatch } returns mismatch
++    }
++    private val context: Context = mockk {
++        every { noBackupFilesDir } answers { directory.root }
++        every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
++    }
++    private val recovery
++        get() = WalletSeedRecovery(context, coordinator, gate, ResetProgressStore(context, DirectorySync {}))
++
++    @BeforeTest
++    fun setUp() {
++        mockkObject(Synchronizer.Companion)
++        mockkObject(SlipstreamSynchronizer.Companion)
++    }
++
++    @AfterTest
++    fun tearDown() {
++        unmockkObject(Synchronizer.Companion)
++        unmockkObject(SlipstreamSynchronizer.Companion)
++    }
++
++    @Test
++    fun retryWithdrawnInputStillErasesAndRestoresUnderTheGate() = runTest {
++        backgroundScope.observeSdkWithdrawal()
++        runCurrent()
++        coEvery { SlipstreamSynchronizer.erase(context, network) } coAnswers {
++            assertTrue(gate.inputSuspended)
++            true
++        }
++        coEvery { Synchronizer.erase(context, network) } returns true
++        val order = mutableListOf<String>()
++
++        assertEquals(true, recovery.eraseAndRestore(network, { order += "enter" }) {
++            assertTrue(gate.inputSuspended)
++            order += "restore"
++        })
++
++        assertEquals(listOf("enter", "restore"), order)
++        assertFalse(gate.inputSuspended)
++        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
++    }
++
++    @Test
++    fun transportRestartDefersRecoveryUntilTheNextProcess() = runTest {
++        val generation = MutableStateFlow(0L)
++        val wallet = mockk<PersistableWallet>()
++        val reads = MutableStateFlow(WalletSdkRead(0L, wallet))
++        var admitted: PersistableWallet? = null
++        backgroundScope.launch {
++            gate.walletInput(gate.walletDecisions(reads, generation), generation).collect { admitted = it }
++        }
++        backgroundScope.launch { gate.transportInput(MutableStateFlow(false), generation).collect {} }
++        runCurrent()
++        assertEquals(wallet, admitted)
++        gate.recordCommittedMode(usesTor = true)
++
++        assertNull(recovery.eraseAndRestore(network, { error("erase entered") }) { error("restored") })
++
++        assertTrue(gate.restartRequired.value)
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any()) }
++    }
++
++    @Test
++    fun activeSdkThatDoesNotCloseDefinitivelyRefusesErasure() = runTest {
++        selected.value = mockk()
++        backgroundScope.observeSdkWithdrawal()
++        runCurrent()
++
++        assertEquals(false, recovery.eraseAndRestore(network, { error("erase entered") }) { error("restored") })
++
++        assertFalse(gate.inputSuspended)
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any()) }
++    }
++
++    @Test
++    fun inactiveApiRefusalLeavesRecoveryRetryableAndDoesNotRestore() = runTest {
++        backgroundScope.observeSdkWithdrawal()
++        runCurrent()
++        coEvery { SlipstreamSynchronizer.erase(context, network) } returns false
++
++        assertEquals(false, recovery.eraseAndRestore(network, {}) { error("restored after failed erase") })
++
++        assertFalse(gate.inputSuspended)
++        coVerify(exactly = 0) { Synchronizer.erase(any(), any()) }
++    }
++
++    @Test
++    fun staleNullSynchronizerDoesNotConfirmCoordinatorWithdrawal() = runTest {
++        assertEquals(false, recovery.eraseAndRestore(network, { error("erase entered") }) { error("restored") })
++
++        assertFalse(gate.inputSuspended)
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any()) }
++    }
++
++    private fun CoroutineScope.observeSdkWithdrawal() = launch {
++        val generation = MutableStateFlow(0L)
++        val reads = MutableStateFlow(WalletSdkRead(0L, null))
++        gate.walletInput(gate.walletDecisions(reads, generation), generation).collect { wallet ->
++            if (wallet == null && gate.inputSuspended) mismatch.value = false
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AddressBookRepositoryGiftCardGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AddressBookRepositoryGiftCardGuardTest.kt
 index dd9e18236..5d8637365 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AddressBookRepositoryGiftCardGuardTest.kt
@@ -87069,10 +87517,10 @@ index dd9e18236..5d8637365 100644
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepositoryTest.kt
 new file mode 100644
-index 000000000..75d60f528
+index 000000000..f093e2336
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ApplicationStateRepositoryTest.kt
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,62 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -87099,7 +87547,8 @@ index 000000000..75d60f528
 +        val foreground = MutableStateFlow(true)
 +        val blocked = MutableStateFlow(true)
 +        val pending = MutableStateFlow(false)
-+        backgroundScope.launch { relaySynchronizerLifecycle(current, foreground, blocked, pending) }
++        val suspended = MutableStateFlow(false)
++        backgroundScope.launch { relaySynchronizerLifecycle(current, foreground, blocked, pending, suspended) }
 +        runCurrent()
 +        blocked.value = false
 +        runCurrent()
@@ -87114,6 +87563,13 @@ index 000000000..75d60f528
 +
 +        assertEquals(listOf("background", "foreground", "background", "foreground"), lifecycleCalls)
 +
++        suspended.value = true
++        runCurrent()
++        assertEquals("background", lifecycleCalls.last())
++        suspended.value = false
++        runCurrent()
++        assertEquals("foreground", lifecycleCalls.last())
++
 +        // Reset preparation can fail while the existing SDK is still loaded.
 +        pending.value = true
 +        runCurrent()
@@ -87121,7 +87577,10 @@ index 000000000..75d60f528
 +        runCurrent()
 +        foreground.value = true
 +        runCurrent()
-+        assertEquals(listOf("background", "foreground", "background", "foreground", "background"), lifecycleCalls)
++        assertEquals(
++            listOf("background", "foreground", "background", "foreground", "background", "foreground", "background"),
++            lifecycleCalls,
++        )
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
@@ -87985,56 +88444,70 @@ index 5333e1415..bcfac2bc7 100644
 @@ -294,0 +304 @@ class GiftCardRepositoryIdlePolicyTest {
 +            afterReset.job.cancel()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
-index 000ebfa20..f88e0b05f 100644
+index 000ebfa20..d527abefc 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepositoryTest.kt
-@@ -4,0 +5 @@ import cash.z.ecc.android.sdk.model.Memo
+@@ -3,0 +4 @@ import cash.z.ecc.android.sdk.exception.PcztException
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -4,0 +6 @@ import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.Pczt
-@@ -12,0 +14,2 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
+@@ -12,0 +15,2 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
-@@ -13,0 +17,2 @@ import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+@@ -13,0 +18,2 @@ import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -15,0 +21 @@ import io.mockk.coEvery
+@@ -14,0 +21 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
++import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+@@ -15,0 +23,2 @@ import io.mockk.coEvery
 +import io.mockk.coVerify
-@@ -16,0 +23,3 @@ import io.mockk.mockk
++import io.mockk.every
+@@ -16,0 +26,5 @@ import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.flow.first
-@@ -20,0 +30,3 @@ import kotlin.test.assertFailsWith
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.flow.onEach
+@@ -17,0 +32 @@ import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeout
+@@ -20,0 +36,3 @@ import kotlin.test.assertFailsWith
 +import kotlin.test.assertIs
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
-@@ -24,0 +37,2 @@ class KeystoneProposalRepositoryTest {
+@@ -23 +41,3 @@ class KeystoneProposalRepositoryTest {
+-    private val accountDataSource = mockk<AccountDataSource>()
++    private val accountDataSource = mockk<AccountDataSource> {
++        every { signingAuthorityChanges } returns flowOf(Unit)
++    }
+@@ -24,0 +45,2 @@ class KeystoneProposalRepositoryTest {
 +    private val signer = mockk<KeystoneSDKProvider>()
 +    private val appAccess = AppAccessSession()
-@@ -30 +44,3 @@ class KeystoneProposalRepositoryTest {
+@@ -30 +52,3 @@ class KeystoneProposalRepositoryTest {
 -            keystoneSDKProvider = mockk<KeystoneSDKProvider>(),
 +            keystoneSDKProvider = signer,
 +            processSwapTransaction = mockk(relaxed = true),
 +            appAccessSession = appAccess,
-@@ -36 +51,0 @@ class KeystoneProposalRepositoryTest {
+@@ -36 +59,0 @@ class KeystoneProposalRepositoryTest {
 -        val amount = Zatoshi(1234L)
-@@ -38 +53 @@ class KeystoneProposalRepositoryTest {
+@@ -38 +61 @@ class KeystoneProposalRepositoryTest {
 -        repository.setMigrationSweepProposal(proposal, amount)
 +        repository.setMigrationSweepProposal(proposal)
-@@ -41 +56 @@ class KeystoneProposalRepositoryTest {
+@@ -41 +64 @@ class KeystoneProposalRepositoryTest {
 -        assertEquals(MigrationSweepTransactionProposal(amount, proposal), stored)
 +        assertEquals(MigrationSweepTransactionProposal(proposal), stored)
-@@ -52 +67 @@ class KeystoneProposalRepositoryTest {
+@@ -52 +75 @@ class KeystoneProposalRepositoryTest {
 -            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
 +            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
-@@ -66 +81 @@ class KeystoneProposalRepositoryTest {
+@@ -66 +89 @@ class KeystoneProposalRepositoryTest {
 -            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
 +            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
-@@ -83 +98 @@ class KeystoneProposalRepositoryTest {
+@@ -83 +106 @@ class KeystoneProposalRepositoryTest {
 -            repository.setMigrationSweepProposal(mockk<Proposal>(), Zatoshi(1234L))
 +            repository.setMigrationSweepProposal(mockk<Proposal>())
-@@ -85 +100 @@ class KeystoneProposalRepositoryTest {
+@@ -85 +108 @@ class KeystoneProposalRepositoryTest {
 -            coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } throws
 +            coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } throws
-@@ -94,0 +110,68 @@ class KeystoneProposalRepositoryTest {
+@@ -94,0 +118,95 @@ class KeystoneProposalRepositoryTest {
 +    @Test
 +    fun replacementDuringRedactionCannotBeHandedToKeystone() = runBlocking {
 +        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
@@ -88101,6 +88574,33 @@ index 000ebfa20..f88e0b05f 100644
 +        assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
 +        coVerify(exactly = 0) { signer.generatePczt(any()) }
 +        repository.clear()
++    }
++
++    @Test
++    fun retiringTheSynchronizerWithdrawsTheObservedApprovalWithoutReplacingTheDraft() = runBlocking {
++        val transport = WalletTransportAccess()
++        val synchronizer = mockk<Synchronizer>()
++        every { accountDataSource.signingAuthorityChanges } returns transport.authorityChanges
++        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
++        val proposal = repository.getTransactionProposal()
++        coEvery { proposalDataSource.createPcztFromProposal(any(), any(), any()) } returns Pczt(byteArrayOf(1))
++        coEvery { proposalDataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
++        repository.createPCZTFromProposal()
++        repository.approveForSigning(proposal, canSign = { !transport.isRetired(synchronizer) })
++        val ready = CompletableDeferred<String>()
++        val invalidated = async {
++            repository.signingPreparationIds.onEach { id -> if (id != null) ready.complete(id) }.first { it == null }
++        }
++
++        withTimeout(2_000) {
++            assertEquals(repository.signingPreparationId(), ready.await())
++            transport.retire(synchronizer)
++            assertNull(invalidated.await())
++        }
++
++        assertEquals(proposal, repository.transactionProposal.value)
++        assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
++        coVerify(exactly = 0) { signer.generatePczt(any()) }
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/MetadataRepositoryUpdateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/MetadataRepositoryUpdateTest.kt
@@ -89377,7 +89877,7 @@ index 70f0929ad..1cc4daef3 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..73c8afefa 100644
+index 0bc7a1124..7daaa823e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,3 @@ import android.app.Application
@@ -90217,7 +90717,7 @@ index 0bc7a1124..73c8afefa 100644
 +        backgroundScope.launch {
 +            gate.walletInput(gate.walletDecisions(generation.map {
 +                co.electriccoin.zcash.ui.common.provider.WalletSdkRead(it, wallet)
-+            }, generation)).collect()
++            }, generation), generation).collect()
 +        }
 +        backgroundScope.launch {
 +            gate.transportInput(
@@ -90502,7 +91002,7 @@ index 0bc7a1124..73c8afefa 100644
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
 -        events += "wallet"
-+    override fun retryRead() {
++    override fun retryRead(recoveredWallet: PersistableWallet?) {
 +        readRetries++
 @@ -364,0 +1357,17 @@ private class FakePersistableWalletProvider(
 +    override suspend fun store(persistableWallet: PersistableWallet) =
@@ -93406,22 +93906,22 @@ index 5479877f8..30b13ab5b 100644
 -        isSwapRefundWarningDismissed: FakeIsSwapRefundWarningDismissedStorageProvider =
 +        isSwapRefundWarningDismissed: IsSwapRefundWarningDismissedStorageProvider =
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-index 638b04663..eaaf00de2 100644
+index 638b04663..cec64b971 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
-@@ -2,0 +3,10 @@ package co.electriccoin.zcash.ui.common.usecase
+@@ -2,0 +3,9 @@ package co.electriccoin.zcash.ui.common.usecase
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
 +import cash.z.ecc.android.sdk.model.PersistableWallet
 +import cash.z.ecc.android.sdk.model.SeedPhrase
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
-+import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.WalletInitMode
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
 +import co.electriccoin.zcash.ui.NavigationCommand
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-@@ -3,0 +14 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -3,0 +13,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
++import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 @@ -4,0 +16 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 @@ -5,0 +18 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
@@ -93435,35 +93935,33 @@ index 638b04663..eaaf00de2 100644
 +import kotlin.test.Test
 @@ -11,0 +29 @@ import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -12,0 +31 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
-+import kotlinx.coroutines.flow.flow
-@@ -17,2 +35,0 @@ import kotlinx.coroutines.test.runTest
+@@ -17,2 +34,0 @@ import kotlinx.coroutines.test.runTest
 -import kotlin.test.Test
 -import kotlin.test.assertTrue
-@@ -23 +40 @@ import kotlin.test.assertTrue
+@@ -23 +39 @@ import kotlin.test.assertTrue
 - * [SeedMismatchRecoveryException] to the error screen.
 + * recovery failure to the error screen.
-@@ -33 +50,3 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -33 +49,3 @@ class ObserveSeedMismatchUseCaseTest {
 -    private val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
 +    private val navigateToError = NavigateToErrorUseCase(mockk())
 +    private val launchNavigation = LaunchNavigationRequests()
 +    private val walletWriteAccess = WalletWriteAccess()
-@@ -39,0 +59,2 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -39,0 +58,2 @@ class ObserveSeedMismatchUseCaseTest {
 +            launchNavigation = launchNavigation,
 +            walletWriteAccess = walletWriteAccess,
-@@ -45 +66 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -45 +65 @@ class ObserveSeedMismatchUseCaseTest {
 -            coEvery { recoverFromSeedMismatch() } returns Unit
 +            coEvery { recoverFromSeedMismatch(any(), any()) } returns Unit
-@@ -52 +73 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -52 +72 @@ class ObserveSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { recoverFromSeedMismatch() }
 +            coVerify(exactly = 1) { recoverFromSeedMismatch(any(), any()) }
-@@ -56 +77 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -56 +76 @@ class ObserveSeedMismatchUseCaseTest {
 -    fun recoveryFailureIsLoggedAndDoesNotCrashTheCollector() =
 +    fun recoveryFailureQueuesSupportAndDoesNotCrashTheCollector() =
-@@ -58 +79 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -58 +78 @@ class ObserveSeedMismatchUseCaseTest {
 -            coEvery { recoverFromSeedMismatch() } throws RuntimeException("erase failed")
 +            coEvery { recoverFromSeedMismatch(any(), any()) } throws RuntimeException("erase failed")
-@@ -69,2 +90,5 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -69,2 +89,5 @@ class ObserveSeedMismatchUseCaseTest {
 -            coVerify(exactly = 2) { recoverFromSeedMismatch() }
 -            verify(exactly = 0) { navigateToError(any(), any()) }
 +            coVerify(exactly = 2) { recoverFromSeedMismatch(any(), any()) }
@@ -93471,7 +93969,7 @@ index 638b04663..eaaf00de2 100644
 +                listOf(LaunchNavigationRequests.Kind.SEED_RECOVERY_ERROR),
 +                launchNavigation.changes.value.map { it.kind },
 +            )
-@@ -74,6 +98,6 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -74,6 +97,6 @@ class ObserveSeedMismatchUseCaseTest {
 -    fun terminalFailureRoutesToNavigateToError() =
 -        runTest {
 -            val exception = SeedMismatchRecoveryException(3)
@@ -93484,7 +93982,7 @@ index 638b04663..eaaf00de2 100644
 +        launchNavigation.requestGiftScan()
 +        backgroundScope.launch { useCase() }
 +        runCurrent()
-@@ -81,2 +105,15 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -81,2 +104,67 @@ class ObserveSeedMismatchUseCaseTest {
 -            isSeedMismatchState.value = true
 -            runCurrent()
 +        isSeedMismatchState.value = true
@@ -93502,8 +94000,7 @@ index 638b04663..eaaf00de2 100644
 +            attempts++
 +            accepts
 +        }
-@@ -84 +121,54 @@ class ObserveSeedMismatchUseCaseTest {
--            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
++
 +        tryDelivery()
 +        assertEquals(0, attempts)
 +        unlocked = true
@@ -93555,44 +94052,43 @@ index 638b04663..eaaf00de2 100644
 +        runCurrent()
 +        assertFalse(launchNavigation.changes.value.isEmpty())
 +        walletWriteAccess.beginReset()
-+
+@@ -84 +172,2 @@ class ObserveSeedMismatchUseCaseTest {
+-            verify(exactly = 1) { navigateToError(ErrorArgs.General(exception), any()) }
 +        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
 +            error("A previous wallet's failure must not be presented")
-@@ -85,0 +176,2 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -85,0 +175,2 @@ class ObserveSeedMismatchUseCaseTest {
 +        assertTrue(launchNavigation.changes.value.isEmpty())
 +    }
-@@ -89 +181 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -89 +180 @@ class ObserveSeedMismatchUseCaseTest {
 -     * [recoveryFailureIsLoggedAndDoesNotCrashTheCollector] a further flip must not retrigger recovery.
 +     * [recoveryFailureQueuesSupportAndDoesNotCrashTheCollector] a further flip must not retrigger recovery.
-@@ -94 +186 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -94 +185 @@ class ObserveSeedMismatchUseCaseTest {
 -            coEvery { recoverFromSeedMismatch() } throws CancellationException("cancelled")
 +            coEvery { recoverFromSeedMismatch(any(), any()) } throws CancellationException("cancelled")
-@@ -106,2 +198,2 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -106,2 +197,2 @@ class ObserveSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { recoverFromSeedMismatch() }
 -            verify(exactly = 0) { navigateToError(any(), any()) }
 +            coVerify(exactly = 1) { recoverFromSeedMismatch(any(), any()) }
 +            assertTrue(launchNavigation.changes.value.isEmpty())
-@@ -108,0 +201,95 @@ class ObserveSeedMismatchUseCaseTest {
+@@ -108,0 +200,91 @@ class ObserveSeedMismatchUseCaseTest {
 +
 +    @Test
 +    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
 +        val mismatch = MutableStateFlow(true)
 +        val entered = CompletableDeferred<Unit>()
 +        val finishErase = CompletableDeferred<Unit>()
-+        val coordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flow {
-+                entered.complete(Unit)
-+                mismatch.value = false
-+                finishErase.await()
-+                emit(true)
-+            }
++        val sdkRecovery = seedRecoveryFixture {
++            entered.complete(Unit)
++            mismatch.value = false
++            finishErase.await()
++            true
 +        }
 +        val synchronizer = mockk<SynchronizerProvider> {
 +            every { isSeedMismatch } returns mismatch
 +        }
 +        val initial = existingTestWallet()
 +        val wallet = RecoveryWallet(initial)
-+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
++        val recover = RecoverFromSeedMismatchUseCase(wallet, sdkRecovery, walletWriteAccess, mockk(relaxed = true))
 +        val observe = ObserveSeedMismatchUseCase(
 +            synchronizer, recover, navigateToError, launchNavigation, walletWriteAccess,
 +        )
@@ -93609,12 +94105,10 @@ index 638b04663..eaaf00de2 100644
 +
 +    @Test
 +    fun restoreWriteFailureAfterReportedEraseOffersSupportBeforeDelay() = runTest {
-+        val coordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flow { emit(true) }
-+        }
++        val sdkRecovery = seedRecoveryFixture { true }
 +        val initial = existingTestWallet()
 +        val wallet = RecoveryWallet(initial, failRestoreWrite = true)
-+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator, walletWriteAccess, mockk(relaxed = true))
++        val recover = RecoverFromSeedMismatchUseCase(wallet, sdkRecovery, walletWriteAccess, mockk(relaxed = true))
 +        val observe = ObserveSeedMismatchUseCase(
 +            synchronizerProvider, recover, navigateToError, launchNavigation, walletWriteAccess,
 +        )
@@ -94396,30 +94890,35 @@ index 16244cdf4..65cb5eb54 100644
 +            } returns true
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
-index 606f64402..07f88a73b 100644
+index 606f64402..b47abb321 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
-@@ -3,0 +4,2 @@ import cash.z.ecc.android.sdk.WalletCoordinator
+@@ -3 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
+-import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.WalletInitMode
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
-@@ -6,0 +9 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
+@@ -6,0 +8 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-@@ -7,0 +11,2 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+@@ -7,0 +10,4 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 +import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -12 +17,5 @@ import io.mockk.mockk
++import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
++import co.electriccoin.zcash.ui.common.provider.eraseResult
+@@ -10 +15,0 @@ import io.mockk.coVerify
+-import io.mockk.every
+@@ -12,3 +17,6 @@ import io.mockk.mockk
 -import kotlinx.coroutines.delay
-+import io.mockk.verify
+-import kotlinx.coroutines.flow.flow
+-import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -14,0 +24,2 @@ import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
-@@ -16,0 +28 @@ import kotlin.test.Test
+@@ -16,0 +25 @@ import kotlin.test.Test
 +import kotlin.test.assertEquals
-@@ -18,8 +30,5 @@ import kotlin.test.assertFailsWith
+@@ -18,8 +27,5 @@ import kotlin.test.assertFailsWith
 -import kotlin.time.Duration.Companion.days
 -
 -/**
@@ -94433,12 +94932,11 @@ index 606f64402..07f88a73b 100644
 +import kotlin.test.assertTrue
 +import kotlin.time.Duration.Companion.seconds
 +
-@@ -27,5 +36,9 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -27,4 +33,22 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    private val wallet = mockk<PersistableWallet>(relaxed = true)
 -    private val persistableWalletProvider =
 -        mockk<PersistableWalletProvider>(relaxed = true) {
 -            coEvery { getPersistableWallet() } returns wallet
--        }
 +    private val wallet = PersistableWallet(
 +        network = ZcashNetwork.Testnet,
 +        birthday = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
@@ -94448,101 +94946,116 @@ index 606f64402..07f88a73b 100644
 +    )
 +    private val access = WalletWriteAccess()
 +    private val walletProvider = RecordingWalletProvider(wallet, access)
-@@ -32,0 +46,2 @@ class RecoverFromSeedMismatchUseCaseTest {
++    private val sdkRecovery = mockk<WalletSeedRecovery>()
 +    private val preferenceRecovery = mockk<SdkEncryptedPreferenceRecoveryProvider>(relaxed = true)
-+    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, walletCoordinator, access, preferenceRecovery)
-@@ -34 +49 @@ class RecoverFromSeedMismatchUseCaseTest {
--    private val useCase = RecoverFromSeedMismatchUseCase(persistableWalletProvider, walletCoordinator)
++    private val recovery = RecoverFromSeedMismatchUseCase(walletProvider, sdkRecovery, access, preferenceRecovery)
++
 +    private suspend fun useCase() = recovery(access.token())
-@@ -37,3 +52,7 @@ class RecoverFromSeedMismatchUseCaseTest {
--    fun successfulEraseWipesThenRePersists() =
--        runTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
++
++    @Test
 +    fun destructiveRecoveryExpiresAnImportedReceiptEvenWhenTheWalletGenerationStaysTheSame() = runTest {
 +        val originalGeneration = access.token()
 +        val pendingImport = assertNotNull(access.enrollmentToken())
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
++        sdkRecovery.eraseResult {
 +            assertFalse(access.permitsEnrollment(pendingImport))
-+            emit(true)
-+        }
-@@ -41 +60 @@ class RecoverFromSeedMismatchUseCaseTest {
--            useCase()
++            true
+@@ -32 +55,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    private val walletCoordinator = mockk<WalletCoordinator>()
+@@ -34 +57,6 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    private val useCase = RecoverFromSeedMismatchUseCase(persistableWalletProvider, walletCoordinator)
 +        useCase()
-@@ -43,3 +62,4 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
--            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
--        }
++
 +        assertEquals(originalGeneration, access.token())
 +        assertFalse(access.permitsEnrollment(pendingImport))
 +        assertTrue(access.permitsEnrollment(assertNotNull(access.enrollmentToken())))
 +    }
-@@ -48,3 +68,5 @@ class RecoverFromSeedMismatchUseCaseTest {
--    fun noWalletStoredIsANoOp() =
+@@ -37,3 +65,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    fun successfulEraseWipesThenRePersists() =
 -        runTest {
--            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
 +    fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flow {
++        sdkRecovery.eraseResult {
 +            assertTrue(walletProvider.replacements.isEmpty())
-+            emit(true)
++            true
 +        }
-@@ -52 +74 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -41 +71 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        useCase()
-@@ -54,3 +76,6 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
--            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+@@ -43,3 +73,7 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
 -        }
-+        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        assertEquals(
 +            listOf(wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)),
 +            walletProvider.replacements,
 +        )
++        assertEquals(1, walletProvider.readRetries)
 +    }
-@@ -59,3 +84,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -48,3 +82,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    fun noWalletStoredIsANoOp() =
+-        runTest {
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
++    fun noWalletStoredIsANoOp() = runTest {
++        walletProvider.persistableWallet.value = null
+@@ -52 +85 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            useCase()
++        useCase()
+@@ -54,3 +87,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
+-            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
+-        }
++        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
++        assertTrue(walletProvider.replacements.isEmpty())
++    }
+@@ -59,3 +92,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun failedEraseDoesNotPersistAndThrowsExplicitError() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-+    fun noWalletStoredIsANoOp() = runTest {
-+        walletProvider.persistableWallet.value = null
-@@ -63 +87 @@ class RecoverFromSeedMismatchUseCaseTest {
++    fun aLegacyWalletWithNoBirthdayRestoresFromTheEarliestSupportedHeight() = runTest {
++        walletProvider.persistableWallet.value = wallet.copy(birthday = null)
++        sdkRecovery.eraseResult { true }
+@@ -63 +96 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        useCase()
-@@ -65,2 +89,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -65,2 +98,5 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
-+        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
-+        assertTrue(walletProvider.replacements.isEmpty())
++        val restored = walletProvider.replacements.single()
++        assertEquals(wallet.network.saplingActivationHeight, restored.birthday)
++        assertEquals(WalletInitMode.RestoreWallet, restored.walletInitMode)
++        assertEquals(wallet.seedPhrase, restored.seedPhrase)
 +    }
-@@ -68,6 +92,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -68,6 +103,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * Simulates the collector re-invoking this use case on every `isSeedMismatch` flip — far more
 -     * than the retry cap. Only [RecoverFromSeedMismatchUseCase]'s `MAX_RECOVERY_ATTEMPTS` (3) real
 -     * erase attempts are made; once exhausted, further invocations fail fast without hammering the
 -     * SDK again — this is the unthrottled wipe-retry loop fix.
 -     */
-@@ -75,3 +94,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -75,3 +105,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun repeatedFailuresAreCappedAndStopHittingTheSdk() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +    fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-@@ -79,3 +97 @@ class RecoverFromSeedMismatchUseCaseTest {
++        sdkRecovery.eraseResult { false }
+@@ -79,3 +108 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            repeat(5) {
 -                assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 -            }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -83,3 +99,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -83,3 +110,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -87,4 +101,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -87,4 +112,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * A success resets the failure counter, and a subsequent failure starts a fresh cap rather
 -     * than inheriting the earlier count.
 -     */
-@@ -92,5 +103,9 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -92,5 +114,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun successAfterPriorFailuresResetsTheCounter() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
@@ -94550,74 +95063,74 @@ index 606f64402..07f88a73b 100644
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +    fun unreadablePreferencesRefuseDetachedEraseWithoutRepairingOrReplacingWallet() = runTest {
 +        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
-+
+@@ -98,2 +117,6 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
+-            useCase()
 +        assertEquals(1, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
-+        verify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        coVerify(exactly = 0) { preferenceRecovery.ensureReadable() }
 +        assertEquals(wallet, walletProvider.persistableWallet.value)
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -98,2 +113,4 @@ class RecoverFromSeedMismatchUseCaseTest {
--            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
--            useCase()
+@@ -101 +124,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+-            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
 +    @Test
 +    fun recoveryRetriesAReadFailureBeforeEnteringTheSdkOnce() = runTest {
 +        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unavailable") andThen Unit
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
-@@ -101 +118 @@ class RecoverFromSeedMismatchUseCaseTest {
--            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
-+        useCase()
-@@ -103,2 +120,10 @@ class RecoverFromSeedMismatchUseCaseTest {
++        sdkRecovery.eraseResult { true }
+@@ -103,2 +129,12 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
++        useCase()
++
 +        coVerify(exactly = 2) { preferenceRecovery.checkReadableForErase() }
-+        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        assertEquals(WalletInitMode.RestoreWallet, walletProvider.persistableWallet.value?.walletInitMode)
 +    }
 +
 +    @Test
 +    fun repeatedFailuresAreCappedAndStopHittingTheSdk() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
++        sdkRecovery.eraseResult { false }
 +
 +        repeat(5) {
-@@ -106 +130,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -106 +141,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
-@@ -109,6 +133,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -109,6 +144,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * A wallet concurrently nulled out (Reset Zashi racing this recovery) leaves
 -     * [WalletCoordinator.deleteSdkDataFlow]'s inner wallet read null, so the flow never emits or
 -     * closes. A bounded timeout must count as a failed attempt exactly like an explicit `false`
 -     * result, rather than hanging this use case (and the collector invoking it) forever.
 -     */
-+        verify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
 +
-@@ -116,3 +138,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -116,3 +149,5 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun eraseTimeoutCountsAsFailedAttemptAndThrows() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flow<Boolean> { delay(1.days) }
 +    fun replacementWalletGetsItsOwnRecoveryAttempts() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
++        sdkRecovery.eraseResult { false }
 +        repeat(3) { assertFailsWith<SeedMismatchRecoveryException> { useCase() } }
 +        val old = access.token()
 +        access.replaceWallet { walletProvider.persistableWallet.value = wallet.copy() }
-@@ -120 +144,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -120 +155,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        recovery(old)
 +        val firstFailure = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -122,2 +147,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -122,2 +158,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertEquals(1, firstFailure.failedAttempts)
-+        verify(exactly = 4) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 4) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +    }
-@@ -125,4 +150,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -125,4 +161,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * If Reset Zashi clears the persisted wallet while the erase is in flight, `store()` must not
 -     * resurrect the deleted wallet's seed.
 -     */
-@@ -130,6 +152,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -130,6 +163,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenWalletWasClearedDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -94625,31 +95138,31 @@ index 606f64402..07f88a73b 100644
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returnsMany listOf(wallet, null)
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
 +    fun successAfterPriorFailuresResetsTheCounter() = runTest {
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
++        sdkRecovery.eraseResult { false }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -137 +157,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -137 +168,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
++        sdkRecovery.eraseResult { true }
 +        useCase()
-@@ -139,2 +160 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -139,2 +171,8 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertEquals(1, walletProvider.replacements.size)
-@@ -142,4 +162,8 @@ class RecoverFromSeedMismatchUseCaseTest {
++
++        sdkRecovery.eraseResult { false }
++        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
++        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
++        coVerify(exactly = 5) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
++        assertEquals(1, walletProvider.replacements.size)
++    }
+@@ -142,4 +180 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * If the user restores a different wallet while the erase is in flight, `store()` must not
 -     * overwrite it with the stale, now-wiped wallet's recovery copy.
 -     */
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-+        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-+        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-+        verify(exactly = 5) { walletCoordinator.deleteSdkDataFlow() }
-+        assertEquals(1, walletProvider.replacements.size)
-+    }
-+
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -147,15 +171,42 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -147,15 +182,33 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenADifferentWalletWasStoredDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -94667,7 +95180,7 @@ index 606f64402..07f88a73b 100644
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 +    fun delayedEraseOffersHelpButKeepsWalletReplacementFencedUntilCompletion() = runTest {
 +        val sdkResult = CompletableDeferred<Boolean>()
-+        every { walletCoordinator.deleteSdkDataFlow() } returns flow { emit(sdkResult.await()) }
++        sdkRecovery.eraseResult { sdkResult.await() }
 +        val delayed = CompletableDeferred<Unit>()
 +        val recovering = launch { recovery(access.token()) { delayed.complete(Unit) } }
 +        val replacing = launch { access.replaceWallet { walletProvider.persistableWallet.value = wallet } }
@@ -94683,7 +95196,7 @@ index 606f64402..07f88a73b 100644
 +        recovering.join()
 +        replacing.join()
 +        assertEquals(wallet, walletProvider.persistableWallet.value)
-+        verify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +    }
 +
 +    private class RecordingWalletProvider(
@@ -94693,7 +95206,13 @@ index 606f64402..07f88a73b 100644
 +        override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
 +        override val writeVersion get() = access.token()
 +        val replacements = mutableListOf<PersistableWallet>()
++        var readRetries = 0
 +
++        override fun retryRead(recoveredWallet: PersistableWallet?) {
++            assertEquals(replacements.last(), assertNotNull(recoveredWallet))
++            readRetries += 1
+@@ -164 +217,19 @@ class RecoverFromSeedMismatchUseCaseTest {
+-    private fun seedPhrase(word: String) = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { word })
 +        override suspend fun store(persistableWallet: PersistableWallet): Unit =
 +            error("Recovery must compare the original wallet and version before storing")
 +
@@ -94707,8 +95226,8 @@ index 606f64402..07f88a73b 100644
 +            replacements += replacement
 +            persistableWallet.value = replacement
 +            return true
-@@ -164 +215,4 @@ class RecoverFromSeedMismatchUseCaseTest {
--    private fun seedPhrase(word: String) = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { word })
++        }
++
 +        override suspend fun getPersistableWallet() = persistableWallet.value
 +
 +        override suspend fun requirePersistableWallet() = checkNotNull(persistableWallet.value)
@@ -95038,7 +95557,7 @@ index 000000000..bc0e490ee
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..ccdf0c999 100644
+index c01988b65..4c18b93bb 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 @@ -4,0 +5,14 @@ import cash.z.ecc.android.sdk.type.AddressType
@@ -95072,7 +95591,7 @@ index c01988b65..ccdf0c999 100644
 +import kotlin.test.assertFailsWith
 @@ -71,0 +93 @@ class RequestSwapQuoteUseCaseTest {
 +    private val synchronizer = mockk<Synchronizer>()
-@@ -83,0 +106,169 @@ class RequestSwapQuoteUseCaseTest {
+@@ -83,0 +106,183 @@ class RequestSwapQuoteUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun quoteFinishingAfterExternalNavigationCannotPrepareOrConsumeReview() = runTest(dispatcher) {
@@ -95098,6 +95617,20 @@ index c01988b65..ccdf0c999 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 +        verify(exactly = 0) { swapRepository.consumeReview(any()) }
 +        verify(exactly = 0) { navigationRouter.custom(any()) }
++    }
++
++    @Test
++    fun fractionalInputCannotReachAddressAllocationOrQuoteInEitherDirection() = runBlocking {
++        val instance = useCase(swapQuote(zec, btc))
++        val address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
++        for (amount in listOf(BigDecimal("0.100000009"), BigDecimal("0.000000009"))) {
++            instance.requestExactInput(amount, address, btc, BigDecimal.ONE, { true })
++            instance.requestFlexInputIntoZec(amount, address, btc, BigDecimal.ONE, { true })
++        }
++
++        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any(), any()) }
++        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
++        verify(exactly = 0) { swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any()) }
 +    }
 +
 +    @Test
@@ -95242,89 +95775,89 @@ index c01988b65..ccdf0c999 100644
 +        }
 +    }
 +
-@@ -90 +281 @@ class RequestSwapQuoteUseCaseTest {
+@@ -90 +295 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
 +            coVerify { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
-@@ -98,2 +289,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -98,2 +303,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) }
 -            coVerify { keystoneProposalRepository.createPCZTFromProposal() }
 +            coVerify { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 +            coVerify { keystoneProposalRepository.createPCZTFromProposal(any()) }
-@@ -107 +298 @@ class RequestSwapQuoteUseCaseTest {
+@@ -107 +312 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) }
 +            coVerify { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) }
-@@ -115 +306 @@ class RequestSwapQuoteUseCaseTest {
+@@ -115 +320 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws
 +            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
-@@ -124 +315 @@ class RequestSwapQuoteUseCaseTest {
+@@ -124 +329 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws
 +            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
-@@ -133 +324 @@ class RequestSwapQuoteUseCaseTest {
+@@ -133 +338 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws
 +            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws
-@@ -137,3 +328,3 @@ class RequestSwapQuoteUseCaseTest {
+@@ -137,3 +342,3 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
 -            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
 -            coVerify(exactly = 1) { zashiProposalRepository.clear() }
 +            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.clear(any()) }
 +            coVerify(exactly = 0) { zashiProposalRepository.clear(any()) }
-@@ -145 +336 @@ class RequestSwapQuoteUseCaseTest {
+@@ -145 +350 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws
 +            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
-@@ -154 +345 @@ class RequestSwapQuoteUseCaseTest {
+@@ -154 +359 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws
 +            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws
-@@ -158 +349 @@ class RequestSwapQuoteUseCaseTest {
+@@ -158 +363 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
 +            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
-@@ -164 +355 @@ class RequestSwapQuoteUseCaseTest {
+@@ -164 +369 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws TestException()
 +            coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws TestException()
-@@ -172 +363,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -172 +377,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) } throws TestException()
 +            coEvery { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) } throws
 +                TestException()
-@@ -180 +372 @@ class RequestSwapQuoteUseCaseTest {
+@@ -180 +386 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) } throws TestException()
 +            coEvery { ledgerProposalPipeline.createExactInputSwapProposal(any(), any(), any()) } throws TestException()
-@@ -183 +375 @@ class RequestSwapQuoteUseCaseTest {
+@@ -183 +389 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
 +            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
-@@ -202 +394 @@ class RequestSwapQuoteUseCaseTest {
+@@ -202 +408 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) }
 +            coVerify { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
-@@ -210,2 +402,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -210,2 +416,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) }
 -            coVerify { keystoneProposalRepository.createPCZTFromProposal() }
 +            coVerify { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) }
 +            coVerify { keystoneProposalRepository.createPCZTFromProposal(any()) }
-@@ -219 +411 @@ class RequestSwapQuoteUseCaseTest {
+@@ -219 +425 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify { ledgerProposalPipeline.createExactOutputSwapProposal(any(), any()) }
 +            coVerify { ledgerProposalPipeline.createExactOutputSwapProposal(any(), any(), any()) }
-@@ -227 +419 @@ class RequestSwapQuoteUseCaseTest {
+@@ -227 +433 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
 +            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
-@@ -236 +428 @@ class RequestSwapQuoteUseCaseTest {
+@@ -236 +442 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
 +            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
-@@ -245 +437 @@ class RequestSwapQuoteUseCaseTest {
+@@ -245 +451 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws
 +            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
-@@ -254 +446,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -254 +460,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } throws TestException()
 +            coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
 +                TestException()
-@@ -262 +455,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -262 +469,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any()) } throws TestException()
 +            coEvery { keystoneProposalRepository.createExactOutputSwapProposal(any(), any(), any()) } throws
 +                TestException()
-@@ -281,2 +475,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -281,2 +489,2 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any()) }
 +            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
-@@ -297,4 +491,4 @@ class RequestSwapQuoteUseCaseTest {
+@@ -297,4 +505,4 @@ class RequestSwapQuoteUseCaseTest {
 -            coVerify(exactly = 0) { ledgerProposalPipeline.createExactInputSwapProposal(any(), any()) }
 -            coVerify(exactly = 1) { ledgerProposalPipeline.clear() }
 -            coVerify(exactly = 1) { keystoneProposalRepository.clear() }
@@ -95333,16 +95866,16 @@ index c01988b65..ccdf0c999 100644
 +            coVerify(exactly = 0) { ledgerProposalPipeline.clear(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.clear(any()) }
 +            coVerify(exactly = 0) { zashiProposalRepository.clear(any()) }
-@@ -308 +502 @@ class RequestSwapQuoteUseCaseTest {
+@@ -308 +516 @@ class RequestSwapQuoteUseCaseTest {
 -            verify(exactly = 1) { swapRepository.clearQuote() }
 +            verify(exactly = 1) { swapRepository.clearQuote(any()) }
-@@ -361 +555 @@ class RequestSwapQuoteUseCaseTest {
+@@ -361 +569 @@ class RequestSwapQuoteUseCaseTest {
 -                    address = "destination",
 +                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -367 +561 @@ class RequestSwapQuoteUseCaseTest {
+@@ -367 +575 @@ class RequestSwapQuoteUseCaseTest {
 -            verify(exactly = 0) { swapRepository.clearQuote() }
 +            verify(exactly = 0) { swapRepository.clearQuote(any()) }
-@@ -404,0 +599,94 @@ class RequestSwapQuoteUseCaseTest {
+@@ -404,0 +613,94 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun incomingQuotesUseIndependentShieldedRecipients() =
 +        runBlocking {
@@ -95437,7 +95970,7 @@ index c01988b65..ccdf0c999 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 +    }
 +
-@@ -406,0 +695,96 @@ class RequestSwapQuoteUseCaseTest {
+@@ -406,0 +709,96 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun invalidRecipientsStopEveryModeBeforeFreshAddressOrProvider() = runBlocking {
 +        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
@@ -95534,7 +96067,7 @@ index c01988b65..ccdf0c999 100644
 +        assertNavigatedToError()
 +    }
 +
-@@ -445 +829,21 @@ class RequestSwapQuoteUseCaseTest {
+@@ -445 +843,73 @@ class RequestSwapQuoteUseCaseTest {
 -    private fun zodl(): WalletAccount = mockk<ZodlAccount> { every { isSpendable } returns true }
 +    @Test
 +    fun providerDelayCannotBindAnOutgoingRefundToOneAccountAndDebitAnother() = runTest {
@@ -95557,14 +96090,12 @@ index c01988b65..ccdf0c999 100644
 +            val job = launch {
 +                if (mode == SwapMode.EXACT_INPUT) request.exactInput() else request.exactOutput()
 +            }
-@@ -447 +851,4 @@ class RequestSwapQuoteUseCaseTest {
--    private fun keystone(): WalletAccount = mockk<KeystoneAccount> { every { isSpendable } returns true }
++
 +            entered.await()
 +            account = second
 +            result.value = SwapQuoteData.Success(quote)
 +            job.join()
-@@ -449 +856,56 @@ class RequestSwapQuoteUseCaseTest {
--    private fun ledger(): WalletAccount = mockk<LedgerAccount> { every { isSpendable } returns true }
++
 +            coVerify { accountDataSource.requestNextShieldedAddress(true, first) }
 +            coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createExactInputSwapProposal(any(), any(), any()) }
@@ -95611,33 +96142,35 @@ index c01988b65..ccdf0c999 100644
 +        every { isSpendable } returns true
 +        every { isSelected } returns true
 +    }
-+
+@@ -447 +917,4 @@ class RequestSwapQuoteUseCaseTest {
+-    private fun keystone(): WalletAccount = mockk<KeystoneAccount> { every { isSpendable } returns true }
 +    private fun keystone(): WalletAccount = mockk<KeystoneAccount> {
 +        every { isSpendable } returns true
 +        every { isSelected } returns true
 +    }
-+
+@@ -449 +922,4 @@ class RequestSwapQuoteUseCaseTest {
+-    private fun ledger(): WalletAccount = mockk<LedgerAccount> { every { isSpendable } returns true }
 +    private fun ledger(): WalletAccount = mockk<LedgerAccount> {
 +        every { isSpendable } returns true
 +        every { isSelected } returns true
 +    }
-@@ -454 +916 @@ class RequestSwapQuoteUseCaseTest {
+@@ -454 +930 @@ class RequestSwapQuoteUseCaseTest {
 -            address = "destination",
 +            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -463 +925 @@ class RequestSwapQuoteUseCaseTest {
+@@ -463 +939 @@ class RequestSwapQuoteUseCaseTest {
 -            address = "destination",
 +            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -472 +934 @@ class RequestSwapQuoteUseCaseTest {
+@@ -472 +948 @@ class RequestSwapQuoteUseCaseTest {
 -            refundAddress = "refund",
 +            refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -485 +947,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -485 +961,2 @@ class RequestSwapQuoteUseCaseTest {
 -        selectedAccount: WalletAccount = zodl()
 +        selectedAccount: WalletAccount = zodl(),
 +        repository: SwapRepository = swapRepository,
-@@ -487,0 +951,2 @@ class RequestSwapQuoteUseCaseTest {
+@@ -487,0 +965,2 @@ class RequestSwapQuoteUseCaseTest {
 +        every { swapRepository.markReviewReady(any()) } returns true
 +        every { swapRepository.consumeReview(any()) } returns quoteData
-@@ -492,3 +957,7 @@ class RequestSwapQuoteUseCaseTest {
+@@ -492,3 +971,7 @@ class RequestSwapQuoteUseCaseTest {
 -        val synchronizer = mockk<Synchronizer> { coEvery { validateAddress(any()) } returns AddressType.Unified }
 -        val synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
@@ -95648,18 +96181,18 @@ index c01988b65..ccdf0c999 100644
 +        coEvery {
 +            accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any())
 +        } returns shieldedAddress
-@@ -495,0 +965 @@ class RequestSwapQuoteUseCaseTest {
+@@ -495,0 +979 @@ class RequestSwapQuoteUseCaseTest {
 +        every { accountDataSource.allAccounts } returns MutableStateFlow(listOf(selectedAccount))
-@@ -499 +969 @@ class RequestSwapQuoteUseCaseTest {
+@@ -499 +983 @@ class RequestSwapQuoteUseCaseTest {
 -            swapRepository = swapRepository,
 +            swapRepository = repository,
-@@ -518 +988 @@ class RequestSwapQuoteUseCaseTest {
+@@ -518 +1002 @@ class RequestSwapQuoteUseCaseTest {
 -        destinationAddress: String = "destination",
 +        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -541 +1011 @@ class RequestSwapQuoteUseCaseTest {
+@@ -541 +1025 @@ class RequestSwapQuoteUseCaseTest {
 -        destinationAddress: String = "destination",
 +        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -559 +1029 @@ class RequestSwapQuoteUseCaseTest {
+@@ -559 +1043 @@ class RequestSwapQuoteUseCaseTest {
 -        refundAddress: String = "refund",
 +        refundAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCaseTest.kt
@@ -100022,14 +100555,13 @@ index 000000000..e11cce502
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..51b91b89e
+index 000000000..77ceed3c7
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,486 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
-+import cash.z.ecc.android.sdk.WalletCoordinator
 +import cash.z.ecc.android.sdk.WalletInitMode
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
 +import cash.z.ecc.android.sdk.model.PersistableWallet
@@ -100058,6 +100590,8 @@ index 000000000..51b91b89e
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
++import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
++import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
@@ -100078,7 +100612,6 @@ index 000000000..51b91b89e
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CoroutineStart
 +import kotlinx.coroutines.Dispatchers
@@ -100087,7 +100620,6 @@ index 000000000..51b91b89e
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.filterNotNull
 +import kotlinx.coroutines.flow.first
-+import kotlinx.coroutines.flow.flow
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.runBlocking
@@ -100237,9 +100769,9 @@ index 000000000..51b91b89e
 +                return original
 +            }
 +        }
-+        val coordinator = mockk<WalletCoordinator>()
++        val sdkRecovery = mockk<WalletSeedRecovery>()
 +        val recover = RecoverFromSeedMismatchUseCase(
-+            stagedRead, coordinator, fixture.writeAccess, mockk(relaxed = true),
++            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
 +        )
 +        val recovery = launch { recover(beforeReset) }
 +        val replacement = originalWallet().copy(endpoint = LightWalletEndpoint("new.example.invalid", 443, true))
@@ -100251,7 +100783,7 @@ index 000000000..51b91b89e
 +            returnSnapshot.complete(Unit)
 +        }
 +        recovery.join()
-+        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
++        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        assertEquals(replacement, fixture.walletProvider.requirePersistableWallet())
 +    }
 +
@@ -100288,11 +100820,9 @@ index 000000000..51b91b89e
 +            recoveryWriteEntered.complete(Unit)
 +            finishRecoveryWrite.await()
 +        }
-+        val recoveryCoordinator = mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flowOf(true)
-+        }
++        val sdkRecovery = seedRecoveryFixture { true }
 +        val recover = RecoverFromSeedMismatchUseCase(
-+            fixture.walletProvider, recoveryCoordinator, fixture.writeAccess, mockk(relaxed = true),
++            fixture.walletProvider, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
 +        )
 +        val recovery = launch { recover(fixture.writeAccess.token()) }
 +        val reset = fixture.reset()
@@ -100401,12 +100931,10 @@ index 000000000..51b91b89e
 +    private class PausedRecovery(provider: PersistableWalletProvider, access: WalletWriteAccess) {
 +        val started = CompletableDeferred<Unit>()
 +        val finish = CompletableDeferred<Unit>()
-+        val recover = RecoverFromSeedMismatchUseCase(provider, mockk<WalletCoordinator> {
-+            every { deleteSdkDataFlow() } returns flow {
-+                started.complete(Unit)
-+                finish.await()
-+                emit(true)
-+            }
++        val recover = RecoverFromSeedMismatchUseCase(provider, seedRecoveryFixture {
++            started.complete(Unit)
++            finish.await()
++            true
 +        }, access, mockk(relaxed = true))
 +    }
 +
@@ -101128,10 +101656,10 @@ index 000000000..e00d0f4a5
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
 new file mode 100644
-index 000000000..fa7d90645
+index 000000000..902b56f0d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,245 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -101277,6 +101805,35 @@ index 000000000..fa7d90645
 +        assertEquals("{synthetic-unreadable}", storage.durable)
 +    }
 +
++    @Test
++    fun recoveredSdkInputUsesExplicitRestoreModeForTheCurrentWallet() = runTest {
++        val storage = CommitFixture().apply { failCommit = false }
++        val walletProvider = provider(storage)
++        val sdkWallets = observeSdkInput(walletProvider)
++        walletProvider.store(candidate)
++        runCurrent()
++        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
++
++        val original = walletProvider.requirePersistableWallet()
++        val restored = original.copy(walletInitMode = WalletInitMode.RestoreWallet)
++        assertTrue(walletProvider.storeIfCurrent(original, restored, walletProvider.writeVersion))
++        walletProvider.retryRead(recoveredWallet = restored)
++        // Another SDK model construction can replace the pinned SDK's process-global mode.
++        candidate.copy(walletInitMode = WalletInitMode.ExistingWallet)
++        runCurrent()
++        assertEquals(WalletInitMode.RestoreWallet, sdkWallets.last()?.walletInitMode)
++
++        val newWallet = candidate.copy(
++            endpoint = LightWalletEndpoint("different.fixture.invalid", 443, true),
++            seedPhrase = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { "ability" }),
++            walletInitMode = WalletInitMode.NewWallet,
++        )
++        walletProvider.store(newWallet)
++        runCurrent()
++        assertEquals(newWallet.endpoint, sdkWallets.last()?.endpoint)
++        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
++    }
++
 +    private suspend fun TestScope.assertUncommitted(
 +        walletProvider: PersistableWalletProviderImpl,
 +        sdkWallets: List<PersistableWallet?>,
@@ -101350,10 +101907,10 @@ index 000000000..fa7d90645
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkTransportGateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkTransportGateTest.kt
 new file mode 100644
-index 000000000..d720d8365
+index 000000000..ff3773ca2
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkTransportGateTest.kt
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,242 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import cash.z.ecc.android.sdk.model.PersistableWallet
@@ -101379,6 +101936,37 @@ index 000000000..d720d8365
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class WalletSdkTransportGateTest {
 +    @Test
++    fun recoveryDoesNotReopenTheCachedWalletBeforeFreshDecode() = runTest {
++        val gate = WalletSdkTransportGate()
++        val generation = MutableStateFlow(0L)
++        val old = mockk<PersistableWallet>()
++        val restored = mockk<PersistableWallet>()
++        val reads = MutableStateFlow(WalletSdkRead(0L, old))
++        val observed = mutableListOf<PersistableWallet?>()
++        backgroundScope.launch {
++            gate.walletInput(gate.walletDecisions(reads, generation), generation).collect { observed += it }
++        }
++        backgroundScope.launch { gate.transportInput(MutableStateFlow(false), generation).collect {} }
++        runCurrent()
++        assertEquals(old, observed.last())
++        val beforeRecovery = observed.size
++        gate.whileRecoveringSeed {
++            runCurrent()
++            assertNull(observed.last())
++            generation.value = 1L
++        }
++        runCurrent()
++        assertNull(observed.last())
++
++        // Even a precomputed decision cannot re-admit the preceding read generation.
++        assertNull(gate.walletInput(flow { emit(WalletSdkRead(0L, old)) }, generation).first())
++        reads.value = WalletSdkRead(1L, restored)
++        runCurrent()
++        assertEquals(restored, observed.last())
++        assertTrue(observed.drop(beforeRecovery).none { it === old })
++    }
++
++    @Test
 +    fun walletlessSetupCanSwitchTheVerifiedTorChoiceBeforeFirstWalletAdmission() = runTest {
 +        val gate = WalletSdkTransportGate()
 +        val newWallet = mockk<PersistableWallet>()
@@ -101388,7 +101976,7 @@ index 000000000..d720d8365
 +        val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 +        backgroundScope.launch {
 +            combine(
-+                gate.walletInput(gate.walletDecisions(wallets, generation)),
++                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
 +                gate.transportInput(useTor, generation),
 +            ) { wallet, tor -> wallet to tor }.collect { sdkInputs += it }
 +        }
@@ -101415,7 +102003,7 @@ index 000000000..d720d8365
 +        val observed = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 +        backgroundScope.launch {
 +            combine(
-+                gate.walletInput(gate.walletDecisions(wallets, generation)),
++                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
 +                gate.transportInput(preference, generation),
 +            ) { wallet, tor -> wallet to tor }.collect { observed += it }
 +        }
@@ -101446,7 +102034,7 @@ index 000000000..d720d8365
 +            val observed = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 +            val collector = backgroundScope.launch {
 +                combine(
-+                    gate.walletInput(gate.walletDecisions(wallets, generation)),
++                    gate.walletInput(gate.walletDecisions(wallets, generation), generation),
 +                    gate.transportInput(preference, generation),
 +                ) { wallet, tor -> wallet to tor }.collect { observed += it }
 +            }
@@ -101478,7 +102066,7 @@ index 000000000..d720d8365
 +        val stored = MutableStateFlow(false)
 +        val sdkInputs = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 +        fun inputs(owner: WalletSdkTransportGate) = combine(
-+            owner.walletInput(owner.walletDecisions(wallets, generation)),
++            owner.walletInput(owner.walletDecisions(wallets, generation), generation),
 +            owner.transportInput(stored, generation),
 +        ) { savedWallet, tor -> savedWallet to tor }
 +        backgroundScope.launch { inputs(gate).collect { sdkInputs += it } }
@@ -101525,7 +102113,7 @@ index 000000000..d720d8365
 +
 +        backgroundScope.launch {
 +            combine(
-+                gate.walletInput(gate.walletDecisions(wallets, generation)),
++                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
 +                gate.transportInput(transportReads, generation),
 +            ) {
 +                sdkWallet, tor -> sdkWallet to tor
@@ -109111,10 +109699,14 @@ index 000000000..5ea41a2da
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
-index 35abdfd66..0cd9c8cc5 100644
+index 35abdfd66..e624e0919 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
-@@ -62,0 +63,20 @@ class SwapVMMapperChangeModeTest {
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -18,0 +20 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
+@@ -62,0 +65,42 @@ class SwapVMMapperChangeModeTest {
 +    @Test
 +    fun fiatConversionFloorsTheExactTokenAmountAtAssetPrecision() {
 +        val asset = SwapAssetTestFixture.asset(
@@ -109133,6 +109725,28 @@ index 35abdfd66..0cd9c8cc5 100644
 +
 +        assertNotNull(screen.primaryButton).onClick()
 +        assertEquals(listOf(BigDecimal("0.99999999")), requested)
++    }
++
++    @Test
++    fun typedOverprecisionIsVisibleAndCannotRequestAQuoteInEitherDirection() {
++        val safeCallbacks = callbacks.copy(onRequestSwapQuoteClick = { _, _, _ -> error("Unexpected quote") })
++        SwapDirection.entries.forEach { direction ->
++            listOf("0.100000009", "0.000000009").forEach { text ->
++                val input = internalState(account(isSpendable = true)).copy(
++                    swapDirection = direction,
++                    amountTextState = NumberTextFieldInnerState.fromAmount(BigDecimal(text)),
++                    addressText = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
++                )
++                val screen = mapper.createState(input, safeCallbacks)
++                assertEquals(
++                    stringRes(co.electriccoin.zcash.ui.design.R.string.send_error_invalidAmount),
++                    screen.amountTextField.error,
++                )
++                val quote = assertNotNull(screen.primaryButton)
++                assertFalse(quote.isEnabled)
++                quote.onClick()
++            }
++        }
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
@@ -112846,7 +113460,7 @@ index 000000000..b3779d0d1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt
 new file mode 100644
-index 000000000..74e12f8dd
+index 000000000..6b4b9e6d1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt
 @@ -0,0 +1,165 @@
@@ -112927,7 +113541,7 @@ index 000000000..74e12f8dd
 +        val admitted = mutableListOf<Pair<PersistableWallet?, Boolean?>>()
 +        backgroundScope.launch {
 +            combine(
-+                gate.walletInput(gate.walletDecisions(wallets, generation)),
++                gate.walletInput(gate.walletDecisions(wallets, generation), generation),
 +                gate.transportInput(preference.observe(), generation),
 +            ) { current, tor -> current to tor }.collect { admitted += it }
 +        }
@@ -115255,6 +115869,55 @@ index 000000000..62b0800ea
 +        assertEquals("fake phrase only", copied)
 +        copyRecoveryIfRevealed(true, { "1234567" }, { copied = it })
 +        assertEquals("1234567", copied)
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/work/SyncWorkerTransportTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/work/SyncWorkerTransportTest.kt
+new file mode 100644
+index 000000000..694680353
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/work/SyncWorkerTransportTest.kt
+@@ -0,0 +1,43 @@
++package co.electriccoin.zcash.work
++
++import cash.z.ecc.android.sdk.Synchronizer
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.async
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class SyncWorkerTransportTest {
++    private val currentStatus = MutableStateFlow(Synchronizer.Status.SYNCING)
++    private val synchronizer = mockk<Synchronizer> { every { status } returns currentStatus }
++
++    @Test
++    fun workerStartingWithSuspendedSdkReturnsWithoutCompletingSync() = runTest {
++        val sync = MutableStateFlow<Synchronizer?>(null)
++        assertFalse(awaitBackgroundSync(sync, MutableStateFlow(true)))
++    }
++
++    @Test
++    fun intentionalWithdrawalStopsRunningWorkerAndFreshProcessCanSync() = runTest {
++        val suspended = MutableStateFlow(false)
++        val sync = MutableStateFlow<Synchronizer?>(synchronizer)
++        val waiting = async { awaitBackgroundSync(sync, suspended) }
++        runCurrent()
++        assertFalse(waiting.isCompleted)
++
++        suspended.value = true
++        sync.value = null
++        assertFalse(waiting.await())
++
++        sync.value = synchronizer
++        suspended.value = false
++        currentStatus.value = Synchronizer.Status.SYNCED
++        assertTrue(awaitBackgroundSync(sync, suspended))
 +    }
 +}
 diff --git a/ui-lib/src/test/resources/swap-catalog-admission.json b/ui-lib/src/test/resources/swap-catalog-admission.json
