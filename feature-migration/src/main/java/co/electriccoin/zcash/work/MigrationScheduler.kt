@@ -15,8 +15,10 @@ import co.electriccoin.zcash.migration.BuildConfig
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
+import org.koin.core.context.GlobalContext
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -37,8 +39,12 @@ import kotlin.time.toJavaDuration
  * notification (spec §6.4), never to run the transfer itself.
  */
 class MigrationScheduler(
-    private val context: Context
+    private val context: Context,
 ) {
+    private val resetPending = {
+        GlobalContext.getOrNull()?.getOrNull<ResetProgressStore>()?.isPending?.value == true ||
+            ResetProgressStore.hasPendingMarker(context)
+    }
     // Armed/cancelled alongside the WorkManager job below rather than threaded through every call
     // site separately — see MigrationDueAlarmScheduler's kdoc for why this needs its own
     // AlarmManager alarm instead of relying on the WorkManager job itself.
@@ -65,7 +71,7 @@ class MigrationScheduler(
     }
 
     internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration, version: Long) {
-        if (wakeVersion(accountKeyId) != version) return
+        if (resetPending() || wakeVersion(accountKeyId) != version) return
         val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
         // An interrupted worker may already have committed its child before acknowledging it.
         val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
@@ -80,6 +86,7 @@ class MigrationScheduler(
     }
 
     internal suspend fun reconcileScheduledWake(accountKeyId: String, version: Long = wakeVersion(accountKeyId)) {
+        if (resetPending()) return
         val manager = WorkManager.getInstance(context)
         val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
             .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
@@ -96,10 +103,11 @@ class MigrationScheduler(
         expectedVersion: Long? = null,
         startsPlan: Boolean = false,
     ): Boolean {
-        val manager = WorkManager.getInstance(context)
-        val request = newWorkRequest(accountKeyId, delay)
+        val manager by lazy { WorkManager.getInstance(context) }
+        val request by lazy { newWorkRequest(accountKeyId, delay) }
         val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
             synchronized(wakeVersions) {
+                if (resetPending()) return@synchronized null
                 val current = wakeVersion(accountKeyId)
                 if (startsPlan) completedPlans.remove(accountKeyId)
                 if (accountKeyId in completedPlans || expectedVersion != null && expectedVersion != current) {
@@ -127,10 +135,12 @@ class MigrationScheduler(
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
     private suspend fun armFallback(accountKeyId: String, version: Long, resolve: suspend () -> Wake?) {
+        if (resetPending()) return
         try {
             val wake = resolve() ?: return
             MigrationAccountRetirement.keepWake(accountKeyId) {
                 synchronized(wakeVersions) {
+                    if (resetPending()) return@synchronized
                     val stillPending = accountKeyId !in completedPlans && wakeVersion(accountKeyId) == version &&
                         !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
                     if (stillPending) {
@@ -156,6 +166,13 @@ class MigrationScheduler(
 
     suspend fun cancelAndWait(accountKeyId: String) {
         cancelWork(accountKeyId).result.await()
+    }
+
+    suspend fun cancelWalletWorkAndWait() {
+        val cancellation = synchronized(wakeVersions) {
+            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
+        }
+        cancellation.result.await()
     }
 
     private fun cancelWork(accountKeyId: String): Operation = synchronized(wakeVersions) {

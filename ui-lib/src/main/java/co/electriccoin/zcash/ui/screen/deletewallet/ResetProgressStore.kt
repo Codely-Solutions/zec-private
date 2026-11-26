@@ -28,7 +28,7 @@ enum class ResetStage {
  * preferences. The marker lives outside the stores it protects and contains neither keys nor account IDs.
  */
 class ResetProgressStore(context: Context, private val directorySync: DirectorySync) {
-    private val file = File(context.noBackupFilesDir, "wallet-reset-progress")
+    private val file = markerFile(context)
     private val pending = MutableStateFlow(!Files.notExists(file.toPath()))
 
     private var lastStage: ResetStage? = null
@@ -102,4 +102,10 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
 
     private fun readStage(): ResetStage? =
         if (Files.notExists(file.toPath())) null else ResetStage.valueOf(file.readText())
+
+    companion object {
+        fun hasPendingMarker(context: Context): Boolean = !Files.notExists(markerFile(context).toPath())
+
+        private fun markerFile(context: Context) = File(context.noBackupFilesDir, "wallet-reset-progress")
+    }
 }

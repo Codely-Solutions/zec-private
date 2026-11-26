@@ -6,7 +6,6 @@ import android.content.Intent
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.InternalTestingApi
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.MainActivity
@@ -76,14 +75,12 @@ import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationLiveDriver
-import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -337,12 +334,12 @@ class MigrationAppHooksImpl(
     }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
+        val scheduler = MigrationScheduler(context)
         val keys = if (accountKeyId == null) {
             launchNavigation.clearMigrationRequests()
-            val cancellation = WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
             migrationLiveDriver.stopAll()
-            cancellation.result.await()
             migrationDriveOnce.awaitIdle()
+            scheduler.cancelWalletWorkAndWait()
             pendingMigrationSchedule.clear()
             pendingKeystone.clear()
             // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
@@ -355,7 +352,7 @@ class MigrationAppHooksImpl(
             listOf(accountKeyId)
         }
         keys.forEach { key ->
-            MigrationScheduler(context).cancel(key)
+            if (accountKeyId == null) scheduler.cancelAndWait(key) else scheduler.cancel(key)
             withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
             migrationNotifier.cancel(key)
             migrationNotifier.cancelStepDue(key)

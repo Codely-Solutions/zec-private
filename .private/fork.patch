@@ -5067,60 +5067,57 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..d5db851b2 100644
+index 294506ed1..86cdc55d7 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
 +import android.content.ComponentName
-@@ -7,0 +9 @@ import androidx.navigation.toRoute
-+import androidx.work.WorkManager
-@@ -8,0 +11,3 @@ import cash.z.ecc.android.sdk.InternalTestingApi
+@@ -8,0 +10,3 @@ import cash.z.ecc.android.sdk.InternalTestingApi
 +import co.electriccoin.zcash.ui.LaunchNavigationRequests
 +import co.electriccoin.zcash.ui.MainActivity
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -16,0 +22 @@ import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
+@@ -16,0 +21 @@ import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
 +import co.electriccoin.zcash.ui.common.model.AppAccessSession
-@@ -20,0 +27 @@ import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorag
+@@ -20,0 +26 @@ import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorag
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -28 +35 @@ import co.electriccoin.zcash.ui.dialogComposable
+@@ -28 +34 @@ import co.electriccoin.zcash.ui.dialogComposable
 -import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -64,0 +72,3 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
+@@ -64,0 +71,3 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
 +import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
-@@ -65,0 +76,3 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -66 +75,4 @@ import co.electriccoin.zcash.work.MigrationScheduler
+-import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationAccountRetirement
 +import co.electriccoin.zcash.work.MigrationDriveOnce
 +import co.electriccoin.zcash.work.MigrationLiveDriver
-@@ -66,0 +80 @@ import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
-@@ -67,0 +82,10 @@ import kotlinx.coroutines.CoroutineScope
+@@ -67,0 +80,9 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.filterNotNull
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.Dispatchers
-+import kotlinx.coroutines.guava.await
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.withContext
-@@ -118,0 +143 @@ class MigrationSyncedHookImpl(
+@@ -118,0 +140 @@ class MigrationSyncedHookImpl(
 +    private val resetProgress: ResetProgressStore,
-@@ -120,0 +146 @@ class MigrationSyncedHookImpl(
+@@ -120,0 +143 @@ class MigrationSyncedHookImpl(
 +        if (resetProgress.isPending.value) return
-@@ -125,3 +150,0 @@ class MigrationSyncedHookImpl(
+@@ -125,3 +147,0 @@ class MigrationSyncedHookImpl(
 -        val isInProgress =
 -            getOrchardMigrationSdk().getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress
 -        if (!isInProgress) return
-@@ -128,0 +152,2 @@ class MigrationSyncedHookImpl(
+@@ -128,0 +149,2 @@ class MigrationSyncedHookImpl(
 +        val state = getOrchardMigrationSdk(accountKeyId)?.getMigrationStateUnreconciled()
 +        if (state !is cash.z.ecc.android.sdk.MigrationState.InProgress || resetProgress.isPending.value) return
-@@ -136 +161 @@ class MigrationAppHooksImpl(
+@@ -136 +158 @@ class MigrationAppHooksImpl(
 -    private val navigationRouter: NavigationRouter,
 +    private val launchNavigation: LaunchNavigationRequests,
-@@ -139,0 +165,9 @@ class MigrationAppHooksImpl(
+@@ -139,0 +162,9 @@ class MigrationAppHooksImpl(
 +    private val resetProgress: ResetProgressStore,
 +    private val migrationLiveDriver: MigrationLiveDriver,
 +    private val migrationDriveOnce: MigrationDriveOnce,
@@ -5130,12 +5127,12 @@ index 294506ed1..d5db851b2 100644
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
 +    private val appAccess: AppAccessSession,
 +    private val navigationRouter: NavigationRouter,
-@@ -146 +180,3 @@ class MigrationAppHooksImpl(
+@@ -146 +177,3 @@ class MigrationAppHooksImpl(
 -            BuildConfig.DEBUG &&
 +            resetProgress.isPending.value -> false
 +
 +            DebugStartMigrationE2EUseCase.isAllowed &&
-@@ -153,8 +189,5 @@ class MigrationAppHooksImpl(
+@@ -153,8 +186,5 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
 -                // replaceAll ensures Home is always on the back stack regardless of how the app
 -                // was opened. Account selection first — the migration screens read the SELECTED
@@ -5149,7 +5146,7 @@ index 294506ed1..d5db851b2 100644
 +            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
 +                intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 +                openNotificationProgress(intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID), scope)
-@@ -164,11 +197,66 @@ class MigrationAppHooksImpl(
+@@ -164,11 +194,66 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -5227,14 +5224,14 @@ index 294506ed1..d5db851b2 100644
 +                        selected?.sdkAccount?.accountUuid?.toStorageKeyId() == ownerKey &&
 +                            walletWriteAccess.token() == wallet && !resetProgress.isPending.value &&
 +                            !MigrationAccountRetirement.blocks(ownerKey)
-@@ -176 +263,0 @@ class MigrationAppHooksImpl(
+@@ -176 +260,0 @@ class MigrationAppHooksImpl(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +264,0 @@ class MigrationAppHooksImpl(
+@@ -178 +261,0 @@ class MigrationAppHooksImpl(
 -                true
-@@ -179,0 +266,2 @@ class MigrationAppHooksImpl(
+@@ -179,0 +263,2 @@ class MigrationAppHooksImpl(
 +        }
 +    }
-@@ -181,2 +269,38 @@ class MigrationAppHooksImpl(
+@@ -181,2 +266,38 @@ class MigrationAppHooksImpl(
 -            else -> {
 -                false
 +    override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
@@ -5275,9 +5272,9 @@ index 294506ed1..d5db851b2 100644
 +        } finally {
 +            if (retirementStarted && !deleted) {
 +                restoreRetirement(accountKeyId, generation)
-@@ -184,0 +309 @@ class MigrationAppHooksImpl(
+@@ -184,0 +306 @@ class MigrationAppHooksImpl(
 +    }
-@@ -186,23 +311,14 @@ class MigrationAppHooksImpl(
+@@ -186,23 +308,14 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -5315,12 +5312,12 @@ index 294506ed1..d5db851b2 100644
 +                }
 +            } finally {
 +                if (!reopened) MigrationAccountRetirement.restore(accountKeyId)
-@@ -210,4 +325,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +322,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +329,9 @@ class MigrationAppHooksImpl(
+@@ -217 +326,9 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    @Suppress("TooGenericExceptionCaught") // The account is gone even if the OS rejects worker cleanup.
 +    private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
@@ -5331,18 +5328,18 @@ index 294506ed1..d5db851b2 100644
 +            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
 +        }
 +    }
-@@ -220,5 +340,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +337,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
 -                    accountDataSource.getAllAccounts().map { it.sdkAccount.accountUuid.toStorageKeyId() }
 -                }.getOrDefault(emptyList())
++        val scheduler = MigrationScheduler(context)
 +        val keys = if (accountKeyId == null) {
 +            launchNavigation.clearMigrationRequests()
-+            val cancellation = WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
 +            migrationLiveDriver.stopAll()
-+            cancellation.result.await()
 +            migrationDriveOnce.awaitIdle()
++            scheduler.cancelWalletWorkAndWait()
 +            pendingMigrationSchedule.clear()
 +            pendingKeystone.clear()
 +            // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
@@ -5354,11 +5351,13 @@ index 294506ed1..d5db851b2 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -226,0 +359 @@ class MigrationAppHooksImpl(
+@@ -226 +355,2 @@ class MigrationAppHooksImpl(
+-            MigrationScheduler(context).cancel(key)
++            if (accountKeyId == null) scheduler.cancelAndWait(key) else scheduler.cancel(key)
 +            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
-@@ -227,0 +361 @@ class MigrationAppHooksImpl(
+@@ -227,0 +358 @@ class MigrationAppHooksImpl(
 +            migrationNotifier.cancelStepDue(key)
-@@ -229,6 +363 @@ class MigrationAppHooksImpl(
+@@ -229,6 +360 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
@@ -5366,17 +5365,17 @@ index 294506ed1..d5db851b2 100644
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
 +        if (accountKeyId == null) migrationNotifier.cancelWalletMigrationNotices()
-@@ -236,0 +366,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +363,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +375 @@ class MigrationNavigatorImpl(
+@@ -242,3 +372 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -250,7 +381,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -250,7 +378,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSetupArgs> { MigrationSetupScreen() }
 -            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
 -            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
@@ -5391,13 +5390,13 @@ index 294506ed1..d5db851b2 100644
 +            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +390 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +387 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute(), entry.id) }
-@@ -261 +392 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +389 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
-@@ -263,5 +394,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263,5 +391,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 -            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
@@ -11468,7 +11467,7 @@ index 41f7bb347..844ad09d1 100644
 -                    e
 +                    "MigrationLiveDriver: step failed (${e.javaClass.simpleName}). Retrying."
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
-index 1886de6a8..3bdadb490 100644
+index 1886de6a8..831487f3d 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 @@ -8,0 +9,2 @@ import androidx.work.OneTimeWorkRequestBuilder
@@ -11476,15 +11475,25 @@ index 1886de6a8..3bdadb490 100644
 +import androidx.work.WorkInfo
 @@ -9,0 +12 @@ import androidx.work.WorkManager
 +import androidx.work.WorkRequest
-@@ -12,0 +16,5 @@ import co.electriccoin.zcash.migration.migrationLog
+@@ -12,0 +16,7 @@ import co.electriccoin.zcash.migration.migrationLog
 +import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 +import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.guava.await
++import org.koin.core.context.GlobalContext
 +import java.util.UUID
-@@ -13,0 +22 @@ import kotlin.time.Duration
+@@ -13,0 +24 @@ import kotlin.time.Duration
 +import kotlin.time.Duration.Companion.milliseconds
-@@ -38,17 +47,104 @@ class MigrationScheduler(
+@@ -31 +42 @@ class MigrationScheduler(
+-    private val context: Context
++    private val context: Context,
+@@ -32,0 +44,4 @@ class MigrationScheduler(
++    private val resetPending = {
++        GlobalContext.getOrNull()?.getOrNull<ResetProgressStore>()?.isPending?.value == true ||
++            ResetProgressStore.hasPendingMarker(context)
++    }
+@@ -38,17 +53,108 @@ class MigrationScheduler(
 -    fun schedule(accountKeyId: String, delay: Duration) {
 -        migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
 -        WorkManager.getInstance(context).enqueueUniqueWork(
@@ -11523,7 +11532,7 @@ index 1886de6a8..3bdadb490 100644
 +    }
 +
 +    internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration, version: Long) {
-+        if (wakeVersion(accountKeyId) != version) return
++        if (resetPending() || wakeVersion(accountKeyId) != version) return
 +        val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
 +        // An interrupted worker may already have committed its child before acknowledging it.
 +        val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
@@ -11538,6 +11547,7 @@ index 1886de6a8..3bdadb490 100644
 +    }
 +
 +    internal suspend fun reconcileScheduledWake(accountKeyId: String, version: Long = wakeVersion(accountKeyId)) {
++        if (resetPending()) return
 +        val manager = WorkManager.getInstance(context)
 +        val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
 +            .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
@@ -11554,10 +11564,11 @@ index 1886de6a8..3bdadb490 100644
 +        expectedVersion: Long? = null,
 +        startsPlan: Boolean = false,
 +    ): Boolean {
-+        val manager = WorkManager.getInstance(context)
-+        val request = newWorkRequest(accountKeyId, delay)
++        val manager by lazy { WorkManager.getInstance(context) }
++        val request by lazy { newWorkRequest(accountKeyId, delay) }
 +        val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
 +            synchronized(wakeVersions) {
++                if (resetPending()) return@synchronized null
 +                val current = wakeVersion(accountKeyId)
 +                if (startsPlan) completedPlans.remove(accountKeyId)
 +                if (accountKeyId in completedPlans || expectedVersion != null && expectedVersion != current) {
@@ -11585,10 +11596,12 @@ index 1886de6a8..3bdadb490 100644
 +
 +    @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
 +    private suspend fun armFallback(accountKeyId: String, version: Long, resolve: suspend () -> Wake?) {
++        if (resetPending()) return
 +        try {
 +            val wake = resolve() ?: return
 +            MigrationAccountRetirement.keepWake(accountKeyId) {
 +                synchronized(wakeVersions) {
++                    if (resetPending()) return@synchronized
 +                    val stillPending = accountKeyId !in completedPlans && wakeVersion(accountKeyId) == version &&
 +                        !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
 +                    if (stillPending) {
@@ -11606,7 +11619,7 @@ index 1886de6a8..3bdadb490 100644
 +        } catch (e: Exception) {
 +            migrationLog("MigrationScheduler: fallback alarm unavailable (${e.javaClass.simpleName}).")
 +        }
-@@ -58,2 +154,12 @@ class MigrationScheduler(
+@@ -58,2 +164,19 @@ class MigrationScheduler(
 -        migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
 -        WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
 +        cancelWork(accountKeyId)
@@ -11616,14 +11629,21 @@ index 1886de6a8..3bdadb490 100644
 +        cancelWork(accountKeyId).result.await()
 +    }
 +
++    suspend fun cancelWalletWorkAndWait() {
++        val cancellation = synchronized(wakeVersions) {
++            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
++        }
++        cancellation.result.await()
++    }
++
 +    private fun cancelWork(accountKeyId: String): Operation = synchronized(wakeVersions) {
 +        advanceWakeVersion(accountKeyId)
 +        completedPlans.remove(accountKeyId)
 +        migrationLog("MigrationScheduler: cancelling a migration work chain.")
 +        val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
-@@ -61,0 +168 @@ class MigrationScheduler(
+@@ -61,0 +185 @@ class MigrationScheduler(
 +        operation
-@@ -64,0 +172,53 @@ class MigrationScheduler(
+@@ -64,0 +189,53 @@ class MigrationScheduler(
 +        // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
 +        private val wakeVersions = mutableMapOf<String, Long>()
 +        private val completedPlans = mutableSetOf<String>()
@@ -11677,7 +11697,7 @@ index 1886de6a8..3bdadb490 100644
 +        private fun advanceWakeVersion(accountKeyId: String): Long =
 +            (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
 +
-@@ -70,0 +231,2 @@ class MigrationScheduler(
+@@ -70,0 +248,2 @@ class MigrationScheduler(
 +        private const val RETRY_BACKOFF_SHIFT_LIMIT = 20
 +
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
@@ -12078,10 +12098,10 @@ index 698a60fbd..66791cab1 100644
 +        }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..0bb15452b
+index 000000000..9c823801f
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,474 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -12103,6 +12123,7 @@ index 000000000..0bb15452b
 +import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 +import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 +import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 +import co.electriccoin.zcash.work.MigrationDriveOnce
 +import co.electriccoin.zcash.work.MigrationAccountRetirement
@@ -12133,11 +12154,13 @@ index 000000000..0bb15452b
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
++import java.nio.file.Files
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertTrue
++import kotlin.time.Duration
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class MigrationAppHooksResetTest {
@@ -12326,7 +12349,10 @@ index 000000000..0bb15452b
 +            }
 +        }
 +        val driver = mockk<MigrationLiveDriver>(relaxed = true)
-+        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
++        val releaseEnteredDrive = CompletableDeferred<Unit>()
++        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true) {
++            coEvery { awaitIdle() } coAnswers { releaseEnteredDrive.await() }
++        }
 +        val notifier = mockk<MigrationNotifier>(relaxed = true)
 +        val hooks = MigrationAppHooksImpl(
 +            mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context, pendingReset(), driver, driveOnce,
@@ -12340,6 +12366,11 @@ index 000000000..0bb15452b
 +            runCurrent()
 +
 +            coVerify(exactly = 0) { accounts.getAllAccounts() }
++            verify(exactly = 0) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
++            assertFalse(reset.isCompleted)
++
++            releaseEnteredDrive.complete(Unit)
++            runCurrent()
 +            verify(exactly = 1) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
 +            assertFalse(reset.isCompleted)
 +
@@ -12347,12 +12378,13 @@ index 000000000..0bb15452b
 +            runCurrent()
 +            assertTrue(reset.isCompleted)
 +            coVerifyOrder {
-+                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
 +                driver.stopAll()
 +                driveOnce.awaitIdle()
++                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
 +                notifier.cancelWalletMigrationNotices()
 +            }
 +        } finally {
++            releaseEnteredDrive.cancel()
 +            cancellation.cancel(false)
 +            unmockkObject(WorkManager.Companion)
 +        }
@@ -12384,18 +12416,46 @@ index 000000000..0bb15452b
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
 +            every { WorkManager.getInstance(context) } returns workManager
-+            every { anyConstructed<MigrationScheduler>().cancel(any()) } returns Unit
++            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(any()) } returns Unit
 +
 +            hooks.cancelMigrationWork(null)
 +
-+            verify(exactly = 1) { anyConstructed<MigrationScheduler>().cancel("fixture") }
++            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().cancelAndWait("fixture") }
 +            verify(exactly = 1) { notifier.cancel("fixture") }
 +            verify(exactly = 1) { notifier.cancelStepDue("fixture") }
-+            verify(exactly = 0) { anyConstructed<MigrationScheduler>().cancel("other") }
++            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().cancelAndWait("other") }
 +            coVerify(exactly = 0) { accounts.getAllAccounts() }
 +        } finally {
 +            unmockkConstructor(MigrationScheduler::class)
 +            unmockkObject(WorkManager.Companion)
++        }
++    }
++
++    @Test
++    fun aPendingResetRefusesAPlanAndPreventsRecoveryFromRearmingItsWake() = runTest {
++        val directory = Files.createTempDirectory("migration-reset-fixture")
++        val context = mockk<Context> { every { noBackupFilesDir } returns directory.toFile() }
++        val reset = ResetProgressStore(context, mockk(relaxed = true))
++        val scheduler = MigrationScheduler(context)
++        val key = "pending-reset-fixture"
++        val version = MigrationScheduler.wakeVersion(key)
++        mockkObject(WorkManager.Companion)
++        try {
++            reset.store(ResetStage.ERASE_SDK)
++            every { WorkManager.getInstance(context) } throws AssertionError("WorkManager lookup during pending reset")
++
++            assertFailsWith<IllegalStateException> {
++                scheduler.scheduleAndAwait(key, Duration.ZERO)
++            }
++            scheduler.scheduleIfMissing(key, expectedVersion = version)
++            scheduler.scheduleSuccessorAndAwait(key, Duration.ZERO, version)
++            scheduler.reconcileScheduledWake(key, version)
++            verify(exactly = 0) { WorkManager.getInstance(context) }
++            assertEquals(version, MigrationScheduler.wakeVersion(key))
++        } finally {
++            unmockkObject(WorkManager.Companion)
++            reset.store(null)
++            Files.delete(directory)
 +        }
 +    }
 +
@@ -62933,10 +62993,10 @@ index cf8c8cf1c..0fe34e81a 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
 new file mode 100644
-index 000000000..d20a6d1ef
+index 000000000..5da2e16dd
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetProgressStore.kt
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,111 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -62967,7 +63027,7 @@ index 000000000..d20a6d1ef
 + * preferences. The marker lives outside the stores it protects and contains neither keys nor account IDs.
 + */
 +class ResetProgressStore(context: Context, private val directorySync: DirectorySync) {
-+    private val file = File(context.noBackupFilesDir, "wallet-reset-progress")
++    private val file = markerFile(context)
 +    private val pending = MutableStateFlow(!Files.notExists(file.toPath()))
 +
 +    private var lastStage: ResetStage? = null
@@ -63041,6 +63101,12 @@ index 000000000..d20a6d1ef
 +
 +    private fun readStage(): ResetStage? =
 +        if (Files.notExists(file.toPath())) null else ResetStage.valueOf(file.readText())
++
++    companion object {
++        fun hasPendingMarker(context: Context): Boolean = !Files.notExists(markerFile(context).toPath())
++
++        private fun markerFile(context: Context) = File(context.noBackupFilesDir, "wallet-reset-progress")
++    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletSdkDataUseCase.kt
 new file mode 100644

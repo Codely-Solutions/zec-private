@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateReposito
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationAccountRetirement
@@ -49,11 +50,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationAppHooksResetTest {
@@ -242,7 +245,10 @@ class MigrationAppHooksResetTest {
             }
         }
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
-        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true)
+        val releaseEnteredDrive = CompletableDeferred<Unit>()
+        val driveOnce = mockk<MigrationDriveOnce>(relaxed = true) {
+            coEvery { awaitIdle() } coAnswers { releaseEnteredDrive.await() }
+        }
         val notifier = mockk<MigrationNotifier>(relaxed = true)
         val hooks = MigrationAppHooksImpl(
             mockk(), mockk(), mockk(relaxed = true), accounts, notifier, context, pendingReset(), driver, driveOnce,
@@ -256,6 +262,11 @@ class MigrationAppHooksResetTest {
             runCurrent()
 
             coVerify(exactly = 0) { accounts.getAllAccounts() }
+            verify(exactly = 0) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
+            assertFalse(reset.isCompleted)
+
+            releaseEnteredDrive.complete(Unit)
+            runCurrent()
             verify(exactly = 1) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
             assertFalse(reset.isCompleted)
 
@@ -263,12 +274,13 @@ class MigrationAppHooksResetTest {
             runCurrent()
             assertTrue(reset.isCompleted)
             coVerifyOrder {
-                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
                 driver.stopAll()
                 driveOnce.awaitIdle()
+                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
                 notifier.cancelWalletMigrationNotices()
             }
         } finally {
+            releaseEnteredDrive.cancel()
             cancellation.cancel(false)
             unmockkObject(WorkManager.Companion)
         }
@@ -300,18 +312,46 @@ class MigrationAppHooksResetTest {
         mockkConstructor(MigrationScheduler::class)
         try {
             every { WorkManager.getInstance(context) } returns workManager
-            every { anyConstructed<MigrationScheduler>().cancel(any()) } returns Unit
+            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(any()) } returns Unit
 
             hooks.cancelMigrationWork(null)
 
-            verify(exactly = 1) { anyConstructed<MigrationScheduler>().cancel("fixture") }
+            coVerify(exactly = 1) { anyConstructed<MigrationScheduler>().cancelAndWait("fixture") }
             verify(exactly = 1) { notifier.cancel("fixture") }
             verify(exactly = 1) { notifier.cancelStepDue("fixture") }
-            verify(exactly = 0) { anyConstructed<MigrationScheduler>().cancel("other") }
+            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().cancelAndWait("other") }
             coVerify(exactly = 0) { accounts.getAllAccounts() }
         } finally {
             unmockkConstructor(MigrationScheduler::class)
             unmockkObject(WorkManager.Companion)
+        }
+    }
+
+    @Test
+    fun aPendingResetRefusesAPlanAndPreventsRecoveryFromRearmingItsWake() = runTest {
+        val directory = Files.createTempDirectory("migration-reset-fixture")
+        val context = mockk<Context> { every { noBackupFilesDir } returns directory.toFile() }
+        val reset = ResetProgressStore(context, mockk(relaxed = true))
+        val scheduler = MigrationScheduler(context)
+        val key = "pending-reset-fixture"
+        val version = MigrationScheduler.wakeVersion(key)
+        mockkObject(WorkManager.Companion)
+        try {
+            reset.store(ResetStage.ERASE_SDK)
+            every { WorkManager.getInstance(context) } throws AssertionError("WorkManager lookup during pending reset")
+
+            assertFailsWith<IllegalStateException> {
+                scheduler.scheduleAndAwait(key, Duration.ZERO)
+            }
+            scheduler.scheduleIfMissing(key, expectedVersion = version)
+            scheduler.scheduleSuccessorAndAwait(key, Duration.ZERO, version)
+            scheduler.reconcileScheduledWake(key, version)
+            verify(exactly = 0) { WorkManager.getInstance(context) }
+            assertEquals(version, MigrationScheduler.wakeVersion(key))
+        } finally {
+            unmockkObject(WorkManager.Companion)
+            reset.store(null)
+            Files.delete(directory)
         }
     }
 
