@@ -73,6 +73,10 @@ PUBLICATION_JOBS = {
     b'verify_publication', b'record_integration', b'notify', b'validation_recovered', b'failed',
 }
 
+
+class ReceiptInputsChanged(ValueError):
+    """The original receipt belongs to different acceptance inputs."""
+
 ARTIFACTS = {
     'production_id': 'validated-unsigned-apk', 'core_id': 'core-testnet-candidate',
     'quote_id': 'isolated-ui-repro-apk', 'core_receipt_id': 'hosted-core-receipt',
@@ -367,9 +371,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
             outputs['same_controller_retry'] = 'true'
     elif same:
         require(original_quote, 'Same-controller quote retry requires the original transient quote failure')
-    if original_quote:
+    if original_quote and quote_inputs_match(root, original, controller):
         require(not quote_run, 'The original run already has a passing quote receipt')
-        verify_receipt_delta(root, original, controller, 'Quote')
         outputs.update(quote_receipt_id=history.retained('hosted-quote-receipt', QUOTE_JOBS[0])[0],
                        quote_controller=original, quote_run=int(run_id))
     if quote_run:
@@ -496,16 +499,31 @@ def stopped_recovery(run_id, metadata, *, historical=False):
     return history
 
 
-def acceptance_workflow(root, revision):
+def acceptance_workflow(root, revision, stage):
     workflow = git(root, 'show', f'{revision}:{RELEASE_WORKFLOW}')
     # The canonical workflow places all acceptance and artifact production before publication.
     acceptance, marker, publication = workflow.partition(b'\n  publish:\n')
     headers = [line for line in (marker + publication).splitlines()
                if line.strip() and not line.startswith((b'    ', b'#', b'  #'))]
     expected = {b'  ' + name + b':' for name in PUBLICATION_JOBS}
-    require(marker and len(headers) == len(expected) and set(headers) == expected,
-            'Cannot establish the shared release workflow acceptance boundary')
+    if not marker or len(headers) != len(set(headers)) or not set(headers) <= expected:
+        raise ReceiptInputsChanged('Cannot establish the shared release workflow acceptance boundary')
+    # The opposite acceptance job cannot provide artifacts or execute a step for this receipt.
+    independent = (b'hosted_core',) if stage == 'Quote' else (
+        b'hosted_quotes', b'recovery_quotes', b'reserve_quote_retry',
+    )
+    for name in independent:
+        acceptance = re.sub(rb'(?ms)^  ' + name + rb':\n.*?(?=^  [^ ]|\Z)', b'', acceptance)
     return acceptance
+
+
+def quote_inputs_match(root, producer, controller):
+    try:
+        verify_receipt_delta(root, producer, controller, 'Quote')
+    except ReceiptInputsChanged as error:
+        print(f'{error}. Require a fresh unfunded quote receipt.')
+        return False
+    return True
 
 
 def verify_receipt_delta(root, producer, controller, stage):
@@ -527,11 +545,11 @@ def verify_receipt_delta(root, producer, controller, stage):
             '.github/workflows/quote-bridge.yml',
         }
     changed = set(filter(None, delta.decode().split('\0')))
-    require(changed <= paths,
-            stage + ' execution inputs changed after the passing receipt')
+    if not changed <= paths:
+        raise ReceiptInputsChanged(stage + ' execution inputs changed after the passing receipt')
     if RELEASE_WORKFLOW in changed:
-        require(acceptance_workflow(root, producer) == acceptance_workflow(root, controller),
-                stage + ' execution inputs changed in the shared release workflow')
+        if acceptance_workflow(root, producer, stage) != acceptance_workflow(root, controller, stage):
+            raise ReceiptInputsChanged(stage + ' execution inputs changed in the shared release workflow')
 
 
 def diagnostic_stage_for_linked_wallet(root, source, original, controller, original_run, core_run, metadata):

@@ -896,10 +896,10 @@ class QuoteRecoveryTests(unittest.TestCase):
     def test_original_passing_receipts_require_current_wallet_and_quote_execution_inputs(self):
         states = dict(BUILD_JOBS, publish='failure', **{WALLET: 'success', QUOTE: 'success'})
         original = self.recovery_run(7, OLD, states, (*ARTIFACTS.values(), 'hosted-quote-receipt'))
-        for path, error in (
-                (b'.private/publish.py\0', None),
-                (b'.private/tor_resident_ui_driver.py\0', 'Quote execution inputs changed'),
-                (b'.private/hosted_core.py\0', 'Wallet execution inputs changed'),
+        for path, error, quote_reusable in (
+                (b'.private/publish.py\0', None, True),
+                (b'.private/tor_resident_ui_driver.py\0', None, False),
+                (b'.private/hosted_core.py\0', 'Wallet execution inputs changed', True),
         ):
             with self.subTest(path=path), patch('quote_recovery.require_dispatch'), \
                     patch('quote_recovery.verify_delta', return_value=None), \
@@ -913,7 +913,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                 else:
                     result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
                     self.assertIn('core_receipt_id', result)
-                    self.assertEqual(result['quote_receipt_id'], '75')
+                    self.assertEqual(result.get('quote_receipt_id'), '75' if quote_reusable else None)
 
     def test_recovery_rejects_product_and_wallet_harness_changes(self):
         for changed in (b'gradle.properties\0', b'.private/core_testnet_driver.py\0'):
@@ -973,10 +973,16 @@ class QuoteRecoveryTests(unittest.TestCase):
         workflow = (root / '.github/workflows/build-release.yml').read_bytes().replace(b'\r\n', b'\n')
         publisher_only = workflow.replace(b'  publish:\n', b'  publish:\n    # Publisher repair\n', 1)
         quote_change = workflow.replace(b'  hosted_quotes:\n', b'  hosted_quotes:\n    # Quote wiring changed\n', 1)
+        wallet_change = workflow.replace(b'  hosted_core:\n', b'  hosted_core:\n    # Wallet wiring changed\n', 1)
+        earlier_publisher = workflow.split(b'\n  draft_readiness:\n', 1)[0] + b'\n  resume_draft:\n' + \
+            workflow.split(b'\n  resume_draft:\n', 1)[1]
         unexpected = publisher_only + b'\n  "unclassified_job":\n    runs-on: ubuntu-24.04\n'
-        self.assertTrue(publisher_only != workflow and quote_change != workflow)
+        self.assertTrue(all(updated != workflow for updated in (publisher_only, quote_change, wallet_change)))
         for stage in ('Wallet', 'Quote'):
-            for updated, error in ((publisher_only, None), (quote_change, 'execution inputs changed'),
+            for updated, error in ((publisher_only, None),
+                                   (earlier_publisher, None),
+                                   (quote_change, 'execution inputs changed' if stage == 'Quote' else None),
+                                   (wallet_change, 'execution inputs changed' if stage == 'Wallet' else None),
                                    (unexpected, 'acceptance boundary')):
                 with self.subTest(stage=stage, error=error), patch('quote_recovery.git', side_effect=[
                     OLD.encode(), b'.github/workflows/build-release.yml\0', workflow, updated
@@ -997,6 +1003,25 @@ class QuoteRecoveryTests(unittest.TestCase):
                     'quote_recovery.git', side_effect=[OLD.encode(), b'.private/' + filename + b'\0']
                 ), self.assertRaisesRegex(ValueError, stage + ' execution inputs changed'):
                     verify_receipt_delta(Path('.'), OLD, MAIN, stage)
+
+    def test_changed_quote_runner_admits_original_apks_with_fresh_unfunded_quotes(self):
+        states = dict(BUILD_JOBS, publish='failure', **{QUOTE: 'success', WALLET: 'success'})
+        names = (*BUILD_ARTIFACTS, 'hosted-core-receipt', 'hosted-quote-receipt')
+        original = self.recovery_run(7, OLD, states, names)
+        path = b'.private/hosted_quote_probe.py\0'
+        for signing in (False, True):
+            with self.subTest(signing=signing), patch('quote_recovery.require_dispatch'), \
+                    patch('quote_recovery.verify_build_candidate'), \
+                    patch('quote_recovery.verify_receipt_delta', wraps=verify_receipt_delta), \
+                    patch('quote_recovery.git', side_effect=lambda _root, verb, *_: OLD.encode()
+                          if verb == 'merge-base' else path):
+                result = resolve(Path('.'), SOURCE, MAIN, '7', self.recovery_metadata(original), signing=signing)
+                self.assertEqual(result['production_id'], '71')
+                self.assertEqual(result['quote_id'], '73')
+                self.assertEqual(result['core_receipt_id'], '74')
+                self.assertNotIn('quote_receipt_id', result)
+                self.assertNotIn('run_missing_core', result)
+                self.assertNotIn('same_controller_retry', result)
 
     def test_original_passing_quote_survives_wallet_repair_in_admission_and_signing(self):
         cases = (
