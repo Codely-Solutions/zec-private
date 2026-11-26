@@ -37,8 +37,13 @@ class PersistServerSelectionUseCase(
     private suspend fun persistSelection(selection: WalletServerSelection, version: Long) {
         val saved = walletTransport.ifIdleSwitch {
             val previous = walletServerSelectionProvider.getServerSelection() ?: return@ifIdleSwitch false
-            val replaced =
-                if (previous.endpoint != selection.endpoint) synchronizerProvider.synchronizer.value else null
+            val replaced = if (previous.endpoint != selection.endpoint) {
+                val current = synchronizerProvider.synchronizer.value
+                if (walletTransport.awaitingEndpointReplacement(current)) return@ifIdleSwitch null
+                current
+            } else {
+                null
+            }
             currentCoroutineContext().ensureActive()
             walletServerSelectionProvider.storeServerSelection(selection, version) {
                 if (replaced != null) walletTransport.retire(replaced)

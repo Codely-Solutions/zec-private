@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.preparePayment
 import co.electriccoin.zcash.ui.common.datasource.publishOwnedPayment
+import co.electriccoin.zcash.ui.common.datasource.requireOwnedPaymentSlot
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
@@ -186,8 +187,10 @@ class LedgerProposalRepositoryImpl(
     override suspend fun preparePayment(draft: PaymentDraft, owner: PaymentDraftOwner): SendTransactionProposal {
         val previous = transactionProposal.value
         val proposal = proposalDataSource.preparePayment(owner, draft)
-        owner.requireCurrent()
-        val pczt = createReviewPczt(proposal, owner.account)
+        transactionProposal.requireOwnedPaymentSlot(owner, previous)
+        val pczt = createReviewPczt(proposal, owner.account) {
+            transactionProposal.requireOwnedPaymentSlot(owner, previous)
+        }
         transactionProposal.publishOwnedPayment(owner, previous, proposal)
         prepareSigning(proposal, pczt, owner.account)
         return proposal
@@ -249,26 +252,30 @@ class LedgerProposalRepositoryImpl(
     }
 
     override suspend fun createPCZTFromProposal() {
-        val transactionProposal = getTransactionProposal()
-        transactionProposal.requireCurrentShieldingApproval()
-        val owner = when (transactionProposal) {
-            is ShieldTransactionProposal -> checkNotNull(transactionProposal.approval).account
-            is SwapTransactionProposal -> transactionProposal.fundingAccount
+        val current = getTransactionProposal()
+        current.requireCurrentShieldingApproval()
+        val owner = when (current) {
+            is ShieldTransactionProposal -> checkNotNull(current.approval).account
+            is SwapTransactionProposal -> current.fundingAccount
             else -> accountDataSource.getSelectedAccount()
         }
-        val result = createReviewPczt(transactionProposal, owner)
+        val result = createReviewPczt(current, owner) {
+            check(transactionProposal.value === current) { "The transaction changed during preparation." }
+            current.requireCurrentShieldingApproval()
+        }
         currentCoroutineContext().ensureActive()
-        check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
-        transactionProposal.requireCurrentShieldingApproval()
-        prepareSigning(transactionProposal, result, owner)
+        check(transactionProposal.value === current) { "The transaction changed during preparation." }
+        current.requireCurrentShieldingApproval()
+        prepareSigning(current, result, owner)
     }
 
-    private suspend fun createReviewPczt(proposal: TransactionProposal, owner: WalletAccount): Pczt =
+    private suspend fun createReviewPczt(
+        proposal: TransactionProposal,
+        owner: WalletAccount,
+        beforeCreation: () -> Unit,
+    ): Pczt =
         try {
-            proposalDataSource.createPcztFromProposal(account = owner, proposal = proposal.proposal) {
-                check(transactionProposal.value === proposal) { "The transaction changed during preparation." }
-                proposal.requireCurrentShieldingApproval()
-            }
+            proposalDataSource.createPcztFromProposal(owner, proposal.proposal, beforeCreation)
         } catch (e: PcztException.MultiStepProposalUnsupportedException) {
             if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
         }

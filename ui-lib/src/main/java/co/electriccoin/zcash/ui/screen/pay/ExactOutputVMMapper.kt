@@ -148,8 +148,7 @@ internal class ExactOutputVMMapper {
         val fiat = fiatInnerState.amount
         val amount =
             asset?.let { selected ->
-                selected.positiveUsdPrice?.let { fiat?.divide(it, MathContext.DECIMAL128) }
-                    ?.setScale(selected.decimals, RoundingMode.DOWN)
+                selected.positiveUsdPrice?.let { fiat?.divide(it, selected.decimals, RoundingMode.DOWN) }
             }
         return amountInnerState.copy(
             innerTextFieldState =

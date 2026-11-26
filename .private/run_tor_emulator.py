@@ -107,8 +107,11 @@ with EmulatorSession(ROOT, guest_memory=guest_memory) as session:
     if capture_only:
         receipt.update(passed=True, captureOnly=True, evidenceScope='Synthetic rendering only')
     elif manifest.get('probeKind')=='core-testnet':
+        from acceptance_policy import needs_tor_mode_transition
         from core_testnet_driver import run
-        run(adb,ROOT,apk_paths,manifest,before_faucet_post=before_faucet_post)
+        transition = needs_tor_mode_transition(manifest['build_source_sha'], baseline=manifest['baseline_source_sha'])
+        run(adb, ROOT, apk_paths, manifest, before_faucet_post=before_faucet_post,
+            tor_mode_preparation=apk_preparation if transition else None)
         receipt.update(passed=True,fundsTransferred=True,realFundsUsed=False,walletAccess='isolated-testnet-only')
     elif manifest.get('probeKind')=='differential':
         from tor_differential_driver import run

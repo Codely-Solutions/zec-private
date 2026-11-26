@@ -27,7 +27,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -72,14 +71,14 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
             }
             val destination = SwapCatalogTestFixture.externalAssets.first {
                 it.chainTicker == network && it.decimals == decimals
-            }.copy(usdPrice = BigDecimal("100000"))
+            }.copy(usdPrice = BigDecimal("1.00000000000000000000000000000000000001"))
             val assets = SwapAssetsData(data = listOf(destination), zecAsset = origin)
-            val wireRequest = CompletableDeferred<String>()
+            val wireAmounts = mutableListOf<String>()
             val near = mockk<NearApiProvider> {
                 coEvery { requestQuote(any()) } coAnswers {
                     val json = Json.encodeToString(QuoteRequest.serializer(), firstArg<QuoteRequest>())
                     val amount = Json.parseToJsonElement(json).jsonObject.getValue("amount").jsonPrimitive.content
-                    wireRequest.complete(amount)
+                    wireAmounts.add(amount)
                     throw IllegalArgumentException("Synthetic quote provider refused request")
                 }
             }
@@ -191,9 +190,21 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
                 assertTrue(review.isEnabled)
                 review.onClick()
                 runCurrent()
-                assertTrue(wireRequest.isCompleted, "1Click request did not reach the synthetic provider")
-                assertEquals("1", wireRequest.await())
-                coVerify(exactly = 1) { accountDataSource.requestNextShieldedAddress(true, account) }
+                assertEquals(listOf("1"), wireAmounts)
+
+                assertNotNull(vm.state.value).amountFiat.onValueChange(
+                    NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
+                )
+                runCurrent()
+                val fiatOwned = assertNotNull(vm.state.value)
+                val expected = BigDecimal.ONE.subtract(minimum)
+                assertEquals(expected, fiatOwned.amount.innerState.amount)
+                val fiatReview = assertNotNull(fiatOwned.primaryButton)
+                assertTrue(fiatReview.isEnabled)
+                fiatReview.onClick()
+                runCurrent()
+                assertEquals(listOf("1", expected.movePointRight(decimals).toBigIntegerExact().toString()), wireAmounts)
+                coVerify(exactly = 2) { accountDataSource.requestNextShieldedAddress(true, account) }
             } finally {
                 vm.viewModelScope.cancel()
             }

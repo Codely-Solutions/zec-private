@@ -31,6 +31,8 @@ import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryPr
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
@@ -41,6 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -64,6 +67,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 interface WalletRepository {
     val walletInitialization: StateFlow<WalletInitializationState>
@@ -82,7 +86,7 @@ interface WalletRepository {
 
     fun retryWalletInitialization()
 
-    fun retryWalletRead()
+    suspend fun retryWalletRead(canRetry: () -> Boolean = { true })
 
     suspend fun markIronwoodAnnouncementShown()
 
@@ -116,6 +120,8 @@ class WalletRepositoryImpl(
     private val resetProgressStore: ResetProgressStore,
     private val transportGate: WalletSdkTransportGate? = null,
     accountDataSource: AccountDataSource? = null,
+    private val walletWriteAccess: WalletWriteAccess,
+    private val walletTransport: WalletTransportAccess,
 ) : WalletRepository {
     /**
      * Scope the repository's `stateIn`-shared flows run on. Captured by those flows at
@@ -323,9 +329,13 @@ class WalletRepositoryImpl(
                 initialValue = WalletRestoringState.NONE
             )
 
-    override fun retryWalletRead() {
-        persistableWalletProvider.retryRead()
-        init()
+    override suspend fun retryWalletRead(canRetry: () -> Boolean) {
+        val restarted = walletWriteAccess.withSdkRecovery(walletWriteAccess.token()) {
+            if (!canRetry()) return@withSdkRecovery false
+            persistableWalletProvider.retryRead()
+            true
+        }
+        if (restarted == true) init()
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -352,7 +362,17 @@ class WalletRepositoryImpl(
         if (wallet == null) return
         if (wallet.endpoint.host in lightWalletEndpointProvider.getDecommissionedHosts()) {
             val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
-            persistableWalletProvider.storeIfCurrent(wallet, replacement, version)
+            walletTransport.switchWhenIdle {
+                walletWriteAccess.withSdkRecovery(version) {
+                    val previous = synchronizerProvider.synchronizer.value
+                    currentCoroutineContext().ensureActive()
+                    withContext(NonCancellable) {
+                        if (persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
+                            walletTransport.retire(previous)
+                        }
+                    }
+                }
+            }
         }
     }
 

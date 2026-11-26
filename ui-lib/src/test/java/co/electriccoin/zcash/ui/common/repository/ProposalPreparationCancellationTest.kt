@@ -8,6 +8,10 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraft
+import co.electriccoin.zcash.ui.common.datasource.PaymentDraftOwner
+import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
@@ -15,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +30,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.suspendCoroutine
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -119,6 +126,68 @@ class ProposalPreparationCancellationTest {
 
     private fun proposal(send: ZecSend) =
         ExactInputSwapTransactionProposal(send.destination, send.amount, send.memo, mockk(), quote, account)
+
+    @Test
+    fun ownedPaymentCreatesThePcztBeforePublishingTheNewProposal() = runTest {
+        val repository = keystone()
+        val send = send("reviewed-recipient")
+        val request = "zcash:synthetic-request"
+        val owner = PaymentDraftOwner(account, "reviewed-payment") { true }
+        val regular = RegularTransactionProposal(send.destination, send.amount, send.memo, mockk())
+        val zip321 =
+            Zip321TransactionProposal(send.destination, send.amount, send.memo, mockk(), binaryMemoByteCount = 4)
+        coEvery { dataSource.createProposal(account, send) } returns regular
+        coEvery { dataSource.createZip321Proposal(account, request) } returns zip321
+        coEvery { dataSource.addProofsToPczt(any(), any()) } returns Pczt(byteArrayOf(2))
+        val cases = listOf(PaymentDraft.Send(send) to regular, PaymentDraft.Zip321(request) to zip321)
+        for ((draft, proposal) in cases) {
+            val previous = repository.transactionProposal.value
+            val prepared = Pczt(byteArrayOf(1))
+            coEvery { dataSource.createPcztFromProposal(account, proposal.proposal, any()) } coAnswers {
+                assertSame(previous, repository.transactionProposal.value)
+                arg<() -> Unit>(2).invoke()
+                prepared
+            }
+
+            assertSame(proposal, repository.preparePayment(draft, owner))
+            assertSame(proposal, repository.transactionProposal.value)
+            repository.approveForSigning(proposal)
+            assertSame(prepared, repository.getProposalPCZT())
+        }
+        repository.clear()
+    }
+
+    @Test
+    fun revokedOrReplacedDraftCannotEnterNativePcztCreation() = runTest {
+        val repository = keystone()
+        val send = send("reviewed-recipient")
+        val proposal = RegularTransactionProposal(send.destination, send.amount, send.memo, mockk())
+        coEvery { dataSource.createProposal(account, send) } returns proposal
+        for (replace in listOf(false, true)) {
+            val previous = proposal.copy(proposal = mockk())
+            repository.transactionProposal.value = previous
+            var allowed = true
+            val owner = PaymentDraftOwner(account, "reviewed-payment") { allowed }
+            var nativeEntered = false
+            var expected = previous
+            coEvery { dataSource.createPcztFromProposal(account, proposal.proposal, any()) } coAnswers {
+                if (replace) {
+                    expected = proposal.copy(proposal = mockk())
+                    repository.transactionProposal.value = expected
+                } else {
+                    allowed = false
+                }
+                arg<() -> Unit>(2).invoke()
+                nativeEntered = true
+                Pczt(byteArrayOf(1))
+            }
+
+            assertFailsWith<CancellationException> { repository.preparePayment(PaymentDraft.Send(send), owner) }
+            assertFalse(nativeEntered)
+            assertSame(expected, repository.transactionProposal.value)
+        }
+        repository.clear()
+    }
 
     private suspend fun send(recipient: String) =
         ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)

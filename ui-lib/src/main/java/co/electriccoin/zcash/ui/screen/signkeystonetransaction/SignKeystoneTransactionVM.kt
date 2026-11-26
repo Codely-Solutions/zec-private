@@ -24,7 +24,6 @@ import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import com.sparrowwallet.hummingbird.UREncoder
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,8 +33,6 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -56,21 +53,15 @@ class SignKeystoneTransactionVM(
     private val retryRequests = MutableStateFlow(0)
     private val preparation = MutableStateFlow<Preparation?>(null)
     private val proposals = keystoneProposalRepository.transactionProposal
+    private val originalApproval = keystoneProposalRepository.signingPreparationId()
+    private val approvalIds = keystoneProposalRepository.signingPreparationIds
     private val wallets = getWalletAccounts.observe()
     // The repository holds a single approved proposal even when the selected Keystone account changes.
     private var signingAccount = wallets.value.selectedKeystone()?.sdkAccount?.accountUuid
     private val rejection = MutableStateFlow<Attempt?>(null)
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val shieldApprovalCurrent = proposals.flatMapLatest { proposal ->
-        if (proposal is ShieldTransactionProposal) {
-            keystoneProposalRepository.signingPreparationIds.map { it != null }
-        } else {
-            flowOf(true)
-        }
-    }
 
     val bottomSheetState =
-        combine(rejection, proposals, wallets, preparation, shieldApprovalCurrent) { attempt, _, _, _, _ ->
+        combine(rejection, proposals, wallets, preparation, approvalIds) { attempt, _, _, _, _ ->
             if (attempt == null || !isCurrent(attempt)) return@combine null
             SignKeystoneTransactionBottomSheetState(
                 onBack = { closeRejection(attempt) },
@@ -96,16 +87,18 @@ class SignKeystoneTransactionVM(
             proposals,
             wallets,
             preparation,
-            shieldApprovalCurrent,
-        ) { proposal, wallets, prepared, shieldApproved ->
-            if (proposal == null) return@combine null
-            if (proposal is ShieldTransactionProposal && (!shieldApproved || proposal.approval?.isCurrent() != true)) {
+            approvalIds,
+        ) { proposal, wallets, prepared, approvalId ->
+            if (proposal == null || approvalId == null || approvalId != originalApproval) return@combine null
+            if (proposal is ShieldTransactionProposal && proposal.approval?.isCurrent() != true) {
                 return@combine null
             }
             val wallet = wallets.selectedKeystone() ?: return@combine null
             val account = wallet.sdkAccount.accountUuid
             if (signingAccount != null && signingAccount != account) return@combine null
-            val current = prepared?.takeIf { it.attempt.proposal === proposal && it.attempt.account == account }
+            val current = prepared?.takeIf {
+                it.attempt.proposal === proposal && it.attempt.account == account && it.attempt.approvalId == approvalId
+            }
             val attempt = current?.attempt
             val phase = current?.phase ?: KeystoneQrPreparation.LOADING
             val ready = phase == KeystoneQrPreparation.READY
@@ -139,9 +132,7 @@ class SignKeystoneTransactionVM(
                         text = stringRes(R.string.keystone_signWith_getSignature),
                         onClick = {
                             if (attempt != null && ready && isReady(attempt)) {
-                                keystoneProposalRepository.signingPreparationId()?.let {
-                                    navigationRouter.forward(ScanKeystonePCZTRequest(it))
-                                }
+                                navigationRouter.forward(ScanKeystonePCZTRequest(attempt.approvalId))
                             }
                         },
                         isEnabled = ready
@@ -155,12 +146,11 @@ class SignKeystoneTransactionVM(
                     ButtonState(
                         text = stringRes("Share PCZT"),
                         onClick = {
-                            if (attempt != null && ready) {
+                            if (attempt != null && ready && isReady(attempt)) {
                                 viewModelScope.launch {
                                     sharePCZT {
-                                navigationRouter.isForegroundAtEntry(sourceEntryId) &&
-                                    isReady(attempt)
-                            }
+                                        navigationRouter.isForegroundAtEntry(sourceEntryId) && isReady(attempt)
+                                    }
                                 }
                             }
                         },
@@ -178,14 +168,17 @@ class SignKeystoneTransactionVM(
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             val selected = wallets.map { it.selectedKeystone() }.distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
-            combine(proposals, selected, retryRequests) { proposal, wallet, _ -> proposal to wallet }
-                .collectLatest { (proposal, wallet) ->
+            combine(proposals, selected, retryRequests, approvalIds) { proposal, wallet, _, approvalId ->
+                Triple(proposal, wallet, approvalId)
+            }
+                .collectLatest { (proposal, wallet, approvalId) ->
                     rejection.value = null
                     preparation.value = null
                     val account = wallet?.sdkAccount?.accountUuid ?: return@collectLatest
                     if (signingAccount == null) signingAccount = account
                     if (signingAccount != account || proposal == null) return@collectLatest
-                    val attempt = Attempt(account, proposal)
+                    val approved = approvalId?.takeIf { it == originalApproval } ?: return@collectLatest
+                    val attempt = Attempt(account, proposal, approved)
                     preparation.value = Preparation(attempt)
                     if (!isCurrent(attempt)) return@collectLatest
                     try {
@@ -215,9 +208,9 @@ class SignKeystoneTransactionVM(
         if (!isReady(attempt)) return
         try {
             val part = checkNotNull(current.encoder?.nextPart())
-            preparation.value = current.copy(qrData = part)
+            if (isReady(attempt)) preparation.value = current.copy(qrData = part)
         } catch (_: Exception) {
-            preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
+            if (isCurrent(attempt)) preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
         }
     }
 
@@ -248,6 +241,7 @@ class SignKeystoneTransactionVM(
     private fun isCurrent(attempt: Attempt): Boolean =
         isActiveSigningAccount(attempt.account) && preparation.value?.attempt === attempt &&
             proposals.value === attempt.proposal &&
+            keystoneProposalRepository.signingPreparationId() == attempt.approvalId &&
             (attempt.proposal !is ShieldTransactionProposal || attempt.proposal.approval?.isCurrent() == true)
 
     private fun isActiveSigningAccount(account: AccountUuid): Boolean =
@@ -262,6 +256,7 @@ class SignKeystoneTransactionVM(
     private class Attempt(
         val account: AccountUuid,
         val proposal: TransactionProposal,
+        val approvalId: String,
     )
 
     private data class Preparation(

@@ -199,7 +199,9 @@ class AutomaticServerRepositoryImpl(
         if (isAppInTransactionState || endpoint !in lightWalletEndpointProvider.getEndpoints()) return
         val synchronizer = candidate.synchronizer
         walletTransport.ifIdleSwitch {
-            if (isAppInTransactionState || synchronizerProvider.synchronizer.value !== synchronizer) {
+            if (isAppInTransactionState || synchronizerProvider.synchronizer.value !== synchronizer ||
+                walletTransport.awaitingEndpointReplacement(synchronizer)
+            ) {
                 return@ifIdleSwitch
             }
             currentCoroutineContext().ensureActive()

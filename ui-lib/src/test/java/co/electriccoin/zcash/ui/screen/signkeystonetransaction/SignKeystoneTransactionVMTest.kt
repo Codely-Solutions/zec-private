@@ -1,9 +1,14 @@
 package co.electriccoin.zcash.ui.screen.signkeystonetransaction
 
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldingApproval
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -245,6 +250,47 @@ class SignKeystoneTransactionVMTest {
     }
 
     @Test
+    fun relockRevokesRegularAndSwapQrEvenIfAnotherApprovalArrives() = runTest {
+        val recipient = WalletAddress.Unified.new("synthetic-recipient")
+        val account = EditAccountFixtures.keystone(isSelected = true)
+        val proposals = listOf(
+            RegularTransactionProposal(recipient, Zatoshi(1234), Memo(""), mockk()),
+            ExactInputSwapTransactionProposal(recipient, Zatoshi(1234), Memo(""), mockk(), mockk(), account),
+        )
+        proposals.forEach { proposal ->
+            val h = harness()
+            h.proposals.value = proposal
+            coEvery { h.repository.createPCZTEncoder() } returns encoder()
+            start(h.vm)
+            val stale = assertNotNull(h.vm.state.value)
+            assertNotNull(stale.qrData)
+            stale.negativeButton.onClick()
+            runCurrent()
+            val rejection = assertNotNull(h.vm.bottomSheetState.value)
+
+            h.preparationIds.value = null
+            runCurrent()
+            assertNull(h.vm.state.value)
+            assertNull(h.vm.bottomSheetState.value)
+            h.preparationIds.value = "new-approval"
+            runCurrent()
+            assertNull(h.vm.state.value)
+
+            stale.generateNextQrCode()
+            stale.positiveButton.onClick()
+            stale.secondaryButton?.onClick?.invoke()
+            rejection.negativeButton.onClick()
+            advanceTimeBy(400)
+            runCurrent()
+            assertNull(h.vm.state.value)
+            verify(exactly = 0) { h.router.forward(any()) }
+            verify(exactly = 0) { h.cancel.rejectKeystone(any(), any(), null) }
+            h.vm.leaveSigning()
+            verify(exactly = 1) { h.router.back() }
+        }
+    }
+
+    @Test
     fun returningAfterRelockCannotReadACachedQrOrRejectionSheet() = runTest {
         val h = harness()
         var approved = true
@@ -283,7 +329,7 @@ class SignKeystoneTransactionVMTest {
         val wallets = MutableStateFlow<List<WalletAccount>?>(listOf(EditAccountFixtures.keystone(isSelected = true)))
         val repository = mockk<KeystoneProposalRepository> {
             every { transactionProposal } returns proposals
-            every { signingPreparationId() } returns "prepared"
+            every { signingPreparationId() } answers { preparationIds.value }
             every { signingPreparationIds } returns preparationIds
         }
         val router = mockk<NavigationRouter>(relaxed = true)

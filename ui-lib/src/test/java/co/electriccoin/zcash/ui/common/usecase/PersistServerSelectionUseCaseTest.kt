@@ -170,4 +170,26 @@ class PersistServerSelectionUseCaseTest {
 
         assertTrue(transport.isRetired(synchronizer))
     }
+
+    @Test
+    fun consecutiveEndpointChangesWaitForThePreviousReplacement() = runTest {
+        val active = MutableStateFlow<Synchronizer?>(synchronizer)
+        every { synchronizerProvider.synchronizer } returns active
+        coEvery { synchronizer.validateServerEndpoint(any(), endpoint) } returns ServerValidation.Valid
+        coEvery { getAutomaticEndpoint() } returns fastest
+        useCase.persistManual(endpoint)
+        coEvery { storage.getServerSelection() } returns WalletServerSelection(endpoint, false)
+
+        assertFailsWith<ServerSelectionWalletBusyException> { useCase.persistAutomatic() }
+        active.value = null
+        assertFailsWith<ServerSelectionWalletBusyException> { useCase.persistAutomatic() }
+        coVerify(exactly = 0) {
+            storage.storeServerSelection(WalletServerSelection(fastest, true), 12L, null, any())
+        }
+
+        val replacement = mockk<Synchronizer>()
+        active.value = replacement
+        useCase.persistAutomatic()
+        assertTrue(transport.isRetired(replacement))
+    }
 }

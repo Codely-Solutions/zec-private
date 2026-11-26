@@ -40,6 +40,7 @@ import co.electriccoin.zcash.ui.util.isServiceUnavailable
 import io.ktor.client.plugins.ResponseException
 import java.math.BigDecimal
 import java.math.MathContext
+import java.math.RoundingMode
 import kotlin.math.absoluteValue
 import co.electriccoin.zcash.ui.design.R as DesignR
 
@@ -454,7 +455,7 @@ internal class SwapVMMapper {
             return null
         }
 
-        val amount = textField.textField.innerState.amount
+        val amount = state.getOriginTokenAmount()
         val shouldRetryPrices = state.swapAssets.shouldRetryPrices(state.swapAsset)
         val isWaitingForPrices =
             state.swapAssets.isLoading &&
@@ -484,7 +485,7 @@ internal class SwapVMMapper {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedContact?.address ?: state.addressText
-                    state.getOriginTokenAmount()?.let {
+                    amount?.takeIf { it.signum() > 0 }?.let {
                         onRequestSwapQuoteClick(it, state.getOriginFiatAmount(), address)
                     }
                 }
@@ -649,11 +650,12 @@ private data class SwapInternalState(
             }
 
             FIAT -> {
-                val usdPrice = originAsset.positiveUsdPrice
+                val asset = originAsset ?: return null
+                val usdPrice = asset.positiveUsdPrice
                 if (fiatAmount == null || usdPrice == null) {
                     null
                 } else {
-                    fiatAmount.divide(usdPrice, MathContext.DECIMAL128)
+                    fiatAmount.divide(usdPrice, asset.decimals, RoundingMode.DOWN)
                 }
             }
         }

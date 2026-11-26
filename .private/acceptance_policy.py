@@ -24,6 +24,10 @@ TOR_MODE_STAGES = (('torModeSave', False), ('torModeResume', True),
                    ('torModeSave', True), ('torModeResume', False))
 TOR_MODE_INPUTS = {
     TOR_MODE_GATE,
+    'gradle.properties',
+    'gradle/libs.versions.toml',
+    'ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt',
     'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsTorEnabledStorageProvider.kt',
@@ -96,6 +100,14 @@ def validate_tor_mode_transition(probe, candidate, original_apk, preparations):
                 step.get('role') != 'candidate' or step.get('installed_hash_verified') is not True or
                 any(step.get(key) != value for key, value in candidate.items())):
             raise ValueError('Wrong stage or candidate in installed wallet Tor transition')
+        if not saving:
+            network = step.get('network_probe')
+            if (not isinstance(network, dict) or network.get('direct_tls') is not True or
+                    network.get('sdk_endpoint_ready_during_interruption') is not (not tor) or
+                    network.get('sdk_endpoint_recovered') is not True or
+                    type(network.get('blocked_tcp_packets')) is not int or
+                    network['blocked_tcp_packets'] < int(tor)):
+                raise ValueError('Installed SDK route did not pass the scoped interruption check')
     if any(steps[i]['process_id'] == steps[i + 1]['process_id'] for i in (0, 2)):
         raise ValueError('Installed wallet Tor transition did not restart the Android process')
 
@@ -359,6 +371,10 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
         raise ValueError('Executed wallet runtime differs from the production candidate')
     if receipt.get('runtime_input_fingerprint') != runtime:
         raise ValueError('Receipt wallet runtime binding mismatch')
+    if needs_tor_mode_transition(product_revision, root, baseline=receipt['baseline_source_sha']):
+        validate_tor_mode_transition(receipt.get('tor_mode_transition'),
+                                     receipt['instrumentation_pairing']['candidate'],
+                                     receipt['candidate_apk_sha256'], receipt.get('apk_preparation', {}))
     compiled = receipt['build_input_fingerprint']
     if prepared is not None:
         if use_tor or direct_core_build_fingerprint(product_revision, prepared['harness_controller'], root) != compiled:
@@ -370,10 +386,6 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
                     or probe.get('installed_hash_verified') is not True
                     or any(probe.get(key) != value for key, value in candidate.items())):
                 raise ValueError('Changed transport inputs require a passing native Tor probe on the exact candidate')
-        if needs_tor_mode_transition(product_revision, root, baseline=receipt['baseline_source_sha']):
-            validate_tor_mode_transition(receipt.get('tor_mode_transition'),
-                                         receipt['instrumentation_pairing']['candidate'],
-                                         receipt['candidate_apk_sha256'], receipt['apk_preparation'])
         return runtime
     for revision in (acceptance_revision, receipt['build_source_sha']):
         if input_fingerprint(revision, root=root, profile='core-build') != compiled:

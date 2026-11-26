@@ -57,14 +57,22 @@ private suspend fun ProposalDataSource.createOwnedZip321Proposal(
     throw error
 }
 
+fun MutableStateFlow<TransactionProposal?>.requireOwnedPaymentSlot(
+    owner: PaymentDraftOwner,
+    previous: TransactionProposal?,
+) {
+    owner.requireCurrent()
+    if (value !== previous) throw CancellationException("Another payment replaced the prepared draft")
+}
+
 suspend fun MutableStateFlow<TransactionProposal?>.publishOwnedPayment(
     owner: PaymentDraftOwner,
     previous: TransactionProposal?,
     proposal: SendTransactionProposal,
 ) {
     currentCoroutineContext().ensureActive()
-    owner.requireCurrent()
-    if (value !== previous || !compareAndSet(previous, proposal)) {
+    requireOwnedPaymentSlot(owner, previous)
+    if (!compareAndSet(previous, proposal)) {
         throw CancellationException("Another payment replaced the prepared draft")
     }
 }

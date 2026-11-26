@@ -75,29 +75,86 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def wait_for_preclaim_marker(adb, operation, timeout):
+def wait_for_guest_marker(adb, operation, name, timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        marker = adb('shell', 'run-as', PACKAGE, 'cat', 'files/core-sync-ready.json',
-                     timeout=10, check=False)
+        marker = adb('shell', 'run-as', PACKAGE, 'cat', 'files/' + name, timeout=10, check=False)
         if marker.returncode == 0:
             try:
-                ready = json.loads(marker.stdout)
+                return json.loads(marker.stdout)
             except json.JSONDecodeError:
                 # The guest may still be writing the marker.
                 pass
-            else:
-                return isinstance(ready, dict) and ready.get('ready') is True and ready.get('probe_only') is True
         if operation.poll() is not None:
             break
         time.sleep(.5)
-    return False
+    return None
+
+
+def wait_for_preclaim_marker(adb, operation, timeout):
+    ready = wait_for_guest_marker(adb, operation, 'core-sync-ready.json', timeout)
+    return isinstance(ready, dict) and ready.get('ready') is True and ready.get('probe_only') is True
+
+
+def tor_route_targets(value):
+    if not isinstance(value, dict) or value.get('public_testnet_endpoint') is not True:
+        raise RuntimeError('Isolated public testnet endpoint was not established')
+    addresses = value.get('addresses')
+    if (type(addresses) is not list or not 1 <= len(addresses) <= 16
+            or any(not isinstance(address, str) for address in addresses)):
+        raise RuntimeError('Missing bounded testnet endpoint addresses')
+    targets = {ipaddress.ip_address(address) for address in addresses}
+    if not all(target.is_global for target in targets):
+        raise RuntimeError('Unexpected non-public testnet endpoint')
+    return targets
 
 
 def claim_after_readiness(check_readiness, submit_claim):
     if check_readiness is not None:
         check_readiness()
     return submit_claim()
+
+
+def attest_tor_mode_route(adb, operation, shell, app_uid, expected_tor):
+    ready = wait_for_guest_marker(adb, operation, 'core-mode-ready.json', 80)
+    if ready is None and operation.poll() is not None:
+        # Preserve the normal instrumentation diagnostics if startup failed.
+        return None
+    targets = tor_route_targets(ready)
+    if type(app_uid) is not int or not 10000 <= app_uid < 20000:
+        raise RuntimeError('Unexpected isolated app UID')
+    chain = 'CORE_MODE_PROBE'
+    cleanup = []
+    blocked = 0
+    try:
+        jump = ('-m', 'owner', '--uid-owner', str(app_uid), '-p', 'tcp', '-j', chain)
+        for binary, family in (('iptables', 4), ('ip6tables', 6)):
+            shell(binary, '-N', chain)
+            cleanup.extend([(binary, '-X', chain), (binary, '-F', chain)])
+            loopback = '127.0.0.0/8' if family == 4 else '::1'
+            shell(binary, '-A', chain, '-d', loopback, '-j', 'RETURN')
+            for target in sorted(str(value) for value in targets if value.version == family):
+                shell(binary, '-A', chain, '-p', 'tcp', '-d', target, '--dport', '443', '-j', 'RETURN')
+            shell(binary, '-A', chain, '-j', 'REJECT')
+            shell(binary, '-I', 'OUTPUT', '1', *jump)
+            cleanup.append((binary, '-D', 'OUTPUT', *jump))
+        shell('run-as', PACKAGE, 'touch', 'files/core-mode-interrupted')
+        checked = wait_for_guest_marker(adb, operation, 'core-mode-checked.json', 27)
+        if not isinstance(checked, dict) or checked.get('direct_tls') is not True or (
+                checked.get('sdk_endpoint_ready') is not (not expected_tor)):
+            raise RuntimeError('Installed SDK did not distinguish Tor interruption from direct access')
+        for binary in ('iptables', 'ip6tables'):
+            rows = shell(binary, '-L', chain, '-n', '-v', '-x').splitlines()
+            blocked += sum(int(row.split()[0]) for row in rows
+                           if len(row.split()) > 2 and row.split()[2] == 'REJECT')
+        if expected_tor and blocked < 1:
+            raise RuntimeError('Tor relay interruption had no observed Android packet')
+    finally:
+        for command in reversed(cleanup):
+            shell(*command)
+    shell('run-as', PACKAGE, 'touch', 'files/core-mode-restored')
+    return dict(direct_tls=True, sdk_endpoint_ready_during_interruption=not expected_tor,
+                blocked_tcp_packets=blocked)
 
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
@@ -111,8 +168,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     if installed_upgrade and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_check
                               or preclaim_only or live_tor_probe or tor_mode_transition):
         raise ValueError('Installed-upgrade verification requires the dedicated direct unfunded path')
-    if tor_mode_transition and (use_tor or not live_tor_probe):
-        raise ValueError('Tor mode transitions require direct acceptance with a native Tor probe')
+    if tor_mode_transition and (transport_only or (not use_tor and not live_tor_probe)):
+        raise ValueError('Tor mode transitions require full wallet acceptance and a native Tor probe')
     if not use_tor and (transport_only or repeat_cold_start or upgrade_probe or preclaim_only):
         raise ValueError('Tor-specific unfunded probes require the Tor transport')
     if preclaim_only and (not transport_only or upgrade_probe or repeat_cold_start):
@@ -192,15 +249,27 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if not readiness_only:
             pairing['stages'][name] = dict(role=role, **expected, installed_hash_verified=True)
         adb('logcat','-c',timeout=15)
+        route_probe = name == 'torModeResume'
+        if route_probe:
+            shell('run-as', PACKAGE, 'rm', '-f', 'files/core-mode-ready.json', 'files/core-mode-checked.json',
+                  'files/core-mode-interrupted', 'files/core-mode-restored')
         command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
                      'valueless-coins-only', '-e', 'transport', 'tor' if stage_uses_tor else 'direct',
-                     '-e', 'stage', name, RUNNER]
+                     '-e', 'stage', name]
+        if route_probe:
+            command += ['-e', 'torModeRouteProbe', 'true']
+        command.append(RUNNER)
         timeout_seconds=min(timeout,max(1,INSTRUMENTATION_DEADLINE_SECONDS-int(time.monotonic()-started)))
+        deadline = time.monotonic() + timeout_seconds
         operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         with operation_lock:active_instrumentation[name]=operation
         ready = False
+        route = None
         try:
+            if route_probe:
+                route = attest_tor_mode_route(adb, operation, shell, uid(), stage_uses_tor)
+                timeout_seconds = max(1, deadline - time.monotonic())
             if readiness_only:
                 ready = wait_for_preclaim_marker(adb, operation, timeout_seconds)
                 # Stop at the existing unfunded marker, before the host requests an outage.
@@ -266,14 +335,20 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 diagnostic['pre_wallet_crash']=crash.stdout.decode(errors='replace')[-10000:]
             (root/'core-testnet-diagnostic.json').write_text(json.dumps(diagnostic))
             raise RuntimeError('Core test stage failed: ' + current_stage)
-        if (not use_tor or name == 'rpcProbe') and rows[0].get('tor_enabled') is not stage_uses_tor:
+        if (not use_tor or name in TOR_MODE_STAGE_NAMES or name == 'rpcProbe'
+                ) and rows[0].get('tor_enabled') is not stage_uses_tor:
             raise RuntimeError('Instrumentation did not establish the expected Tor setting')
         if name == 'rpcProbe':
             report['live_tor_probe'] = dict(pairing['stages'].pop(name), passed=True, tor_enabled=True)
         if name in TOR_MODE_STAGE_NAMES:
             fields = ('stage', 'passed', 'network', 'tor_enabled', 'wallet_preserved', 'process_id',
                       'saved_mode', 'admission_blocked_until_restart')
-            return dict(pairing['stages'].pop(name), **{key: rows[0][key] for key in fields})
+            paired = dict(pairing['stages'].pop(name), **{key: rows[0][key] for key in fields})
+            if route_probe:
+                if route is None or rows[0].get('sdk_endpoint_recovered') is not True:
+                    raise RuntimeError('Missing restored Android SDK route evidence')
+                paired['network_probe'] = dict(route, sdk_endpoint_recovered=True)
+            return paired
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
         if installed_upgrade or (candidate_only and name in ('receiptProbe', 'recipient', 'restoreProbe', 'sender')):
@@ -411,7 +486,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 mode_steps = []
                 for name, tor in TOR_MODE_STAGES:
                     shell('am', 'force-stop', PACKAGE)
-                    mode_steps.append(stage(name, 120, tor_mode=tor))
+                    mode_steps.append(stage(name, 150 if name == 'torModeResume' else 120, tor_mode=tor))
                 transition = dict(installed_apk_sha256=candidate_hash, steps=mode_steps)
                 validate_tor_mode_transition(transition, pairing['candidate'], report['candidate_apk_sha256'],
                                              tor_mode_preparation)

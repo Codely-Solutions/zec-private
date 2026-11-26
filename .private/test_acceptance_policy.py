@@ -79,8 +79,9 @@ class AcceptancePolicyTest(unittest.TestCase):
             changed=commit()
             with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed,root=root)
 
-    def receipt(self, **identities):
-        baseline = json.loads(Path(__file__).with_name('upgrade-baseline.json').read_text())
+    def receipt(self, *, baseline=None, **identities):
+        if baseline is None:
+            baseline = json.loads(Path(__file__).with_name('upgrade-baseline.json').read_text())
         receipt = dict(schema=1, input_fingerprint='inputs', passed=True,
                        evidence_class='real-app-testnet', network='zcash-testnet',
                        clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
@@ -347,9 +348,13 @@ class AcceptancePolicyTest(unittest.TestCase):
             git('init','-q');(root/'app.kt').write_text('unchanged product')
             harness=root/CORE_TEST_SOURCE;harness.parent.mkdir(parents=True,exist_ok=True);harness.write_text('old test')
             try:
+                baseline_sha = commit()
+                fixture = json.loads(baseline_path.read_text())
+                fixture['source_sha'] = baseline_sha
+                baseline_path.write_text(json.dumps(fixture))
                 candidate=commit();harness.write_text('test now waits for enabled control');accepted=commit()
                 self.assertTrue(verify_promotion_revision(candidate,accepted,root=root))
-                receipt=self.receipt(build_source_sha=accepted);receipt.update(
+                receipt=self.receipt(build_source_sha=accepted, baseline=fixture);receipt.update(
                     input_fingerprint=input_fingerprint(accepted,root=root),
                     build_input_fingerprint=input_fingerprint(accepted,root=root,profile='core-build'),
                     runtime_input_fingerprint=input_fingerprint(candidate,root=root,profile='core-runtime'))
@@ -364,7 +369,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                 (root/'.private/candidate.json').write_text('{}')
                 (root/'.private/source-state.json').write_text('{}')
                 child=commit()
-                child_receipt=self.receipt(build_source_sha=child);child_receipt.update(
+                child_receipt=self.receipt(build_source_sha=child, baseline=fixture)
+                child_receipt.update(
                     input_fingerprint=input_fingerprint(child,root=root),
                     build_input_fingerprint=input_fingerprint(child,root=root,profile='core-build'),
                     runtime_input_fingerprint=input_fingerprint(child,root=root,profile='core-runtime'))
@@ -413,7 +419,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                 git('add','-A');git('-c','user.name=Fixture','-c','user.email=test@example.invalid','commit','-qm','Fixture')
                 return git('rev-parse','HEAD')
             def receipt_for(revision,producer):
-                receipt=self.receipt(build_source_sha=producer)
+                receipt=self.receipt(build_source_sha=producer, baseline=baseline)
                 receipt.update(
                     input_fingerprint=input_fingerprint(revision,root=root),
                     runtime_input_fingerprint=input_fingerprint(revision,root=root,profile='core-runtime'),
@@ -429,6 +435,10 @@ class AcceptancePolicyTest(unittest.TestCase):
             try:
                 for name,value in fixture.items():
                     path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
+                baseline_sha = commit()
+                baseline = json.loads(baseline_path.read_text())
+                baseline['source_sha'] = baseline_sha
+                baseline_path.write_text(json.dumps(baseline))
                 producer=commit()
                 old_receipt=receipt_for(producer,producer)
                 (root/'.private/core_faucet.py').write_text('corrected host setup')
@@ -483,7 +493,10 @@ class AcceptancePolicyTest(unittest.TestCase):
         cases = (
             ({}, {'gradle.properties': 'changed'}, False),
             ({}, {TOR_MODE_GATE: 'new'}, True),
-            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'gradle.properties': 'changed'}, False),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'gradle.properties': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same',
+                                      'ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt': 'changed'}, True),
+            ({TOR_MODE_GATE: 'same'}, {TOR_MODE_GATE: 'same', 'docs/WALLET-GUIDE.md': 'changed'}, False),
             ({TOR_MODE_GATE: 'old'}, {TOR_MODE_GATE: 'changed'}, True),
             ({TOR_MODE_GATE: 'old'}, {}, True),
         )
@@ -503,6 +516,9 @@ class AcceptancePolicyTest(unittest.TestCase):
             steps.append(dict(candidate, stage=stage, tor_enabled=tor, passed=True, network='zcash-testnet',
                               saved_mode=not tor if saving else tor, wallet_preserved=True, process_id=pid,
                               admission_blocked_until_restart=saving, role='candidate', installed_hash_verified=True))
+            if not saving:
+                steps[-1]['network_probe'] = dict(direct_tls=True, sdk_endpoint_ready_during_interruption=not tor,
+                                                  sdk_endpoint_recovered=True, blocked_tcp_packets=int(tor))
         probe = dict(installed_apk_sha256=installed, steps=steps)
         validate_tor_mode_transition(probe, candidate, apk, preparations)
         for invalid in (None, dict(probe, installed_apk_sha256='f'*64), dict(probe, steps=steps[:2])):
@@ -510,10 +526,27 @@ class AcceptancePolicyTest(unittest.TestCase):
                 validate_tor_mode_transition(invalid, candidate, apk, preparations)
         for field, invalid in (('process_id', 100), ('process_id', True), ('tor_enabled', False),
                                ('executed_sha256', 'f'*64), ('wallet_preserved', False),
-                               ('admission_blocked_until_restart', True)):
+                               ('admission_blocked_until_restart', True), ('network_probe', {})):
             with self.subTest(field=field, invalid=invalid), self.assertRaises(ValueError):
                 mismatched = [steps[0], dict(steps[1], **{field: invalid}), *steps[2:]]
                 validate_tor_mode_transition(dict(probe, steps=mismatched), candidate, apk, preparations)
+        for index, field, invalid in ((1, 'sdk_endpoint_ready_during_interruption', True),
+                                       (1, 'blocked_tcp_packets', 0), (1, 'sdk_endpoint_recovered', False),
+                                       (3, 'sdk_endpoint_ready_during_interruption', False), (3, 'direct_tls', False)):
+            with self.subTest(index=index, field=field), self.assertRaises(ValueError):
+                modified = steps[:]
+                observed = dict(steps[index]['network_probe'], **{field: invalid})
+                modified[index] = dict(steps[index], network_probe=observed)
+                validate_tor_mode_transition(dict(probe, steps=modified), candidate, apk, preparations)
+
+    def test_guarded_local_promotion_rejects_a_missing_tor_transition(self):
+        receipt = dict(runtime_input_fingerprint='runtime', baseline_source_sha='a'*40,
+                       candidate_apk_sha256='b'*64, instrumentation_pairing={'candidate': {}})
+        with (patch('acceptance_policy.validate_core'),
+              patch('acceptance_policy.input_fingerprint', return_value='runtime'),
+              patch('acceptance_policy.needs_tor_mode_transition', return_value=True)):
+            with self.assertRaisesRegex(ValueError, 'Missing exact installed wallet Tor transition'):
+                validate_core_sources(receipt, 'c'*40)
 
     def test_quotes_need_real_repeated_evidence_on_the_requested_route(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',

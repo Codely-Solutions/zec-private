@@ -10,12 +10,15 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.screen.ironwood.IronwoodActivation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
 // To make this more multiplatform compatible, we need to remove the dependency on Context
@@ -30,6 +33,8 @@ class WalletViewModel(
 
     val secretState: StateFlow<SecretState> = walletRepository.secretState
     val walletInitialization = walletRepository.walletInitialization
+    private val walletReadPending = MutableStateFlow(false)
+    val isWalletReadPending = walletReadPending.asStateFlow()
 
     /**
      * Emits `true` once — on the first launch that satisfies all Ironwood-announcement conditions:
@@ -77,7 +82,14 @@ class WalletViewModel(
 
     fun retryWalletInitialization() = walletRepository.retryWalletInitialization()
 
-    fun retryWalletRead() = walletRepository.retryWalletRead()
+    fun retryWalletRead(canRetry: () -> Boolean) = viewModelScope.launch {
+        if (!walletReadPending.compareAndSet(expect = false, update = true)) return@launch
+        try {
+            walletRepository.retryWalletRead(canRetry)
+        } finally {
+            walletReadPending.value = false
+        }
+    }
 
     fun persistExistingWalletWithSeedPhrase(
         network: ZcashNetwork,

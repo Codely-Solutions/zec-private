@@ -41,6 +41,7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationUIState
@@ -1075,6 +1076,54 @@ class WalletRepositoryImplTest {
     }
 
     @Test
+    fun authenticatedRetryKeepsTheReadGenerationUntilSdkRecoveryFinishes() = runTest {
+        val access = WalletWriteAccess()
+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet(), walletWriteAccess = access)
+        repository.useTestScope(testScheduler)
+        val wallet = harness.walletProvider as FakePersistableWalletProvider
+        val release = CompletableDeferred<Unit>()
+        val erase = launch { access.withSdkRecovery(access.token()) { release.await() } }
+        runCurrent()
+        var stillAllowed = true
+        val retry = launch { repository.retryWalletRead { stillAllowed } }
+        runCurrent()
+        assertEquals(0, wallet.readRetries)
+
+        stillAllowed = false
+        release.complete(Unit)
+        erase.join()
+        retry.join()
+        assertEquals(0, wallet.readRetries)
+
+        repository.retryWalletRead()
+        assertEquals(1, wallet.readRetries)
+    }
+
+    @Test
+    fun startupEndpointMigrationWaitsUntilAnAdmittedWalletOperationFinishes() = runTest {
+        val transport = WalletTransportAccess()
+        val old = LightWalletEndpoint("retired.example", 443, true)
+        val wallet = fixtureWallet().copy(endpoint = old)
+        val (repository, harness) = newRepository(
+            OnboardingState.READY, wallet, decommissionedHosts = setOf(old.host), walletTransport = transport,
+        )
+        repository.useTestScope(testScheduler)
+        val release = CompletableDeferred<Unit>()
+        val ongoing = launch { transport.whileOperating { release.await() } }
+        runCurrent()
+        repository.init()
+        runCurrent()
+        assertEquals(wallet, harness.walletProvider.requirePersistableWallet())
+        assertTrue(harness.events.isEmpty())
+
+        release.complete(Unit)
+        ongoing.join()
+        advanceUntilIdle()
+        assertEquals(wallet.copy(endpoint = LightWalletEndpoint("zec.rocks", 443, true)),
+                     harness.walletProvider.requirePersistableWallet())
+    }
+
+    @Test
     fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
         runTest {
             val torPreferences = RecordingPreferenceProvider(mutableListOf())
@@ -1180,6 +1229,9 @@ class WalletRepositoryImplTest {
         resetPending: Boolean = false,
         transportGate: WalletSdkTransportGate? = null,
         accountDataSource: AccountDataSource? = null,
+        decommissionedHosts: Set<String> = emptySet(),
+        walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
+        walletTransport: WalletTransportAccess = WalletTransportAccess(),
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()
 
@@ -1206,7 +1258,7 @@ class WalletRepositoryImplTest {
         val lightWalletEndpointProvider =
             mockk<LightWalletEndpointProvider> {
                 every { getDefaultEndpoint() } returns LightWalletEndpoint("zec.rocks", 443, true)
-                every { getDecommissionedHosts() } returns emptySet()
+                every { getDecommissionedHosts() } returns decommissionedHosts
             }
 
         val persistableWalletProvider =
@@ -1255,6 +1307,8 @@ class WalletRepositoryImplTest {
                 resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
                 transportGate = transportGate,
                 accountDataSource = accountDataSource,
+                walletWriteAccess = walletWriteAccess,
+                walletTransport = walletTransport,
             )
 
         scopes += repository.scope
@@ -1290,9 +1344,15 @@ private class FakePersistableWalletProvider(
     private val writeAccess = WalletWriteAccess()
     var failWrites = false
     var failWritesBeforePublishing = false
+    var readRetries = 0
+        private set
 
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
     override val writeVersion get() = writeAccess.token()
+
+    override fun retryRead() {
+        readRetries++
+    }
 
     override suspend fun store(persistableWallet: PersistableWallet) =
         writeAccess.replaceWallet { write(persistableWallet) }

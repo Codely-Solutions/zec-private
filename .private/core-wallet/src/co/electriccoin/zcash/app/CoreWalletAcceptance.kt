@@ -30,6 +30,7 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.model.TransactionId
 import co.electriccoin.lightwallet.client.model.Response
+import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.lightwallet.client.model.RawTransactionUnsafe
 import cash.z.ecc.android.sdk.type.ServerValidation
 import cash.z.ecc.android.sdk.Synchronizer
@@ -450,6 +451,9 @@ class CoreWalletAcceptance {
                 .put("saved_mode", if (stage == "torModeSave") !useTor else useTor)
                 .put("wallet_preserved", true)
                 .put("admission_blocked_until_restart", stage == "torModeSave")
+            if (stage == "torModeResume" && arguments.getString("torModeRouteProbe") == "true") {
+                receipt.put("sdk_endpoint_recovered", true)
+            }
         }
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (useTor && stage in listOf("rpcProbe", "networkTargets", "fund")) {
@@ -582,31 +586,7 @@ class CoreWalletAcceptance {
         check(!metadataSucceeded.get()) { "Sensitive metadata succeeded during DROP" }
         check(!updateSucceeded.get()) { "Update request succeeded during DROP" }
         mark("direct_tls_start")
-        withContext(kotlinx.coroutines.Dispatchers.IO) {
-            java.net.Socket().use { plain ->
-                // Socket read timeouts alone are per-read, not a whole handshake deadline.
-                // Closing the owned socket also bounds a peer that trickles handshake data.
-                val deadline = launch(kotlinx.coroutines.Dispatchers.Default) {
-                    delay(12_000)
-                    plain.close()
-                }
-                try {
-                    plain.connect(bulkAddress, 6_000)
-                    plain.soTimeout = 6_000
-                    val factory = javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
-                    (factory.createSocket(plain, endpoint.host, endpoint.port, true) as javax.net.ssl.SSLSocket).use {
-                        it.soTimeout = 6_000
-                        val parameters = it.sslParameters
-                        parameters.endpointIdentificationAlgorithm = "HTTPS"
-                        it.sslParameters = parameters
-                        it.startHandshake()
-                    }
-                } finally {
-                    deadline.cancel()
-                    deadline.join()
-                }
-            }
-        }
+        checkPublicEndpointTls(endpoint, bulkAddress)
         mark("direct_tls_finished")
         check(!metadataSucceeded.get() && !updateSucceeded.get()) { "Sensitive read succeeded before DROP release marker" }
         val requestedMs = elapsed()
@@ -1393,7 +1373,11 @@ class CoreWalletAcceptance {
         val preference = dependency<IsTorEnabledStorageProvider>()
         val synchronizer = dependency<SynchronizerProvider>()
         check(preference.observe().first() == originalTor) { "Unexpected original stored Tor choice" }
-        if (walletProvider.getPersistableWallet() == null) dependency<WalletRepository>().createNewWallet()
+        if (walletProvider.getPersistableWallet() == null) {
+            val repository = dependency<WalletRepository>()
+            repository.markIronwoodAnnouncementShown()
+            repository.createNewWallet()
+        }
         val walletId = withTimeout(45_000) {
             walletProvider.persistableWallet.filterNotNull().first()
             dependency<WalletRepository>().secretState.first {
@@ -1402,7 +1386,9 @@ class CoreWalletAcceptance {
             torModeWalletId(synchronizer.getSynchronizer())
         }
         check(dependency<HttpClientProvider>().supportsKtorTimeouts() == !originalTor)
+        waitUi("Receive", "tor_mode_wallet_ready")
         dependency<NavigationRouter>().forward(TorSettingsArgs)
+        waitUi(context.getString(co.electriccoin.zcash.ui.R.string.torSetup_title), "tor_mode_settings_ready")
         val choice = if (originalTor) co.electriccoin.zcash.ui.R.string.currencyConversion_learnMoreOptionDisable
         else co.electriccoin.zcash.ui.R.string.torSetup_ccSheet_enable
         clickUi(context.getString(choice), "tor_mode_opposite_choice")
@@ -1428,6 +1414,47 @@ class CoreWalletAcceptance {
         check(dependency<HttpClientProvider>().supportsKtorTimeouts() == !usesTor)
         check(!hasUiText("Open Android Settings")) { "Tor restart notice is still visible after restarting" }
         requireEndpointReady(synchronizer, "after_tor_mode_restart")
+        if (arguments.getString("torModeRouteProbe") == "true") verifySdkModeUnderInterruption(synchronizer, usesTor)
+    }
+
+    private suspend fun verifySdkModeUnderInterruption(sync: Synchronizer, usesTor: Boolean) =
+        kotlinx.coroutines.coroutineScope {
+            val endpoint = dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
+            check(endpoint.host == "testnet.zec.rocks" && endpoint.port == 443 && endpoint.isSecure)
+            val addresses = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                java.net.InetAddress.getAllByName(endpoint.host).map { it.hostAddress }
+            }
+            check(addresses.isNotEmpty())
+            File(context.filesDir, "core-mode-ready.json").writeText(JSONObject()
+                .put("public_testnet_endpoint", true).put("addresses", JSONArray(addresses)).toString())
+            awaitModeMarker("core-mode-interrupted")
+            val reached = java.util.concurrent.atomic.AtomicBoolean(false)
+            val metadata = launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    reached.set(sync.validateServerEndpoint(context, endpoint) == ServerValidation.Valid)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // The SDK can reject the interrupted route before the observation window ends.
+                }
+            }
+            try {
+                if (usesTor) delay(8_000)
+                checkPublicEndpointTls(endpoint, java.net.InetSocketAddress(endpoint.host, endpoint.port))
+                if (!usesTor) withTimeout(8_000) { metadata.join() }
+                check(reached.get() == !usesTor) { "SDK metadata did not distinguish the applied route" }
+                File(context.filesDir, "core-mode-checked.json").writeText(JSONObject()
+                    .put("direct_tls", true).put("sdk_endpoint_ready", reached.get()).toString())
+                awaitModeMarker("core-mode-restored")
+                requireEndpointReady(sync, "after_tor_mode_interruption")
+            } finally {
+                metadata.cancel()
+            }
+        }
+
+    private suspend fun awaitModeMarker(name: String) {
+        val marker = File(context.filesDir, name)
+        withTimeout(40_000) { while (!marker.exists()) delay(100) }
     }
 
     private suspend fun torModeWalletId(synchronizer: Synchronizer): String {
@@ -1512,6 +1539,37 @@ class CoreWalletAcceptance {
         check(wallet.network == ZcashNetwork.Testnet)
         check(wallet.seedPhrase.joinToString() == fixture().getString(role + "Seed"))
         dependency<SynchronizerProvider>().getSynchronizer()
+    }
+
+    private suspend fun checkPublicEndpointTls(
+        endpoint: LightWalletEndpoint,
+        address: java.net.InetSocketAddress,
+    ) {
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            java.net.Socket().use { plain ->
+                // Socket read timeouts alone are per-read, not a whole handshake deadline.
+                // Closing the owned socket also bounds a peer that trickles handshake data.
+                val deadline = launch(kotlinx.coroutines.Dispatchers.Default) {
+                    delay(12_000)
+                    plain.close()
+                }
+                try {
+                    plain.connect(address, 6_000)
+                    plain.soTimeout = 6_000
+                    val factory = javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+                    (factory.createSocket(plain, endpoint.host, endpoint.port, true) as javax.net.ssl.SSLSocket).use {
+                        it.soTimeout = 6_000
+                        val parameters = it.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        it.sslParameters = parameters
+                        it.startHandshake()
+                    }
+                } finally {
+                    deadline.cancel()
+                    deadline.join()
+                }
+            }
+        }
     }
 
     private suspend fun requireEndpointReady(sync: Synchronizer, label: String) {

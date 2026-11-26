@@ -217,15 +217,17 @@ private fun UnavailableWalletRecovery(
     val support = koinInject<SendEmailUseCase>()
     val activity = LocalActivity.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val retryPending by walletViewModel.isWalletReadPending.collectAsStateWithLifecycle()
     val canAct = {
         hasAppAccess() && !resetProgress.isPending.value &&
             walletViewModel.secretState.value == SecretState.UNAVAILABLE &&
             lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
     }
     StoredWalletUnavailableView(
-        onRetry = { if (canAct()) walletViewModel.retryWalletRead() },
+        onRetry = { if (canAct()) walletViewModel.retryWalletRead(canAct) },
         onSupport = { support.sendBlankSupport(canAct) },
         onBack = activity::finish,
+        isRetrying = retryPending,
     )
 }
 

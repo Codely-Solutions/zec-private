@@ -10,8 +10,9 @@ from unittest.mock import Mock, patch
 import core_testnet_driver as driver
 from acceptance_policy import validate_core
 from core_testnet_driver import (
-    PACKAGE, RUNNER, claim_after_readiness, installed_apk_hash, instrumentation_role, run, select_apk_roles,
-    verify_instrumentation_pair, wait_for_preclaim_marker,
+    PACKAGE, RUNNER, attest_tor_mode_route, claim_after_readiness, installed_apk_hash, instrumentation_role, run,
+    select_apk_roles,
+    tor_route_targets, verify_instrumentation_pair, wait_for_preclaim_marker,
 )
 from test_support import patch_environment
 
@@ -37,6 +38,33 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
         steps = []
         claim_after_readiness(lambda: steps.append('app Tor ready'), lambda: steps.append('POST'))
         self.assertEqual(steps, ['app Tor ready', 'POST'])
+
+    def test_tor_route_interruption_exempts_only_bounded_public_addresses(self):
+        self.assertEqual({'93.184.216.34', '2001:4860:4860::8888'}, {str(address) for address in
+                         tor_route_targets(dict(public_testnet_endpoint=True,
+                                                addresses=['93.184.216.34', '2001:4860:4860::8888']))})
+        for addresses in ([], ['127.0.0.1'], ['169.254.169.254'], ['::1'],
+                          ['93.184.216.34/24'], ['93.184.216.34'] * 17):
+            with self.subTest(addresses=addresses), self.assertRaises((RuntimeError, ValueError)):
+                tor_route_targets(dict(public_testnet_endpoint=True, addresses=addresses))
+
+    def test_tor_route_check_requires_control_and_removes_the_owned_rules(self):
+        ready = dict(public_testnet_endpoint=True, addresses=['93.184.216.34'])
+        for expected_tor, sdk_ready, passes in ((True, False, True), (False, True, True), (True, True, False)):
+            with self.subTest(tor=expected_tor, sdk=sdk_ready):
+                shell = Mock(return_value='1 64 REJECT')
+                observation = dict(direct_tls=True, sdk_endpoint_ready=sdk_ready)
+                with patch.object(driver, 'wait_for_guest_marker', side_effect=[ready, observation]):
+                    if passes:
+                        proof = attest_tor_mode_route(Mock(), Mock(), shell, 10012, expected_tor)
+                        self.assertEqual(proof['sdk_endpoint_ready_during_interruption'], sdk_ready)
+                        shell.assert_called_with('run-as', PACKAGE, 'touch', 'files/core-mode-restored')
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'did not distinguish'):
+                            attest_tor_mode_route(Mock(), Mock(), shell, 10012, expected_tor)
+                        shell.assert_called_with('iptables', '-X', 'CORE_MODE_PROBE')
+                for tool in ('iptables', 'ip6tables'):
+                    shell.assert_any_call(tool, '-X', 'CORE_MODE_PROBE')
 
     def test_baseline_and_candidate_roles_are_explicit(self):
         baseline = Path('baseline-ui.apk')

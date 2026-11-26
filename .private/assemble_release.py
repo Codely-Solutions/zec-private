@@ -191,7 +191,6 @@ def main():
         require(all(core.get('stages', {}).get('interruption', {}).get(key) is True for key in
                     ('update_metadata_valid_before', 'update_metadata_valid_after', 'update_blocked_during_outage')),
                 'Real update metadata outage/recovery evidence required')
-        validate_core_sources(core, args.source_sha, head, root=SOURCE)
         # Preserve original execution fields; add only guard/producer provenance.
         provenance = dict(guard_job=profiles['core']['receipt']['job'], artifact_id=core_manifest['id'],
                           workflow_run_id=args.core_run, apk_preparation=preparations,
@@ -199,6 +198,7 @@ def main():
         for key, value in provenance.items():
             require(key not in core or core[key] == value, 'Original execution identity differs: '+key)
             core[key] = value
+        validate_core_sources(core, args.source_sha, head, root=SOURCE)
     require('apk_sha256' not in baseline or core.get('baseline_apk_sha256') == baseline['apk_sha256'],
             'Executed baseline app differs from selected upgrade APK')
     validate_direct_core_candidate(core, args.source_sha, version)

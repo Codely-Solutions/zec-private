@@ -165,23 +165,25 @@ class PersistableWalletProviderImpl(
         expected: WalletServerSelection?,
         onCommitted: () -> Unit,
     ): Boolean =
-        walletWriteAccess.write(version) {
-            val current = persistableWalletStorageProvider.get()
-            if (current == null || (expected != null && current.serverSelection() != expected)) {
-                false
-            } else {
-                currentCoroutineContext().ensureActive()
-                withContext(NonCancellable) {
-                    persistableWalletStorageProvider.store(
-                        WalletRecord(
-                            wallet = current.wallet.copy(endpoint = selection.endpoint),
-                            isAutomatic = checkNotNull(selection.isAutomatic)
+        walletWriteAccess.withSdkRecovery(version) {
+            walletWriteAccess.write(version) {
+                val current = persistableWalletStorageProvider.get()
+                if (current == null || (expected != null && current.serverSelection() != expected)) {
+                    false
+                } else {
+                    currentCoroutineContext().ensureActive()
+                    withContext(NonCancellable) {
+                        persistableWalletStorageProvider.store(
+                            WalletRecord(
+                                wallet = current.wallet.copy(endpoint = selection.endpoint),
+                                isAutomatic = checkNotNull(selection.isAutomatic)
+                            )
                         )
-                    )
-                    onCommitted()
+                        onCommitted()
+                    }
+                    true
                 }
-                true
-            }
+            } ?: false
         } ?: false
 
     override suspend fun getPersistableWallet() = currentRecord()?.wallet

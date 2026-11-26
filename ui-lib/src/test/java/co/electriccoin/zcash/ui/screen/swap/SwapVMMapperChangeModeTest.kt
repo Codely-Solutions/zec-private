@@ -60,6 +60,26 @@ class SwapVMMapperChangeModeTest {
         assertNull(state.changeModeButton)
     }
 
+    @Test
+    fun fiatConversionFloorsTheExactTokenAmountAtAssetPrecision() {
+        val asset = SwapAssetTestFixture.asset(
+            decimals = 8,
+            usdPrice = BigDecimal("1.00000000000000000000000000000000000001"),
+        )
+        val state = internalState(account(isSpendable = true)).copy(
+            swapAsset = asset,
+            currencyType = CurrencyType.FIAT,
+            addressText = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
+        )
+        val requested = mutableListOf<BigDecimal>()
+        val screen = mapper.createState(state, callbacks.copy(
+            onRequestSwapQuoteClick = { amount, _, _ -> requested += amount },
+        ))
+
+        assertNotNull(screen.primaryButton).onClick()
+        assertEquals(listOf(BigDecimal("0.99999999")), requested)
+    }
+
     private fun account(isSpendable: Boolean): WalletAccount =
         mockk {
             every { canSpend(any()) } returns true
