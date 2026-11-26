@@ -23,7 +23,7 @@ class WalletSeedRecovery(
     internal suspend fun eraseAndRestore(
         network: ZcashNetwork,
         beforeErase: () -> Unit,
-        restoreWallet: suspend () -> Unit,
+        prepareRestore: suspend () -> Boolean,
     ): Boolean? {
         if (transportGate.restartRequired.value || !coordinator.isSeedMismatch.value) return null
         return transportGate.whileRecoveringSeed {
@@ -35,18 +35,21 @@ class WalletSeedRecovery(
             }
             if (inactive != true) return@whileRecoveringSeed false
             withContext(Dispatchers.IO) {
-                var erased = false
+                var outcome: Boolean? = false
                 withTimeoutOrNull(30.seconds) {
                     resetProgressStore.withMigrationInputStopped({ transportGate.inputSuspended }) {
                         // Bound preparation. An admitted erase drains and records its result.
                         withContext(NonCancellable) {
-                            beforeErase()
-                            erased = runCatchingRecoverable { eraseInactiveSdkData(context, network) }.isSuccess
-                            if (erased) restoreWallet()
+                            outcome = if (prepareRestore()) {
+                                beforeErase()
+                                runCatchingRecoverable { eraseInactiveSdkData(context, network) }.isSuccess
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
-                erased
+                outcome
             }
         }
     }

@@ -530,9 +530,16 @@ class WalletRepositoryImpl(
     }
 
     private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
-        // A process can stop between the encrypted wallet write and onboarding metadata. Its seed already owns
-        // this setup. Resume conservatively as a restore and preserve the existing backup flag.
-        val replacement = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
+        // Keep the accepted provisioning mode when the seed commit reached disk before onboarding metadata.
+        // Older records omit that mode. Continue from a supported restore height in that case.
+        val replacement = if (wallet.walletInitMode == WalletInitMode.ExistingWallet) {
+            wallet.copy(
+                birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
+                walletInitMode = WalletInitMode.RestoreWallet,
+            )
+        } else {
+            wallet
+        }
         if (!persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
             throw WalletInitializationConflictException()
         }

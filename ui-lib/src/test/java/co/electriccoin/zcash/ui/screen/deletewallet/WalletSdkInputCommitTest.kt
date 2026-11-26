@@ -2,11 +2,15 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
 import android.content.SharedPreferences
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletInitMode
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.global.hideResetWallet
 import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
@@ -14,6 +18,7 @@ import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.StoredWalletDecodeException
+import co.electriccoin.zcash.ui.common.provider.WalletProvisioning
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -65,7 +70,9 @@ class WalletSdkInputCommitTest {
 
         assertEquals(listOf(null, candidate.seedPhrase), sdkWallets.map { it?.seedPhrase })
         assertEquals(candidate.seedPhrase, walletProvider.getPersistableWallet()?.seedPhrase)
-        assertEquals(candidate.seedPhrase, provider(CommitFixture(storage.durable)).getPersistableWallet()?.seedPhrase)
+        val cold = provider(CommitFixture(storage.durable)).sdkWalletReads.first().wallet
+        assertEquals(candidate.seedPhrase, cold?.seedPhrase)
+        assertEquals(WalletInitMode.NewWallet, cold?.walletInitMode)
     }
 
     @Test
@@ -153,13 +160,19 @@ class WalletSdkInputCommitTest {
         assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
 
         val original = walletProvider.requirePersistableWallet()
-        val restored = original.copy(walletInitMode = WalletInitMode.RestoreWallet)
+        val restored = original.copy(
+            birthday = original.network.saplingActivationHeight,
+            walletInitMode = WalletInitMode.RestoreWallet,
+        )
         assertTrue(walletProvider.storeIfCurrent(original, restored, walletProvider.writeVersion))
-        walletProvider.retryRead(recoveredWallet = restored)
+        walletProvider.retryRead()
         // Another SDK model construction can replace the pinned SDK's process-global mode.
         candidate.copy(walletInitMode = WalletInitMode.ExistingWallet)
         runCurrent()
         assertEquals(WalletInitMode.RestoreWallet, sdkWallets.last()?.walletInitMode)
+        val cold = provider(CommitFixture(storage.durable)).sdkWalletReads.first().wallet
+        assertEquals(WalletInitMode.RestoreWallet, cold?.walletInitMode)
+        assertEquals(restored.birthday, cold?.birthday)
 
         val newWallet = candidate.copy(
             endpoint = LightWalletEndpoint("different.fixture.invalid", 443, true),
@@ -170,6 +183,43 @@ class WalletSdkInputCommitTest {
         runCurrent()
         assertEquals(newWallet.endpoint, sdkWallets.last()?.endpoint)
         assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
+    }
+
+    @Test
+    fun onlyTheExpectedNativeAccountCompletesProvisioningForFutureReads() = runTest {
+        val storage = CommitFixture().apply { failCommit = false }
+        val walletProvider = provider(storage)
+        val sdkWallets = observeSdkInput(walletProvider)
+        walletProvider.store(candidate)
+        runCurrent()
+        val transport = WalletSdkTransportGate()
+        val provisioning = WalletProvisioning(walletProvider, transport)
+        val engine = mockk<Synchronizer> { every { network } returns candidate.network }
+        val wrongAccount = mockk<Account> {
+            every { hdAccountIndex } returns Zip32AccountIndex(0)
+            every { keySource } returns "zashi"
+            every { ufvk } returns "different-test-key"
+        }
+        val account = mockk<Account> {
+            every { hdAccountIndex } returns Zip32AccountIndex(0)
+            every { keySource } returns "zashi"
+            every { ufvk } returns "matching-test-key"
+        }
+        fun coldStore() = provider(CommitFixture(storage.durable))
+        provisioning.confirm(engine, listOf(wrongAccount), "zashi", { true }) { "matching-test-key" }
+        assertEquals(WalletInitMode.NewWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
+
+        var current = true
+        provisioning.confirm(engine, listOf(account), "zashi", { current }) {
+            current = false
+            "matching-test-key"
+        }
+        assertEquals(WalletInitMode.NewWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
+
+        provisioning.confirm(engine, listOf(account), "zashi", { true }) { "matching-test-key" }
+        runCurrent()
+        assertEquals(listOf(null, WalletInitMode.NewWallet), sdkWallets.map { it?.walletInitMode })
+        assertEquals(WalletInitMode.ExistingWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
     }
 
     private suspend fun TestScope.assertUncommitted(

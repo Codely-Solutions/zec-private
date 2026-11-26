@@ -18,11 +18,11 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]). Withdraws
- * the SDK input, erases the inactive wallet data and re-stores the existing wallet with
- * [WalletInitMode.RestoreWallet] before the next synchronizer build.
+ * the SDK input and records [WalletInitMode.RestoreWallet] for the current wallet before
+ * erasing inactive data. An interrupted erase leaves enough information to resume provisioning.
  * A reported failure throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
  * failures no further erase is attempted for that wallet generation. Wallet reset and replacement drain
- * admitted SDK erases. Re-storing also verifies that the wallet snapshot is current.
+ * admitted SDK erases. Recovery rereads the wallet under the same fence as endpoint changes.
  */
 class RecoverFromSeedMismatchUseCase(
     private val persistableWalletProvider: PersistableWalletProvider,
@@ -87,20 +87,24 @@ class RecoverFromSeedMismatchUseCase(
         try {
             withContext(NonCancellable) {
                 sdkRecovery.eraseAndRestore(wallet.network, walletWriteAccess::onSdkErasureStarting) {
-                    val recoveryWallet = wallet.copy(
-                        birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
-                        walletInitMode = WalletInitMode.RestoreWallet,
-                    )
-                    if (persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
-                        // Withdraw the cached pre-recovery input until a fresh wallet decode carries RestoreWallet.
-                        persistableWalletProvider.retryRead(recoveredWallet = recoveryWallet)
-                    } else {
-                        Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
-                    }
+                    prepareRestore(wallet, version)
                 }
             }
         } finally {
             notice.cancel()
+        }
+    }
+
+    private suspend fun prepareRestore(original: PersistableWallet, version: Long): Boolean {
+        val current = persistableWalletProvider.getPersistableWallet() ?: return false
+        if (current.seedPhrase != original.seedPhrase || current.network != original.network) return false
+        val replacement = current.copy(
+            birthday = current.birthday ?: current.network.saplingActivationHeight,
+            walletInitMode = WalletInitMode.RestoreWallet,
+        )
+        return persistableWalletProvider.storeIfCurrent(current, replacement, version).also { stored ->
+            // Discard cached SDK inputs while the recovery gate still holds the engine closed.
+            if (stored) persistableWalletProvider.retryRead()
         }
     }
 

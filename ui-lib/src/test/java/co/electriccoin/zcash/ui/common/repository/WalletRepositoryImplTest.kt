@@ -1350,7 +1350,7 @@ private class FakePersistableWalletProvider(
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
     override val writeVersion get() = writeAccess.token()
 
-    override fun retryRead(recoveredWallet: PersistableWallet?) {
+    override fun retryRead() {
         readRetries++
     }
 

@@ -37048,7 +37048,7 @@ index 1a21cd376..0f9011394 100644
 +                simpleSwapAssetProvider = get(),
 +                walletWriteAccess = get(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-index 9c294ca9d..c96bd2da5 100644
+index 9c294ca9d..a29a27c0b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 @@ -22,0 +23,2 @@ import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
@@ -37059,30 +37059,33 @@ index 9c294ca9d..c96bd2da5 100644
 -import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProviderImpl
 @@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
-@@ -81,0 +83,4 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+@@ -81,0 +83,5 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
++import co.electriccoin.zcash.ui.common.provider.WalletProvisioning
 +import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -84,0 +90 @@ import org.koin.dsl.bind
+@@ -84,0 +91 @@ import org.koin.dsl.bind
 +import org.koin.dsl.binds
-@@ -94 +100,5 @@ val providerModule =
+@@ -94 +101,6 @@ val providerModule =
 -        singleOf(::PersistableWalletProviderImpl) bind PersistableWalletProvider::class
 +        singleOf(::PersistableWalletProviderImpl) binds
 +            arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
 +        single { WalletWriteAccess(get()) }
 +        single { WalletTransportAccess(get()) }
 +        singleOf(::WalletEnrollmentAccess)
-@@ -96 +105,0 @@ val providerModule =
++        singleOf(::WalletProvisioning)
+@@ -96 +107,0 @@ val providerModule =
 -        singleOf(::IsServerSelectionAutomaticProviderImpl) bind IsServerSelectionAutomaticProvider::class
-@@ -102,0 +112 @@ val providerModule =
+@@ -102,0 +114,2 @@ val providerModule =
 +                migrationSyncGate = get(),
-@@ -124 +134 @@ val providerModule =
++                provisioning = get(),
+@@ -124 +137 @@ val providerModule =
 -        singleOf(::IsTorEnabledStorageProviderImpl) bind IsTorEnabledStorageProvider::class
 +        single<IsTorEnabledStorageProvider> { IsTorEnabledStorageProviderImpl(get(), get()) }
-@@ -129,0 +140 @@ val providerModule =
+@@ -129,0 +143 @@ val providerModule =
 +        single { QuoteRequestDiagnostics() }
-@@ -136,0 +148,3 @@ val providerModule =
+@@ -136,0 +151,3 @@ val providerModule =
 +        single {
 +            KrakenPriceProvider(get(), elapsedTimeMillis = get<GetMonotonicTimeProvider>()::invoke)
 +        } bind IndependentPriceProvider::class
@@ -44504,24 +44507,23 @@ index 000000000..85f546267
 +        BigInteger(1, bytes.copyOfRange(start, end).reversedArray())
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-index c85256529..b57bd2297 100644
+index c85256529..ce69686dc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.provider
 +import cash.z.ecc.android.sdk.WalletInitMode
-@@ -3,0 +5,2 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
-+import cash.z.ecc.android.sdk.model.ZcashNetwork
+@@ -3,0 +5 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-@@ -5,0 +9 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
+@@ -5,0 +8 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 +import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDefault
-@@ -7,0 +12,6 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+@@ -7,0 +11,6 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -8,0 +19,9 @@ import kotlinx.coroutines.flow.Flow
+@@ -8,0 +18,9 @@ import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
@@ -44531,12 +44533,10 @@ index c85256529..b57bd2297 100644
 +import kotlinx.coroutines.flow.distinctUntilChanged
 +import kotlinx.coroutines.flow.flatMapLatest
 +import kotlinx.coroutines.flow.flowOf
-@@ -9,0 +29,2 @@ import kotlinx.coroutines.flow.map
+@@ -9,0 +28,2 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.withContext
-@@ -10,0 +32 @@ import org.json.JSONObject
-+import java.security.MessageDigest
-@@ -13,0 +36,12 @@ interface PersistableWalletProvider {
+@@ -13,0 +34,12 @@ interface PersistableWalletProvider {
 +    val availability: Flow<StoredWalletAvailability>
 +        get() = persistableWallet.map { wallet ->
 +            if (wallet == null) StoredWalletAvailability.ABSENT else StoredWalletAvailability.PRESENT
@@ -44548,12 +44548,12 @@ index c85256529..b57bd2297 100644
 +    val sdkWalletReads: Flow<WalletSdkRead>
 +        get() = persistableWallet.map { WalletSdkRead(readGeneration.value, it) }
 +
-+    fun retryRead(recoveredWallet: PersistableWallet? = null) = Unit
-@@ -16,0 +51,3 @@ interface PersistableWalletProvider {
++    fun retryRead() = Unit
+@@ -16,0 +49,3 @@ interface PersistableWalletProvider {
 +    /** Writes only while the persisted snapshot and wallet generation match. */
 +    suspend fun storeIfCurrent(expected: PersistableWallet, replacement: PersistableWallet, version: Long): Boolean
 +
-@@ -21,0 +59,29 @@ interface PersistableWalletProvider {
+@@ -21,0 +57,29 @@ interface PersistableWalletProvider {
 +private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
 +
 +data class WalletSdkRead(val generation: Long, val wallet: PersistableWallet?)
@@ -44583,27 +44583,16 @@ index c85256529..b57bd2297 100644
 +    ): Boolean
 +}
 +
-@@ -23,2 +89,4 @@ class PersistableWalletProviderImpl(
+@@ -23,2 +87,4 @@ class PersistableWalletProviderImpl(
 -    preferenceHolder: EncryptedPreferenceProvider
 -) : PersistableWalletProvider {
 +    private val preferenceHolder: EncryptedPreferenceProvider,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 +    resetProgressStore: ResetProgressStore? = null,
 +) : PersistableWalletProvider, WalletServerSelectionProvider {
-@@ -25,0 +94,12 @@ class PersistableWalletProviderImpl(
+@@ -25,0 +92 @@ class PersistableWalletProviderImpl(
 +    override val writeVersion get() = walletWriteAccess.token()
-+
-+    private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
-+
-+    private val readRequests = MutableStateFlow(0L)
-+    @Volatile private var seedRestoreRead: SeedRestoreRead? = null
-+    override val readGeneration = readRequests.asStateFlow()
-+
-+    @OptIn(ExperimentalCoroutinesApi::class)
-+    private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
-+        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
-+        .buffer(0)
-@@ -27,7 +107,7 @@ class PersistableWalletProviderImpl(
+@@ -27,7 +94,17 @@ class PersistableWalletProviderImpl(
 -    override val persistableWallet: Flow<PersistableWallet?> =
 -        persistableWalletStorageProvider
 -            .observe()
@@ -44611,6 +44600,16 @@ index c85256529..b57bd2297 100644
 -                wallet?.copy(
 -                    seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })
 -                )
++    private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
++
++    private val readRequests = MutableStateFlow(0L)
++    override val readGeneration = readRequests.asStateFlow()
++
++    @OptIn(ExperimentalCoroutinesApi::class)
++    private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
++        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
++        .buffer(0)
++
 +    private fun observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
 +        if (suppressed) {
 +            flowOf(Result.success(null))
@@ -44618,7 +44617,7 @@ index c85256529..b57bd2297 100644
 +            persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
 +                if (failure !is Exception || failure is CancellationException) throw failure
 +                emit(Result.failure(failure))
-@@ -34,0 +115,44 @@ class PersistableWalletProviderImpl(
+@@ -34,0 +112,39 @@ class PersistableWalletProviderImpl(
 +        }
 +
 +    override val availabilityRead = combine(records, readRequests) { (generation, result), _ ->
@@ -44635,16 +44634,17 @@ index c85256529..b57bd2297 100644
 +
 +    override val sdkWalletReads = records.map { (generation, result) ->
 +        val wallet = result.getOrNull()?.wallet
-+        val restore = wallet?.let {
-+            seedRestoreRead?.matches(it, generation, writeVersion)
-+        } == true
 +        WalletSdkRead(
 +            generation,
-+            wallet?.copy(
-+                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() }),
-+                walletInitMode = if (restore) WalletInitMode.RestoreWallet else wallet.walletInitMode,
-+            ),
++            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
 +        )
++    }.distinctUntilChanged { previous, current ->
++        // Recording successful account creation only changes the next engine's initialization mode.
++        previous.generation == current.generation && when {
++            previous.wallet == null -> current.wallet == null
++            current.wallet == null -> false
++            else -> previous.wallet.matchesPersistedSnapshot(current.wallet)
++        }
 +    }
 +
 +    override val persistableWallet = sdkWalletReads.map { it.wallet }.distinctUntilChanged()
@@ -44652,18 +44652,12 @@ index c85256529..b57bd2297 100644
 +    override val serverSelection =
 +        records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
 +
-+    override fun retryRead(recoveredWallet: PersistableWallet?) {
-+        if (recoveredWallet != null) {
-+            // The pinned SDK's JSON omits its process-wide initialization mode.
-+            seedRestoreRead = SeedRestoreRead(
-+                writeVersion, readRequests.value + 1, recoveredWallet.network, recoveredWallet.seedDigest(),
-+            )
-+        }
++    override fun retryRead() {
 +        readRequests.update { it + 1 }
 +    }
 +
 +    override suspend fun getServerSelection() = currentRecord()?.serverSelection()
-@@ -37 +161,17 @@ class PersistableWalletProviderImpl(
+@@ -37 +153,63 @@ class PersistableWalletProviderImpl(
 -        persistableWalletStorageProvider.store(persistableWallet)
 +        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
 +    }
@@ -44682,8 +44676,8 @@ index c85256529..b57bd2297 100644
 +                true
 +            }
 +        } ?: false
-@@ -40 +180,33 @@ class PersistableWalletProviderImpl(
--    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
++    }
++
 +    override suspend fun storeServerSelection(
 +        selection: WalletServerSelection,
 +        version: Long,
@@ -44699,7 +44693,7 @@ index c85256529..b57bd2297 100644
 +                    currentCoroutineContext().ensureActive()
 +                    withContext(NonCancellable) {
 +                        persistableWalletStorageProvider.store(
-+                            WalletRecord(
++                            current.copy(
 +                                wallet = current.wallet.copy(endpoint = selection.endpoint),
 +                                isAutomatic = checkNotNull(selection.isAutomatic)
 +                            )
@@ -44711,74 +44705,100 @@ index c85256529..b57bd2297 100644
 +            } ?: false
 +        } ?: false
 +
++    internal suspend fun markProvisioned(
++        expected: PersistableWallet,
++        version: Long,
++        stillUsesEngine: () -> Boolean,
++    ) {
++        walletWriteAccess.withSdkRecovery(version) {
++            walletWriteAccess.write(version) {
++                val current = persistableWalletStorageProvider.get() ?: return@write
++                if (stillUsesEngine() && current.wallet.walletInitMode == expected.walletInitMode &&
++                    current.wallet.matchesPersistedSnapshot(expected)
++                ) {
++                    persistableWalletStorageProvider.store(
++                        current.copy(wallet = current.wallet.copy(walletInitMode = WalletInitMode.ExistingWallet))
++                    )
++                }
++            }
++        }
+@@ -40 +218 @@ class PersistableWalletProviderImpl(
+-    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
 +    override suspend fun getPersistableWallet() = currentRecord()?.wallet
-+
+@@ -42 +220,10 @@ class PersistableWalletProviderImpl(
+-    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
 +    override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
 +
 +    private suspend fun currentRecord() =
 +        if (readsSuppressed?.value == true) null else persistableWalletStorageProvider.get()
-@@ -42 +214,5 @@ class PersistableWalletProviderImpl(
--    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
++
 +    private suspend fun WalletRecord.serverSelection() =
 +        WalletServerSelection(
 +            endpoint = wallet.endpoint,
 +            isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
 +        )
-@@ -45 +221,24 @@ class PersistableWalletProviderImpl(
+@@ -45 +232,12 @@ class PersistableWalletProviderImpl(
 -private interface PersistableWalletStorageProvider : NullableStorageProvider<PersistableWallet>
 +private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
 +    network == expected.network && seedPhrase == expected.seedPhrase &&
 +        birthday == expected.birthday && endpoint == expected.endpoint
-+
-+private class SeedRestoreRead(
-+    private val owner: Long,
-+    private val firstRead: Long,
-+    private val network: ZcashNetwork,
-+    private val seed: ByteArray,
-+) {
-+    fun matches(wallet: PersistableWallet, read: Long, version: Long): Boolean =
-+        version == owner && read >= firstRead && wallet.network == network && seed.contentEquals(wallet.seedDigest())
-+}
-+
-+private fun PersistableWallet.seedDigest(): ByteArray =
-+    MessageDigest.getInstance("SHA-256").digest(seedPhrase.split.joinToString(" ") { it.trim() }.encodeToByteArray())
 +
 +private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault(
 +    PreferenceKey("is_server_selection_automatic")
 +)
 +
 +private const val SERVER_SELECTION_AUTOMATIC = "server_selection_automatic"
++private const val APP_WALLET_PROVISIONING = "app_wallet_provisioning"
 +
 +private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
-@@ -49,2 +248 @@ private class PersistableWalletStorageProviderImpl(
+@@ -49,2 +247 @@ private class PersistableWalletStorageProviderImpl(
 -) : BaseNullableStorageProvider<PersistableWallet>(),
 -    PersistableWalletStorageProvider {
 +) : BaseNullableStorageProvider<WalletRecord>() {
-@@ -56 +254 @@ private class PersistableWalletPreferenceDefault(
+@@ -56 +253 @@ private class PersistableWalletPreferenceDefault(
 -) : PreferenceDefault<PersistableWallet?> {
 +) : PreferenceDefault<WalletRecord?> {
-@@ -58 +256,9 @@ private class PersistableWalletPreferenceDefault(
+@@ -58 +255,18 @@ private class PersistableWalletPreferenceDefault(
 -        preferenceProvider.getString(key)?.let { PersistableWallet.from(JSONObject(it)) }
 +        preferenceProvider.getString(key)?.let { serialized ->
 +            runCatchingRecoverable {
 +                val json = JSONObject(serialized)
-+                WalletRecord(PersistableWallet.from(json), json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean)
++                val mode = when (json.opt(APP_WALLET_PROVISIONING)) {
++                    null -> WalletInitMode.ExistingWallet
++                    "new" -> WalletInitMode.NewWallet
++                    "restore" -> WalletInitMode.RestoreWallet
++                    else -> error("Unsupported wallet provisioning mode")
++                }
++                WalletRecord(
++                    PersistableWallet.from(json).copy(walletInitMode = mode),
++                    json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean
++                )
 +            }.getOrElse {
 +                // JSONObject and SDK parse errors can contain the original decrypted record.
 +                throw StoredWalletDecodeException()
 +            }
 +        }
-@@ -62,2 +268,7 @@ private class PersistableWalletPreferenceDefault(
+@@ -62,2 +276,17 @@ private class PersistableWalletPreferenceDefault(
 -        newValue: PersistableWallet?
 -    ) = preferenceProvider.putString(key, newValue?.toJson()?.toString())
 +        newValue: WalletRecord?
 +    ) {
 +        val value = newValue?.let { record ->
-+            record.wallet.toJson().apply { put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic) }.toString()
++            record.wallet.toJson().apply {
++                put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic)
++                put(
++                    APP_WALLET_PROVISIONING,
++                    when (record.wallet.walletInitMode) {
++                        WalletInitMode.NewWallet -> "new"
++                        WalletInitMode.RestoreWallet -> "restore"
++                        WalletInitMode.ExistingWallet -> null
++                    }
++                )
++            }.toString()
 +        }
 +        preferenceProvider.putStringWithRollback(key, value)
 +    }
-@@ -64,0 +276,2 @@ private class PersistableWalletPreferenceDefault(
+@@ -64,0 +294,2 @@ private class PersistableWalletPreferenceDefault(
 +
 +internal class StoredWalletDecodeException : IllegalStateException("Could not read the stored wallet record")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PreferredFiatProvider.kt
@@ -45123,15 +45143,16 @@ index 4b2a09ed5..78ef2e276 100644
 @@ -77,0 +80 @@ class SwapAssetCacheProviderImpl(
 +        val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
-index 5ca17bee4..0444601bc 100644
+index 5ca17bee4..6d24d4f5b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
 @@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 +import co.electriccoin.zcash.global.WalletMigrationSyncGate
-@@ -64,0 +66,2 @@ class SynchronizerProviderImpl(
+@@ -64,0 +66,3 @@ class SynchronizerProviderImpl(
 +    migrationSyncGate: WalletMigrationSyncGate,
 +    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
-@@ -66,3 +69,4 @@ class SynchronizerProviderImpl(
++    provisioning: WalletProvisioning? = null,
+@@ -66,3 +70,4 @@ class SynchronizerProviderImpl(
 -    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 -
 -    override val error = MutableStateFlow<SynchronizerError?>(null)
@@ -45139,20 +45160,36 @@ index 5ca17bee4..0444601bc 100644
 +    override val error = combine(engineError, migrationSyncGate.error) { engine, migration ->
 +        migration ?: engine
 +    }.stateIn(scope, SharingStarted.Eagerly, null)
-@@ -83 +87 @@ class SynchronizerProviderImpl(
+@@ -83 +88 @@ class SynchronizerProviderImpl(
 -                                error.update { new }
 +                                engineError.update { new }
-@@ -109,2 +113,4 @@ class SynchronizerProviderImpl(
+@@ -102,0 +108,15 @@ class SynchronizerProviderImpl(
++        if (provisioning != null) {
++            scope.launch(Dispatchers.IO) {
++                synchronizer.flatMapLatest { engine ->
++                    engine?.accountsFlow?.filterNotNull()?.map { engine to it } ?: emptyFlow()
++                }.collect { (engine, accounts) ->
++                    runCatchingRecoverable {
++                        provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
++                            synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
++                        })
++                    }.onFailure {
++                        Twig.warn { "Wallet provisioning could not be confirmed (${it.javaClass.simpleName})" }
++                    }
++                }
++            }
++        }
+@@ -109,2 +129,4 @@ class SynchronizerProviderImpl(
 -                        runCatching { migrationSyncedHook.value.onSynced() }
 -                            .onFailure { Twig.warn { "MIGRATION_DIAG foreground SYNCED hook: ${it.message}" } }
 +                        runCatchingRecoverable { migrationSyncedHook.value.onSynced() }
 +                            .onFailure {
 +                                Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
 +                            }
-@@ -148 +154 @@ class SynchronizerProviderImpl(
+@@ -148 +170 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Processor: $error" }
 +            Twig.error { "Wallet processor failed" }
-@@ -157 +163 @@ class SynchronizerProviderImpl(
+@@ -157 +179 @@ class SynchronizerProviderImpl(
 -            Twig.error { "WALLET - Error Setup: $error" }
 +            Twig.error { "Wallet synchronizer setup failed" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletActionAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletActionAccess.kt
@@ -45237,12 +45274,62 @@ index 000000000..cb205b67b
 +    suspend fun <T> stage(token: WalletEnrollmentToken, block: () -> T): T? =
 +        walletWriteAccess.withSdkRecovery(token.wallet) { if (permits(token)) block() else null }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletProvisioning.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletProvisioning.kt
+new file mode 100644
+index 000000000..4336ac0da
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletProvisioning.kt
+@@ -0,0 +1,44 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletInitMode
++import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.PersistableWallet
++import cash.z.ecc.android.sdk.tool.DerivationTool
++import co.electriccoin.zcash.global.WalletSdkTransportGate
++
++/** Retires the durable setup intent only after the same seed has its first native software account. */
++class WalletProvisioning(
++    private val wallets: PersistableWalletProviderImpl,
++    private val transport: WalletSdkTransportGate,
++) {
++    internal suspend fun confirm(
++        engine: Synchronizer,
++        accounts: List<Account>,
++        keySource: String,
++        isCurrentEngine: () -> Boolean,
++        deriveFirstFullViewingKey: suspend (PersistableWallet) -> String = ::deriveFirstFullViewingKey,
++    ) {
++        fun current() = isCurrentEngine() && !transport.inputSuspended
++        if (!current()) return
++        val primary = accounts.firstOrNull { it.keySource == keySource && it.hdAccountIndex?.index == 0L }
++        val storedKey = primary?.ufvk ?: return
++        val version = wallets.writeVersion
++        val wallet = wallets.getPersistableWallet()
++        if (wallet != null && wallet.walletInitMode != WalletInitMode.ExistingWallet &&
++            wallet.network == engine.network &&
++            storedKey == deriveFirstFullViewingKey(wallet)
++        ) {
++            wallets.markProvisioned(wallet, version, ::current)
++        }
++    }
++}
++
++private suspend fun deriveFirstFullViewingKey(wallet: PersistableWallet): String {
++    val seed = wallet.seedPhrase.toByteArray()
++    return try {
++        DerivationTool.getInstance().deriveUnifiedFullViewingKeys(seed, wallet.network, 1).single().encoding
++    } finally {
++        seed.fill(0)
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt
 new file mode 100644
-index 000000000..6d3687611
+index 000000000..b1ebb1253
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecovery.kt
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,56 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import android.content.Context
@@ -45268,7 +45355,7 @@ index 000000000..6d3687611
 +    internal suspend fun eraseAndRestore(
 +        network: ZcashNetwork,
 +        beforeErase: () -> Unit,
-+        restoreWallet: suspend () -> Unit,
++        prepareRestore: suspend () -> Boolean,
 +    ): Boolean? {
 +        if (transportGate.restartRequired.value || !coordinator.isSeedMismatch.value) return null
 +        return transportGate.whileRecoveringSeed {
@@ -45280,18 +45367,21 @@ index 000000000..6d3687611
 +            }
 +            if (inactive != true) return@whileRecoveringSeed false
 +            withContext(Dispatchers.IO) {
-+                var erased = false
++                var outcome: Boolean? = false
 +                withTimeoutOrNull(30.seconds) {
 +                    resetProgressStore.withMigrationInputStopped({ transportGate.inputSuspended }) {
 +                        // Bound preparation. An admitted erase drains and records its result.
 +                        withContext(NonCancellable) {
-+                            beforeErase()
-+                            erased = runCatchingRecoverable { eraseInactiveSdkData(context, network) }.isSuccess
-+                            if (erased) restoreWallet()
++                            outcome = if (prepareRestore()) {
++                                beforeErase()
++                                runCatchingRecoverable { eraseInactiveSdkData(context, network) }.isSuccess
++                            } else {
++                                null
++                            }
 +                        }
 +                    }
 +                }
-+                erased
++                outcome
 +            }
 +        }
 +    }
@@ -48372,7 +48462,7 @@ index 26bf877f4..d7cb1f713 100644
 +    } == true
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..a2cf0bfae 100644
+index fa652b038..2f5566b2e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -6 +5,0 @@ import androidx.annotation.VisibleForTesting
@@ -48761,15 +48851,24 @@ index fa652b038..a2cf0bfae 100644
 +                    stored ?: candidate ?: PersistableWallet(
 @@ -383,0 +520 @@ class WalletRepositoryImpl(
 +                candidate = restoredWallet
-@@ -388,0 +526,2 @@ class WalletRepositoryImpl(
+@@ -388,0 +526,37 @@ class WalletRepositoryImpl(
 +            } finally {
 +                transportGate?.recordCommittedMode(request.enableTor)
-@@ -391,0 +531,110 @@ class WalletRepositoryImpl(
++            }
++        }
++    }
 +
 +    private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
-+        // A process can stop between the encrypted wallet write and onboarding metadata. Its seed already owns
-+        // this setup. Resume conservatively as a restore and preserve the existing backup flag.
-+        val replacement = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
++        // Keep the accepted provisioning mode when the seed commit reached disk before onboarding metadata.
++        // Older records omit that mode. Continue from a supported restore height in that case.
++        val replacement = if (wallet.walletInitMode == WalletInitMode.ExistingWallet) {
++            wallet.copy(
++                birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
++                walletInitMode = WalletInitMode.RestoreWallet,
++            )
++        } else {
++            wallet
++        }
 +        if (!persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
 +            throw WalletInitializationConflictException()
 +        }
@@ -48790,8 +48889,7 @@ index fa652b038..a2cf0bfae 100644
 +                activeInitialization ?: startWalletInitialization(
 +                    accepted ?: WalletInitializationOperation(request, operation)
 +                )
-+            }
-+        }
+@@ -390,0 +565,45 @@ class WalletRepositoryImpl(
 +
 +    @Suppress("TooGenericExceptionCaught")
 +    private fun startWalletInitialization(accepted: WalletInitializationOperation): Deferred<Unit> {
@@ -48837,7 +48935,7 @@ index fa652b038..a2cf0bfae 100644
 +            if (error == null) result.complete(Unit) else result.completeExceptionally(error)
 +        }
 +        return result
-+    }
+@@ -391,0 +611,37 @@ class WalletRepositoryImpl(
 +
 +    private class WalletInitializationOperation(
 +        val request: WalletInitializationRequest,
@@ -48875,7 +48973,7 @@ index fa652b038..a2cf0bfae 100644
 +    INCOMPLETE,
 +    RUNNING,
 +    FAILED
-@@ -399,5 +648,2 @@ class WalletRepositoryImpl(
+@@ -399,5 +655,2 @@ class WalletRepositoryImpl(
 - * Every other [OnboardingState] resolves to [SecretState.NONE], a stored wallet notwithstanding.
 - * [OnboardingState.NEEDS_WARN] and [OnboardingState.NEEDS_BACKUP] are ordinals of an earlier
 - * onboarding flow that nothing writes any more — [WalletRepositoryImpl] only ever persists
@@ -48883,11 +48981,11 @@ index fa652b038..a2cf0bfae 100644
 - * completion, so routing a wallet found under them back to onboarding is the intended outcome.
 + * A stored wallet from an earlier setup must pass app-access authentication before onboarding
 + * continues. A wallet stored by the current setup retains the first-run onboarding grant.
-@@ -408,0 +655 @@ internal fun resolveSecretState(
+@@ -408,0 +662 @@ internal fun resolveSecretState(
 +    storedByCurrentSetup: Boolean = false,
-@@ -412,0 +660 @@ internal fun resolveSecretState(
+@@ -412,0 +667 @@ internal fun resolveSecretState(
 +        hasWallet && !storedByCurrentSetup -> SecretState.INCOMPLETE
-@@ -414,0 +663,3 @@ internal fun resolveSecretState(
+@@ -414,0 +670,3 @@ internal fun resolveSecretState(
 +
 +private fun OnboardingState.requiresWalletlessRecovery() =
 +    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA
@@ -53304,7 +53402,7 @@ index eb7d61b0d..9a718a545 100644
 +            null
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
-index 4ed2d4b85..bdc72c516 100644
+index 4ed2d4b85..49b472774 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCase.kt
 @@ -8,3 +8,9 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -53328,11 +53426,11 @@ index 4ed2d4b85..bdc72c516 100644
 - * failures no further erase is attempted. The store is skipped when the persisted wallet changed during
 - * the erase (concurrent Reset Zashi or wallet restore).
 + * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]). Withdraws
-+ * the SDK input, erases the inactive wallet data and re-stores the existing wallet with
-+ * [WalletInitMode.RestoreWallet] before the next synchronizer build.
++ * the SDK input and records [WalletInitMode.RestoreWallet] for the current wallet before
++ * erasing inactive data. An interrupted erase leaves enough information to resume provisioning.
 + * A reported failure throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
 + * failures no further erase is attempted for that wallet generation. Wallet reset and replacement drain
-+ * admitted SDK erases. Re-storing also verifies that the wallet snapshot is current.
++ * admitted SDK erases. Recovery rereads the wallet under the same fence as endpoint changes.
 @@ -23 +29,3 @@ class RecoverFromSeedMismatchUseCase(
 -    private val walletCoordinator: WalletCoordinator,
 +    private val sdkRecovery: WalletSeedRecovery,
@@ -53382,23 +53480,20 @@ index 4ed2d4b85..bdc72c516 100644
 -        failedAttempts = 0
 +        if (erased == true) failedAttempts = 0
 +    }
-@@ -62,7 +69,4 @@ class RecoverFromSeedMismatchUseCase(
+@@ -62,5 +69,23 @@ class RecoverFromSeedMismatchUseCase(
 -        val currentWallet = persistableWalletProvider.getPersistableWallet()
 -        if (currentWallet == null || !currentWallet.identifiesSameWalletAs(wallet)) {
 -            Twig.error {
 -                "Seed-mismatch recovery: skipping store() — the persisted wallet changed during the erase " +
 -                    "(cleared by a concurrent Reset Zashi, or replaced by a concurrent wallet restore)"
--            }
--            return
 +    private suspend fun canReadSdkPreferences(): Boolean {
 +        repeat(PREFERENCE_READ_ATTEMPTS) { attempt ->
 +            if (runCatchingRecoverable { preferenceRecovery.checkReadableForErase() }.isSuccess) return true
 +            if (attempt < PREFERENCE_READ_ATTEMPTS - 1) delay(1.seconds)
-@@ -69,0 +74,2 @@ class RecoverFromSeedMismatchUseCase(
++        }
 +        return false
 +    }
-@@ -71 +77,28 @@ class RecoverFromSeedMismatchUseCase(
--        persistableWalletProvider.store(recoveryWallet)
++
 +    private suspend fun waitForErase(
 +        wallet: PersistableWallet,
 +        version: Long,
@@ -53412,26 +53507,32 @@ index 4ed2d4b85..bdc72c516 100644
 +        try {
 +            withContext(NonCancellable) {
 +                sdkRecovery.eraseAndRestore(wallet.network, walletWriteAccess::onSdkErasureStarting) {
-+                    val recoveryWallet = wallet.copy(
-+                        birthday = wallet.birthday ?: wallet.network.saplingActivationHeight,
-+                        walletInitMode = WalletInitMode.RestoreWallet,
-+                    )
-+                    if (persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
-+                        // Withdraw the cached pre-recovery input until a fresh wallet decode carries RestoreWallet.
-+                        persistableWalletProvider.retryRead(recoveredWallet = recoveryWallet)
-+                    } else {
-+                        Twig.info { "Seed-mismatch recovery: wallet changed during SDK erase, restore skipped" }
-+                    }
++                    prepareRestore(wallet, version)
 +                }
-+            }
+@@ -68 +93,2 @@ class RecoverFromSeedMismatchUseCase(
+-            return
 +        } finally {
 +            notice.cancel()
+@@ -69,0 +96 @@ class RecoverFromSeedMismatchUseCase(
++    }
+@@ -71 +98,11 @@ class RecoverFromSeedMismatchUseCase(
+-        persistableWalletProvider.store(recoveryWallet)
++    private suspend fun prepareRestore(original: PersistableWallet, version: Long): Boolean {
++        val current = persistableWalletProvider.getPersistableWallet() ?: return false
++        if (current.seedPhrase != original.seedPhrase || current.network != original.network) return false
++        val replacement = current.copy(
++            birthday = current.birthday ?: current.network.saplingActivationHeight,
++            walletInitMode = WalletInitMode.RestoreWallet,
++        )
++        return persistableWalletProvider.storeIfCurrent(current, replacement, version).also { stored ->
++            // Discard cached SDK inputs while the recovery gate still holds the engine closed.
++            if (stored) persistableWalletProvider.retryRead()
 +        }
-@@ -76 +109,2 @@ class RecoverFromSeedMismatchUseCase(
+@@ -76 +113,2 @@ class RecoverFromSeedMismatchUseCase(
 -        private val ERASE_TIMEOUT = 30.seconds
 +        private const val PREFERENCE_READ_ATTEMPTS = 3
 +        private val ERASE_NOTICE_DELAY = 30.seconds
-@@ -81,8 +115 @@ class RecoverFromSeedMismatchUseCase(
+@@ -81,8 +119 @@ class RecoverFromSeedMismatchUseCase(
 - * Wallet identity is network plus seed phrase. `walletInitMode` is excluded because it is not serialized
 - * and reflects process state rather than identity.
 - */
@@ -87482,10 +87583,10 @@ index 000000000..31a063c1c
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt
 new file mode 100644
-index 000000000..8038fd769
+index 000000000..87964462e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryFixture.kt
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,18 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import io.mockk.coEvery
@@ -87496,18 +87597,20 @@ index 000000000..8038fd769
 +
 +internal fun WalletSeedRecovery.eraseResult(erase: suspend () -> Boolean) {
 +    coEvery { eraseAndRestore(any(), any(), any()) } coAnswers {
-+        secondArg<() -> Unit>().invoke()
-+        val erased = erase()
-+        if (erased) thirdArg<suspend () -> Unit>().invoke()
-+        erased
++        if (thirdArg<suspend () -> Boolean>().invoke()) {
++            secondArg<() -> Unit>().invoke()
++            erase()
++        } else {
++            null
++        }
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt
 new file mode 100644
-index 000000000..84a4e021e
+index 000000000..ac9702d06
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/WalletSeedRecoveryTest.kt
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,163 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import android.content.Context
@@ -87586,10 +87689,11 @@ index 000000000..84a4e021e
 +
 +        assertEquals(true, recovery.eraseAndRestore(network, { order += "enter" }) {
 +            assertTrue(gate.inputSuspended)
-+            order += "restore"
++            order += "prepare"
++            true
 +        })
 +
-+        assertEquals(listOf("enter", "restore"), order)
++        assertEquals(listOf("prepare", "enter"), order)
 +        assertFalse(gate.inputSuspended)
 +        verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
 +    }
@@ -87627,15 +87731,31 @@ index 000000000..84a4e021e
 +    }
 +
 +    @Test
-+    fun inactiveApiRefusalLeavesRecoveryRetryableAndDoesNotRestore() = runTest {
++    fun inactiveApiRefusalRetainsThePreparedRestoreForRetry() = runTest {
 +        backgroundScope.observeSdkWithdrawal()
 +        runCurrent()
 +        coEvery { SlipstreamSynchronizer.erase(context, network) } returns false
 +
-+        assertEquals(false, recovery.eraseAndRestore(network, {}) { error("restored after failed erase") })
++        var prepared = false
++        assertEquals(false, recovery.eraseAndRestore(network, { assertTrue(prepared) }) {
++            prepared = true
++            true
++        })
 +
++        assertTrue(prepared)
 +        assertFalse(gate.inputSuspended)
 +        coVerify(exactly = 0) { Synchronizer.erase(any(), any()) }
++    }
++
++    @Test
++    fun inactiveSdkIsLeftIntactWhenRestorePreparationIsRefused() = runTest {
++        backgroundScope.observeSdkWithdrawal()
++        runCurrent()
++
++        assertNull(recovery.eraseAndRestore(network, { error("erase entered") }) { false })
++
++        assertFalse(gate.inputSuspended)
++        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any()) }
 +    }
 +
 +    @Test
@@ -90072,7 +90192,7 @@ index 70f0929ad..1cc4daef3 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..7daaa823e 100644
+index 0bc7a1124..4f6f37e32 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,3 @@ import android.app.Application
@@ -91197,7 +91317,7 @@ index 0bc7a1124..7daaa823e 100644
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
 -        events += "wallet"
-+    override fun retryRead(recoveredWallet: PersistableWallet?) {
++    override fun retryRead() {
 +        readRetries++
 @@ -364,0 +1357,17 @@ private class FakePersistableWalletProvider(
 +    override suspend fun store(persistableWallet: PersistableWallet) =
@@ -95085,7 +95205,7 @@ index 16244cdf4..65cb5eb54 100644
 +            } returns true
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
-index 606f64402..b47abb321 100644
+index 606f64402..02a42cb0e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt
 @@ -3 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -95164,19 +95284,20 @@ index 606f64402..b47abb321 100644
 +        assertFalse(access.permitsEnrollment(pendingImport))
 +        assertTrue(access.permitsEnrollment(assertNotNull(access.enrollmentToken())))
 +    }
-@@ -37,3 +65,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -37,3 +65,6 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun successfulEraseWipesThenRePersists() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
-+    fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
++    fun successfulEraseRequiresTheCurrentWalletRestoreIntentFirst() = runTest {
 +        sdkRecovery.eraseResult {
-+            assertTrue(walletProvider.replacements.isEmpty())
++            assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
++            assertEquals(1, walletProvider.readRetries)
 +            true
 +        }
-@@ -41 +71 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -41 +72 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        useCase()
-@@ -43,3 +73,7 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -43,3 +74,7 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { walletCoordinator.deleteSdkDataFlow() }
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
 -        }
@@ -95187,33 +95308,33 @@ index 606f64402..b47abb321 100644
 +        )
 +        assertEquals(1, walletProvider.readRetries)
 +    }
-@@ -48,3 +82,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -48,3 +83,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun noWalletStoredIsANoOp() =
 -        runTest {
 -            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
 +    fun noWalletStoredIsANoOp() = runTest {
 +        walletProvider.persistableWallet.value = null
-@@ -52 +85 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -52 +86 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        useCase()
-@@ -54,3 +87,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -54,3 +88,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { walletCoordinator.deleteSdkDataFlow() }
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        coVerify(exactly = 0) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -59,3 +92,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -59,3 +93,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun failedEraseDoesNotPersistAndThrowsExplicitError() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 +    fun aLegacyWalletWithNoBirthdayRestoresFromTheEarliestSupportedHeight() = runTest {
 +        walletProvider.persistableWallet.value = wallet.copy(birthday = null)
 +        sdkRecovery.eraseResult { true }
-@@ -63 +96 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -63 +97 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        useCase()
-@@ -65,2 +98,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -65,2 +99,5 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        val restored = walletProvider.replacements.single()
@@ -95221,36 +95342,36 @@ index 606f64402..b47abb321 100644
 +        assertEquals(WalletInitMode.RestoreWallet, restored.walletInitMode)
 +        assertEquals(wallet.seedPhrase, restored.seedPhrase)
 +    }
-@@ -68,6 +103,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -68,6 +104,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * Simulates the collector re-invoking this use case on every `isSeedMismatch` flip — far more
 -     * than the retry cap. Only [RecoverFromSeedMismatchUseCase]'s `MAX_RECOVERY_ATTEMPTS` (3) real
 -     * erase attempts are made; once exhausted, further invocations fail fast without hammering the
 -     * SDK again — this is the unthrottled wipe-retry loop fix.
 -     */
-@@ -75,3 +105,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -75,3 +106,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun repeatedFailuresAreCappedAndStopHittingTheSdk() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
-+    fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
++    fun failedEraseRetainsRestoreIntentAndThrowsExplicitError() = runTest {
 +        sdkRecovery.eraseResult { false }
-@@ -79,3 +108 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -79,3 +109 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            repeat(5) {
 -                assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 -            }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -83,3 +110,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -83,3 +111,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 3) { walletCoordinator.deleteSdkDataFlow() }
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
-+        assertTrue(walletProvider.replacements.isEmpty())
++        assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
 +    }
-@@ -87,4 +112,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -87,4 +113,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * A success resets the failure counter, and a subsequent failure starts a fresh cap rather
 -     * than inheriting the earlier count.
 -     */
-@@ -92,5 +114,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -92,5 +115,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun successAfterPriorFailuresResetsTheCounter() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
@@ -95258,7 +95379,7 @@ index 606f64402..b47abb321 100644
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +    fun unreadablePreferencesRefuseDetachedEraseWithoutRepairingOrReplacingWallet() = runTest {
 +        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unreadable fixture")
-@@ -98,2 +117,6 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -98,2 +118,6 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(true)
 -            useCase()
 +        assertEquals(1, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
@@ -95267,13 +95388,13 @@ index 606f64402..b47abb321 100644
 +        assertEquals(wallet, walletProvider.persistableWallet.value)
 +        assertTrue(walletProvider.replacements.isEmpty())
 +    }
-@@ -101 +124,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -101 +125,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
 +    @Test
 +    fun recoveryRetriesAReadFailureBeforeEnteringTheSdkOnce() = runTest {
 +        coEvery { preferenceRecovery.checkReadableForErase() } throws IllegalStateException("Unavailable") andThen Unit
 +        sdkRecovery.eraseResult { true }
-@@ -103,2 +129,12 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -103,2 +130,12 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        useCase()
@@ -95288,9 +95409,9 @@ index 606f64402..b47abb321 100644
 +        sdkRecovery.eraseResult { false }
 +
 +        repeat(5) {
-@@ -106 +141,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -106 +142,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 1) { persistableWalletProvider.store(any()) }
-@@ -109,6 +144,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -109,6 +145,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * A wallet concurrently nulled out (Reset Zashi racing this recovery) leaves
 -     * [WalletCoordinator.deleteSdkDataFlow]'s inner wallet read null, so the flow never emits or
@@ -95298,10 +95419,10 @@ index 606f64402..b47abb321 100644
 -     * result, rather than hanging this use case (and the collector invoking it) forever.
 -     */
 +        coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-+        assertTrue(walletProvider.replacements.isEmpty())
++        assertTrue(walletProvider.replacements.all { it.walletInitMode == WalletInitMode.RestoreWallet })
 +    }
 +
-@@ -116,3 +149,5 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -116,3 +150,5 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun eraseTimeoutCountsAsFailedAttemptAndThrows() =
 -        runTest {
 -            every { walletCoordinator.deleteSdkDataFlow() } returns flow<Boolean> { delay(1.days) }
@@ -95310,22 +95431,22 @@ index 606f64402..b47abb321 100644
 +        repeat(3) { assertFailsWith<SeedMismatchRecoveryException> { useCase() } }
 +        val old = access.token()
 +        access.replaceWallet { walletProvider.persistableWallet.value = wallet.copy() }
-@@ -120 +155,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -120 +156,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        recovery(old)
 +        val firstFailure = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -122,2 +158,3 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -122,2 +159,3 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
 +        assertEquals(1, firstFailure.failedAttempts)
 +        coVerify(exactly = 4) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
 +    }
-@@ -125,4 +161,0 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -125,4 +162,0 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * If Reset Zashi clears the persisted wallet while the erase is in flight, `store()` must not
 -     * resurrect the deleted wallet's seed.
 -     */
-@@ -130,6 +163,4 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -130,6 +164,4 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenWalletWasClearedDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -95336,28 +95457,28 @@ index 606f64402..b47abb321 100644
 +        sdkRecovery.eraseResult { false }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-@@ -137 +168,2 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -137 +169,2 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            useCase()
 +        sdkRecovery.eraseResult { true }
 +        useCase()
-@@ -139,2 +171,8 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -139,2 +172,8 @@ class RecoverFromSeedMismatchUseCaseTest {
 -            coVerify(exactly = 0) { persistableWalletProvider.store(any()) }
 -        }
-+        assertEquals(1, walletProvider.replacements.size)
++        assertEquals(3, walletProvider.replacements.size)
 +
 +        sdkRecovery.eraseResult { false }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 +        coVerify(exactly = 5) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-+        assertEquals(1, walletProvider.replacements.size)
++        assertEquals(5, walletProvider.replacements.size)
 +    }
-@@ -142,4 +180 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -142,4 +181 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    /**
 -     * If the user restores a different wallet while the erase is in flight, `store()` must not
 -     * overwrite it with the stale, now-wiped wallet's recovery copy.
 -     */
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -147,15 +182,33 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -147,15 +183,33 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    fun storeIsSkippedWhenADifferentWalletWasStoredDuringErase() =
 -        runTest {
 -            every { wallet.network } returns ZcashNetwork.Mainnet
@@ -95383,7 +95504,7 @@ index 606f64402..b47abb321 100644
 +            advanceTimeBy(30.seconds)
 +            runCurrent()
 +            assertTrue(delayed.isCompleted)
-+            assertTrue(walletProvider.replacements.isEmpty())
++            assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
 +            assertTrue(!replacing.isCompleted)
 +        } finally {
 +            sdkResult.complete(true)
@@ -95403,10 +95524,10 @@ index 606f64402..b47abb321 100644
 +        val replacements = mutableListOf<PersistableWallet>()
 +        var readRetries = 0
 +
-+        override fun retryRead(recoveredWallet: PersistableWallet?) {
-+            assertEquals(replacements.last(), assertNotNull(recoveredWallet))
++        override fun retryRead() {
++            assertEquals(WalletInitMode.RestoreWallet, replacements.last().walletInitMode)
 +            readRetries += 1
-@@ -164 +217,19 @@ class RecoverFromSeedMismatchUseCaseTest {
+@@ -164 +218,19 @@ class RecoverFromSeedMismatchUseCaseTest {
 -    private fun seedPhrase(word: String) = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { word })
 +        override suspend fun store(persistableWallet: PersistableWallet): Unit =
 +            error("Recovery must compare the original wallet and version before storing")
@@ -100750,10 +100871,10 @@ index 000000000..e11cce502
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..77ceed3c7
+index 000000000..7c0566638
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,486 @@
+@@ -0,0 +1,529 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -100786,6 +100907,7 @@ index 000000000..77ceed3c7
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 +import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
@@ -100994,7 +101116,11 @@ index 000000000..77ceed3c7
 +        val recovery = launch { erase.recover(version) }
 +        try {
 +            withTimeout(10.seconds) { erase.started.await() }
-+            assertTrue(provider.storeIfCurrent(original, replacement, version))
++            val prepared = provider.requirePersistableWallet()
++            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
++            assertTrue(provider.storeIfCurrent(prepared, replacement.copy(
++                birthday = prepared.birthday, walletInitMode = prepared.walletInitMode
++            ), version))
 +            assertEquals(version, provider.writeVersion)
 +            assertEquals(replacement.endpoint, provider.requirePersistableWallet().endpoint)
 +        } finally {
@@ -101003,6 +101129,44 @@ index 000000000..77ceed3c7
 +        recovery.join()
 +
 +        assertEquals(replacement.endpoint, provider.requirePersistableWallet().endpoint)
++    }
++
++    @Test
++    fun seedRecoveryPreparesTheEndpointCommittedAfterItsInitialRead() = runBlocking {
++        val fixture = Fixture()
++        val provider = fixture.walletProvider
++        val original = originalWallet()
++        provider.store(original)
++        val version = provider.writeVersion
++        val captured = CompletableDeferred<Unit>()
++        val resume = CompletableDeferred<Unit>()
++        val stagedRead = object : PersistableWalletProvider by provider {
++            override suspend fun getPersistableWallet(): PersistableWallet {
++                val snapshot = provider.requirePersistableWallet()
++                if (captured.complete(Unit)) resume.await()
++                return snapshot
++            }
++        }
++        val endpoint = LightWalletEndpoint("new-server.fixture.invalid", 443, true)
++        val sdkRecovery = seedRecoveryFixture {
++            val prepared = provider.requirePersistableWallet()
++            assertEquals(endpoint, prepared.endpoint)
++            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
++            true
++        }
++        val recover = RecoverFromSeedMismatchUseCase(
++            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
++        )
++        val pending = launch { recover(version) }
++        try {
++            withTimeout(10.seconds) { captured.await() }
++            assertTrue(provider.storeServerSelection(WalletServerSelection(endpoint, false), version))
++        } finally {
++            resume.complete(Unit)
++        }
++        pending.join()
++        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
++        assertEquals(endpoint, provider.requirePersistableWallet().endpoint)
 +    }
 +
 +    @Test
@@ -101851,19 +102015,23 @@ index 000000000..e00d0f4a5
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
 new file mode 100644
-index 000000000..902b56f0d
+index 000000000..ef32e1169
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,295 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
 +import android.content.SharedPreferences
++import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.WalletInitMode
++import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 +import cash.z.ecc.android.sdk.model.PersistableWallet
 +import cash.z.ecc.android.sdk.model.SeedPhrase
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.global.WalletSdkTransportGate
 +import co.electriccoin.zcash.global.hideResetWallet
 +import co.electriccoin.zcash.preference.AndroidPreferenceProvider
 +import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
@@ -101871,6 +102039,7 @@ index 000000000..902b56f0d
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 +import co.electriccoin.zcash.ui.common.provider.StoredWalletDecodeException
++import co.electriccoin.zcash.ui.common.provider.WalletProvisioning
 +import io.mockk.coEvery
 +import io.mockk.every
 +import io.mockk.mockk
@@ -101922,7 +102091,9 @@ index 000000000..902b56f0d
 +
 +        assertEquals(listOf(null, candidate.seedPhrase), sdkWallets.map { it?.seedPhrase })
 +        assertEquals(candidate.seedPhrase, walletProvider.getPersistableWallet()?.seedPhrase)
-+        assertEquals(candidate.seedPhrase, provider(CommitFixture(storage.durable)).getPersistableWallet()?.seedPhrase)
++        val cold = provider(CommitFixture(storage.durable)).sdkWalletReads.first().wallet
++        assertEquals(candidate.seedPhrase, cold?.seedPhrase)
++        assertEquals(WalletInitMode.NewWallet, cold?.walletInitMode)
 +    }
 +
 +    @Test
@@ -102010,13 +102181,19 @@ index 000000000..902b56f0d
 +        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
 +
 +        val original = walletProvider.requirePersistableWallet()
-+        val restored = original.copy(walletInitMode = WalletInitMode.RestoreWallet)
++        val restored = original.copy(
++            birthday = original.network.saplingActivationHeight,
++            walletInitMode = WalletInitMode.RestoreWallet,
++        )
 +        assertTrue(walletProvider.storeIfCurrent(original, restored, walletProvider.writeVersion))
-+        walletProvider.retryRead(recoveredWallet = restored)
++        walletProvider.retryRead()
 +        // Another SDK model construction can replace the pinned SDK's process-global mode.
 +        candidate.copy(walletInitMode = WalletInitMode.ExistingWallet)
 +        runCurrent()
 +        assertEquals(WalletInitMode.RestoreWallet, sdkWallets.last()?.walletInitMode)
++        val cold = provider(CommitFixture(storage.durable)).sdkWalletReads.first().wallet
++        assertEquals(WalletInitMode.RestoreWallet, cold?.walletInitMode)
++        assertEquals(restored.birthday, cold?.birthday)
 +
 +        val newWallet = candidate.copy(
 +            endpoint = LightWalletEndpoint("different.fixture.invalid", 443, true),
@@ -102027,6 +102204,43 @@ index 000000000..902b56f0d
 +        runCurrent()
 +        assertEquals(newWallet.endpoint, sdkWallets.last()?.endpoint)
 +        assertEquals(WalletInitMode.NewWallet, sdkWallets.last()?.walletInitMode)
++    }
++
++    @Test
++    fun onlyTheExpectedNativeAccountCompletesProvisioningForFutureReads() = runTest {
++        val storage = CommitFixture().apply { failCommit = false }
++        val walletProvider = provider(storage)
++        val sdkWallets = observeSdkInput(walletProvider)
++        walletProvider.store(candidate)
++        runCurrent()
++        val transport = WalletSdkTransportGate()
++        val provisioning = WalletProvisioning(walletProvider, transport)
++        val engine = mockk<Synchronizer> { every { network } returns candidate.network }
++        val wrongAccount = mockk<Account> {
++            every { hdAccountIndex } returns Zip32AccountIndex(0)
++            every { keySource } returns "zashi"
++            every { ufvk } returns "different-test-key"
++        }
++        val account = mockk<Account> {
++            every { hdAccountIndex } returns Zip32AccountIndex(0)
++            every { keySource } returns "zashi"
++            every { ufvk } returns "matching-test-key"
++        }
++        fun coldStore() = provider(CommitFixture(storage.durable))
++        provisioning.confirm(engine, listOf(wrongAccount), "zashi", { true }) { "matching-test-key" }
++        assertEquals(WalletInitMode.NewWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
++
++        var current = true
++        provisioning.confirm(engine, listOf(account), "zashi", { current }) {
++            current = false
++            "matching-test-key"
++        }
++        assertEquals(WalletInitMode.NewWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
++
++        provisioning.confirm(engine, listOf(account), "zashi", { true }) { "matching-test-key" }
++        runCurrent()
++        assertEquals(listOf(null, WalletInitMode.NewWallet), sdkWallets.map { it?.walletInitMode })
++        assertEquals(WalletInitMode.ExistingWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
 +    }
 +
 +    private suspend fun TestScope.assertUncommitted(

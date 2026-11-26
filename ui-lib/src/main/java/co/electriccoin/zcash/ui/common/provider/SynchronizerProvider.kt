@@ -65,6 +65,7 @@ class SynchronizerProviderImpl(
     private val migrationSyncedHook: Lazy<MigrationSyncedHook>,
     migrationSyncGate: WalletMigrationSyncGate,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+    provisioning: WalletProvisioning? = null,
 ) : SynchronizerProvider {
     private val engineError = MutableStateFlow<SynchronizerError?>(null)
     override val error = combine(engineError, migrationSyncGate.error) { engine, migration ->
@@ -104,6 +105,21 @@ class SynchronizerProviderImpl(
             )
 
     init {
+        if (provisioning != null) {
+            scope.launch(Dispatchers.IO) {
+                synchronizer.flatMapLatest { engine ->
+                    engine?.accountsFlow?.filterNotNull()?.map { engine to it } ?: emptyFlow()
+                }.collect { (engine, accounts) ->
+                    runCatchingRecoverable {
+                        provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
+                            synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
+                        })
+                    }.onFailure {
+                        Twig.warn { "Wallet provisioning could not be confirmed (${it.javaClass.simpleName})" }
+                    }
+                }
+            }
+        }
         scope.launch {
             synchronizer
                 .flatMapLatest { s -> s?.status ?: emptyFlow() }

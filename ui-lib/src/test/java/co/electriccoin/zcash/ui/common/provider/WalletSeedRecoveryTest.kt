@@ -76,10 +76,11 @@ class WalletSeedRecoveryTest {
 
         assertEquals(true, recovery.eraseAndRestore(network, { order += "enter" }) {
             assertTrue(gate.inputSuspended)
-            order += "restore"
+            order += "prepare"
+            true
         })
 
-        assertEquals(listOf("enter", "restore"), order)
+        assertEquals(listOf("prepare", "enter"), order)
         assertFalse(gate.inputSuspended)
         verify(exactly = 0) { coordinator.deleteSdkDataFlow() }
     }
@@ -117,15 +118,31 @@ class WalletSeedRecoveryTest {
     }
 
     @Test
-    fun inactiveApiRefusalLeavesRecoveryRetryableAndDoesNotRestore() = runTest {
+    fun inactiveApiRefusalRetainsThePreparedRestoreForRetry() = runTest {
         backgroundScope.observeSdkWithdrawal()
         runCurrent()
         coEvery { SlipstreamSynchronizer.erase(context, network) } returns false
 
-        assertEquals(false, recovery.eraseAndRestore(network, {}) { error("restored after failed erase") })
+        var prepared = false
+        assertEquals(false, recovery.eraseAndRestore(network, { assertTrue(prepared) }) {
+            prepared = true
+            true
+        })
 
+        assertTrue(prepared)
         assertFalse(gate.inputSuspended)
         coVerify(exactly = 0) { Synchronizer.erase(any(), any()) }
+    }
+
+    @Test
+    fun inactiveSdkIsLeftIntactWhenRestorePreparationIsRefused() = runTest {
+        backgroundScope.observeSdkWithdrawal()
+        runCurrent()
+
+        assertNull(recovery.eraseAndRestore(network, { error("erase entered") }) { false })
+
+        assertFalse(gate.inputSuspended)
+        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any()) }
     }
 
     @Test

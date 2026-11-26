@@ -30,6 +30,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.WalletSeedRecovery
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.provider.seedRecoveryFixture
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
@@ -238,7 +239,11 @@ class ResetWalletWriteOwnershipTest {
         val recovery = launch { erase.recover(version) }
         try {
             withTimeout(10.seconds) { erase.started.await() }
-            assertTrue(provider.storeIfCurrent(original, replacement, version))
+            val prepared = provider.requirePersistableWallet()
+            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
+            assertTrue(provider.storeIfCurrent(prepared, replacement.copy(
+                birthday = prepared.birthday, walletInitMode = prepared.walletInitMode
+            ), version))
             assertEquals(version, provider.writeVersion)
             assertEquals(replacement.endpoint, provider.requirePersistableWallet().endpoint)
         } finally {
@@ -247,6 +252,44 @@ class ResetWalletWriteOwnershipTest {
         recovery.join()
 
         assertEquals(replacement.endpoint, provider.requirePersistableWallet().endpoint)
+    }
+
+    @Test
+    fun seedRecoveryPreparesTheEndpointCommittedAfterItsInitialRead() = runBlocking {
+        val fixture = Fixture()
+        val provider = fixture.walletProvider
+        val original = originalWallet()
+        provider.store(original)
+        val version = provider.writeVersion
+        val captured = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val stagedRead = object : PersistableWalletProvider by provider {
+            override suspend fun getPersistableWallet(): PersistableWallet {
+                val snapshot = provider.requirePersistableWallet()
+                if (captured.complete(Unit)) resume.await()
+                return snapshot
+            }
+        }
+        val endpoint = LightWalletEndpoint("new-server.fixture.invalid", 443, true)
+        val sdkRecovery = seedRecoveryFixture {
+            val prepared = provider.requirePersistableWallet()
+            assertEquals(endpoint, prepared.endpoint)
+            assertEquals(WalletInitMode.RestoreWallet, prepared.walletInitMode)
+            true
+        }
+        val recover = RecoverFromSeedMismatchUseCase(
+            stagedRead, sdkRecovery, fixture.writeAccess, mockk(relaxed = true),
+        )
+        val pending = launch { recover(version) }
+        try {
+            withTimeout(10.seconds) { captured.await() }
+            assertTrue(provider.storeServerSelection(WalletServerSelection(endpoint, false), version))
+        } finally {
+            resume.complete(Unit)
+        }
+        pending.join()
+        coVerify(exactly = 1) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
+        assertEquals(endpoint, provider.requirePersistableWallet().endpoint)
     }
 
     @Test

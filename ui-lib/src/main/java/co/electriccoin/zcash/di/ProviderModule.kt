@@ -80,6 +80,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeTimestampSto
 import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeTimestampStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+import co.electriccoin.zcash.ui.common.provider.WalletProvisioning
 import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.WalletEnrollmentAccess
 import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
@@ -102,6 +103,7 @@ val providerModule =
         single { WalletWriteAccess(get()) }
         single { WalletTransportAccess(get()) }
         singleOf(::WalletEnrollmentAccess)
+        singleOf(::WalletProvisioning)
         singleOf(::PreferredFiatProviderImpl) bind PreferredFiatProvider::class
         single {
             SynchronizerProviderImpl(
@@ -110,6 +112,7 @@ val providerModule =
                 // lazy {} breaks the AccountDataSource -> SynchronizerProvider resolution cycle
                 migrationSyncedHook = lazy { get() },
                 migrationSyncGate = get(),
+                provisioning = get(),
             )
         } bind SynchronizerProvider::class
         singleOf(::ApplicationStateProviderImpl) bind ApplicationStateProvider::class

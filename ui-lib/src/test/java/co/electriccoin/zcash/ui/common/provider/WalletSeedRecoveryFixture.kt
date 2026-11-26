@@ -8,9 +8,11 @@ internal fun seedRecoveryFixture(erase: suspend () -> Boolean): WalletSeedRecove
 
 internal fun WalletSeedRecovery.eraseResult(erase: suspend () -> Boolean) {
     coEvery { eraseAndRestore(any(), any(), any()) } coAnswers {
-        secondArg<() -> Unit>().invoke()
-        val erased = erase()
-        if (erased) thirdArg<suspend () -> Unit>().invoke()
-        erased
+        if (thirdArg<suspend () -> Boolean>().invoke()) {
+            secondArg<() -> Unit>().invoke()
+            erase()
+        } else {
+            null
+        }
     }
 }

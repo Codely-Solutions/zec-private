@@ -62,9 +62,10 @@ class RecoverFromSeedMismatchUseCaseTest {
     }
 
     @Test
-    fun successfulEraseRePersistsOnlyAgainstTheOriginalWalletAndVersion() = runTest {
+    fun successfulEraseRequiresTheCurrentWalletRestoreIntentFirst() = runTest {
         sdkRecovery.eraseResult {
-            assertTrue(walletProvider.replacements.isEmpty())
+            assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
+            assertEquals(1, walletProvider.readRetries)
             true
         }
 
@@ -102,12 +103,12 @@ class RecoverFromSeedMismatchUseCaseTest {
     }
 
     @Test
-    fun failedEraseDoesNotPersistAndThrowsExplicitError() = runTest {
+    fun failedEraseRetainsRestoreIntentAndThrowsExplicitError() = runTest {
         sdkRecovery.eraseResult { false }
 
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
 
-        assertTrue(walletProvider.replacements.isEmpty())
+        assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
     }
 
     @Test
@@ -142,7 +143,7 @@ class RecoverFromSeedMismatchUseCaseTest {
         }
 
         coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-        assertTrue(walletProvider.replacements.isEmpty())
+        assertTrue(walletProvider.replacements.all { it.walletInitMode == WalletInitMode.RestoreWallet })
     }
 
     @Test
@@ -168,13 +169,13 @@ class RecoverFromSeedMismatchUseCaseTest {
         sdkRecovery.eraseResult { true }
         useCase()
 
-        assertEquals(1, walletProvider.replacements.size)
+        assertEquals(3, walletProvider.replacements.size)
 
         sdkRecovery.eraseResult { false }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         coVerify(exactly = 5) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-        assertEquals(1, walletProvider.replacements.size)
+        assertEquals(5, walletProvider.replacements.size)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -189,7 +190,7 @@ class RecoverFromSeedMismatchUseCaseTest {
             advanceTimeBy(30.seconds)
             runCurrent()
             assertTrue(delayed.isCompleted)
-            assertTrue(walletProvider.replacements.isEmpty())
+            assertEquals(WalletInitMode.RestoreWallet, walletProvider.replacements.single().walletInitMode)
             assertTrue(!replacing.isCompleted)
         } finally {
             sdkResult.complete(true)
@@ -209,8 +210,8 @@ class RecoverFromSeedMismatchUseCaseTest {
         val replacements = mutableListOf<PersistableWallet>()
         var readRetries = 0
 
-        override fun retryRead(recoveredWallet: PersistableWallet?) {
-            assertEquals(replacements.last(), assertNotNull(recoveredWallet))
+        override fun retryRead() {
+            assertEquals(WalletInitMode.RestoreWallet, replacements.last().walletInitMode)
             readRetries += 1
         }
 

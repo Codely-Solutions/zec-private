@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.common.provider
 
 import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.model.PersistableWallet
-import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.security.MessageDigest
 
 interface PersistableWalletProvider {
     val persistableWallet: Flow<PersistableWallet?>
@@ -44,7 +42,7 @@ interface PersistableWalletProvider {
     val sdkWalletReads: Flow<WalletSdkRead>
         get() = persistableWallet.map { WalletSdkRead(readGeneration.value, it) }
 
-    fun retryRead(recoveredWallet: PersistableWallet? = null) = Unit
+    fun retryRead() = Unit
 
     suspend fun store(persistableWallet: PersistableWallet)
 
@@ -96,7 +94,6 @@ class PersistableWalletProviderImpl(
     private val readsSuppressed = resetProgressStore?.isSdkInputSuppressed
 
     private val readRequests = MutableStateFlow(0L)
-    @Volatile private var seedRestoreRead: SeedRestoreRead? = null
     override val readGeneration = readRequests.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -128,16 +125,17 @@ class PersistableWalletProviderImpl(
 
     override val sdkWalletReads = records.map { (generation, result) ->
         val wallet = result.getOrNull()?.wallet
-        val restore = wallet?.let {
-            seedRestoreRead?.matches(it, generation, writeVersion)
-        } == true
         WalletSdkRead(
             generation,
-            wallet?.copy(
-                seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() }),
-                walletInitMode = if (restore) WalletInitMode.RestoreWallet else wallet.walletInitMode,
-            ),
+            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
         )
+    }.distinctUntilChanged { previous, current ->
+        // Recording successful account creation only changes the next engine's initialization mode.
+        previous.generation == current.generation && when {
+            previous.wallet == null -> current.wallet == null
+            current.wallet == null -> false
+            else -> previous.wallet.matchesPersistedSnapshot(current.wallet)
+        }
     }
 
     override val persistableWallet = sdkWalletReads.map { it.wallet }.distinctUntilChanged()
@@ -145,13 +143,7 @@ class PersistableWalletProviderImpl(
     override val serverSelection =
         records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
 
-    override fun retryRead(recoveredWallet: PersistableWallet?) {
-        if (recoveredWallet != null) {
-            // The pinned SDK's JSON omits its process-wide initialization mode.
-            seedRestoreRead = SeedRestoreRead(
-                writeVersion, readRequests.value + 1, recoveredWallet.network, recoveredWallet.seedDigest(),
-            )
-        }
+    override fun retryRead() {
         readRequests.update { it + 1 }
     }
 
@@ -192,7 +184,7 @@ class PersistableWalletProviderImpl(
                     currentCoroutineContext().ensureActive()
                     withContext(NonCancellable) {
                         persistableWalletStorageProvider.store(
-                            WalletRecord(
+                            current.copy(
                                 wallet = current.wallet.copy(endpoint = selection.endpoint),
                                 isAutomatic = checkNotNull(selection.isAutomatic)
                             )
@@ -203,6 +195,25 @@ class PersistableWalletProviderImpl(
                 }
             } ?: false
         } ?: false
+
+    internal suspend fun markProvisioned(
+        expected: PersistableWallet,
+        version: Long,
+        stillUsesEngine: () -> Boolean,
+    ) {
+        walletWriteAccess.withSdkRecovery(version) {
+            walletWriteAccess.write(version) {
+                val current = persistableWalletStorageProvider.get() ?: return@write
+                if (stillUsesEngine() && current.wallet.walletInitMode == expected.walletInitMode &&
+                    current.wallet.matchesPersistedSnapshot(expected)
+                ) {
+                    persistableWalletStorageProvider.store(
+                        current.copy(wallet = current.wallet.copy(walletInitMode = WalletInitMode.ExistingWallet))
+                    )
+                }
+            }
+        }
+    }
 
     override suspend fun getPersistableWallet() = currentRecord()?.wallet
 
@@ -222,24 +233,12 @@ private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWall
     network == expected.network && seedPhrase == expected.seedPhrase &&
         birthday == expected.birthday && endpoint == expected.endpoint
 
-private class SeedRestoreRead(
-    private val owner: Long,
-    private val firstRead: Long,
-    private val network: ZcashNetwork,
-    private val seed: ByteArray,
-) {
-    fun matches(wallet: PersistableWallet, read: Long, version: Long): Boolean =
-        version == owner && read >= firstRead && wallet.network == network && seed.contentEquals(wallet.seedDigest())
-}
-
-private fun PersistableWallet.seedDigest(): ByteArray =
-    MessageDigest.getInstance("SHA-256").digest(seedPhrase.split.joinToString(" ") { it.trim() }.encodeToByteArray())
-
 private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault(
     PreferenceKey("is_server_selection_automatic")
 )
 
 private const val SERVER_SELECTION_AUTOMATIC = "server_selection_automatic"
+private const val APP_WALLET_PROVISIONING = "app_wallet_provisioning"
 
 private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
 
@@ -256,7 +255,16 @@ private class PersistableWalletPreferenceDefault(
         preferenceProvider.getString(key)?.let { serialized ->
             runCatchingRecoverable {
                 val json = JSONObject(serialized)
-                WalletRecord(PersistableWallet.from(json), json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean)
+                val mode = when (json.opt(APP_WALLET_PROVISIONING)) {
+                    null -> WalletInitMode.ExistingWallet
+                    "new" -> WalletInitMode.NewWallet
+                    "restore" -> WalletInitMode.RestoreWallet
+                    else -> error("Unsupported wallet provisioning mode")
+                }
+                WalletRecord(
+                    PersistableWallet.from(json).copy(walletInitMode = mode),
+                    json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean
+                )
             }.getOrElse {
                 // JSONObject and SDK parse errors can contain the original decrypted record.
                 throw StoredWalletDecodeException()
@@ -268,7 +276,17 @@ private class PersistableWalletPreferenceDefault(
         newValue: WalletRecord?
     ) {
         val value = newValue?.let { record ->
-            record.wallet.toJson().apply { put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic) }.toString()
+            record.wallet.toJson().apply {
+                put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic)
+                put(
+                    APP_WALLET_PROVISIONING,
+                    when (record.wallet.walletInitMode) {
+                        WalletInitMode.NewWallet -> "new"
+                        WalletInitMode.RestoreWallet -> "restore"
+                        WalletInitMode.ExistingWallet -> null
+                    }
+                )
+            }.toString()
         }
         preferenceProvider.putStringWithRollback(key, value)
     }
