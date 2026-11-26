@@ -78,6 +78,8 @@ Every verified success advances its scope's run and attempt order, even when the
 
 Publication-attestation lookup requires successful signing and a retained archive created during the original trusted upload step. An upload can persist the archive before its acknowledgement fails or is cancelled. Recover that exact archive only when its size, digest and upload interval match. Reject failed signing, missing archives, copied-attempt timestamps and archives outside the original upload window. New artifact names index the attested Android version code and release tag. The original names remain readable. Pre-draft recovery checks the original attested changelog before opening the signing key. Preserve independent APK, certificate, payload and tag verification.
 
+The publisher rereads protected main immediately before creating a missing tag or draft and after verifying the baseline immediately before exposing the draft. An observed controller change leaves the existing draft and assets available for exact reconciliation. GitHub processes the ref read and release mutation as separate operations.
+
 New attestations carry the signing publisher run and attempt. After independent public verification, integration can acknowledge an existing protected-main record whose complete evidence matches the original attestation and whose history contains the attested controller and candidate. A conflicting record stops recovery. A matching record uses the normal success notice without acquiring a writer token. If the normal Git push returns an error or times out, read protected main and report success only when its tip equals the exact prepared commit. Otherwise use the usual failure and reconciliation path.
 
 ## Shared release preflight

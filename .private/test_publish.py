@@ -681,6 +681,30 @@ class PublishMetadataTest(unittest.TestCase):
             self.assertNotIn('--clobber', cli.call_args.args)
             api.assert_called_once_with('releases/43', method='PATCH', data={'draft': False, 'make_latest': 'true'})
 
+    def test_draft_stays_private_when_main_advances_during_baseline_verification(self):
+        proof = dict(release_tag='v3.19.0-private.31', source_sha='a' * 40, versionCode=3234034,
+                     apk_sha256='c' * 64)
+        controller = 'b' * 40
+        draft = dict(self.draft(proof), assets=self.assets(proof))
+        protected_main = controller
+
+        def verify_baseline(_proof):
+            nonlocal protected_main
+            protected_main = 'd' * 40
+
+        with tempfile.TemporaryDirectory() as scratch, \
+                patch_environment({'GITHUB_REF': 'refs/heads/main'}), \
+                patch.object(publish, 'release_for_tag', return_value=draft), \
+                patch.object(publish, 'verify_release_identity'), patch.object(publish, 'require_advancing_version'), \
+                patch.object(publish, 'require_publication_baseline', side_effect=verify_baseline), \
+                patch.object(publish, 'verify_tag', return_value={'type': 'commit', 'sha': proof['source_sha']}), \
+                patch.object(publish, 'current_main', side_effect=lambda: protected_main), \
+                patch.object(publish, 'run', return_value=controller), \
+                patch.object(publish, 'release_api', return_value=dict(draft, draft=False)) as api:
+            with self.assertRaisesRegex(RuntimeError, 'Main changed since validation began'):
+                publish.expose_release(proof, Path(scratch), controller=controller, existing=draft)
+            api.assert_not_called()
+
     def test_draft_missing_apk_requires_byte_exact_protected_signing(self):
         import reconcile_release as reconcile
 
@@ -789,14 +813,27 @@ class PublishMetadataTest(unittest.TestCase):
     def test_orphan_tags_must_point_to_the_exact_attested_commit(self):
         tag = 'v3.19.0-private.31'
         source = 'a' * 40
+        controller = 'c' * 40
         matching = [{'ref': 'refs/tags/' + tag, 'object': {'sha': source, 'type': 'commit'}}]
         api = MagicMock(side_effect=[[], matching[0], matching])
-        self.assertEqual(publish.verify_tag(tag, source, api=api, create=True), matching[0]['object'])
+        with patch.object(publish, 'require_current_controller') as require_controller:
+            self.assertEqual(publish.verify_tag(tag, source, api=api, create_on_controller=controller),
+                             matching[0]['object'])
+            require_controller.assert_called_once_with(controller)
         self.assertEqual(api.call_args_list[1].kwargs, {
             'method': 'POST', 'data': {'ref': 'refs/tags/' + tag, 'sha': source}})
         api = MagicMock(return_value=matching)
         with self.assertRaisesRegex(ValueError, 'points to a different source'):
-            publish.verify_tag(tag, 'b' * 40, api=api, create=True)
+            publish.verify_tag(tag, 'b' * 40, api=api, create_on_controller=controller)
+        api.assert_called_once()
+
+    def test_missing_tag_is_not_created_by_a_superseded_controller(self):
+        api = MagicMock(return_value=[])
+        with patch_environment({'GITHUB_REF': 'refs/heads/main'}), \
+                patch.object(publish, 'run', return_value='b' * 40), \
+                patch.object(publish, 'current_main', return_value='d' * 40), \
+                self.assertRaisesRegex(RuntimeError, 'Main changed since validation began'):
+            publish.verify_tag('v3.19.0-private.31', 'a' * 40, api=api, create_on_controller='b' * 40)
         api.assert_called_once()
 
     def test_unsigned_archive_uses_the_same_compressed_budget_before_and_after_signing(self):

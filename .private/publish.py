@@ -432,9 +432,10 @@ def tag_object(tag, api):
     return find_release_tag(tag, api)
 
 
-def verify_tag(tag, source, *, api=release_api, create=False):
+def verify_tag(tag, source, *, api=release_api, create_on_controller=None):
     obj = tag_object(tag, api)
-    if obj is None and create:
+    if obj is None and create_on_controller is not None:
+        require_current_controller(create_on_controller)
         api('git/refs', method='POST', data={'ref': 'refs/tags/' + tag, 'sha': source})
         obj = tag_object(tag, api)
         require(obj is not None, 'Expected the exact release tag after creation')
@@ -531,8 +532,9 @@ def expose_release(proof, dist, *, controller, existing=None):
                 hashlib.sha256(notes.read_text(encoding='utf-8').strip().encode('utf-8')).hexdigest(),
                 'Draft creation needs the exact original release notes')
     require_current_controller(controller)
-    verify_tag(tag, source, create=True)
+    verify_tag(tag, source, create_on_controller=controller)
     if not current:
+        require_current_controller(controller)
         run('gh', 'release', 'create', tag, '--repo', REPO, '--draft', '--verify-tag', '--target', source,
             '--title', release_title(tag), '--notes-file', str(notes))
         current = release_for_tag(tag)
@@ -553,8 +555,8 @@ def expose_release(proof, dist, *, controller, existing=None):
             'Draft identity changed during publication')
     exact_assets(final, proof, complete=True)
     require(verify_tag(tag, source) is not None, 'Release tag disappeared before publication')
-    require_current_controller(controller)
     require_publication_baseline(proof)
+    require_current_controller(controller)
     result = release_api(f'releases/{final["id"]}', method='PATCH', data={'draft': False, 'make_latest': 'true'})
     require(result['id'] == final['id'] and result['draft'] is False, 'Expected the exact release to be public')
     exact_assets(result, proof, complete=True)
