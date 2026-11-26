@@ -7788,7 +7788,7 @@ index 50c737dbd..470c27564 100644
 +        return
 +    }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
-index 2bf341dca..0e40b2186 100644
+index 2bf341dca..e23b33d29 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVM.kt
 @@ -6,0 +7 @@ import co.electriccoin.zcash.migration.migrationLog
@@ -7861,7 +7861,11 @@ index 2bf341dca..0e40b2186 100644
 @@ -74 +120 @@ class MigrationKeystoneScanVM(
 -                val sdk = getOrchardMigrationSdk()
 +                val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-@@ -169,48 +215,8 @@ class MigrationKeystoneScanVM(
+@@ -90,0 +137,3 @@ class MigrationKeystoneScanVM(
++                // The decoder has finished this round. If the handoff is refused or applying the
++                // signatures fails, the same screen can scan all of the original round again.
++                hasResetDecoder = false
+@@ -169,48 +218,8 @@ class MigrationKeystoneScanVM(
 -                if (pending.roundIndex + 1 < totalRounds) {
 -                    // More rounds remain — carry the accumulated signatures forward and hand off to a
 -                    // fresh sign-screen instance for the next round. replace() keeps the back stack at
@@ -7918,7 +7922,7 @@ index 2bf341dca..0e40b2186 100644
 +                    accumulatedPrepSigned = accumulatedPrepSigned,
 +                    accumulatedTransferSigned = accumulatedTransferSigned,
 +                    isFullySigned = fullySigned,
-@@ -218,4 +224,10 @@ class MigrationKeystoneScanVM(
+@@ -218,4 +227,11 @@ class MigrationKeystoneScanVM(
 -                migrationLog(
 -                    "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
 -                )
@@ -7933,10 +7937,11 @@ index 2bf341dca..0e40b2186 100644
 +                isProcessing = openAfterSigning(nextRoute, canCompleteScan) {
 +                    pendingKeystonePczts.set(accountKeyId, nextBatch)
 +                }
-@@ -230 +242 @@ class MigrationKeystoneScanVM(
++                if (!isProcessing) state.update { it.copy(progress = null) }
+@@ -230 +246 @@ class MigrationKeystoneScanVM(
 -                migrationLog("MigrationKeystoneScanVM: onScanned failed: $e")
 +                migrationLog("MigrationKeystoneScanVM: scan failed (${e.javaClass.simpleName}).")
-@@ -258,0 +271,14 @@ class MigrationKeystoneScanVM(
+@@ -258,0 +275,14 @@ class MigrationKeystoneScanVM(
 +    private suspend fun openAfterSigning(
 +        route: Any,
 +        canCompleteScan: () -> Boolean,
@@ -7951,7 +7956,7 @@ index 2bf341dca..0e40b2186 100644
 +        super.onCleared()
 +    }
 +
-@@ -259,0 +286,2 @@ class MigrationKeystoneScanVM(
+@@ -259,0 +290,2 @@ class MigrationKeystoneScanVM(
 +
 +    fun recoverFromHome() = navigationRouter.backToRoot()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/keystonesign/MigrationKeystoneSignArgs.kt
@@ -12668,7 +12673,7 @@ index 60f75827b..0d30bd9ab 100644
 -                    coEvery { this@mockk(null) } returns snapshot
 +                    coEvery { this@mockk(any()) } returns snapshot
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
-index 7ec2ab46a..a62bdc8b5 100644
+index 7ec2ab46a..2b93d3d1a 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/keystonescan/MigrationKeystoneScanVMTest.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.BaseNavigationCommand
@@ -12715,7 +12720,7 @@ index 7ec2ab46a..a62bdc8b5 100644
 @@ -185 +211 @@ class MigrationKeystoneScanVMTest {
 -            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
 +            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
-@@ -221,0 +248,54 @@ class MigrationKeystoneScanVMTest {
+@@ -221,0 +248,61 @@ class MigrationKeystoneScanVMTest {
 +    @Test
 +    fun completingFirstOfTwoRoundsReplacesTheSignAndScanPair() = runTest {
 +        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
@@ -12768,39 +12773,46 @@ index 7ec2ab46a..a62bdc8b5 100644
 +
 +        assertSame(original, pendingPczts.peek(testAccountKeyId))
 +        assertTrue(router.replacedRoutes.isEmpty())
++
++        entry.value = ActiveNavigationEntry("scan", null)
++        vm.onScanned("frame")
++        advanceUntilIdle()
++        assertTrue(assertNotNull(pendingPczts.peek(testAccountKeyId)).isFullySigned)
++        assertEquals(listOf(MigrationScheduledArgs(testAccountKeyId)), router.replacedRoutes)
++        coVerify(exactly = 2) { sdk.resetKeystoneSignBatchDecoder() }
 +    }
 +
-@@ -226,0 +307 @@ class MigrationKeystoneScanVMTest {
+@@ -226,0 +314 @@ class MigrationKeystoneScanVMTest {
 +        sourceEntryId: String? = null,
-@@ -229 +310,3 @@ class MigrationKeystoneScanVMTest {
+@@ -229 +317,3 @@ class MigrationKeystoneScanVMTest {
 -        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> { coEvery { this@mockk() } returns sdk },
 +        getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
 +            coEvery { this@mockk(testAccountKeyId) } returns sdk
 +        },
-@@ -233,0 +317,4 @@ class MigrationKeystoneScanVMTest {
+@@ -233,0 +324,4 @@ class MigrationKeystoneScanVMTest {
 +        sourceEntryId = sourceEntryId,
 +        walletActionAccess = mockk<WalletActionAccess> {
 +            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { true } }
 +        },
-@@ -276 +363,3 @@ class MigrationKeystoneScanVMTest {
+@@ -276 +370,3 @@ class MigrationKeystoneScanVMTest {
 -    private class FakeNavigationRouter : NavigationRouter {
 +    private class FakeNavigationRouter(
 +        override val activeEntry: MutableStateFlow<ActiveNavigationEntry?> = MutableStateFlow(null),
 +    ) : NavigationRouter {
-@@ -279,0 +369,3 @@ class MigrationKeystoneScanVMTest {
+@@ -279,0 +376,3 @@ class MigrationKeystoneScanVMTest {
 +        val replacedRoutes = mutableListOf<Any>()
 +        var replacementOrigin: KClass<*>? = null
 +            private set
-@@ -285 +377 @@ class MigrationKeystoneScanVMTest {
+@@ -285 +384 @@ class MigrationKeystoneScanVMTest {
 -        override fun replace(vararg routes: Any) = Unit
 +        override fun replace(vararg routes: Any) { replacedRoutes.addAll(routes) }
-@@ -289 +381,4 @@ class MigrationKeystoneScanVMTest {
+@@ -289 +388,4 @@ class MigrationKeystoneScanVMTest {
 -        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
 +        override fun replaceFrom(route: KClass<*>, vararg routes: Any) {
 +            replacementOrigin = route
 +            replacedRoutes.addAll(routes)
 +        }
-@@ -297 +392,12 @@ class MigrationKeystoneScanVMTest {
+@@ -297 +399,12 @@ class MigrationKeystoneScanVMTest {
 -        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +            val current = activeEntry.value ?: return

@@ -134,6 +134,9 @@ class MigrationKeystoneScanVM(
                     isProcessing = false
                     return@launch
                 }
+                // The decoder has finished this round. If the handoff is refused or applying the
+                // signatures fails, the same screen can scan all of the original round again.
+                hasResetDecoder = false
 
                 // Firmware can't change mid-batch (same physical device every round), so checking on
                 // round 0 only is sufficient and avoids making the user scan through every remaining
@@ -231,6 +234,7 @@ class MigrationKeystoneScanVM(
                 isProcessing = openAfterSigning(nextRoute, canCompleteScan) {
                     pendingKeystonePczts.set(accountKeyId, nextBatch)
                 }
+                if (!isProcessing) state.update { it.copy(progress = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
