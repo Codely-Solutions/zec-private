@@ -96,8 +96,9 @@ class RecoverFromSeedMismatchUseCase(
     }
 
     private suspend fun prepareRestore(original: PersistableWallet, version: Long): Boolean {
-        val current = persistableWalletProvider.getPersistableWallet() ?: return false
-        if (current.seedPhrase != original.seedPhrase || current.network != original.network) return false
+        val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
+            it.seedPhrase == original.seedPhrase && it.network == original.network
+        } ?: return false
         val replacement = current.copy(
             birthday = current.birthday ?: current.network.saplingActivationHeight,
             walletInitMode = WalletInitMode.RestoreWallet,

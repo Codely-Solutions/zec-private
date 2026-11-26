@@ -206,6 +206,7 @@ class WalletSdkInputCommitTest {
             every { ufvk } returns "matching-test-key"
         }
         fun coldStore() = provider(CommitFixture(storage.durable))
+        provisioning.confirm(engine, listOf(account), null, { true }) { error("unidentified account source") }
         provisioning.confirm(engine, listOf(wrongAccount), "zashi", { true }) { "matching-test-key" }
         assertEquals(WalletInitMode.NewWallet, coldStore().sdkWalletReads.first().wallet?.walletInitMode)
 

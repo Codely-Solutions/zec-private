@@ -98,18 +98,10 @@ class PersistableWalletProviderImpl(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val records = combine(readsSuppressed ?: flowOf(false), readRequests, ::Pair)
-        .flatMapLatest { (suppressed, generation) -> observeRecords(suppressed).map { generation to it } }
-        .buffer(0)
-
-    private fun observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
-        if (suppressed) {
-            flowOf(Result.success(null))
-        } else {
-            persistableWalletStorageProvider.observe().map { Result.success(it) }.catch { failure ->
-                if (failure !is Exception || failure is CancellationException) throw failure
-                emit(Result.failure(failure))
-            }
+        .flatMapLatest { (suppressed, generation) ->
+            persistableWalletStorageProvider.observeRecords(suppressed).map { generation to it }
         }
+        .buffer(0)
 
     override val availabilityRead = combine(records, readRequests) { (generation, result), _ ->
         val availability = when {
@@ -228,6 +220,16 @@ class PersistableWalletProviderImpl(
             isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
         )
 }
+
+private fun PersistableWalletStorageProviderImpl.observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
+    if (suppressed) {
+        flowOf(Result.success(null))
+    } else {
+        observe().map { Result.success(it) }.catch { failure ->
+            if (failure !is Exception || failure is CancellationException) throw failure
+            emit(Result.failure(failure))
+        }
+    }
 
 private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
     network == expected.network && seedPhrase == expected.seedPhrase &&

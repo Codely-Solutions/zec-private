@@ -15,20 +15,19 @@ class WalletProvisioning(
     internal suspend fun confirm(
         engine: Synchronizer,
         accounts: List<Account>,
-        keySource: String,
+        keySource: String?,
         isCurrentEngine: () -> Boolean,
         deriveFirstFullViewingKey: suspend (PersistableWallet) -> String = ::deriveFirstFullViewingKey,
     ) {
         fun current() = isCurrentEngine() && !transport.inputSuspended
-        if (!current()) return
+        if (!current() || keySource == null) return
         val primary = accounts.firstOrNull { it.keySource == keySource && it.hdAccountIndex?.index == 0L }
         val storedKey = primary?.ufvk ?: return
         val version = wallets.writeVersion
-        val wallet = wallets.getPersistableWallet()
-        if (wallet != null && wallet.walletInitMode != WalletInitMode.ExistingWallet &&
-            wallet.network == engine.network &&
-            storedKey == deriveFirstFullViewingKey(wallet)
-        ) {
+        val wallet = wallets.getPersistableWallet()?.takeIf {
+            it.walletInitMode != WalletInitMode.ExistingWallet && it.network == engine.network
+        }
+        if (wallet != null && storedKey == deriveFirstFullViewingKey(wallet)) {
             wallets.markProvisioned(wallet, version, ::current)
         }
     }
