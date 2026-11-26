@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.migration.review
 
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.MigrationSchedule
 import cash.z.ecc.android.sdk.MigrationState
@@ -56,6 +57,7 @@ import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -491,49 +493,6 @@ class MigrationReviewVMTest {
             assertConfirmationNeedsForeground(ActiveNavigationEntry("automatic-review", null, hostResumed = false))
         }
 
-    @Test
-    fun automaticConfirmationWaitsForItsReviewAfterAuthenticationAndRetainsAnAdmittedResult() = runTest {
-        val owner = ActiveNavigationEntry("automatic-review", null)
-        val router = FakeNavigationRouter(owner.id)
-        val signFinished = CompletableDeferred<Unit>()
-        val plan = schedule(8L, 100_000L)
-        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
-            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-            coEvery { proposeMigrationTransfers() } returns plan
-            coEvery { signAndStoreMigrationSchedule(plan, any()) } coAnswers { signFinished.await() }
-        }
-        val authentication = mockk<BiometricRepository> {
-            coEvery { requestBiometrics(any()) } coAnswers {
-                router.activeEntry.value = owner.copy(hostResumed = false)
-            }
-        }
-        val finalized = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
-        val vm = vm(
-            router = router,
-            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-            mode = MigrationMode.AUTOMATIC,
-            sourceEntryId = owner.id,
-            biometricRepository = authentication,
-            finalizeMigrationSchedule = finalized,
-        )
-        vm.currentReview().onConfirm()
-        runCurrent()
-        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
-
-        router.activeEntry.value = owner
-        runCurrent()
-        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
-        router.activeEntry.value = owner.copy(hostResumed = false)
-        signFinished.complete(Unit)
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { finalized(plan, MigrationMode.AUTOMATIC, any(), false) }
-        val handoff = router.scopedCommands.single()
-        assertEquals(owner.id, handoff.sourceEntryId)
-        assertTrue(handoff.isStillAllowed())
-        assertIs<NavigationCommand.Forward>(handoff.buildCommand())
-    }
-
     private suspend fun TestScope.assertConfirmationNeedsForeground(afterKeyRequest: ActiveNavigationEntry) {
         val review = "automatic-review"
         val router = FakeNavigationRouter(review)
@@ -749,6 +708,74 @@ class MigrationReviewAuthorityTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun automaticConfirmationWaitsForItsReviewAfterAuthenticationAndRetainsAnAdmittedResult() = runTest {
+        assertCommittedResult { it.copy(hostResumed = false) }
+    }
+
+    @Test
+    fun automaticConfirmationRetainsItsResultWhileAnExternalScannerCoversReview() = runTest {
+        assertCommittedResult { ActiveNavigationEntry("gift-scanner", null) }
+    }
+
+    @Test
+    fun automaticConfirmationRecordsCommittedWorkAfterTheReviewIsDisposedWithoutQueueingNavigation() = runTest {
+        assertCommittedResult(disposeReview = true) { null }
+    }
+
+    private suspend fun TestScope.assertCommittedResult(
+        disposeReview: Boolean = false,
+        completionEntry: (ActiveNavigationEntry) -> ActiveNavigationEntry?,
+    ) {
+        val owner = ActiveNavigationEntry("automatic-review", null)
+        val router = FakeNavigationRouter(owner.id)
+        val signFinished = CompletableDeferred<Unit>()
+        val plan = schedule(8L, 100_000L)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { proposeMigrationTransfers() } returns plan
+            coEvery { signAndStoreMigrationSchedule(plan, any()) } coAnswers { signFinished.await() }
+        }
+        val authentication = mockk<BiometricRepository> {
+            coEvery { requestBiometrics(any()) } coAnswers {
+                router.activeEntry.value = owner.copy(hostResumed = false)
+            }
+        }
+        val finalized = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+            sourceEntryId = owner.id,
+            biometricRepository = authentication,
+            finalizeMigrationSchedule = finalized,
+        )
+        vm.currentReview().onConfirm()
+        runCurrent()
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+
+        router.activeEntry.value = owner
+        runCurrent()
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
+        router.activeEntry.value = completionEntry(owner)
+        if (disposeReview) vm.viewModelScope.cancel()
+        signFinished.complete(Unit)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { finalized(plan, MigrationMode.AUTOMATIC, any(), false) }
+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
+        coVerify(exactly = 1) { authentication.requestBiometrics(any()) }
+        if (disposeReview) {
+            assertTrue(router.scopedCommands.isEmpty())
+        } else {
+            val handoff = router.scopedCommands.single()
+            assertEquals(owner.id, handoff.sourceEntryId)
+            router.activeEntry.value = owner
+            assertTrue(handoff.isStillAllowed())
+            assertIs<NavigationCommand.Forward>(handoff.buildCommand())
+        }
     }
 
     @Test

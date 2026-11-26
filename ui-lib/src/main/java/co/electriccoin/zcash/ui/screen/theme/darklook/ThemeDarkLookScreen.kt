@@ -14,7 +14,9 @@ import org.koin.core.parameter.parametersOf
 fun ThemeDarkLookScreen(args: ThemeDarkLookArgs, sourceEntryId: String) {
     val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    ThemeDarkLookView(state)
+    val read by vm.preferenceRead.collectAsStateWithLifecycle()
+    state?.let { ThemeDarkLookView(it) }
+        ?: ThemeDarkLookLoadView(read.error == null, vm::onBack, vm::retryRead)
 }
 
 @Serializable

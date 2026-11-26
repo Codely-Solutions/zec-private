@@ -24,9 +24,14 @@ PROPOSAL_PAGE_SIZE = 100
 PROPOSAL_PAGE_LIMIT = 10
 
 
+def authored_by_dependabot(pr):
+    user = pr.get('user') or {}
+    return user.get('login') == 'dependabot[bot]' and user.get('type') == 'Bot'
+
+
 def trusted_proposal(pr, repository_id):
     return (pr['state'] == 'open' and not pr['draft']
-            and pr['user']['login'] == 'dependabot[bot]' and pr['user']['type'] == 'Bot'
+            and authored_by_dependabot(pr)
             and pr['base']['ref'] == 'main' and pr['base']['repo']['id'] == repository_id
             and pr['head']['repo'] is not None and pr['head']['repo']['id'] == repository_id
             and pr['head']['ref'].startswith('dependabot/')
@@ -99,12 +104,10 @@ def api(path, *options):
     return json.loads(subprocess.check_output(['gh', 'api', path, *options], text=True, timeout=30))
 
 
-def proposal_inventory(prefix):
+def open_proposals(prefix):
     proposals = {}
     for page in range(1, PROPOSAL_PAGE_LIMIT + 1):
-        # Leave mutable state and base filters out of the page offsets. Trust and current-state
-        # checks still select only open main proposals after the full inventory is available.
-        batch = api(f'{prefix}/pulls?state=all&sort=created&direction=asc'
+        batch = api(f'{prefix}/pulls?state=open&sort=created&direction=asc'
                     f'&per_page={PROPOSAL_PAGE_SIZE}&page={page}')
         for proposal in batch:
             number = proposal['number']
@@ -112,15 +115,31 @@ def proposal_inventory(prefix):
                 raise RuntimeError('The proposal inventory changed during discovery. Retry the watch.')
             proposals[number] = proposal
         if len(batch) < PROPOSAL_PAGE_SIZE:
-            return proposals.values()
+            return proposals
     raise RuntimeError('The complete proposal inventory exceeds the bounded discovery window.')
+
+
+def proposal_inventory(prefix):
+    proposals = open_proposals(prefix)
+    if len(proposals) >= PROPOSAL_PAGE_SIZE:
+        # Compare complete observed inventories before evaluating a multi-page result. An earlier
+        # closure or reopen can shift offsets even when neither page contains a repeated number.
+        current = open_proposals(prefix)
+        if tuple(proposals) != tuple(current):
+            raise RuntimeError('The proposal inventory changed during discovery. Retry the watch.')
+        proposals = current
+    return proposals.values()
+
+
+class ProposalChanged(ValueError):
+    """The candidate changed while the controller was verifying it."""
 
 
 def verified_wrapper(prefix, number, base, head, repository_id):
     detail = api(f'{prefix}/pulls/{number}')
     if (not trusted_proposal(detail, repository_id) or detail['head']['sha'] != head
             or detail['base']['sha'] != base or detail['changed_files'] != 1):
-        raise ValueError('Exact current Dependabot wrapper-only proposal required')
+        raise ProposalChanged('Exact current Dependabot wrapper-only proposal required')
     files = api(f'{prefix}/pulls/{number}/files?per_page=2')
     if (len(files) != 1 or files[0]['filename'] != WRAPPER_PROPERTIES
             or files[0]['status'] != 'modified' or files[0].get('previous_filename')):
@@ -130,7 +149,7 @@ def verified_wrapper(prefix, number, base, head, repository_id):
     final = api(f'{prefix}/pulls/{number}')
     if (not trusted_proposal(final, repository_id) or final['head']['sha'] != head
             or final['base']['sha'] != base or api(f'{prefix}/commits/main')['sha'] != base):
-        raise ValueError('Proposal or main changed during verification')
+        raise ProposalChanged('Proposal or main changed during verification')
     return version, proposed
 
 
@@ -220,18 +239,18 @@ def main():
         return
     eligible = []
     for pr in proposal_inventory(prefix):
-        if not trusted_proposal(pr, repository['id']):
+        if not authored_by_dependabot(pr):
             continue
         number = pr['number']
         detail = api(f'{prefix}/pulls/{number}')
-        if not trusted_proposal(detail, repository['id']) or detail['head']['sha'] != pr['head']['sha']:
-            messages.append(f'- #{number} changed during discovery')
+        if not trusted_proposal(detail, repository['id']):
+            messages.append(f'- #{number} is not a current open Dependabot proposal for main')
             continue
         files = api(f'{prefix}/pulls/{number}/files?per_page=100') if detail['changed_files'] <= 100 else []
         current = api(f'{prefix}/pulls/{number}')
-        if not trusted_proposal(current, repository['id']) or current['head']['sha'] != detail['head']['sha']:
-            messages.append(f'- #{number} changed during discovery')
-            continue
+        if (not trusted_proposal(current, repository['id']) or current['head']['sha'] != detail['head']['sha']
+                or current['base']['sha'] != detail['base']['sha']):
+            raise ProposalChanged(f'Dependabot proposal #{number} changed during discovery. Retry the watch.')
         head = detail['head']['sha']
         finding = classify_paths(files, detail['changed_files'])
         if detail['changed_files'] == len(files) == 1 and files[0]['filename'] == WRAPPER_PROPERTIES \
@@ -242,6 +261,8 @@ def main():
             else:
                 try:
                     version, _ = verified_wrapper(prefix, number, base, head, repository['id'])
+                except ProposalChanged:
+                    raise
                 except ValueError as error:
                     finding = str(error)
                 except OSError:

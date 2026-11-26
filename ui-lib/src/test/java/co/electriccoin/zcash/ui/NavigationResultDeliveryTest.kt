@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
+import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
@@ -47,6 +48,36 @@ class NavigationResultDeliveryTest {
     val compose = createComposeRule()
 
     private lateinit var controller: NavHostController
+
+    @Test
+    fun navigationTracksOnlyTheExactTypedProgressIdentity() {
+        install()
+        compose.runOnIdle {
+            val owner = object : LifecycleOwner {
+                override val lifecycle = LifecycleRegistry(this)
+            }
+            owner.lifecycle.currentState = Lifecycle.State.RESUMED
+            val router = NavigationRouterImpl()
+            val stopTracking = controller.trackActiveEntry(router, owner.lifecycle)
+            try {
+                controller.navigate(BoundTransactionProgressArgs("original"))
+                assertEquals("original", router.activeEntry.value?.submissionProgressId)
+                assertTrue(router.activeEntry.value?.hostResumed == true)
+
+                owner.lifecycle.currentState = Lifecycle.State.CREATED
+                assertEquals("original", router.activeEntry.value?.submissionProgressId)
+                assertFalse(router.activeEntry.value?.hostResumed == true)
+                owner.lifecycle.currentState = Lifecycle.State.RESUMED
+
+                controller.navigate(BoundTransactionProgressArgs("unrelated"))
+                assertEquals("unrelated", router.activeEntry.value?.submissionProgressId)
+                controller.navigate(ScanGiftCardArgs(true))
+                assertEquals(null, router.activeEntry.value?.submissionProgressId)
+            } finally {
+                stopTracking()
+            }
+        }
+    }
 
     @Test
     fun reportHandoffFollowsTheHostLifecycleAndOriginatingEntry() {
@@ -313,6 +344,7 @@ class NavigationResultDeliveryTest {
                 dialog<ErrorDialog> { Text("Seed recovery") }
                 composable<ScanGiftCardArgs> { Text("External scan") }
                 composable<ActivityHistoryArgs> { Text("Activity history") }
+                composable<BoundTransactionProgressArgs> { Text("Transaction progress") }
             }
         }
     }

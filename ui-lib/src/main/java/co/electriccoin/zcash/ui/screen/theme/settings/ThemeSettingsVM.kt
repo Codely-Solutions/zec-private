@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 internal class ThemeSettingsVM(
     private val navigationRouter: NavigationRouter,
@@ -35,6 +34,8 @@ internal class ThemeSettingsVM(
 
     private val selectedMode = MutableStateFlow<AppearanceMode?>(null)
     private val save = mutableLce<Unit>()
+    private val read = mutableLce<Unit>()
+    val preferenceRead = read.state
 
     val state =
         combine(selectedMode, save.state) { mode, result ->
@@ -48,7 +49,11 @@ internal class ThemeSettingsVM(
 
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-        viewModelScope.launch {
+        retryRead()
+    }
+
+    fun retryRead() = read.guardLoading {
+        read.execute {
             storedMode = appearanceModeStorageProvider.getOrSystem()
             selectedMode.update { storedMode }
         }
@@ -75,7 +80,7 @@ internal class ThemeSettingsVM(
             hasSaveError = hasSaveError,
         )
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 
     /**
      * [AppearanceMode.LIGHT] never renders dark, so it's selected directly. [AppearanceMode.SYSTEM] and

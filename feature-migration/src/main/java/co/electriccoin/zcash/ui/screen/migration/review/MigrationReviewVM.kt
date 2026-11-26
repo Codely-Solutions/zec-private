@@ -78,6 +78,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -409,8 +410,7 @@ class MigrationReviewVM(
             val account = requireReviewAccount()
             val canOperate = walletActionAccess.capture(account) ?: return@execute
             val authority = ConfirmationAuthority(currentCoroutineContext().job, ::ownsReviewEntry) {
-                val originalEntry = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
-                canOperate() && originalEntry && proposeLce.state.value.success === proposal
+                viewModelScope.isActive && canOperate() && proposeLce.state.value.success === proposal
             }
             if (!authority.canConfirm()) return@execute
             try {

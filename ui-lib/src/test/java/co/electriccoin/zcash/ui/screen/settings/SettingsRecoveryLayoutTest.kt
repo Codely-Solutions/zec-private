@@ -18,9 +18,11 @@ import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerState
 import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerListState
+import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookLoadView
 import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookState
 import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookView
 import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsState
+import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsLoadView
 import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsView
 import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsLoadView
 import org.junit.Rule
@@ -118,6 +120,44 @@ class SettingsRecoveryLayoutTest {
                     hasSaveError = failed,
                 )
             )
+        }
+    }
+
+    @Test
+    fun theAppearanceReadErrorShowsRetryAndClose() {
+        assertAppearanceReadRecovery(
+            view = { close, retry -> ThemeSettingsLoadView(false, close, retry) },
+            assertBack = { compose.onNodeWithContentDescription(it).assertIsDisplayed().performClick() },
+            backText = R.string.general_close,
+        )
+    }
+
+    @Test
+    fun theDarkLookReadErrorShowsRetryAndBack() {
+        assertAppearanceReadRecovery(
+            view = { back, retry -> ThemeDarkLookLoadView(false, back, retry) },
+            assertBack = { compose.onNodeWithText(it).assertIsDisplayed().performClick() },
+            backText = R.string.general_back,
+        )
+    }
+
+    private fun assertAppearanceReadRecovery(
+        view: @Composable (() -> Unit, () -> Unit) -> Unit,
+        assertBack: (String) -> Unit,
+        backText: Int,
+    ) {
+        val resources = RuntimeEnvironment.getApplication().resources
+        var retries = 0
+        var dismissals = 0
+        compose.setContent { ZcashTheme { view({ dismissals++ }, { retries++ }) } }
+        compose.onNodeWithText(resources.getString(R.string.theme_settings_read_failed)).assertIsDisplayed()
+        compose.onNodeWithText(resources.getString(R.string.wallet_initialization_retry))
+            .assertIsDisplayed().performClick()
+        compose.onNodeWithText(resources.getString(R.string.currencyConversion_saveBtn)).assertDoesNotExist()
+        assertBack(resources.getString(backText))
+        compose.runOnIdle {
+            assertEquals(1, retries)
+            assertEquals(1, dismissals)
         }
     }
 

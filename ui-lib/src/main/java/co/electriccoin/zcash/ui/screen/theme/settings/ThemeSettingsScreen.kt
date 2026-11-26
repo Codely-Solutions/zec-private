@@ -12,8 +12,10 @@ import org.koin.core.parameter.parametersOf
 fun ThemeSettingsScreen(sourceEntryId: String) {
     val vm = koinViewModel<ThemeSettingsVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    BackHandler(enabled = state != null) { state?.onBack() }
+    val read by vm.preferenceRead.collectAsStateWithLifecycle()
+    BackHandler(onBack = vm::onBack)
     state?.let { ThemeSettingsView(state = it) }
+        ?: ThemeSettingsLoadView(read.error == null, vm::onBack, vm::retryRead)
 }
 
 @Serializable

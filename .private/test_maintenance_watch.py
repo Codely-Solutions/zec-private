@@ -695,8 +695,11 @@ class MaintenanceWatchTest(unittest.TestCase):
             f'{prefix}/actions/workflows/sync-upstream.yml/runs?event=schedule&per_page=1': {'workflow_runs': []},
             f'{prefix}/commits/main': {'sha': base},
         }
-        query = f'{prefix}/pulls?state=all&sort=created&direction=asc&per_page=100&page='
-        paths.update({query + '1': [proposals[1]] + drafts, query + '2': [proposals[101]]})
+        query = f'{prefix}/pulls?state=open&sort=created&direction=asc&per_page=100&page='
+        # The later proposal changed target, draft status and head after its listing row was observed.
+        # Its current detail is the starting point for eligibility and exact head verification.
+        listed = dict(proposals[101], draft=True, base={'ref': 'review/internal'}, head={'sha': 'd' * 40})
+        paths.update({query + '1': [proposals[1]] + drafts, query + '2': [listed]})
         for number, head in heads.items():
             paths[f'{prefix}/pulls/{number}'] = proposals[number]
             paths[f'{prefix}/pulls/{number}/files?per_page=100'] = [
@@ -726,26 +729,36 @@ class MaintenanceWatchTest(unittest.TestCase):
                 proposal_inventory('repos/fork/wallet')
             self.assertEqual(10, api.call_count)
 
-    def test_proposal_listing_preserves_offsets_when_prior_items_close_or_change_base(self):
+    def test_proposal_listing_rejects_a_shifted_page_and_retries_with_the_complete_open_set(self):
         rows = [
             {'number': number, 'state': 'open', 'base': {'ref': 'main'}}
             for number in range(1, 102)
         ]
+
         def response(path):
+            self.assertIn('state=open', path)
+            self.assertNotIn('base=', path)
             page = int(path.rsplit('page=', 1)[1])
-            eligible_rows = rows
-            if 'state=open' in path:
-                eligible_rows = [row for row in eligible_rows if row['state'] == 'open']
-            if 'base=main' in path:
-                eligible_rows = [row for row in eligible_rows if row['base']['ref'] == 'main']
+            eligible_rows = [row for row in rows if row['state'] == 'open']
             result = eligible_rows[(page - 1) * 100:page * 100]
             if page == 1:
                 rows[0] = dict(rows[0], state='closed')
                 rows[1] = dict(rows[1], base={'ref': 'review/internal'})
             return result
 
-        with patch('maintenance_watch.api', side_effect=response):
-            self.assertEqual(list(range(1, 102)), [p['number'] for p in proposal_inventory('repos/fork/wallet')])
+        with patch('maintenance_watch.api', side_effect=response) as api:
+            with self.assertRaisesRegex(RuntimeError, 'inventory changed'):
+                proposal_inventory('repos/fork/wallet')
+            self.assertEqual(list(range(2, 102)), [p['number'] for p in proposal_inventory('repos/fork/wallet')])
+            self.assertEqual(8, api.call_count)
+
+    def test_proposal_listing_uses_one_request_for_a_short_open_page(self):
+        rows = [{'number': 701}, {'number': 801}]
+        with patch('maintenance_watch.api', return_value=rows) as api:
+            self.assertEqual(rows, list(proposal_inventory('repos/fork/wallet')))
+            api.assert_called_once_with(
+                'repos/fork/wallet/pulls?state=open&sort=created&direction=asc&per_page=100&page=1'
+            )
 
     def test_verified_wrapper_rechecks_the_proposal_after_resolving_the_checksum(self):
         base, head = 'a'*40, 'b'*40

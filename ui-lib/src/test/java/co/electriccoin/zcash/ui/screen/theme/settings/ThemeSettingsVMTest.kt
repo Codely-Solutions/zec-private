@@ -86,6 +86,28 @@ class ThemeSettingsVMTest {
         }
 
     @Test
+    fun failedInitialReadAllowsBackAndReloadsTheOriginalChoice() = runTest(dispatcher) {
+        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK, failFirstRead = true)
+        val oled = FakeIsOledEnabledStorageProvider(stored = true)
+        val router = FakeNavigationRouter()
+        val vm = startedVm(mode, oled, router)
+
+        assertNotNull(vm.preferenceRead.value.error)
+        assertNull(vm.state.value)
+        vm.onBack()
+        assertEquals(1, router.backCount)
+        assertEquals(AppearanceMode.DARK, mode.stored)
+        assertEquals(true, oled.stored)
+
+        vm.retryRead()
+        advanceUntilIdle()
+        assertNull(vm.preferenceRead.value.error)
+        val state = requireNotNull(vm.state.value)
+        assertSingleSelection(state, AppearanceMode.DARK)
+        assertFalse(state.saveButton.isEnabled)
+    }
+
+    @Test
     fun tappingLightSelectsItLocallyAndEnablesSave() =
         runTest(dispatcher) {
             val vm = startedVm(modeProvider = FakeAppearanceModeStorageProvider(stored = AppearanceMode.SYSTEM))
@@ -229,7 +251,8 @@ class ThemeSettingsVMTest {
 }
 
 private class FakeAppearanceModeStorageProvider(
-    stored: AppearanceMode?
+    stored: AppearanceMode?,
+    private var failFirstRead: Boolean = false,
 ) : AppearanceModeStorageProvider {
     private val state = MutableStateFlow(stored)
 
@@ -237,7 +260,13 @@ private class FakeAppearanceModeStorageProvider(
         get() = state.value
     lateinit var storeOled: suspend (Boolean) -> Unit
 
-    override suspend fun get(): AppearanceMode? = state.value
+    override suspend fun get(): AppearanceMode? {
+        if (failFirstRead) {
+            failFirstRead = false
+            error("Preference temporarily unavailable")
+        }
+        return state.value
+    }
 
     override suspend fun store(amount: AppearanceMode) {
         state.value = amount

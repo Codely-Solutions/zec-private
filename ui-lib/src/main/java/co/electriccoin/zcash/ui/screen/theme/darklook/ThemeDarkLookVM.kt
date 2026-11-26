@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 internal class ThemeDarkLookVM(
     private val args: ThemeDarkLookArgs,
@@ -38,6 +37,8 @@ internal class ThemeDarkLookVM(
 
     private val selectedOledEnabled = MutableStateFlow<Boolean?>(null)
     private val save = mutableLce<Unit>()
+    private val read = mutableLce<Unit>()
+    val preferenceRead = read.state
 
     val state =
         combine(selectedOledEnabled, save.state) { oledEnabled, result ->
@@ -51,7 +52,11 @@ internal class ThemeDarkLookVM(
 
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-        viewModelScope.launch {
+        retryRead()
+    }
+
+    fun retryRead() = read.guardLoading {
+        read.execute {
             storedMode = appearanceModeStorageProvider.getOrSystem()
             storedOledEnabled = isOledEnabledStorageProvider.get() == true
             selectedOledEnabled.update { storedOledEnabled }
@@ -89,7 +94,7 @@ internal class ThemeDarkLookVM(
 
     private fun onOptionClick(isOledEnabled: Boolean) = selectedOledEnabled.update { isOledEnabled }
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 
     private fun onSaveClick() = save.guardLoading {
         val oledEnabled = selectedOledEnabled.value ?: return@guardLoading

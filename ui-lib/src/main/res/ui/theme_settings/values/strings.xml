@@ -2,6 +2,7 @@
 <resources>
     <string name="settings_theme">App Theme</string>
     <string name="theme_settings_title">Theme</string>
+    <string name="theme_settings_read_failed">Couldn’t load appearance settings.</string>
     <string name="theme_settings_subtitle">Choose how ZEC Private looks. Pure black backgrounds boost contrast and save power on OLED displays.</string>
     <string name="theme_settings_option_system">System</string>
     <string name="theme_settings_option_system_desc">Follow your device\'s display settings.</string>

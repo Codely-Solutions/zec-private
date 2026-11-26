@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.Spacer
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
@@ -27,6 +28,34 @@ import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceSaveFailure
+import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceReadContent
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ThemeDarkLookLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
+    ZashiScreenModalBottomSheet(onDismissRequest = onBack) { padding ->
+        Column(
+            modifier = Modifier
+                .weight(1f, false)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = padding.calculateBottomPadding()),
+        ) {
+            Text(
+                text = stringResource(R.string.theme_settings_darklook_title),
+                color = ZashiColors.Text.textPrimary,
+                style = ZashiTypography.textXl,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(16.dp)
+            AppearanceReadContent(isLoading, onRetry)
+            Spacer(8.dp)
+            ZashiButton(
+                modifier = Modifier.fillMaxWidth(),
+                state = ButtonState(stringRes(R.string.general_back), onClick = onBack, style = ButtonStyle.SECONDARY),
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -41,6 +41,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -98,6 +99,26 @@ class ThemeDarkLookVMTest {
                 isSaveEnabled = false
             )
         }
+
+    @Test
+    fun failedOledReadAllowsBackAndRestoresTheOriginalPairOnRetry() = runTest(dispatcher) {
+        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK)
+        val oled = FakeIsOledEnabledStorageProvider(stored = true, failFirstRead = true)
+        val router = FakeNavigationRouter()
+        val vm = startedVm(ThemeDarkLookArgs(AppearanceMode.DARK), mode, oled, router)
+
+        assertNotNull(vm.preferenceRead.value.error)
+        assertNull(vm.state.value)
+        vm.onBack()
+        assertEquals(1, router.backCount)
+        assertEquals(AppearanceMode.DARK, mode.stored)
+        assertEquals(true, oled.stored)
+
+        vm.retryRead()
+        advanceUntilIdle()
+        assertNull(vm.preferenceRead.value.error)
+        assertSingleSelection(requireNotNull(vm.state.value), isOledEnabled = true, isSaveEnabled = false)
+    }
 
     @Test
     fun tappingPureBlackSelectsItLocallyAndEnablesSave() =
@@ -392,6 +413,7 @@ private class FakeAppearanceModeStorageProvider(
 
 private class FakeIsOledEnabledStorageProvider(
     stored: Boolean?,
+    private var failFirstRead: Boolean = false,
     private val beforeStore: suspend () -> Unit = {},
 ) : IsOledEnabledStorageProvider {
     private val state = MutableStateFlow(stored)
@@ -399,7 +421,13 @@ private class FakeIsOledEnabledStorageProvider(
     val stored: Boolean?
         get() = state.value
 
-    override suspend fun get(): Boolean? = state.value
+    override suspend fun get(): Boolean? {
+        if (failFirstRead) {
+            failFirstRead = false
+            throw IOException("Preference temporarily unavailable")
+        }
+        return state.value
+    }
 
     override suspend fun store(amount: Boolean) {
         beforeStore()

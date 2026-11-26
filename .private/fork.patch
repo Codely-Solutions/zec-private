@@ -8740,7 +8740,7 @@ index 2c9a83423..20fd87cae 100644
 @@ -271,0 +274 @@ internal fun ImmediateDetailsRow(label: String, value: String) {
 +            textAlign = TextAlign.End,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..8ac2130a9 100644
+index ccdc9db31..e18ecc0ea 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -4,0 +5 @@ import androidx.lifecycle.ViewModel
@@ -8771,27 +8771,28 @@ index ccdc9db31..8ac2130a9 100644
 -import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
 @@ -53,0 +67 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 +import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
-@@ -60,0 +75,7 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -60,0 +75,8 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 +import co.electriccoin.zcash.ui.stageResultFrom
 +import co.electriccoin.zcash.work.MigrationDriveOnce
 +import kotlinx.coroutines.Job
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.isActive
 +import kotlinx.coroutines.job
-@@ -64,0 +86 @@ import kotlinx.coroutines.flow.map
+@@ -64,0 +87 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.withContext
-@@ -76,0 +99 @@ class MigrationReviewVM(
+@@ -76,0 +100 @@ class MigrationReviewVM(
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
-@@ -82 +104,0 @@ class MigrationReviewVM(
+@@ -82 +105,0 @@ class MigrationReviewVM(
 -    private val getOrchardBalance: GetOrchardBalanceUseCase,
-@@ -88,0 +111 @@ class MigrationReviewVM(
+@@ -88,0 +112 @@ class MigrationReviewVM(
 +    private val sourceEntryId: String? = null,
-@@ -89,0 +113,3 @@ class MigrationReviewVM(
+@@ -89,0 +114,3 @@ class MigrationReviewVM(
 +    private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 +    private val walletActionAccess: WalletActionAccess,
 +    private val migrationDrive: MigrationDriveOnce,
-@@ -91,4 +117,6 @@ class MigrationReviewVM(
+@@ -91,4 +118,6 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
 -    // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
 -    // destination of its own (only totalFeeRequired()/transactionCount()); the amount shown is
@@ -8802,16 +8803,16 @@ index ccdc9db31..8ac2130a9 100644
 +    }
 +
 +    // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
-@@ -97 +125 @@ class MigrationReviewVM(
+@@ -97 +126 @@ class MigrationReviewVM(
 -            val schedule: MigrationSchedule,
 +            val reviewed: ReviewedMigrationSchedule,
-@@ -101,4 +129 @@ class MigrationReviewVM(
+@@ -101,4 +130 @@ class MigrationReviewVM(
 -        data class Immediate(
 -            val proposal: Proposal,
 -            val amountZatoshi: Zatoshi
 -        ) : ReviewProposal()
 +        data class Immediate(val proposal: Proposal) : ReviewProposal()
-@@ -134,0 +160,12 @@ class MigrationReviewVM(
+@@ -134,0 +161,12 @@ class MigrationReviewVM(
 +    private var reviewedOwnerKey: String? = null
 +    private var committedMigration: CommittedMigration? = null
 +
@@ -8824,12 +8825,12 @@ index ccdc9db31..8ac2130a9 100644
 +    ) {
 +        fun canConfirm() = owner.isActive && isForeground() && canPresent()
 +    }
-@@ -138,0 +176,4 @@ class MigrationReviewVM(
+@@ -138,0 +177,4 @@ class MigrationReviewVM(
 +        loadProposal()
 +    }
 +
 +    private fun loadProposal() {
-@@ -147 +188,7 @@ class MigrationReviewVM(
+@@ -147 +189,7 @@ class MigrationReviewVM(
 -            val sdk = getOrchardMigrationSdk()
 +            val account = getSelectedWalletAccount()
 +            val key = account.sdkAccount.accountUuid.toStorageKeyId()
@@ -8838,12 +8839,12 @@ index ccdc9db31..8ac2130a9 100644
 +            }
 +            reviewedOwnerKey = key
 +            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-@@ -151 +197,0 @@ class MigrationReviewVM(
+@@ -151 +198,0 @@ class MigrationReviewVM(
 -                        val amount = getOrchardBalance()
-@@ -159 +205 @@ class MigrationReviewVM(
+@@ -159 +206 @@ class MigrationReviewVM(
 -                        ReviewProposal.Immediate(proposal, amount)
 +                        ReviewProposal.Immediate(proposal)
-@@ -171,13 +217,2 @@ class MigrationReviewVM(
+@@ -171,13 +218,2 @@ class MigrationReviewVM(
 -                        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -                        val reused = restartMigrationScheduleRepository.consume(accountKeyId)
 -                        val schedule =
@@ -8859,15 +8860,15 @@ index ccdc9db31..8ac2130a9 100644
 -                            }
 +                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
 +                        val schedule = reviewed.schedule
-@@ -189 +224 @@ class MigrationReviewVM(
+@@ -189 +225 @@ class MigrationReviewVM(
 -                            if (getSelectedWalletAccount() is KeystoneAccount) {
 +                            if (account is KeystoneAccount) {
-@@ -213,2 +248,2 @@ class MigrationReviewVM(
+@@ -213,2 +249,2 @@ class MigrationReviewVM(
 -                        logProposedPlan(schedule)
 -                        ReviewProposal.Automatic(schedule, keystoneRunCount)
 +                        migrationLog("MigrationReviewVM: proposed ${schedule.transfers.size} transfer(s).")
 +                        ReviewProposal.Automatic(reviewed, keystoneRunCount)
-@@ -233 +268,8 @@ class MigrationReviewVM(
+@@ -233 +269,8 @@ class MigrationReviewVM(
 -        }.withLce(groupLce(proposeLce, confirmLce), errorStateMapper::mapToState)
 +        }.withLce(groupLce(proposeLce, confirmLce)) { error ->
 +            val message = when (error.cause) {
@@ -8877,49 +8878,48 @@ index ccdc9db31..8ac2130a9 100644
 +            }
 +            errorStateMapper.mapToState(error, message = message)
 +        }
-@@ -249 +291 @@ class MigrationReviewVM(
+@@ -249 +292 @@ class MigrationReviewVM(
 -                createImmediateState(proposal, isConfirming, exchangeRateState)
 +                createImmediateState(proposal, isConfirming)
-@@ -260 +302 @@ class MigrationReviewVM(
+@@ -260 +303 @@ class MigrationReviewVM(
 -        val sched = proposal.schedule
 +        val sched = proposal.reviewed.schedule
-@@ -305 +347 @@ class MigrationReviewVM(
+@@ -305 +348 @@ class MigrationReviewVM(
 -            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(sched) } },
 +            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(proposal) } },
-@@ -313 +355 @@ class MigrationReviewVM(
+@@ -313 +356 @@ class MigrationReviewVM(
 -                            proposeLce.guardLoading { onConfirmAutomatic(sched) }
 +                            proposeLce.guardLoading { onConfirmAutomatic(proposal) }
-@@ -321,4 +363 @@ class MigrationReviewVM(
+@@ -321,4 +364 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration()'s raw send-max Proposal carries no destination-facing
 -    // "list of transfers" the way a MigrationSchedule does — this renders it as a single
 -    // synthetic row so the (shared) review layout still has something to show, using the real
 -    // fee from Proposal.totalFeeRequired() instead of AUTOMATIC's placeholder.
 +    // The public SDK exposes the sweep fee. The exact eligible amount is available in history after creation.
-@@ -328 +366,0 @@ class MigrationReviewVM(
+@@ -328 +367,0 @@ class MigrationReviewVM(
 -        exchangeRateState: ExchangeRateState,
-@@ -333,2 +371,2 @@ class MigrationReviewVM(
+@@ -333,2 +372,2 @@ class MigrationReviewVM(
 -            totalAmount = stringRes(proposal.amountZatoshi),
 -            totalFiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +            totalAmount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +            totalFiatAmount = null,
-@@ -341,2 +379,2 @@ class MigrationReviewVM(
+@@ -341,2 +380,2 @@ class MigrationReviewVM(
 -                        amount = stringRes(proposal.amountZatoshi),
 -                        fiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +                        amount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +                        fiatAmount = null,
-@@ -348 +386 @@ class MigrationReviewVM(
+@@ -348 +387 @@ class MigrationReviewVM(
 -            onConfirm = { onConfirmImmediate(proposal.proposal, proposal.amountZatoshi) },
 +            onConfirm = { confirmLce.guardLoading { onConfirmImmediate(proposal) } },
-@@ -368 +406 @@ class MigrationReviewVM(
+@@ -368 +407 @@ class MigrationReviewVM(
 -    private fun onConfirmAutomatic(sched: MigrationSchedule) =
 +    private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
-@@ -369,0 +408,8 @@ class MigrationReviewVM(
+@@ -369,0 +409,7 @@ class MigrationReviewVM(
 +            if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
 +            val account = requireReviewAccount()
 +            val canOperate = walletActionAccess.capture(account) ?: return@execute
 +            val authority = ConfirmationAuthority(currentCoroutineContext().job, ::ownsReviewEntry) {
-+                val originalEntry = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
-+                canOperate() && originalEntry && proposeLce.state.value.success === proposal
++                viewModelScope.isActive && canOperate() && proposeLce.state.value.success === proposal
 +            }
 +            if (!authority.canConfirm()) return@execute
 @@ -386 +432,3 @@ class MigrationReviewVM(
@@ -13236,46 +13236,50 @@ index 20a8edf27..3a543cadb 100644
 +            walletActionAccess = mockk(),
 +            migrationDrive = mockk(),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..0a3208c52 100644
+index d0838db0c..a3675241f 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-@@ -13,0 +14 @@ import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.migration.review
++import androidx.lifecycle.viewModelScope
+@@ -13,0 +15 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
-@@ -17,0 +19 @@ import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
+@@ -17,0 +20 @@ import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 +import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
-@@ -24,0 +27,3 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+@@ -24,0 +28,3 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-@@ -25,0 +31 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -25,0 +32 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
-@@ -29,0 +36,2 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
+@@ -29,0 +37,2 @@ import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleReposi
 +import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
-@@ -34 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+@@ -34 +42,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
-@@ -38,0 +46 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+@@ -38,0 +47 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 +import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
-@@ -39,0 +48 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -39,0 +49 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -44,0 +54,3 @@ import io.mockk.mockk
+@@ -44,0 +55,3 @@ import io.mockk.mockk
 +import io.mockk.verify
 +import io.mockk.slot
 +import kotlinx.coroutines.CompletableDeferred
-@@ -50,0 +63 @@ import kotlinx.coroutines.flow.flowOf
+@@ -46,0 +60 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
+@@ -50,0 +65 @@ import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.first
-@@ -52,0 +66 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -52,0 +68 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.TestScope
-@@ -54,0 +69 @@ import kotlinx.coroutines.test.resetMain
+@@ -54,0 +71 @@ import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runCurrent
-@@ -61,0 +77,2 @@ import kotlin.test.assertEquals
+@@ -61,0 +79,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -85,0 +103,3 @@ class MigrationReviewVMTest {
+@@ -85,0 +105,3 @@ class MigrationReviewVMTest {
 +            val reviewed = MigrationSweepTransactionProposal(proposal)
 +            val account = spendable<ZodlAccount>()
 +            every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
-@@ -89,0 +110,7 @@ class MigrationReviewVMTest {
+@@ -89,0 +112,7 @@ class MigrationReviewVMTest {
 +                    getSelectedWalletAccount = selectedAccount(account),
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
@@ -13283,19 +13287,19 @@ index d0838db0c..0a3208c52 100644
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -94 +121 @@ class MigrationReviewVMTest {
+@@ -94 +123 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
-@@ -95,0 +123,3 @@ class MigrationReviewVMTest {
+@@ -95,0 +125,3 @@ class MigrationReviewVMTest {
 +            assertNotNull(vm.state.value.content).onConfirm()
 +            advanceUntilIdle()
 +            collector.cancel()
-@@ -101,2 +131,2 @@ class MigrationReviewVMTest {
+@@ -101,2 +133,2 @@ class MigrationReviewVMTest {
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                submitProposal()
 +                zashiProposalRepository.setMigrationSweepProposal(proposal)
 +                submitProposal(reviewed, reviewedOwner = account.sdkAccount.accountUuid)
-@@ -114 +144,8 @@ class MigrationReviewVMTest {
+@@ -114 +146,8 @@ class MigrationReviewVMTest {
 -            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
 +            val adopted = MigrationSweepTransactionProposal(proposal)
 +            var authorityCurrent = true
@@ -13305,63 +13309,64 @@ index d0838db0c..0a3208c52 100644
 +                every { transactionProposal } returns MutableStateFlow(adopted)
 +                every { activateReviewedMigration(adopted, capture(approval)) } returns true
 +            }
-@@ -117,0 +155,6 @@ class MigrationReviewVMTest {
+@@ -117,0 +157,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -118,0 +162,3 @@ class MigrationReviewVMTest {
+@@ -118,0 +164,3 @@ class MigrationReviewVMTest {
 +                    walletActionAccess = mockk<WalletActionAccess> {
 +                        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
 +                    },
-@@ -127 +173,3 @@ class MigrationReviewVMTest {
+@@ -127 +175,3 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
 +            advanceUntilIdle()
 +            assertNotNull(vm.state.value.content).onConfirm()
-@@ -128,0 +177 @@ class MigrationReviewVMTest {
+@@ -128,0 +179 @@ class MigrationReviewVMTest {
 +            collector.cancel()
-@@ -131,2 +180,2 @@ class MigrationReviewVMTest {
+@@ -131,2 +182,2 @@ class MigrationReviewVMTest {
 -                keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.setMigrationSweepProposal(proposal)
 +                keystoneProposalRepository.prepareReviewedMigration(adopted, any(), any())
-@@ -137,0 +187,3 @@ class MigrationReviewVMTest {
+@@ -137,0 +189,3 @@ class MigrationReviewVMTest {
 +            assertTrue(approval.captured())
 +            authorityCurrent = false
 +            assertFalse(approval.captured())
-@@ -170 +222 @@ class MigrationReviewVMTest {
+@@ -170 +224 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -221 +273 @@ class MigrationReviewVMTest {
+@@ -221 +275 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -248 +300 @@ class MigrationReviewVMTest {
+@@ -248 +302 @@ class MigrationReviewVMTest {
 -            val router = FakeNavigationRouter()
 +            val router = FakeNavigationRouter("scheduled-review")
-@@ -272 +324 @@ class MigrationReviewVMTest {
+@@ -272 +326 @@ class MigrationReviewVMTest {
 -                    coEvery { getMigrationState() } returns MigrationState.NotStarted
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-@@ -283 +335 @@ class MigrationReviewVMTest {
+@@ -283 +337 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -286,0 +339 @@ class MigrationReviewVMTest {
+@@ -286,0 +341 @@ class MigrationReviewVMTest {
 +                    sourceEntryId = "scheduled-review",
-@@ -289 +342,4 @@ class MigrationReviewVMTest {
+@@ -289 +344,4 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(vm, scheduleFromSplit)
 +            val review = vm.currentReview()
 +            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
 +            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
 +            review.onConfirm()
-@@ -297,0 +354,5 @@ class MigrationReviewVMTest {
+@@ -297,0 +356,228 @@ class MigrationReviewVMTest {
 +            val handoff = router.scopedCommands.single()
 +            assertEquals("scheduled-review", handoff.sourceEntryId)
 +            val route = assertIs<NavigationCommand.Forward>(handoff.buildCommand()).routes.single()
 +            assertIs<MigrationScheduledArgs>(route)
 +            assertTrue(router.forwardedRoutes.isEmpty())
-@@ -299,0 +361,291 @@ class MigrationReviewVMTest {
++        }
++
 +    @Test
 +    fun rejectsNegativeHandlesBeforeReviewAndRequiresApprovalForAReplacement() = runTest {
 +        val unusable = schedule(-1L, 400_000L)
@@ -13495,49 +13500,6 @@ index d0838db0c..0a3208c52 100644
 +            assertConfirmationNeedsForeground(ActiveNavigationEntry("automatic-review", null, hostResumed = false))
 +        }
 +
-+    @Test
-+    fun automaticConfirmationWaitsForItsReviewAfterAuthenticationAndRetainsAnAdmittedResult() = runTest {
-+        val owner = ActiveNavigationEntry("automatic-review", null)
-+        val router = FakeNavigationRouter(owner.id)
-+        val signFinished = CompletableDeferred<Unit>()
-+        val plan = schedule(8L, 100_000L)
-+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
-+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-+            coEvery { proposeMigrationTransfers() } returns plan
-+            coEvery { signAndStoreMigrationSchedule(plan, any()) } coAnswers { signFinished.await() }
-+        }
-+        val authentication = mockk<BiometricRepository> {
-+            coEvery { requestBiometrics(any()) } coAnswers {
-+                router.activeEntry.value = owner.copy(hostResumed = false)
-+            }
-+        }
-+        val finalized = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
-+        val vm = vm(
-+            router = router,
-+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-+            mode = MigrationMode.AUTOMATIC,
-+            sourceEntryId = owner.id,
-+            biometricRepository = authentication,
-+            finalizeMigrationSchedule = finalized,
-+        )
-+        vm.currentReview().onConfirm()
-+        runCurrent()
-+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
-+
-+        router.activeEntry.value = owner
-+        runCurrent()
-+        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
-+        router.activeEntry.value = owner.copy(hostResumed = false)
-+        signFinished.complete(Unit)
-+        advanceUntilIdle()
-+
-+        coVerify(exactly = 1) { finalized(plan, MigrationMode.AUTOMATIC, any(), false) }
-+        val handoff = router.scopedCommands.single()
-+        assertEquals(owner.id, handoff.sourceEntryId)
-+        assertTrue(handoff.isStillAllowed())
-+        assertIs<NavigationCommand.Forward>(handoff.buildCommand())
-+    }
-+
 +    private suspend fun TestScope.assertConfirmationNeedsForeground(afterKeyRequest: ActiveNavigationEntry) {
 +        val review = "automatic-review"
 +        val router = FakeNavigationRouter(review)
@@ -13626,7 +13588,7 @@ index d0838db0c..0a3208c52 100644
 +        val account = spendable<KeystoneAccount>()
 +        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
-+        }
+@@ -298,0 +585,25 @@ class MigrationReviewVMTest {
 +        val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true) {
 +            coEvery { this@mockk.get(any<String>()) } returns false
 +        }
@@ -13652,18 +13614,17 @@ index d0838db0c..0a3208c52 100644
 +        coVerify(exactly = 1) { tor.store(any<String>(), true) }
 +        coVerify(exactly = 0) { tor.store(any<String>(), false) }
 +    }
-+
-@@ -311,0 +664,6 @@ class MigrationReviewVMTest {
+@@ -311,0 +623,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -317 +675 @@ class MigrationReviewVMTest {
+@@ -317 +634 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            vm.currentReview().onConfirm()
-@@ -321,4 +679,4 @@ class MigrationReviewVMTest {
+@@ -321,4 +638,4 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
@@ -13672,34 +13633,34 @@ index d0838db0c..0a3208c52 100644
 +            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
 +            coVerify(exactly = 0) { submitProposal(any(), any(), any(), any()) }
-@@ -336 +694,4 @@ class MigrationReviewVMTest {
+@@ -336 +653,4 @@ class MigrationReviewVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
 +            }
-@@ -342 +703 @@ class MigrationReviewVMTest {
+@@ -342 +662 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -347,4 +708 @@ class MigrationReviewVMTest {
+@@ -347,4 +667 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(
 -                vm,
 -                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
 -            )
 +            vm.currentReview().onConfirm()
-@@ -354 +712 @@ class MigrationReviewVMTest {
+@@ -354 +671 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
 +            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-@@ -359 +717 @@ class MigrationReviewVMTest {
+@@ -359 +676 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
 +            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
-@@ -365,4 +723 @@ class MigrationReviewVMTest {
+@@ -365,4 +682 @@ class MigrationReviewVMTest {
 -        return mockk {
 -            coEvery { this@mockk() } returns viewOnly
 -            every { observe() } returns flowOf(viewOnly)
 -        }
 +        return selectedAccount(viewOnly)
-@@ -385,5 +740,12 @@ class MigrationReviewVMTest {
+@@ -385,5 +699,27 @@ class MigrationReviewVMTest {
 -    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
@@ -13717,7 +13678,22 @@ index d0838db0c..0a3208c52 100644
 +    @AfterTest
 +    fun tearDown() {
 +        Dispatchers.resetMain()
-@@ -392,20 +754,38 @@ class MigrationReviewVMTest {
++    }
++
++    @Test
++    fun automaticConfirmationWaitsForItsReviewAfterAuthenticationAndRetainsAnAdmittedResult() = runTest {
++        assertCommittedResult { it.copy(hostResumed = false) }
++    }
++
++    @Test
++    fun automaticConfirmationRetainsItsResultWhileAnExternalScannerCoversReview() = runTest {
++        assertCommittedResult { ActiveNavigationEntry("gift-scanner", null) }
++    }
++
++    @Test
++    fun automaticConfirmationRecordsCommittedWorkAfterTheReviewIsDisposedWithoutQueueingNavigation() = runTest {
++        assertCommittedResult(disposeReview = true) { null }
+@@ -392,11 +728,3 @@ class MigrationReviewVMTest {
 -    // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
 -    // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
 -    // that (by design, same as every other LCE-driven VM in this codebase, e.g.
@@ -13729,7 +13705,10 @@ index d0838db0c..0a3208c52 100644
 -        vm: MigrationReviewVM,
 -        proposal: Proposal,
 -        amountZatoshi: Zatoshi = Zatoshi(500_000L)
--    ) {
++    private suspend fun TestScope.assertCommittedResult(
++        disposeReview: Boolean = false,
++        completionEntry: (ActiveNavigationEntry) -> ActiveNavigationEntry?,
+@@ -404,8 +732,47 @@ class MigrationReviewVMTest {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod(
 -                "onConfirmImmediate",
@@ -13738,45 +13717,54 @@ index d0838db0c..0a3208c52 100644
 -            )
 -        method.isAccessible = true
 -        method.invoke(vm, proposal, amountZatoshi)
-+    @Test
-+    fun declinedKeystoneNavigationClearsTheExactPreparationBeforeProofsStart() = runTest {
-+        val sdkProposal = mockk<Proposal> { coEvery { totalFeeRequired() } returns Zatoshi(1_000L) }
-+        val adopted = MigrationSweepTransactionProposal(sdkProposal)
-+        val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
-+            every { setMigrationSweepProposal(sdkProposal) } returns adopted
-+            every { transactionProposal } returns MutableStateFlow(adopted)
++        val owner = ActiveNavigationEntry("automatic-review", null)
++        val router = FakeNavigationRouter(owner.id)
++        val signFinished = CompletableDeferred<Unit>()
++        val plan = schedule(8L, 100_000L)
++        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
++            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
++            coEvery { proposeMigrationTransfers() } returns plan
++            coEvery { signAndStoreMigrationSchedule(plan, any()) } coAnswers { signFinished.await() }
 +        }
-+        val router = FakeNavigationRouter("keystone-review")
-+        val biometric = mockk<BiometricRepository>(relaxed = true) {
++        val authentication = mockk<BiometricRepository> {
 +            coEvery { requestBiometrics(any()) } coAnswers {
-+                router.activeEntry.value = ActiveNavigationEntry("keystone-review", null, hostResumed = false)
++                router.activeEntry.value = owner.copy(hostResumed = false)
 +            }
 +        }
-+        val sdk = mockk<OrchardMigrationSdk> { coEvery { proposeImmediateMigration() } returns sdkProposal }
++        val finalized = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
 +        val vm = vm(
 +            router = router,
 +            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-+            getSelectedWalletAccount = selectedAccount(spendable<KeystoneAccount>()),
-+            keystoneProposalRepository = keystone,
-+            sourceEntryId = "keystone-review",
-+            biometricRepository = biometric,
++            mode = MigrationMode.AUTOMATIC,
++            sourceEntryId = owner.id,
++            biometricRepository = authentication,
++            finalizeMigrationSchedule = finalized,
 +        )
-+
 +        vm.currentReview().onConfirm()
 +        runCurrent()
-+        assertTrue(router.scopedCommands.isEmpty())
-+        verify(exactly = 0) { keystone.setMigrationSweepProposal(any()) }
-+        router.activeEntry.value = ActiveNavigationEntry("keystone-review", null)
++        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
++
++        router.activeEntry.value = owner
 +        runCurrent()
-+        val handoff = router.scopedCommands.single()
-+        assertTrue(handoff.isStillAllowed())
-+        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
-+        handoff.acknowledge(false)
++        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
++        router.activeEntry.value = completionEntry(owner)
++        if (disposeReview) vm.viewModelScope.cancel()
++        signFinished.complete(Unit)
 +        advanceUntilIdle()
 +
-+        verify(exactly = 1) { keystone.clear(adopted) }
-+        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
-@@ -414,47 +794,21 @@ class MigrationReviewVMTest {
++        coVerify(exactly = 1) { finalized(plan, MigrationMode.AUTOMATIC, any(), false) }
++        coVerify(exactly = 1) { sdk.signAndStoreMigrationSchedule(plan, any()) }
++        coVerify(exactly = 1) { authentication.requestBiometrics(any()) }
++        if (disposeReview) {
++            assertTrue(router.scopedCommands.isEmpty())
++        } else {
++            val handoff = router.scopedCommands.single()
++            assertEquals(owner.id, handoff.sourceEntryId)
++            router.activeEntry.value = owner
++            assertTrue(handoff.isStillAllowed())
++            assertIs<NavigationCommand.Forward>(handoff.buildCommand())
++        }
+@@ -414,47 +781,65 @@ class MigrationReviewVMTest {
 -    private fun vm(
 -        router: NavigationRouter,
 -        getSelectedWalletAccount: GetSelectedWalletAccountUseCase =
@@ -13825,6 +13813,46 @@ index d0838db0c..0a3208c52 100644
 -        override fun forward(vararg routes: Any) {
 -            forwardedRoutes.addAll(routes)
 +    @Test
++    fun declinedKeystoneNavigationClearsTheExactPreparationBeforeProofsStart() = runTest {
++        val sdkProposal = mockk<Proposal> { coEvery { totalFeeRequired() } returns Zatoshi(1_000L) }
++        val adopted = MigrationSweepTransactionProposal(sdkProposal)
++        val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
++            every { setMigrationSweepProposal(sdkProposal) } returns adopted
++            every { transactionProposal } returns MutableStateFlow(adopted)
++        }
++        val router = FakeNavigationRouter("keystone-review")
++        val biometric = mockk<BiometricRepository>(relaxed = true) {
++            coEvery { requestBiometrics(any()) } coAnswers {
++                router.activeEntry.value = ActiveNavigationEntry("keystone-review", null, hostResumed = false)
++            }
++        }
++        val sdk = mockk<OrchardMigrationSdk> { coEvery { proposeImmediateMigration() } returns sdkProposal }
++        val vm = vm(
++            router = router,
++            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
++            getSelectedWalletAccount = selectedAccount(spendable<KeystoneAccount>()),
++            keystoneProposalRepository = keystone,
++            sourceEntryId = "keystone-review",
++            biometricRepository = biometric,
++        )
++
++        vm.currentReview().onConfirm()
++        runCurrent()
++        assertTrue(router.scopedCommands.isEmpty())
++        verify(exactly = 0) { keystone.setMigrationSweepProposal(any()) }
++        router.activeEntry.value = ActiveNavigationEntry("keystone-review", null)
++        runCurrent()
++        val handoff = router.scopedCommands.single()
++        assertTrue(handoff.isStillAllowed())
++        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
++        handoff.acknowledge(false)
++        advanceUntilIdle()
++
++        verify(exactly = 1) { keystone.clear(adopted) }
++        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
++    }
++
++    @Test
 +    fun revokedWalletAuthorityPreservesTheEnteredSplitWithoutNewScheduleSigning() = runTest {
 +        val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
 +        val reviewed = schedule(42L, 100_000L)
@@ -13845,11 +13873,11 @@ index d0838db0c..0a3208c52 100644
 +            coEvery { submitNoteSplit(split, any()) } coAnswers { returned.await().also { committed = true } }
 +            coEvery { getMigrationTransferStates() } returns
 +                cash.z.ecc.android.sdk.MigrationTransferStates(listOf(savedTransfer), 100L)
-@@ -461,0 +816,28 @@ class MigrationReviewVMTest {
++        }
 +        var authorityCurrent = true
 +        val authority = mockk<WalletActionAccess> {
 +            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
-+        }
+@@ -461,0 +847,24 @@ class MigrationReviewVMTest {
 +        val router = FakeNavigationRouter("automatic-split")
 +        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
 +        val vm = vm(
@@ -13874,9 +13902,9 @@ index d0838db0c..0a3208c52 100644
 +        assertTrue(router.scopedCommands.isEmpty())
 +    }
 +}
-@@ -463 +844,0 @@ class MigrationReviewVMTest {
+@@ -463 +871,0 @@ class MigrationReviewVMTest {
 -        override fun replace(vararg routes: Any) = Unit
-@@ -465 +846,75 @@ class MigrationReviewVMTest {
+@@ -465 +873,75 @@ class MigrationReviewVMTest {
 -        override fun replaceAll(vararg routes: Any) = Unit
 +private suspend fun MigrationReviewVM.currentReview() =
 +    requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
@@ -13953,27 +13981,27 @@ index d0838db0c..0a3208c52 100644
 +    override fun forward(vararg routes: Any) {
 +        forwardedRoutes.addAll(routes)
 +    }
-@@ -467 +922 @@ class MigrationReviewVMTest {
+@@ -467 +949 @@ class MigrationReviewVMTest {
 -        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
 +    override fun replace(vararg routes: Any) = Unit
-@@ -469 +924 @@ class MigrationReviewVMTest {
+@@ -469 +951 @@ class MigrationReviewVMTest {
 -        override fun back() = Unit
 +    override fun replaceAll(vararg routes: Any) = Unit
-@@ -471 +926 @@ class MigrationReviewVMTest {
+@@ -471 +953 @@ class MigrationReviewVMTest {
 -        override fun backTo(route: KClass<*>) = Unit
 +    override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
-@@ -473 +928 @@ class MigrationReviewVMTest {
+@@ -473 +955 @@ class MigrationReviewVMTest {
 -        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +    override fun back() = Unit
-@@ -475 +930 @@ class MigrationReviewVMTest {
+@@ -475 +957 @@ class MigrationReviewVMTest {
 -        override fun backToRoot() = Unit
 +    override fun backTo(route: KClass<*>) = Unit
-@@ -477 +932,3 @@ class MigrationReviewVMTest {
+@@ -477 +959,3 @@ class MigrationReviewVMTest {
 -        override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
 +    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +        val current = activeEntry.value?.let { entry -> mockk<NavBackStackEntry> { every { id } returns entry.id } }
 +        (block(current) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
-@@ -480,2 +937,11 @@ class MigrationReviewVMTest {
+@@ -480,2 +964,11 @@ class MigrationReviewVMTest {
 -    private inline fun <reified T : WalletAccount> spendable(): T =
 -        mockk<T>(relaxed = true) { every { isSpendable } returns true }
 +    override fun backToRoot() = Unit
@@ -69893,8 +69921,44 @@ index 5b354b6fc..cdafef351 100644
 +        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
 +            leaving = navigationRouter.commitFrom(sourceEntryId) { NavigationCommand.Back }
 +        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
+index 378d19dd4..2bb6022de 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
+@@ -14 +13,0 @@ import kotlinx.coroutines.flow.WhileSubscribed
+-import kotlinx.coroutines.flow.catch
+@@ -17,0 +17 @@ import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.retryWhen
+@@ -40,6 +40,2 @@ internal class ThemeVM(
+-     * That fallback has a sharp edge: once `.catch` emits [DEFAULT_THEME_APPEARANCE], the combined flow
+-     * completes, so if only one of the two stores throws, the other store's still-healthy value is discarded
+-     * for the rest of the session too, with no retry, instead of being kept on its own. This is accepted
+-     * because this flow exists only to release the splash gate, not to serve as a durable source of truth,
+-     * and `ThemeVMTest` pins it: a stored [AppearanceMode.DARK] alongside a throwing OLED store still
+-     * resolves to [AppearanceMode.SYSTEM].
++     * After a throwing store, reconnect both observations. Keep the last resolved pair while
++     * reconnecting, and space out retries if storage remains unavailable.
+@@ -48,0 +45 @@ internal class ThemeVM(
++            var resolved = false
+@@ -52,0 +50 @@ internal class ThemeVM(
++                    resolved = true
+@@ -64,3 +62,7 @@ internal class ThemeVM(
+-            }.catch { error ->
+-                Twig.error(error) { "Unable to read the stored app theme, falling back to the default appearance" }
+-                emit(DEFAULT_THEME_APPEARANCE)
++            }.retryWhen { error, attempt ->
++                if (attempt == 0L) {
++                    Twig.error { "Stored app theme observation failed (${error.javaClass.simpleName}); reconnecting" }
++                }
++                if (!resolved) emit(DEFAULT_THEME_APPEARANCE)
++                delay(if (attempt == 0L) THEME_READ_TIMEOUT else THEME_RECONNECT_INTERVAL)
++                true
+@@ -68,0 +71 @@ internal class ThemeVM(
++                resolved = true
+@@ -127,0 +131 @@ internal val THEME_READ_TIMEOUT = 2.seconds
++internal val THEME_RECONNECT_INTERVAL = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookScreen.kt
-index f2e90ac7e..beb2be641 100644
+index f2e90ac7e..016b1fe2e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookScreen.kt
 @@ -14,2 +14,2 @@ import org.koin.core.parameter.parametersOf
@@ -69902,6 +69966,11 @@ index f2e90ac7e..beb2be641 100644
 -    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args) }
 +fun ThemeDarkLookScreen(args: ThemeDarkLookArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args, sourceEntryId) }
+@@ -17 +17,3 @@ fun ThemeDarkLookScreen(args: ThemeDarkLookArgs) {
+-    ThemeDarkLookView(state)
++    val read by vm.preferenceRead.collectAsStateWithLifecycle()
++    state?.let { ThemeDarkLookView(it) }
++        ?: ThemeDarkLookLoadView(read.error == null, vm::onBack, vm::retryRead)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt
 index 2782c2448..9916e7c08 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt
@@ -69909,7 +69978,7 @@ index 2782c2448..9916e7c08 100644
 @@ -9,0 +10 @@ internal data class ThemeDarkLookState(
 +    val hasSaveError: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
-index f7ccd703c..61056ee39 100644
+index f7ccd703c..f7ff548dc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
 @@ -8,0 +9,3 @@ import co.electriccoin.zcash.ui.R
@@ -69919,29 +69988,42 @@ index f7ccd703c..61056ee39 100644
 @@ -19 +22 @@ import kotlinx.coroutines.flow.WhileSubscribed
 -import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.combine
-@@ -29,0 +33 @@ internal class ThemeDarkLookVM(
+@@ -22 +24,0 @@ import kotlinx.coroutines.flow.update
+-import kotlinx.coroutines.launch
+@@ -29,0 +32 @@ internal class ThemeDarkLookVM(
 +    private val sourceEntryId: String? = null,
-@@ -35,0 +40 @@ internal class ThemeDarkLookVM(
+@@ -35,0 +39,3 @@ internal class ThemeDarkLookVM(
 +    private val save = mutableLce<Unit>()
-@@ -38,2 +43,3 @@ internal class ThemeDarkLookVM(
++    private val read = mutableLce<Unit>()
++    val preferenceRead = read.state
+@@ -38,2 +44,3 @@ internal class ThemeDarkLookVM(
 -        selectedOledEnabled
 -            .map { oledEnabled -> oledEnabled?.let(::createState) }
 +        combine(selectedOledEnabled, save.state) { oledEnabled, result ->
 +            oledEnabled?.let { createState(it, result.loading, result.error != null) }
 +        }
-@@ -46,0 +53 @@ internal class ThemeDarkLookVM(
+@@ -47 +54,6 @@ internal class ThemeDarkLookVM(
+-        viewModelScope.launch {
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -54 +61 @@ internal class ThemeDarkLookVM(
++        retryRead()
++    }
++
++    fun retryRead() = read.guardLoading {
++        read.execute {
+@@ -54 +66 @@ internal class ThemeDarkLookVM(
 -    private fun createState(oledEnabled: Boolean) =
 +    private fun createState(oledEnabled: Boolean, isSaving: Boolean, hasSaveError: Boolean) =
-@@ -68 +75 @@ internal class ThemeDarkLookVM(
+@@ -68 +80 @@ internal class ThemeDarkLookVM(
 -                    isEnabled = isSaveEnabled(oledEnabled),
 +                    isEnabled = !isSaving && isSaveEnabled(oledEnabled),
-@@ -71 +78,2 @@ internal class ThemeDarkLookVM(
+@@ -71 +83,2 @@ internal class ThemeDarkLookVM(
 -            onBack = ::onBack
 +            onBack = ::onBack,
 +            hasSaveError = hasSaveError,
-@@ -86,3 +94,10 @@ internal class ThemeDarkLookVM(
+@@ -84 +97 @@ internal class ThemeDarkLookVM(
+-    private fun onBack() = navigationRouter.back()
++    fun onBack() = navigationRouter.back()
+@@ -86,3 +99,10 @@ internal class ThemeDarkLookVM(
 -    private fun onSaveClick() =
 -        viewModelScope.launch {
 -            setAppearanceMode(args.mode, isOledEnabled = selectedOledEnabled.value == true)
@@ -69955,18 +70037,48 @@ index f7ccd703c..61056ee39 100644
 +            )
 +            storedMode = args.mode
 +            storedOledEnabled = oledEnabled
-@@ -89,0 +105 @@ internal class ThemeDarkLookVM(
+@@ -89,0 +110 @@ internal class ThemeDarkLookVM(
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
-index 35bf6159c..c1aae9c90 100644
+index 35bf6159c..7c4a233c2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
-@@ -28,0 +29 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
++import co.electriccoin.zcash.ui.design.component.ButtonStyle
+@@ -28,0 +30,29 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceSaveFailure
-@@ -88,0 +90 @@ private fun BottomSheetContent(
++import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceReadContent
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++internal fun ThemeDarkLookLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
++    ZashiScreenModalBottomSheet(onDismissRequest = onBack) { padding ->
++        Column(
++            modifier = Modifier
++                .weight(1f, false)
++                .verticalScroll(rememberScrollState())
++                .padding(start = 24.dp, end = 24.dp, bottom = padding.calculateBottomPadding()),
++        ) {
++            Text(
++                text = stringResource(R.string.theme_settings_darklook_title),
++                color = ZashiColors.Text.textPrimary,
++                style = ZashiTypography.textXl,
++                fontWeight = FontWeight.SemiBold,
++            )
++            Spacer(16.dp)
++            AppearanceReadContent(isLoading, onRetry)
++            Spacer(8.dp)
++            ZashiButton(
++                modifier = Modifier.fillMaxWidth(),
++                state = ButtonState(stringRes(R.string.general_back), onClick = onBack, style = ButtonStyle.SECONDARY),
++            )
++        }
++    }
++}
+@@ -88,0 +119 @@ private fun BottomSheetContent(
 +        if (state.hasSaveError) AppearanceSaveFailure()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
-index 67a497e6e..39ef969f4 100644
+index 67a497e6e..5bd3e576f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
 @@ -8,0 +9 @@ import org.koin.androidx.compose.koinViewModel
@@ -69976,6 +70088,12 @@ index 67a497e6e..39ef969f4 100644
 -    val vm = koinViewModel<ThemeSettingsVM>()
 +fun ThemeSettingsScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<ThemeSettingsVM> { parametersOf(sourceEntryId) }
+@@ -14 +15,2 @@ fun ThemeSettingsScreen() {
+-    BackHandler(enabled = state != null) { state?.onBack() }
++    val read by vm.preferenceRead.collectAsStateWithLifecycle()
++    BackHandler(onBack = vm::onBack)
+@@ -15,0 +18 @@ fun ThemeSettingsScreen() {
++        ?: ThemeSettingsLoadView(read.error == null, vm::onBack, vm::retryRead)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt
 index a787fe93b..5207cafc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt
@@ -69983,7 +70101,7 @@ index a787fe93b..5207cafc7 100644
 @@ -9,0 +10 @@ internal data class ThemeSettingsState(
 +    val hasSaveError: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
-index 38488e94e..6011a85a1 100644
+index 38488e94e..ac50f2c1c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
@@ -69994,29 +70112,42 @@ index 38488e94e..6011a85a1 100644
 @@ -20 +23 @@ import kotlinx.coroutines.flow.WhileSubscribed
 -import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.flow.combine
-@@ -28,0 +32 @@ internal class ThemeSettingsVM(
+@@ -23 +25,0 @@ import kotlinx.coroutines.flow.update
+-import kotlinx.coroutines.launch
+@@ -28,0 +31 @@ internal class ThemeSettingsVM(
 +    private val sourceEntryId: String? = null,
-@@ -32,0 +37 @@ internal class ThemeSettingsVM(
+@@ -32,0 +36,3 @@ internal class ThemeSettingsVM(
 +    private val save = mutableLce<Unit>()
-@@ -35,2 +40,3 @@ internal class ThemeSettingsVM(
++    private val read = mutableLce<Unit>()
++    val preferenceRead = read.state
+@@ -35,2 +41,3 @@ internal class ThemeSettingsVM(
 -        selectedMode
 -            .map { mode -> mode?.let(::createState) }
 +        combine(selectedMode, save.state) { mode, result ->
 +            mode?.let { createState(it, result.loading, result.error != null) }
 +        }
-@@ -43,0 +50 @@ internal class ThemeSettingsVM(
+@@ -44 +51,6 @@ internal class ThemeSettingsVM(
+-        viewModelScope.launch {
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -50 +57 @@ internal class ThemeSettingsVM(
++        retryRead()
++    }
++
++    fun retryRead() = read.guardLoading {
++        read.execute {
+@@ -50 +62 @@ internal class ThemeSettingsVM(
 -    private fun createState(selectedMode: AppearanceMode) =
 +    private fun createState(selectedMode: AppearanceMode, isSaving: Boolean, hasSaveError: Boolean) =
-@@ -64 +71 @@ internal class ThemeSettingsVM(
+@@ -64 +76 @@ internal class ThemeSettingsVM(
 -                    isEnabled = selectedMode != storedMode,
 +                    isEnabled = !isSaving && selectedMode != storedMode,
-@@ -67 +74,2 @@ internal class ThemeSettingsVM(
+@@ -67 +79,2 @@ internal class ThemeSettingsVM(
 -            onBack = ::onBack
 +            onBack = ::onBack,
 +            hasSaveError = hasSaveError,
-@@ -85,9 +93,6 @@ internal class ThemeSettingsVM(
+@@ -70 +83 @@ internal class ThemeSettingsVM(
+-    private fun onBack() = navigationRouter.back()
++    fun onBack() = navigationRouter.back()
+@@ -85,9 +98,6 @@ internal class ThemeSettingsVM(
 -    private fun onSaveClick() =
 -        viewModelScope.launch {
 -            val mode = selectedMode.value
@@ -70032,26 +70163,65 @@ index 38488e94e..6011a85a1 100644
 +            Twig.warn {
 +                "Ignoring save for $mode - only AppearanceMode.LIGHT is selectable here, System and Dark " +
 +                    "forward to the dark-look sheet, which persists the mode together with isOledEnabled."
-@@ -95 +100 @@ internal class ThemeSettingsVM(
+@@ -95 +105 @@ internal class ThemeSettingsVM(
 -            setAppearanceMode(mode, isOledEnabled = false)
 +            return@guardLoading
-@@ -96,0 +102,5 @@ internal class ThemeSettingsVM(
+@@ -96,0 +107,5 @@ internal class ThemeSettingsVM(
 +        if (mode != storedMode) save.execute {
 +            setAppearanceMode(mode, isOledEnabled = false, sourceEntryId = sourceEntryId)
 +            storedMode = mode
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
-index 087d6ee1c..cde796f08 100644
+index 087d6ee1c..e94aebb08 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
-@@ -20,0 +21,3 @@ import androidx.compose.ui.res.stringResource
+@@ -16,0 +17 @@ import androidx.compose.material3.Text
++import androidx.compose.material3.CircularProgressIndicator
+@@ -20,0 +22,3 @@ import androidx.compose.ui.res.stringResource
 +import androidx.compose.ui.semantics.LiveRegionMode
 +import androidx.compose.ui.semantics.liveRegion
 +import androidx.compose.ui.semantics.semantics
-@@ -74,0 +78 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
+@@ -25,0 +30 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
++import co.electriccoin.zcash.ui.design.component.ZashiBaseSettingsOptIn
+@@ -46,0 +52,34 @@ private val CONTENT_TOP_SPACING = 28.dp
++@Composable
++internal fun ThemeSettingsLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
++    ZashiBaseSettingsOptIn(
++        header = stringResource(R.string.theme_settings_title),
++        image = R.drawable.ic_settings_theme,
++        info = null,
++        onDismiss = onBack,
++        footer = {},
++        content = {
++            Spacer(modifier = Modifier.height(16.dp))
++            AppearanceReadContent(isLoading, onRetry)
++        },
++    )
++}
++
++@Composable
++internal fun AppearanceReadContent(isLoading: Boolean, onRetry: () -> Unit) {
++    if (isLoading) {
++        CircularProgressIndicator(color = ZashiColors.Text.textPrimary)
++    } else {
++        Text(
++            text = stringResource(R.string.theme_settings_read_failed),
++            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
++            style = ZashiTypography.textSm,
++            color = ZashiColors.Text.textTertiary,
++        )
++        Spacer(modifier = Modifier.height(16.dp))
++        ZashiButton(
++            modifier = Modifier.fillMaxWidth(),
++            state = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
++        )
++    }
++}
++
+@@ -74,0 +114 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
 +                if (state.hasSaveError) AppearanceSaveFailure()
-@@ -134,0 +139,10 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
+@@ -134,0 +175,10 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
 +@Composable
 +internal fun AppearanceSaveFailure() {
 +    Text(
@@ -77699,35 +77869,37 @@ index 000000000..18b16fe28
 +    <string name="private_contacts_network_empty">No contacts on %1$s. Scan an address or add a contact.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml b/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml
-index 9ef26ee1d..a6247d1a7 100644
+index 9ef26ee1d..84369a215 100644
 --- a/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml
 +++ b/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml
-@@ -5 +5 @@
+@@ -5 +5,2 @@
 -    <string name="theme_settings_subtitle">Elige cómo se ve Zodl. Los fondos negros puros mejoran el contraste y ahorran batería en pantallas OLED.</string>
++    <string name="theme_settings_read_failed">No se pudo cargar la configuración de apariencia.</string>
 +    <string name="theme_settings_subtitle">Elige cómo se ve ZEC Private. Los fondos negros puros mejoran el contraste y ahorran batería en pantallas OLED.</string>
-@@ -9 +9 @@
+@@ -9 +10 @@
 -    <string name="theme_settings_option_light_desc">El aspecto claro estándar de Zodl.</string>
 +    <string name="theme_settings_option_light_desc">El aspecto claro estándar de ZEC Private.</string>
-@@ -13 +13 @@
+@@ -13 +14 @@
 -    <string name="theme_settings_option_classic_desc">El aspecto oscuro estándar de Zodl.</string>
 +    <string name="theme_settings_option_classic_desc">El aspecto oscuro estándar de ZEC Private.</string>
-@@ -17 +17 @@
+@@ -17 +18 @@
 -    <string name="theme_settings_darklook_subtitle">Elige qué aspecto oscuro debe usar Zodl en la apariencia oscura.</string>
 +    <string name="theme_settings_darklook_subtitle">Elige qué aspecto oscuro debe usar ZEC Private en la apariencia oscura.</string>
 diff --git a/ui-lib/src/main/res/ui/theme_settings/values/strings.xml b/ui-lib/src/main/res/ui/theme_settings/values/strings.xml
-index 9cb64a67b..8200c7d33 100644
+index 9cb64a67b..6f42e639a 100644
 --- a/ui-lib/src/main/res/ui/theme_settings/values/strings.xml
 +++ b/ui-lib/src/main/res/ui/theme_settings/values/strings.xml
-@@ -5 +5 @@
+@@ -5 +5,2 @@
 -    <string name="theme_settings_subtitle">Choose how Zodl looks. Pure black backgrounds boost contrast and save power on OLED displays.</string>
++    <string name="theme_settings_read_failed">Couldn’t load appearance settings.</string>
 +    <string name="theme_settings_subtitle">Choose how ZEC Private looks. Pure black backgrounds boost contrast and save power on OLED displays.</string>
-@@ -9 +9 @@
+@@ -9 +10 @@
 -    <string name="theme_settings_option_light_desc">Zodl\'s standard light look.</string>
 +    <string name="theme_settings_option_light_desc">ZEC Private\'s standard light look.</string>
-@@ -13 +13 @@
+@@ -13 +14 @@
 -    <string name="theme_settings_option_classic_desc">Zodl\'s standard dark look.</string>
 +    <string name="theme_settings_option_classic_desc">ZEC Private\'s standard dark look.</string>
-@@ -17 +17 @@
+@@ -17 +18 @@
 -    <string name="theme_settings_darklook_subtitle">Pick which dark look Zodl should use for a dark appearance.</string>
 +    <string name="theme_settings_darklook_subtitle">Pick which dark look ZEC Private should use for a dark appearance.</string>
 diff --git a/ui-lib/src/main/res/ui/update/drawable/ic_zashi_logo_update_available.xml b/ui-lib/src/main/res/ui/update/drawable/ic_zashi_logo_update_available.xml
@@ -78444,10 +78616,10 @@ index 000000000..798a507f6
 +private data class Version2TransactionNote(val txId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
 new file mode 100644
-index 000000000..69faa5948
+index 000000000..989f956ef
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationResultDeliveryTest.kt
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,376 @@
 +package co.electriccoin.zcash.ui
 +
 +import android.app.Activity
@@ -78472,6 +78644,7 @@ index 000000000..69faa5948
 +import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 +import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
++import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 +import io.mockk.mockk
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.toList
@@ -78497,6 +78670,36 @@ index 000000000..69faa5948
 +    val compose = createComposeRule()
 +
 +    private lateinit var controller: NavHostController
++
++    @Test
++    fun navigationTracksOnlyTheExactTypedProgressIdentity() {
++        install()
++        compose.runOnIdle {
++            val owner = object : LifecycleOwner {
++                override val lifecycle = LifecycleRegistry(this)
++            }
++            owner.lifecycle.currentState = Lifecycle.State.RESUMED
++            val router = NavigationRouterImpl()
++            val stopTracking = controller.trackActiveEntry(router, owner.lifecycle)
++            try {
++                controller.navigate(BoundTransactionProgressArgs("original"))
++                assertEquals("original", router.activeEntry.value?.submissionProgressId)
++                assertTrue(router.activeEntry.value?.hostResumed == true)
++
++                owner.lifecycle.currentState = Lifecycle.State.CREATED
++                assertEquals("original", router.activeEntry.value?.submissionProgressId)
++                assertFalse(router.activeEntry.value?.hostResumed == true)
++                owner.lifecycle.currentState = Lifecycle.State.RESUMED
++
++                controller.navigate(BoundTransactionProgressArgs("unrelated"))
++                assertEquals("unrelated", router.activeEntry.value?.submissionProgressId)
++                controller.navigate(ScanGiftCardArgs(true))
++                assertEquals(null, router.activeEntry.value?.submissionProgressId)
++            } finally {
++                stopTracking()
++            }
++        }
++    }
 +
 +    @Test
 +    fun reportHandoffFollowsTheHostLifecycleAndOriginatingEntry() {
@@ -78763,6 +78966,7 @@ index 000000000..69faa5948
 +                dialog<ErrorDialog> { Text("Seed recovery") }
 +                composable<ScanGiftCardArgs> { Text("External scan") }
 +                composable<ActivityHistoryArgs> { Text("Activity history") }
++                composable<BoundTransactionProgressArgs> { Text("Transaction progress") }
 +            }
 +        }
 +    }
@@ -110773,10 +110977,10 @@ index 57fcc6f0e..dd71c9e9c 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt
 new file mode 100644
-index 000000000..63d6ba0b8
+index 000000000..e92c8a2df
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,180 @@
 +package co.electriccoin.zcash.ui.screen.settings
 +
 +import androidx.compose.runtime.Composable
@@ -110797,9 +111001,11 @@ index 000000000..63d6ba0b8
 +import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView
 +import co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState
 +import co.electriccoin.zcash.ui.screen.chooseserver.ServerListState
++import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookLoadView
 +import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookState
 +import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookView
 +import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsState
++import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsLoadView
 +import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsView
 +import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsLoadView
 +import org.junit.Rule
@@ -110897,6 +111103,44 @@ index 000000000..63d6ba0b8
 +                    hasSaveError = failed,
 +                )
 +            )
++        }
++    }
++
++    @Test
++    fun theAppearanceReadErrorShowsRetryAndClose() {
++        assertAppearanceReadRecovery(
++            view = { close, retry -> ThemeSettingsLoadView(false, close, retry) },
++            assertBack = { compose.onNodeWithContentDescription(it).assertIsDisplayed().performClick() },
++            backText = R.string.general_close,
++        )
++    }
++
++    @Test
++    fun theDarkLookReadErrorShowsRetryAndBack() {
++        assertAppearanceReadRecovery(
++            view = { back, retry -> ThemeDarkLookLoadView(false, back, retry) },
++            assertBack = { compose.onNodeWithText(it).assertIsDisplayed().performClick() },
++            backText = R.string.general_back,
++        )
++    }
++
++    private fun assertAppearanceReadRecovery(
++        view: @Composable (() -> Unit, () -> Unit) -> Unit,
++        assertBack: (String) -> Unit,
++        backText: Int,
++    ) {
++        val resources = RuntimeEnvironment.getApplication().resources
++        var retries = 0
++        var dismissals = 0
++        compose.setContent { ZcashTheme { view({ dismissals++ }, { retries++ }) } }
++        compose.onNodeWithText(resources.getString(R.string.theme_settings_read_failed)).assertIsDisplayed()
++        compose.onNodeWithText(resources.getString(R.string.wallet_initialization_retry))
++            .assertIsDisplayed().performClick()
++        compose.onNodeWithText(resources.getString(R.string.currencyConversion_saveBtn)).assertDoesNotExist()
++        assertBack(resources.getString(backText))
++        compose.runOnIdle {
++            assertEquals(1, retries)
++            assertEquals(1, dismissals)
 +        }
 +    }
 +
@@ -115148,16 +115392,58 @@ index 000000000..b3779d0d1
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
-index e415d74b4..05ef10590 100644
+index e415d74b4..f29a19ece 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
-@@ -210,0 +211,4 @@ private class FakeAppearanceModeStorageProvider(
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.theme
++import androidx.lifecycle.viewModelScope
+@@ -7,0 +9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
+@@ -133 +135 @@ class ThemeVMTest {
+-                    oledProvider = FakeIsOledEnabledStorageProvider(failure = IllegalStateException("no store")),
++                    oledProvider = FakeIsOledEnabledStorageProvider(observationFailures = Int.MAX_VALUE),
+@@ -139,0 +142 @@ class ThemeVMTest {
++            vm.viewModelScope.cancel()
+@@ -141,0 +145,23 @@ class ThemeVMTest {
++    @Test
++    fun transientObservationFailureKeepsTheLiveThemeUpdatable() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(stored = AppearanceMode.SYSTEM)
++        val oled = FakeIsOledEnabledStorageProvider(stored = false, observationFailures = 1)
++        val vm = startedVm(mode, oled, advanceToIdle = false)
++
++        assertTrue(vm.isThemeResolved.value)
++        assertEquals(AppearanceMode.SYSTEM, vm.appearanceMode.value)
++
++        mode.store(AppearanceMode.DARK)
++        oled.store(true)
++        advanceTimeBy(THEME_READ_TIMEOUT)
++        runCurrent()
++        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
++        assertTrue(vm.isOledEnabled.value)
++
++        mode.store(AppearanceMode.LIGHT)
++        oled.store(false)
++        runCurrent()
++        assertEquals(AppearanceMode.LIGHT, vm.appearanceMode.value)
++        assertFalse(vm.isOledEnabled.value)
++    }
++
+@@ -210,0 +237,4 @@ private class FakeAppearanceModeStorageProvider(
 +    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
 +        error("This fixture only observes appearance")
 +    }
 +
+@@ -219 +249 @@ private class FakeIsOledEnabledStorageProvider(
+-    private val failure: Throwable? = null,
++    private var observationFailures: Int = 0,
+@@ -242 +272,4 @@ private class FakeIsOledEnabledStorageProvider(
+-            failure?.let { throw it }
++            if (observationFailures > 0) {
++                observationFailures--
++                error("Preference temporarily unavailable")
++            }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
-index c923a2c47..dee7780f6 100644
+index c923a2c47..448ca3592 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 @@ -3,0 +4,4 @@ import androidx.navigation.NavBackStackEntry
@@ -115179,9 +115465,31 @@ index c923a2c47..dee7780f6 100644
 +import kotlinx.coroutines.CompletableDeferred
 @@ -24,0 +36 @@ import kotlinx.coroutines.test.setMain
 +import java.io.IOException
-@@ -30,0 +43 @@ import kotlin.test.assertFalse
+@@ -30,0 +43,2 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -258,0 +272,71 @@ class ThemeDarkLookVMTest {
++import kotlin.test.assertNull
+@@ -88,0 +103,20 @@ class ThemeDarkLookVMTest {
++    @Test
++    fun failedOledReadAllowsBackAndRestoresTheOriginalPairOnRetry() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK)
++        val oled = FakeIsOledEnabledStorageProvider(stored = true, failFirstRead = true)
++        val router = FakeNavigationRouter()
++        val vm = startedVm(ThemeDarkLookArgs(AppearanceMode.DARK), mode, oled, router)
++
++        assertNotNull(vm.preferenceRead.value.error)
++        assertNull(vm.state.value)
++        vm.onBack()
++        assertEquals(1, router.backCount)
++        assertEquals(AppearanceMode.DARK, mode.stored)
++        assertEquals(true, oled.stored)
++
++        vm.retryRead()
++        advanceUntilIdle()
++        assertNull(vm.preferenceRead.value.error)
++        assertSingleSelection(requireNotNull(vm.state.value), isOledEnabled = true, isSaveEnabled = false)
++    }
++
+@@ -258,0 +293,71 @@ class ThemeDarkLookVMTest {
 +    @Test
 +    fun theDelayedSaveQueuesOnlyForItsOwnAppearanceDialog() = runTest(dispatcher) {
 +        val router = NavigationRouterImpl()
@@ -115253,7 +115561,7 @@ index c923a2c47..dee7780f6 100644
 +        coVerify(exactly = 0) { preference.putString(oled, "true") }
 +    }
 +
-@@ -261,3 +345,4 @@ class ThemeDarkLookVMTest {
+@@ -261,3 +366,4 @@ class ThemeDarkLookVMTest {
 -        modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
 -        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 -        router: FakeNavigationRouter = FakeNavigationRouter(),
@@ -115261,33 +115569,66 @@ index c923a2c47..dee7780f6 100644
 +        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 +        router: NavigationRouter = FakeNavigationRouter(),
 +        sourceEntryId: String? = null,
-@@ -264,0 +350 @@ class ThemeDarkLookVMTest {
+@@ -264,0 +371 @@ class ThemeDarkLookVMTest {
 +        if (modeProvider is FakeAppearanceModeStorageProvider) modeProvider.storeOled = oledProvider::store
-@@ -271 +357,2 @@ class ThemeDarkLookVMTest {
+@@ -271 +378,2 @@ class ThemeDarkLookVMTest {
 -                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
 +                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider),
 +                sourceEntryId = sourceEntryId,
-@@ -285,0 +373 @@ private class FakeAppearanceModeStorageProvider(
+@@ -285,0 +394 @@ private class FakeAppearanceModeStorageProvider(
 +    lateinit var storeOled: suspend (Boolean) -> Unit
-@@ -292,0 +381,5 @@ private class FakeAppearanceModeStorageProvider(
+@@ -292,0 +402,5 @@ private class FakeAppearanceModeStorageProvider(
 +    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
 +        storeOled(isOledEnabled)
 +        store(mode)
 +    }
 +
-@@ -301 +394,2 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -301 +415,3 @@ private class FakeIsOledEnabledStorageProvider(
 -    stored: Boolean?
 +    stored: Boolean?,
++    private var failFirstRead: Boolean = false,
 +    private val beforeStore: suspend () -> Unit = {},
-@@ -310,0 +405 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -308 +424,7 @@ private class FakeIsOledEnabledStorageProvider(
+-    override suspend fun get(): Boolean? = state.value
++    override suspend fun get(): Boolean? {
++        if (failFirstRead) {
++            failFirstRead = false
++            throw IOException("Preference temporarily unavailable")
++        }
++        return state.value
++    }
+@@ -310,0 +433 @@ private class FakeIsOledEnabledStorageProvider(
 +        beforeStore()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
-index abf7abb01..9174975d9 100644
+index abf7abb01..942dddc8d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
 @@ -31,0 +32 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -182,0 +184,29 @@ class ThemeSettingsVMTest {
+@@ -86,0 +88,22 @@ class ThemeSettingsVMTest {
++    @Test
++    fun failedInitialReadAllowsBackAndReloadsTheOriginalChoice() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK, failFirstRead = true)
++        val oled = FakeIsOledEnabledStorageProvider(stored = true)
++        val router = FakeNavigationRouter()
++        val vm = startedVm(mode, oled, router)
++
++        assertNotNull(vm.preferenceRead.value.error)
++        assertNull(vm.state.value)
++        vm.onBack()
++        assertEquals(1, router.backCount)
++        assertEquals(AppearanceMode.DARK, mode.stored)
++        assertEquals(true, oled.stored)
++
++        vm.retryRead()
++        advanceUntilIdle()
++        assertNull(vm.preferenceRead.value.error)
++        val state = requireNotNull(vm.state.value)
++        assertSingleSelection(state, AppearanceMode.DARK)
++        assertFalse(state.saveButton.isEnabled)
++    }
++
+@@ -182,0 +206,29 @@ class ThemeSettingsVMTest {
 +    @Test
 +    fun aRejectedLightModeSaveKeepsTheChoiceAvailableForRetry() = runTest(dispatcher) {
 +        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK)
@@ -115317,24 +115658,37 @@ index abf7abb01..9174975d9 100644
 +        assertEquals(MoreArgs::class, router.backToRoute)
 +    }
 +
-@@ -187,0 +218 @@ class ThemeSettingsVMTest {
+@@ -187,0 +240 @@ class ThemeSettingsVMTest {
 +        modeProvider.storeOled = oledProvider::store
-@@ -192 +223 @@ class ThemeSettingsVMTest {
+@@ -192 +245 @@ class ThemeSettingsVMTest {
 -                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
 +                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider)
-@@ -206,0 +238 @@ private class FakeAppearanceModeStorageProvider(
+@@ -201 +254,2 @@ private class FakeAppearanceModeStorageProvider(
+-    stored: AppearanceMode?
++    stored: AppearanceMode?,
++    private var failFirstRead: Boolean = false,
+@@ -206,0 +261 @@ private class FakeAppearanceModeStorageProvider(
 +    lateinit var storeOled: suspend (Boolean) -> Unit
-@@ -213,0 +246,5 @@ private class FakeAppearanceModeStorageProvider(
+@@ -208 +263,7 @@ private class FakeAppearanceModeStorageProvider(
+-    override suspend fun get(): AppearanceMode? = state.value
++    override suspend fun get(): AppearanceMode? {
++        if (failFirstRead) {
++            failFirstRead = false
++            error("Preference temporarily unavailable")
++        }
++        return state.value
++    }
+@@ -213,0 +275,5 @@ private class FakeAppearanceModeStorageProvider(
 +    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
 +        storeOled(isOledEnabled)
 +        store(mode)
 +    }
 +
-@@ -222 +259,2 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -222 +288,2 @@ private class FakeIsOledEnabledStorageProvider(
 -    stored: Boolean?
 +    stored: Boolean?,
 +    private val beforeStore: suspend () -> Unit = {},
-@@ -231,0 +270 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -231,0 +299 @@ private class FakeIsOledEnabledStorageProvider(
 +        beforeStore()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt
 new file mode 100644

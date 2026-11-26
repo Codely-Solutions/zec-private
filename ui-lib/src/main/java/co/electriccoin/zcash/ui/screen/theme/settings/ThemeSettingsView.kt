@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ZashiBaseSettingsOptIn
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
 import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
@@ -46,6 +48,40 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.ScreenLogoHeader
 
 private val CONTENT_TOP_SPACING = 28.dp
+
+@Composable
+internal fun ThemeSettingsLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
+    ZashiBaseSettingsOptIn(
+        header = stringResource(R.string.theme_settings_title),
+        image = R.drawable.ic_settings_theme,
+        info = null,
+        onDismiss = onBack,
+        footer = {},
+        content = {
+            Spacer(modifier = Modifier.height(16.dp))
+            AppearanceReadContent(isLoading, onRetry)
+        },
+    )
+}
+
+@Composable
+internal fun AppearanceReadContent(isLoading: Boolean, onRetry: () -> Unit) {
+    if (isLoading) {
+        CircularProgressIndicator(color = ZashiColors.Text.textPrimary)
+    } else {
+        Text(
+            text = stringResource(R.string.theme_settings_read_failed),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            style = ZashiTypography.textSm,
+            color = ZashiColors.Text.textTertiary,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        ZashiButton(
+            modifier = Modifier.fillMaxWidth(),
+            state = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
+        )
+    }
+}
 
 @Composable
 internal fun ThemeSettingsView(state: ThemeSettingsState) {

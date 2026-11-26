@@ -2,6 +2,7 @@
 <resources>
     <string name="settings_theme">Tema de la app</string>
     <string name="theme_settings_title">Tema</string>
+    <string name="theme_settings_read_failed">No se pudo cargar la configuración de apariencia.</string>
     <string name="theme_settings_subtitle">Elige cómo se ve ZEC Private. Los fondos negros puros mejoran el contraste y ahorran batería en pantallas OLED.</string>
     <string name="theme_settings_option_system">Sistema</string>
     <string name="theme_settings_option_system_desc">Sigue los ajustes de pantalla de tu dispositivo.</string>
