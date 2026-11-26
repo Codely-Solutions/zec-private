@@ -14,17 +14,13 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
+import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -35,6 +31,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 
 /**
  * [SwapRepositoryImpl] owns the shared `assets`/`quote` state (the selected asset + slippage now
@@ -764,6 +768,39 @@ class SwapRepositoryImplTest {
 }
 
 class SwapStatusRequestAdmissionTest {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun walletResetDuringCatalogLoadingDoesNotSendAnOldSwapReferenceOrRetryIt() = runTest {
+        val owner = EditAccountFixtures.zodl()
+        val wallet = WalletWriteAccess()
+        val saved = swapMetadata().copy(ownerAccount = owner, walletWriteToken = wallet.token())
+        val zec = SwapAssetTestFixture.zecAsset()
+        val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
+        val dataSource = mockk<SwapDataSource> {
+            coEvery { getSupportedTokens() } coAnswers {
+                wallet.beginReset()
+                listOf(zec, btc)
+            }
+        }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(saved.depositAddress, owner) } returns saved
+        }
+        val repository = SwapRepositoryImpl(dataSource, mockk(relaxed = true)).apply { scope = backgroundScope }
+        val status = GetSwapStatusUseCase(metadata, repository, walletWriteAccess = wallet)
+
+        val blocked = status.observeForAccount(saved.depositAddress, owner).first { !it.isLoading }
+        assertEquals("Swap status request is no longer active", blocked.error?.message)
+        assertEquals(null, blocked.savedMetadata)
+
+        wallet.finishReset()
+        wallet.replaceWallet {}
+        val beforeStart = status.refreshOnce(saved)
+        assertEquals("Swap status refresh is no longer active", beforeStart.error?.message)
+        coVerify(exactly = 1) { dataSource.getSupportedTokens() }
+        coVerify(exactly = 0) { dataSource.checkSwapStatus(any(), any()) }
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
+    }
+
     @Test
     fun admissionIsRecheckedAfterTheCatalogBeforeSendingTheSavedReference() = runTest {
         val allowed = java.util.concurrent.atomic.AtomicBoolean(true)

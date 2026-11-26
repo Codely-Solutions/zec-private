@@ -87,9 +87,10 @@ class GetReloadableSwapQuoteUseCase(
         return if (sameOwner && sameWallet && previous.matchesStoredSwap(saved)) withSavedObservation(saved) else this
     }
 
-    private data object UnavailableReload : ReloadHandle {
-        override fun requestReload() = Unit
-    }
+}
+
+internal data object UnavailableReload : ReloadHandle {
+    override fun requestReload() = Unit
 }
 
 data class SwapData(

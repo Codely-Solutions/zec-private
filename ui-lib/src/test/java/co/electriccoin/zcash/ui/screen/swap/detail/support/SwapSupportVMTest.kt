@@ -112,19 +112,21 @@ class SwapSupportVMTest {
 
     @Test
     fun reportIssueWaitsForSavedOrLiveSwapDetails() = runTest {
+        val owner = reportOwner(0)
+        val accounts = accountSource(MutableStateFlow(owner))
         val getStatus = mockk<GetSwapStatusUseCase> {
-            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData())
+            every { observeForAccount(saved.depositAddress, owner) } returns flowOf(SwapQuoteStatusData())
         }
         val navigation = reportNavigation()
         val share = mockk<SendEmailUseCase>()
         val vm = SwapSupportVM(
-            SwapSupportArgs(saved.depositAddress),
-            GetReloadableSwapQuoteUseCase(getStatus),
+            SwapSupportArgs(saved.depositAddress, ownerKey),
+            GetReloadableSwapQuoteUseCase(getStatus, accountDataSource = accounts),
             navigation,
             share,
             mockk(),
             AppAccessSession().apply { unlock() },
-            accountSource(MutableStateFlow(reportOwner(0))),
+            accounts,
             WalletWriteAccess(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
@@ -145,7 +147,8 @@ class SwapSupportVMTest {
     @Test
     fun sharesOnlyTheExplicitlyRequestedQuoteFromTheCurrentWalletGeneration() = runTest {
         withQuoteSupport {
-            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress, tracked.ownerAccount) } returns
+                tracked.copy(walletWriteToken = 3L)
             val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
             assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
             assertNull(nextChooser())
@@ -153,7 +156,7 @@ class SwapSupportVMTest {
             runCurrent()
             assertNull(nextChooser())
 
-            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress, tracked.ownerAccount) } returns tracked
             shareQuote.onClick()
             runCurrent()
             val chooser = assertNotNull(nextChooser())
@@ -201,7 +204,9 @@ class SwapSupportVMTest {
                 if (pauseDuringReload) {
                     coEvery { metadata.reloadSwapMetadata(tracked) } coAnswers { pausedRead() }
                 } else {
-                    coEvery { metadata.getSwapMetadata(tracked.depositAddress) } coAnswers { pausedRead() }
+                    coEvery { metadata.getSwapMetadata(tracked.depositAddress, tracked.ownerAccount) } coAnswers {
+                        pausedRead()
+                    }
                 }
 
                 assertNotNull(vm.state.value?.shareQuoteButton).onClick()
@@ -239,22 +244,24 @@ class SwapSupportVMTest {
         }
         val owner = reportOwner(0)
         val selection = MutableStateFlow<ZodlAccount?>(owner)
+        val accounts = accountSource(selection)
         val writeAccess = WalletWriteAccess()
         val tracked = saved.copy(ownerAccount = owner, walletWriteToken = writeAccess.token())
         val getStatus = mockk<GetSwapStatusUseCase> {
-            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
+            every { observeForAccount(saved.depositAddress, owner) } returns
+                flowOf(SwapQuoteStatusData(savedMetadata = tracked))
         }
         val entry = MutableStateFlow<ActiveNavigationEntry?>(ActiveNavigationEntry("support", null))
         val navigation = reportNavigation(entry)
         val session = AppAccessSession().apply { unlock() }
         val vm = SwapSupportVM(
-            SwapSupportArgs(saved.depositAddress),
-            GetReloadableSwapQuoteUseCase(getStatus),
+            SwapSupportArgs(saved.depositAddress, ownerKey),
+            GetReloadableSwapQuoteUseCase(getStatus, accountDataSource = accounts),
             navigation,
             SendEmailUseCase(application, getSupport, BlockchainProviderImpl(application)),
             mockk(),
             session,
-            accountSource(selection),
+            accounts,
             writeAccess,
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
@@ -334,7 +341,7 @@ class SwapSupportVMTest {
         withQuoteSupport {
             val entered = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
-            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } coAnswers {
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress, tracked.ownerAccount) } coAnswers {
                 entered.complete(Unit)
                 release.await()
                 tracked
@@ -363,25 +370,27 @@ class SwapSupportVMTest {
             signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote),
         )
         val getStatus = mockk<GetSwapStatusUseCase> {
-            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
+            every { observeForAccount(saved.depositAddress, owner) } returns
+                flowOf(SwapQuoteStatusData(savedMetadata = tracked))
         }
         val metadata = mockk<MetadataRepository> {
-            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked
+            coEvery { getSwapMetadata(saved.depositAddress, owner) } returns tracked
             coEvery { reloadSwapMetadata(tracked) } returns tracked
         }
         val session = AppAccessSession().apply { unlock() }
+        val accounts = accountSource(MutableStateFlow(owner))
         val pendingReset = MutableStateFlow(false)
         val progress = mockk<co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore> {
             every { isPending } returns pendingReset
         }
         val vm = SwapSupportVM(
-            SwapSupportArgs(saved.depositAddress),
-            GetReloadableSwapQuoteUseCase(getStatus),
+            SwapSupportArgs(saved.depositAddress, ownerKey),
+            GetReloadableSwapQuoteUseCase(getStatus, accountDataSource = accounts),
             reportNavigation(),
             share,
             metadata,
             session,
-            accountSource(MutableStateFlow(owner)),
+            accounts,
             WalletWriteAccess(progress),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
@@ -401,6 +410,8 @@ class SwapSupportVMTest {
     ) = mockk<NavigationRouter>(relaxed = true) {
         every { activeEntry } returns entry
     }
+
+    private val ownerKey = "00".repeat(16)
 
     private fun reportOwner(id: Byte) = mockk<ZodlAccount> {
         every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { id }))
@@ -427,9 +438,10 @@ class SwapSupportVMTest {
         val getSupport = mockk<GetSupportUseCase> { coEvery { this@mockk() } returns supportInfo }
         val share = SendEmailUseCase(application, getSupport, BlockchainProviderImpl(application))
         val owner = reportOwner(0)
+        val accounts = accountSource(MutableStateFlow(owner))
         val statusFlow = MutableStateFlow(SwapQuoteStatusData())
         val getStatus = mockk<GetSwapStatusUseCase> {
-            every { observe(saved.depositAddress) } returns statusFlow
+            every { observeForAccount(saved.depositAddress, owner) } returns statusFlow
         }
         val navigation = reportNavigation()
         var launchedOnBack: Intent? = null
@@ -437,13 +449,13 @@ class SwapSupportVMTest {
             launchedOnBack = shadowOf(application).nextStartedActivity
         }
         val vm = SwapSupportVM(
-            SwapSupportArgs(saved.depositAddress),
-            GetReloadableSwapQuoteUseCase(getStatus),
+            SwapSupportArgs(saved.depositAddress, ownerKey),
+            GetReloadableSwapQuoteUseCase(getStatus, accountDataSource = accounts),
             navigation,
             share,
             mockk(),
             AppAccessSession().apply { unlock() },
-            accountSource(MutableStateFlow(owner)),
+            accounts,
             WalletWriteAccess(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
@@ -490,7 +502,7 @@ class SwapSupportVMTest {
             )
             assertContains(body, "Synthetic device diagnostics")
             assertFalse(body.contains("synthetic-recipient"))
-            verify(exactly = 1) { getStatus.observe(saved.depositAddress) }
+            verify(exactly = 1) { getStatus.observeForAccount(saved.depositAddress, owner) }
             verify(exactly = 1) { navigation.back() }
         } finally {
             subscription.cancel()

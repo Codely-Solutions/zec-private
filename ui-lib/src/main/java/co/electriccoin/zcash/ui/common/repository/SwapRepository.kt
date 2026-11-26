@@ -9,48 +9,50 @@ import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SwapAsset
-import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
-import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
-import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
-import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
 import co.electriccoin.zcash.ui.common.model.near.bindsReviewedFundingTerms
-import co.electriccoin.zcash.ui.common.model.near.requireNoAffiliateFees
-import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
 import co.electriccoin.zcash.ui.common.model.near.matchesReviewedIdentity
+import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
+import co.electriccoin.zcash.ui.common.model.near.requireNoAffiliateFees
+import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
+import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
 import co.electriccoin.zcash.ui.common.model.swapQuoteMismatchSignal
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
+import co.electriccoin.zcash.ui.common.provider.SwapStatusRequestAdmission
 import co.electriccoin.zcash.wallet.foundation.RequestGeneration
 import co.electriccoin.zcash.wallet.foundation.RequestId
 import io.ktor.client.plugins.ResponseException
+import java.math.BigDecimal
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.math.BigDecimal
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Clock
+import kotlinx.coroutines.withContext
 
 @Suppress("TooManyFunctions")
 interface SwapRepository {
@@ -596,7 +598,13 @@ class SwapRepositoryImpl(
         suspend fun request(): SwapQuoteStatus {
             val tokens = getSupportedTokensForStatus()
             check(canRequest?.invoke() != false) { "Swap status request is no longer active" }
-            return swapDataSource.checkSwapStatus(reference, tokens)
+            return if (canRequest == null) {
+                swapDataSource.checkSwapStatus(reference, tokens)
+            } else {
+                withContext(SwapStatusRequestAdmission(canRequest)) {
+                    swapDataSource.checkSwapStatus(reference, tokens)
+                }
+            }
         }
         return try {
             request()

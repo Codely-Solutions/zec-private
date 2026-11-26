@@ -222,7 +222,7 @@ class NearSwapQuoteStatusTest {
             coEvery { getSwapMetadata(DEPOSIT_ADDRESS) } returns saved
         }
         val swaps = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(saved) } answers {
+            coEvery { checkSwapStatus(saved, any()) } answers {
                 sparse.withDecodedDetails("""{"amountOutFormatted":"2.1234567"}""")
             }
         }

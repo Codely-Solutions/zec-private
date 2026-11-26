@@ -16,5 +16,6 @@ fun SwapSupportScreen(args: SwapSupportArgs) {
 
 @Serializable
 data class SwapSupportArgs(
-    val depositAddress: String
+    val depositAddress: String,
+    val accountKeyId: String? = null,
 )

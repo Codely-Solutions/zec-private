@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.bindReportHandoff
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
@@ -16,6 +17,8 @@ import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
+import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
+import co.electriccoin.zcash.ui.common.usecase.UnavailableReload
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -46,18 +50,19 @@ class SwapSupportVM(
         .map(::Selection)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private val swap = args.accountKeyId?.let { getReloadableSwapQuote.observe(args.depositAddress, it) }
+        ?: flowOf(SwapData(SwapQuoteStatusData(isLoading = false), UnavailableReload))
+
     val state: StateFlow<SwapSupportState?> =
-        getReloadableSwapQuote
-            .observe(args.depositAddress)
-            .combine(appAccessSession.grant) { swapData, grant -> swapData to grant }
+        swap.combine(appAccessSession.grant) { swapData, grant -> swapData to grant }
             .combine(selectedAccount) { (swapData, grant), selection ->
                 val saved = swapData.savedMetadata
                 val token = saved?.walletWriteToken
                 val owner = saved?.ownerAccount?.sdkAccount?.accountUuid
                 val isAllowed = {
-                    token != null && owner != null && selection?.account == owner &&
-                        selectedAccount.value === selection && walletWriteAccess.permits(token) &&
-                        appAccessSession.permits(grant)
+                    token != null && owner != null && owner.toStorageKeyId() == args.accountKeyId &&
+                        selection?.account == owner && selectedAccount.value === selection &&
+                        walletWriteAccess.permits(token) && appAccessSession.permits(grant)
                 }
                 SwapSupportState(
                     title = stringRes(R.string.reportSwap_title),
@@ -104,7 +109,9 @@ class SwapSupportVM(
                 metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
             }.getOrNull() ?: return@launch
             if (!canShare()) return@launch
-            val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
+            val selected = runCatchingRecoverable {
+                metadataRepository.getSwapMetadata(expected.depositAddress, expected.ownerAccount)
+            }.getOrNull() ?: return@launch
             if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
                 selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
             ) return@launch

@@ -129,7 +129,7 @@ class SwapDetailVMTest {
             val support = assertNotNull(harness.state().supportButton)
             assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
             support.onClick()
-            verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT)) }
+            verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT, OWNER_KEY)) }
             assertNeutralRetry(harness)
         }
     }
@@ -308,7 +308,7 @@ class SwapDetailVMTest {
             }
             assertEquals(stringRes(R.string.errorPage_action_contactSupport), assertNotNull(support).text)
             support.onClick()
-            verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT)) }
+            verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT, OWNER_KEY)) }
         }
     }
 
@@ -567,7 +567,7 @@ class SwapDetailVMTest {
     private fun TestScope.harness(
         initial: SwapQuoteStatusData,
         clipboard: CopyToClipboardUseCase = mockk(relaxed = true),
-        accountKeyId: String? = null,
+        accountKeyId: String? = OWNER_KEY,
     ): Harness {
         var requests = 0
         val reload = mockk<ReloadHandle> {
@@ -652,6 +652,7 @@ class SwapDetailVMTest {
 
     private companion object {
         const val DEPOSIT = "test-btc-deposit"
+        const val OWNER_KEY = "fixture-owner"
         val OUTPUT = BigDecimal("1.23456789")
     }
 }

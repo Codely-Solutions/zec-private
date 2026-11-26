@@ -2,19 +2,16 @@ package co.electriccoin.zcash.ui.common.datasource
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
-import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
-import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
-import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
-import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
-import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
-import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
+import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -23,55 +20,60 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.metadata.AccountMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
-import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
-import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
+import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
-import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
+import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
+import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataEncryptorImpl
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
-import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
+import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
-import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
+import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
+import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShowErrorUseCase
-import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
-import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
-import co.electriccoin.zcash.ui.common.usecase.ActivityData
+import co.electriccoin.zcash.ui.common.usecase.SwapData
+import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
+import co.electriccoin.zcash.ui.design.util.StringResource
+import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-import co.electriccoin.zcash.ui.design.util.StyledStringResource
-import co.electriccoin.zcash.ui.design.util.StringResource
-import co.electriccoin.zcash.ui.design.util.TickerLocation
-import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
-import co.electriccoin.zcash.ui.R
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
@@ -82,28 +84,6 @@ import io.mockk.mockkObject
 import io.mockk.spyk
 import io.mockk.unmockkObject
 import io.mockk.verify
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.IOException
 import java.math.BigDecimal
@@ -114,9 +94,32 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.Json
 
 /**
  * [MetadataDataSourceImpl] end to end over real files: the real storage provider over a temporary
@@ -184,7 +187,7 @@ class MetadataDataSourceFileTest {
         )
         var requests = 0
         val swaps = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(any()) } answers {
+            coEvery { checkSwapStatus(any(), any()) } answers {
                 when (++requests) {
                     1 -> processing
                     2 -> success
@@ -391,7 +394,7 @@ class MetadataDataSourceFileTest {
             response, quote.originAsset, quote.destinationAsset,
             quote.depositAddress, quote.destinationAddress, quote.refundAddress,
         )
-        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(any()) } returns status }
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(any(), any()) } returns status }
         return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
     }
 
@@ -544,6 +547,7 @@ class MetadataDataSourceFileTest {
         retry.persistBeforeFunding(quote)
         assertEquals(3, sync.attempts)
         val expected = checkNotNull(restarted.getSwapMetadata("deposit"))
+        assertEquals(4, sync.attempts)
         assertEquals(evidence, expected.signedQuoteEvidence)
         assertNull(dataSource().read(metadataKey(2, 3))?.accountMetadata?.swaps?.swapIds?.singleOrNull())
         val success = mockk<SwapQuoteStatus> {
@@ -558,7 +562,7 @@ class MetadataDataSourceFileTest {
         assertEquals(SwapStatus.SUCCESS, settled.status)
         assertEquals(evidence, settled.signedQuoteEvidence)
         retry.persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT, NearSignedQuoteEvidence("{\"other\":true}")))
-        assertEquals(5, sync.attempts)
+        assertEquals(6, sync.attempts)
         assertEquals(settled, storedSwaps().swapIds.single())
         restarted.delete()
         assertFalse(File(metadataDir, canonicalName).exists())
@@ -725,6 +729,30 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun anUndecodableAlternateCannotAuthorizeAnotherFundingSubmission() = runTest {
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        assertTrue(markSwap(dataSource(), quote.provider, quote.mode, quote.reviewedIdentity()))
+        val reserved = read(canonicalName)
+        write(legacyName, reserved, metadataKey(9))
+        val clean = metadata(1)
+        write(canonicalName, clean)
+
+        val metadata = repository(metadataProvider)
+        val process = ProcessSwapTransactionUseCase(metadata, mockk())
+        assertFailsWith<MetadataReadUnavailableException> {
+            process.submitReservedFunding(outgoingProposal(quote, account), {}) { _, _ ->
+                error("SDK must not be entered")
+            }
+        }
+        assertFailsWith<MetadataReadUnavailableException> { metadata.getSwapMetadata("deposit") }
+        assertEquals(clean, read(canonicalName))
+        assertTrue(File(metadataDir, legacyName).isFile)
+        val recovered = assertNotNull(dataSource().read(metadataKey(0, 1, 9)))
+        assertEquals(reserved.accountMetadata.swaps.swapIds, recovered.accountMetadata.swaps.swapIds)
+    }
+
+    @Test
     fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
         val sync = TrackingSync()
         val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
@@ -869,13 +897,60 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun restoredSupportLookupWaitsForTheExactOwnerAndRecoversAnUnreadableAlternate() = runTest {
+        assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
+        val reserved = read(canonicalName)
+        write(legacyName, reserved, metadataKey(1))
+        write(canonicalName, metadata(1))
+        val alternate = File(metadataDir, legacyName)
+        var inaccessible = true
+        val storage = spyk(storageProvider) {
+            every { sizeOf(alternate) } answers {
+                if (inaccessible) throw SecurityException("Synthetic tracking read failure")
+                callOriginal()
+            }
+        }
+        val ownerId = AccountUuid.new(ByteArray(16))
+        val owner = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(ownerId) }
+        val otherId = AccountUuid.new(ByteArray(16) { 7 })
+        val other = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(otherId) }
+        val selection = MutableStateFlow<WalletAccount?>(owner)
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selection }
+        val metadata = repository(metadataProvider, storage = storage)
+        val swaps = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(any(), any()) } throws IOException("Synthetic offline status")
+        }
+        val status = GetSwapStatusUseCase(metadata, swaps, timeSource = testScheduler.timeSource)
+        val useCase = GetReloadableSwapQuoteUseCase(status, metadata, accounts)
+        val observed = mutableListOf<SwapData>()
+        backgroundScope.launch { useCase.observe("deposit", ownerId.toStorageKeyId()).collect { observed += it } }
+        runCurrent()
+        assertIs<MetadataReadUnavailableException>(observed.last().error)
+        assertNull(observed.last().savedMetadata)
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any(), any()) }
+
+        inaccessible = false
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals("deposit", observed.last().savedMetadata?.depositAddress)
+        assertEquals(owner, observed.last().savedMetadata?.ownerAccount)
+        coVerify(exactly = 1) { swaps.checkSwapStatus(any(), any()) }
+
+        selection.value = other
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertNull(observed.last().savedMetadata)
+        coVerify(exactly = 1) { swaps.checkSwapStatus(any(), any()) }
+    }
+
+    @Test
     fun openDetailsRetriesARealDirectorySyncFailureWithoutReopening() = runTest {
         assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
         val sync = TrackingSync(failures = 1)
         val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
         val providerFailure = IOException("Synthetic settlement transport delay")
         val swaps = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(any()) } throws providerFailure
+            coEvery { checkSwapStatus(any(), any()) } throws providerFailure
         }
         val status = GetSwapStatusUseCase(repository(sync.provider), swaps, timeSource = testScheduler.timeSource)
         val observed = mutableListOf<SwapQuoteStatusData>()
@@ -883,12 +958,12 @@ class MetadataDataSourceFileTest {
         runCurrent()
 
         assertTrue(observed.last().error is MetadataReadUnavailableException)
-        coVerify(exactly = 0) { swaps.checkSwapStatus(any()) }
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any(), any()) }
         advanceTimeBy(1_000)
         runCurrent()
         assertEquals("deposit", observed.last().savedMetadata?.depositAddress)
         assertEquals(providerFailure, observed.last().error)
-        coVerify(exactly = 1) { swaps.checkSwapStatus(any()) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(any(), any()) }
     }
 
     @Test
@@ -950,30 +1025,29 @@ class MetadataDataSourceFileTest {
         }
 
     @Test
-    fun anUndecodableCanonicalFileIsSetAsideThenAFreshOneIsWrittenAndTheOldOneMergedBack() =
-        runTest {
-            val otherKey = metadataKey(9)
-            write(canonicalName, metadata(lastUpdated = 1, read = listOf("old")), otherKey)
-            val dataSource = dataSource()
-            val emitted = collectEmissions(dataSource, key)
+    fun quarantinedMetadataRemainsUnavailableUntilACompatibleKeyRecoversIt() = runTest {
+        val otherKey = metadataKey(9)
+        val original = metadata(lastUpdated = 1, annotations = listOf(note("tx", "original note", 1)))
+        write(canonicalName, original, otherKey)
+        val source = dataSource()
 
-            assertEquals(listOf(emptyList()), emitted.map { it?.accountMetadata?.read })
-            val setAsideName = fileNames().single()
-            assertTrue(setAsideName.startsWith("$canonicalName.undecodable-"))
+        assertIs<MetadataObservation.Unavailable>(source.observe(key).first { it != null })
+        val setAsideName = fileNames().single()
+        assertTrue(setAsideName.startsWith("$canonicalName.undecodable-"))
 
-            dataSource.markTxMemoAsRead("new", key)
-            runCurrent()
+        assertFailsWith<MetadataReadUnavailableException> { source.read(key) }
+        assertFailsWith<MetadataReadUnavailableException> { source.readTxNote("tx", key) }
+        assertFalse(source.createOrUpdateTxNote("tx", "overwrite", key))
+        assertTrue(File(metadataDir, setAsideName).isFile)
+        assertEquals(0L, File(metadataDir, canonicalName).length())
 
-            assertEquals(listOf(listOf("new")), emitted.drop(1).map { it?.accountMetadata?.read })
-            assertEquals(listOf(canonicalName, setAsideName), fileNames())
-            assertEquals(listOf("new"), read(canonicalName).accountMetadata.read)
-
-            val keyThatDecodesTheOldFile = metadataKey(0, 1, 9)
-            val merged = dataSource.observeContent(keyThatDecodesTheOldFile).first { it != null }
-
-            assertEquals(setOf("old", "new"), merged?.accountMetadata?.read?.toSet())
-            assertEquals(listOf(canonicalName), fileNames())
-        }
+        val recoveryKey = metadataKey(0, 1, 9)
+        assertEquals(original, source.read(recoveryKey))
+        assertEquals("original note", source.readTxNote("tx", recoveryKey))
+        assertEquals(listOf(canonicalName), fileNames())
+        assertTrue(source.createOrUpdateTxNote("tx", "edited", recoveryKey))
+        assertEquals("edited", source.readTxNote("tx", recoveryKey))
+    }
 
     @Test
     fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =

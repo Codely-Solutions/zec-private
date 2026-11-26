@@ -536,7 +536,8 @@ class MetadataDataSourceImpl(
             otherReads.filter { (_, read) -> read == FileRead.Empty }.forEach { (file, _) -> deleteLogged(file) }
 
             val canonicalMetadata = canonicalRead.decoded()
-            val complete = otherReads.none { (_, read) -> read == FileRead.Unreadable }
+            // Quarantine preserves potentially recoverable history. It cannot establish absence.
+            val complete = canonicalRead.hasKnownContents && otherReads.all { (_, read) -> read.hasKnownContents }
             if (decodedOthers.isEmpty()) {
                 return@withContext MetadataRead(
                     metadata = canonicalMetadata ?: defaultMetadata(),
@@ -891,6 +892,9 @@ private sealed interface FileRead {
      */
     data object Unreadable : FileRead
 }
+
+private val FileRead.hasKnownContents: Boolean
+    get() = this != FileRead.Unreadable && this != FileRead.Undecodable
 
 private fun FileRead.decoded(): MetadataV3? = (this as? FileRead.Decoded)?.metadata
 

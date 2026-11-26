@@ -19,6 +19,7 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.JsonConvertException
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
@@ -44,6 +45,7 @@ class KtorNearApiProviderTest {
     private var responseDate: String? = null
     private var responseAge: String? = null
 
+    private var beforeClientCreated: suspend () -> Unit = {}
     private var createCalls = 0
     private var createTorCalls = 0
 
@@ -110,6 +112,23 @@ class KtorNearApiProviderTest {
             assertNoAuthorization(request)
             assertRespectsTorPreference()
         }
+
+    @Test
+    fun statusAdmissionIsRecheckedAfterClientAcquisitionWithoutChangingItsRoute() = runBlocking {
+        val wallet = WalletWriteAccess()
+        val token = wallet.token()
+        beforeClientCreated = { wallet.beginReset() }
+
+        val refused = assertFailsWith<IllegalStateException> {
+            withContext(SwapStatusRequestAdmission { wallet.permits(token) }) {
+                provider.checkSwapStatus("synthetic-deposit")
+            }
+        }
+        assertEquals("Swap status request is no longer active", refused.message)
+        assertTrue(requests.isEmpty())
+        assertRespectsTorPreference()
+        assertTrue(diagnosticEvents.any { it.startsWith("stage=CLIENT_CLOSE ") })
+    }
 
     @Test
     fun quoteDecodeRejectsTheCompactOversizedOutputFromTheAdmissionProbe() =
@@ -252,6 +271,7 @@ class KtorNearApiProviderTest {
 
         override suspend fun create(): HttpClient {
             createCalls++
+            beforeClientCreated()
             return HttpClient(
                 MockEngine { request ->
                     requests += request

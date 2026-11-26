@@ -438,9 +438,14 @@ class TransactionDetailVM(
         mapper.createTransactionDetailErrorFooter(data.swap?.error)
 
     private fun createSwapSupportButton(data: DetailedTransactionData): ButtonState? {
-        val swap = data.swap ?: return null
-        return getSwapMessage.getButton(swap.status, ::onContactSupport)
-            ?: (swap.savedMetadata ?: data.metadata.swapMetadata)?.savedSwapSupportButton(::onContactSupport)
+        val swap = data.swap
+        val accountKeyId = data.transaction.accountUuid?.toStorageKeyId()
+        if (swap == null || accountKeyId == null) return null
+        val contactSupport: (String) -> Unit = { depositAddress ->
+            navigationRouter.forward(SwapSupportArgs(depositAddress, accountKeyId))
+        }
+        return getSwapMessage.getButton(swap.status, contactSupport)
+            ?: (swap.savedMetadata ?: data.metadata.swapMetadata)?.savedSwapSupportButton(contactSupport)
     }
 
     private fun createPrimaryButtonState(data: DetailedTransactionData, support: ButtonState?): ButtonState? =
@@ -469,10 +474,6 @@ class TransactionDetailVM(
                 }
             }
         }
-
-    private fun onContactSupport(depositAddress: String) {
-        navigationRouter.forward(SwapSupportArgs(depositAddress))
-    }
 
     private fun createSecondaryButtonState(transaction: DetailedTransactionData): ButtonState? {
         fun createAddNoteButtonState(): ButtonState? {

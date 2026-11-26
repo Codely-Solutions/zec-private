@@ -71,8 +71,13 @@ class GetSwapStatusUseCase(
             }
 
             launch {
+                val generation = initial?.walletWriteToken ?: walletWriteAccess.token()
+                val canRequest = { walletWriteAccess.permits(generation) && canRefresh?.invoke() != false }
                 val loaded = runCatchingRecoverable {
-                    initial ?: metadataRepository.loadExpectedMetadata(depositAddress, account, data, walletWriteAccess)
+                    check(canRequest()) { "Swap status refresh is no longer active" }
+                    initial ?: metadataRepository.loadExpectedMetadata(
+                        depositAddress, account, data, walletWriteAccess, generation,
+                    )
                 }
                 val expectedMetadata = loaded.getOrNull()
 
@@ -93,7 +98,7 @@ class GetSwapStatusUseCase(
                 while (true) {
                     try {
                         val requestStartedAt = fundingClock.now()
-                        val (result, saved) = refresh(depositAddress, expectedMetadata, canRefresh)
+                        val (result, saved) = refresh(depositAddress, expectedMetadata, canRequest)
                         donationPreferences?.recordSuccessfulSettlement(saved)
                         val fundingUntil = fundingDeadline(result, requestStartedAt)
                         fundingExpiry?.cancelAndJoin()
@@ -103,7 +108,7 @@ class GetSwapStatusUseCase(
                                 savedMetadata = saved,
                                 isLoading = false,
                                 error = null,
-                                isFundingWindowOpen = fundingUntil != null && fundingUntil > fundingClock.now(),
+                                isFundingWindowOpen = isFundingWindowOpen(fundingUntil),
                             )
                         }
                         fundingExpiry = fundingUntil?.let { deadline ->
@@ -119,18 +124,13 @@ class GetSwapStatusUseCase(
                         throw e
                     } catch (e: Exception) {
                         fundingExpiry?.cancel()
+                        if (!walletWriteAccess.permits(generation)) {
+                            data.value = SwapQuoteStatusData(isLoading = false, error = e)
+                            break
+                        }
                         data.update { it.copy(isFundingWindowOpen = false) }
                         val latest = savedAfterFailure(expectedMetadata, e)
-                        data.update { current ->
-                            current.copy(
-                                isLoading = false,
-                                error = e,
-                                savedMetadata = latest ?: current.savedMetadata,
-                                status = current.status?.takeIf {
-                                    latest == null || current.savedMetadata?.matchesSavedStatus(latest) == true
-                                },
-                            )
-                        }
+                        data.update { it.withRefreshFailure(e, latest) }
                     }
                     delay(30.seconds)
                 }
@@ -145,6 +145,9 @@ class GetSwapStatusUseCase(
             // request so network, parsing and persistence time cannot extend the funding window.
             minOf(status.deadline, requestStartedAt + (status.deadline - issuedAt - 1.seconds))
         }
+
+    private fun isFundingWindowOpen(deadline: Instant?): Boolean =
+        deadline != null && deadline > fundingClock.now()
 
     private suspend fun waitForFundingExpiry(displayUntil: Instant) {
         var timeLeft = displayUntil - fundingClock.now()
@@ -165,25 +168,19 @@ class GetSwapStatusUseCase(
             runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
         }
 
-    private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
-        this === saved || (statusUpdatedAt == saved.statusUpdatedAt && status == saved.status &&
-            (executedAmountOut == null) == (saved.executedAmountOut == null) &&
-            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0 &&
-            observedRefundAmount == saved.observedRefundAmount)
-
     private suspend fun refresh(
         depositAddress: String,
         expected: TransactionSwapMetadata,
-        canRefresh: (() -> Boolean)?,
+        canRequest: () -> Boolean,
     ): Pair<SwapQuoteStatus, TransactionSwapMetadata> {
         val refresh = synchronized(refreshes) {
             refreshes.getOrPut(depositAddress, ::RefreshLock).also { it.users++ }
         }
         try {
             return refresh.mutex.withLock {
-                check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
-                val result = swapRepository.checkSwapStatus(expected, canRefresh)
-                check(canRefresh?.invoke() != false) { "Swap status refresh is no longer active" }
+                check(canRequest()) { "Swap status refresh is no longer active" }
+                val result = swapRepository.checkSwapStatus(expected, canRequest)
+                check(canRequest()) { "Swap status refresh is no longer active" }
                 val saved = metadataRepository.updateSwap(expected, result)
                     ?: throw SwapRefreshNotSavedException(
                         runCatchingRecoverable { metadataRepository.reloadSwapMetadata(expected) }.getOrNull()
@@ -211,8 +208,8 @@ private suspend fun MetadataRepository.loadExpectedMetadata(
     account: WalletAccount?,
     data: MutableStateFlow<SwapQuoteStatusData>,
     walletWriteAccess: WalletWriteAccess,
+    generation: Long,
 ): TransactionSwapMetadata? {
-    val generation = walletWriteAccess.token()
     while (walletWriteAccess.permits(generation)) {
         try {
             val saved = getSwapMetadata(depositAddress, account)
@@ -224,6 +221,12 @@ private suspend fun MetadataRepository.loadExpectedMetadata(
     }
     return null
 }
+
+private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
+    this === saved || (statusUpdatedAt == saved.statusUpdatedAt && status == saved.status &&
+        (executedAmountOut == null) == (saved.executedAmountOut == null) &&
+        amountOutFormatted.compareTo(saved.amountOutFormatted) == 0 &&
+        observedRefundAmount == saved.observedRefundAmount)
 
 private fun DonationPreferences.recordSuccessfulSettlement(saved: TransactionSwapMetadata) {
     if (saved.status == SwapStatus.SUCCESS) recordSuccessfulTransaction()
@@ -238,6 +241,14 @@ data class SwapQuoteStatusData(
 ) {
     val originAsset = status?.originAsset
     val destinationAsset = status?.destinationAsset
+
+    internal fun withRefreshFailure(error: Exception, latest: TransactionSwapMetadata?): SwapQuoteStatusData =
+        copy(
+            isLoading = false,
+            error = error,
+            savedMetadata = latest ?: savedMetadata,
+            status = status?.takeIf { latest == null || savedMetadata?.matchesSavedStatus(latest) == true },
+        )
 
     internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
         val saved = savedMetadata ?: return copy(savedMetadata = observed)

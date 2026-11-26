@@ -383,23 +383,24 @@ class MetadataRepositoryImpl(
 
     override suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount?): TransactionSwapMetadata? {
         val token = walletWriteAccess.token()
-        val (owner, content) = if (account != null) {
-            val key = runCatchingRecoverable { getMetadataKey(account, token) }.getOrElse { failure ->
-                if (!walletWriteAccess.permits(token)) return null
-                Twig.warn { "Bound metadata key unavailable (${failure.javaClass.simpleName})" }
-                throw MetadataReadUnavailableException()
-            }
-            val saved = mutex.withLock { walletWriteAccess.write(token) { metadataDataSource.read(key) } }
-            account to saved
-        } else {
-            combine(accountDataSource.selectedAccount, metadata) { selected, all ->
-                selected?.let { all[it.sdkAccount.accountUuid]?.let { data -> selected to data } }
-            }.filterNotNull().first()
-        }
+        val owner = account ?: accountDataSource.selectedAccount.filterNotNull().first()
+        val key = lookupSwapMetadataKey(owner, token) ?: return null
+        val content = mutex.withLock { walletWriteAccess.write(token) { metadataDataSource.read(key) } }
         return content?.accountMetadata?.swaps?.swapIds
             ?.firstOrNull { it.depositAddress == depositAddress }
             ?.toBusinessObject(simpleSwapAssetProvider)
             ?.copy(ownerAccount = owner, walletWriteToken = token)
+    }
+
+    private suspend fun lookupSwapMetadataKey(owner: WalletAccount, token: Long): MetadataKey? {
+        if (!walletWriteAccess.permits(token)) return null
+        return runCatchingRecoverable { getMetadataKey(owner, token) }.getOrElse { failure ->
+            if (walletWriteAccess.permits(token)) {
+                Twig.warn { "Swap metadata key unavailable (${failure.javaClass.simpleName})" }
+                throw MetadataReadUnavailableException()
+            }
+            null
+        }
     }
 
     override suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata? {

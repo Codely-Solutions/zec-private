@@ -11,22 +11,23 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
-import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PAYMENT_SHORTFALL
-import co.electriccoin.zcash.ui.common.model.settlementStatus
+import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 import co.electriccoin.zcash.ui.common.model.positiveRefund
+import co.electriccoin.zcash.ui.common.model.settlementStatus
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.loadingImageRes
-import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
@@ -36,18 +37,18 @@ import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
-import co.electriccoin.zcash.ui.screen.transactiondetail.settlementCheckButton
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
+import co.electriccoin.zcash.ui.screen.transactiondetail.settlementCheckButton
+import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
+import java.time.ZoneId
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
-import java.time.ZoneId
 
 class SwapDetailVM(
     getReloadableSwapQuote: GetReloadableSwapQuoteUseCase,
@@ -126,7 +127,9 @@ class SwapDetailVM(
                     primaryButton = recheck ?: createPrimaryButtonState(swapData, swapData.error),
                     supportButton = when {
                         recheck != null -> createPrimaryButtonState(swapData, null)
-                        swapData.error != null -> swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
+                        swapData.error != null -> swapData.savedMetadata?.savedSwapSupportButton {
+                            onContactSupport(it, swapData)
+                        }
                         else -> null
                     },
                     onBack = ::onBack,
@@ -169,8 +172,11 @@ class SwapDetailVM(
                 initialValue = null
             )
 
-    private fun onContactSupport(depositAddress: String) {
-        navigationRouter.forward(SwapSupportArgs(depositAddress))
+    private fun onContactSupport(depositAddress: String, swapData: SwapData) {
+        val accountKeyId = args.accountKeyId
+            ?: swapData.savedMetadata?.ownerAccount?.sdkAccount?.accountUuid?.toStorageKeyId()
+            ?: return
+        navigationRouter.forward(SwapSupportArgs(depositAddress, accountKeyId))
     }
 
     private val SwapData.isOutgoing: Boolean
@@ -241,7 +247,7 @@ class SwapDetailVM(
         }
         val supportButton =
             getSwapMessage.getButton(swapData.status) {
-                onContactSupport(it)
+                onContactSupport(it, swapData)
             }
         return when {
             supportButton != null -> {
@@ -256,7 +262,7 @@ class SwapDetailVM(
             }
 
             else -> {
-                swapData.savedMetadata?.savedSwapSupportButton(::onContactSupport)
+                swapData.savedMetadata?.savedSwapSupportButton { onContactSupport(it, swapData) }
             }
         }
     }

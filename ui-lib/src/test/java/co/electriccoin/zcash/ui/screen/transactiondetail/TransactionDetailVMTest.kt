@@ -85,9 +85,11 @@ class TransactionDetailVMTest {
     private val overview = mockk<TransactionOverview> {
         every { zip318Kind } returns Zip318Kind.NOT_CLASSIFIED
     }
+    private val ownerUuid = cash.z.ecc.android.sdk.model.AccountUuid.new(ByteArray(16))
+    private val ownerKey = "00".repeat(16)
     private val sent = SendTransaction.Success(
         TransactionId.new(ByteArray(32) { 1 }), Zatoshi(123_456_789), Instant.EPOCH,
-        0, Zatoshi(10_000), emptyList(), overview, "fixture-deposit"
+        0, Zatoshi(10_000), emptyList(), overview, "fixture-deposit", accountUuid = ownerUuid
     )
 
     @BeforeTest
@@ -140,7 +142,7 @@ class TransactionDetailVMTest {
         val support = assertNotNull(detail.secondaryButton)
         assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
         support.onClick()
-        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress)) }
+        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress, ownerKey)) }
     }
 
     @Test
@@ -391,7 +393,7 @@ class TransactionDetailVMTest {
         retry.onClick()
         support.onClick()
         verify(exactly = 1) { reload.requestReload() }
-        verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
+        verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit", ownerKey)) }
     }
 
     @Test
@@ -411,7 +413,7 @@ class TransactionDetailVMTest {
         assertNotNull(detail.primaryButton).onClick()
         assertNotNull(detail.secondaryButton).onClick()
         verify(exactly = 1) { reload.requestReload() }
-        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress)) }
+        verify(exactly = 1) { router.forward(SwapSupportArgs(saved.depositAddress, ownerKey)) }
     }
 
     @Test
@@ -497,7 +499,7 @@ class TransactionDetailVMTest {
         val support = assertNotNull(state.secondaryButton)
         assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
         support.onClick()
-        verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
+        verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit", ownerKey)) }
     }
 
     @Test

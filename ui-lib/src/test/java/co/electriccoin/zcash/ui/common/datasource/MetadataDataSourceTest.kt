@@ -577,6 +577,7 @@ class MetadataDataSourceTest {
         val saved = AtomicReference(
             metadata(lastUpdated = 1, swapIds = listOf(swap("s1", "near", 5).copy(status = SwapStatus.PENDING)))
         )
+        every { canonicalFile.name } returns key.fileIdentifier()
         every { metadataStorageProvider.getStorageFiles(key) } returns listOf(canonicalFile)
         every { metadataProvider.readMetadataFromFile(canonicalFile, key) } answers { saved.get() }
         every { metadataProvider.writeMetadataToFile(canonicalFile, any(), key) } answers {
@@ -615,7 +616,7 @@ class MetadataDataSourceTest {
         val detailLoading = CompletableDeferred<Unit>()
         var checks = 0
         val provider = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(any()) } coAnswers {
+            coEvery { checkSwapStatus(any(), any()) } coAnswers {
                 when (++checks) {
                     1 -> {
                         entered.complete(Unit)
@@ -629,15 +630,17 @@ class MetadataDataSourceTest {
         }
         val checkStatus = GetSwapStatusUseCase(repository(), provider)
         val activity = async { checkStatus("s1") }
-        entered.await()
+        runCurrent()
+        assertTrue(entered.isCompleted, "The first exact metadata lookup must admit a request")
         val details = async {
             checkStatus.observe("s1").first {
                 if (it.savedMetadata != null) detailLoading.complete(Unit)
                 !it.isLoading
             }
         }
-        detailLoading.await()
-        coVerify(exactly = 1) { provider.checkSwapStatus(any()) }
+        runCurrent()
+        assertTrue(detailLoading.isCompleted, "The detail must use the same durable record")
+        coVerify(exactly = 1) { provider.checkSwapStatus(any(), any()) }
 
         releaseOldResponse.complete(Unit)
         val activityResult = activity.await()

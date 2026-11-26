@@ -59,7 +59,7 @@ class GetSwapStatusUseCaseTest {
                 coEvery { updateSwap(accepted, any()) } returns accepted
             }
             val settled = swapStatusResult(swapStatus = SwapStatus.SUCCESS)
-            val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(accepted) } returns settled }
+            val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(accepted, any()) } returns settled }
             val editor = mockk<SharedPreferences.Editor>(relaxed = true)
             val prefs = mockk<SharedPreferences> {
                 every { getBoolean("successful_activity", false) } returns false
@@ -90,15 +90,15 @@ class GetSwapStatusUseCaseTest {
             coEvery { updateSwap(saved, any()) } returns saved
         }
         val settled = swapStatusResult()
-        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } returns settled }
+        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(saved, any()) } returns settled }
         val useCase = GetSwapStatusUseCase(metadata, provider)
 
         val failed = useCase.observeForAccount("deposit", account).first { !it.isLoading }
         assertSame(failure, failed.error)
-        coVerify(exactly = 0) { provider.checkSwapStatus(any()) }
+        coVerify(exactly = 0) { provider.checkSwapStatus(any(), any()) }
         val retried = useCase.observeForAccount("deposit", account).first { !it.isLoading }
         assertSame(settled, retried.status)
-        coVerify(exactly = 1) { provider.checkSwapStatus(saved) }
+        coVerify(exactly = 1) { provider.checkSwapStatus(saved, any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -116,7 +116,7 @@ class GetSwapStatusUseCaseTest {
             coEvery { reloadSwapMetadata(expected) } returns accepted
         }
         val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
-        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(expected) } returns processing }
+        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(expected, any()) } returns processing }
         val states = mutableListOf<SwapQuoteStatusData>()
         val observer = backgroundScope.launch {
             GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states += it }
@@ -141,7 +141,7 @@ class GetSwapStatusUseCaseTest {
             val status = swapStatusResult()
             val swapRepository =
                 mockk<SwapRepository> {
-                    coEvery { checkSwapStatus(any()) } returns status
+                    coEvery { checkSwapStatus(any(), any()) } returns status
                 }
 
             val result = GetSwapStatusUseCase(metadataRepository, swapRepository).invoke("deposit")
@@ -164,7 +164,7 @@ class GetSwapStatusUseCaseTest {
             }
             val failure = AssetNotFoundException("nep141:btc.omft.near")
             val repository = mockk<SwapRepository> {
-                coEvery { checkSwapStatus(saved) } throws failure
+                coEvery { checkSwapStatus(saved, any()) } throws failure
             }
             val result = GetSwapStatusUseCase(metadata, repository)("deposit")
             assertSame(saved, result.savedMetadata)
@@ -184,7 +184,7 @@ class GetSwapStatusUseCaseTest {
             coEvery { reloadSwapMetadata(earlier) } returns accepted
         }
         val failure = SwapAssetsUnavailableException()
-        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(earlier) } throws failure }
+        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(earlier, any()) } throws failure }
 
         val result = GetSwapStatusUseCase(metadata, provider)("deposit")
 
@@ -200,7 +200,9 @@ class GetSwapStatusUseCaseTest {
         val saved = mockk<TransactionSwapMetadata>()
         val metadata = mockk<MetadataRepository> { coEvery { getSwapMetadata("deposit") } returns saved }
         val delayed = CompletableDeferred<SwapQuoteStatus>()
-        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } coAnswers { delayed.await() } }
+        val repository = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(saved, any()) } coAnswers { delayed.await() }
+        }
         val states = mutableListOf<SwapQuoteStatusData>()
         val observer = backgroundScope.launch {
             GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
@@ -211,7 +213,7 @@ class GetSwapStatusUseCaseTest {
         observer.cancel()
         advanceTimeBy(60_000)
         runCurrent()
-        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
+        coVerify(exactly = 1) { repository.checkSwapStatus(saved, any()) }
     }
 
     @Test
@@ -226,7 +228,7 @@ class GetSwapStatusUseCaseTest {
             val failure = SwapAssetsUnavailableException()
             val swapRepository =
                 mockk<SwapRepository> {
-                    coEvery { checkSwapStatus(any()) } throws failure
+                    coEvery { checkSwapStatus(any(), any()) } throws failure
                 }
 
             val result = GetSwapStatusUseCase(metadataRepository, swapRepository).invoke("deposit")
@@ -251,7 +253,7 @@ class GetSwapStatusUseCaseTest {
             assertFalse(result.isLoading)
             assertIs<IllegalStateException>(result.error)
             assertNull(result.status)
-            coVerify(exactly = 0) { swapRepository.checkSwapStatus(any()) }
+            coVerify(exactly = 0) { swapRepository.checkSwapStatus(any(), any()) }
             coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
         }
 
@@ -270,17 +272,17 @@ class GetSwapStatusUseCaseTest {
             val refunded = swapStatusResult(swapStatus = SwapStatus.REFUNDED)
             val swapRepository =
                 mockk<SwapRepository> {
-                    coEvery { checkSwapStatus(saved) } returnsMany listOf(pending, processing, refunded)
+                    coEvery { checkSwapStatus(saved, any()) } returnsMany listOf(pending, processing, refunded)
                 }
             val useCase = GetSwapStatusUseCase(metadataRepository, swapRepository)
             val firstObserver = backgroundScope.launch { useCase.observe("deposit").collect() }
             runCurrent()
-            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
+            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved, any()) }
             firstObserver.cancel()
             runCurrent()
             advanceTimeBy(60_000)
             runCurrent()
-            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
+            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved, any()) }
 
             // A fresh observer reloads the saved route and stops requesting status after refund.
             val resumed = mutableListOf<SwapQuoteStatusData>()
@@ -291,11 +293,11 @@ class GetSwapStatusUseCaseTest {
             assertEquals(SwapStatus.REFUNDED, resumed.last().status?.status)
             assertNull(resumed.last().error)
             coVerify(exactly = 2) { metadataRepository.getSwapMetadata("deposit") }
-            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
+            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved, any()) }
             coVerify(exactly = 1) { metadataRepository.updateSwap(saved, refunded) }
             advanceTimeBy(120_000)
             runCurrent()
-            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
+            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved, any()) }
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -311,7 +313,7 @@ class GetSwapStatusUseCaseTest {
         val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)
         var attempts = 0
         val repository = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(saved) } answers {
+            coEvery { checkSwapStatus(saved, any()) } answers {
                 when (++attempts) {
                     1 -> pending
                     2 -> throw SwapAssetsUnavailableException()
@@ -357,7 +359,7 @@ class GetSwapStatusUseCaseTest {
         val stalledPoll = CompletableDeferred<SwapQuoteStatus>()
         var attempts = 0
         val provider = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(saved) } coAnswers {
+            coEvery { checkSwapStatus(saved, any()) } coAnswers {
                 when (++attempts) {
                     2 -> throw SwapAssetsUnavailableException()
                     4 -> stalledPoll.await()
@@ -412,7 +414,7 @@ class GetSwapStatusUseCaseTest {
         val status = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
         every { status.deadline } returns start + 60_000.milliseconds
         every { status.observedAtProvider } returns start
-        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } returns status }
+        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(saved, any()) } returns status }
         val states = mutableListOf<SwapQuoteStatusData>()
         backgroundScope.launch {
             GetSwapStatusUseCase(metadata, repository, clock = clock, timeSource = testScheduler.timeSource)
@@ -425,7 +427,7 @@ class GetSwapStatusUseCaseTest {
         runCurrent()
 
         assertFalse(states.last().isFundingWindowOpen)
-        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
+        coVerify(exactly = 1) { repository.checkSwapStatus(saved, any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -446,7 +448,7 @@ class GetSwapStatusUseCaseTest {
         val status = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
         every { status.observedAtProvider } returns issuedAt
         val provider = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(saved) } coAnswers {
+            coEvery { checkSwapStatus(saved, any()) } coAnswers {
                 delay(2_000.milliseconds)
                 status
             }

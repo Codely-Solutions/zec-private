@@ -107,7 +107,7 @@ class SwapActivityStatusTest {
             every { observeContactByAddress(deposit) } returns flowOf(null)
         }
         val swaps = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(storedSwap) } returns remote
+            coEvery { checkSwapStatus(storedSwap, any()) } returns remote
         }
         assertFailed(activity(failed, metadata.value.swapMetadata), stringRes(R.string.swapStatus_swapFailed))
         val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
@@ -322,15 +322,15 @@ class SwapActivityStatusTest {
             coEvery { updateSwap(pendingSecond, result) } returns pendingSecond
         }
         val swaps = mockk<SwapRepository> {
-            coEvery { checkSwapStatus(pendingFirst) } coAnswers { awaitCancellation() }
-            coEvery { checkSwapStatus(pendingSecond) } returns result
+            coEvery { checkSwapStatus(pendingFirst, any()) } coAnswers { awaitCancellation() }
+            coEvery { checkSwapStatus(pendingSecond, any()) } returns result
         }
         val poll = UpdateSwapActivityMetadataUseCase(
             accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
         )
         repeat(3) { poll(ActivityData.BySwap(pendingFirst)) }
         runCurrent()
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst, any()) }
 
         selection.value = second
         poll(ActivityData.BySwap(pendingFirst))
@@ -338,11 +338,11 @@ class SwapActivityStatusTest {
         runCurrent()
         advanceTimeBy(14_999)
         runCurrent()
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst) }
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingSecond) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingFirst, any()) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pendingSecond, any()) }
         advanceTimeBy(1)
         runCurrent()
-        coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond) }
+        coVerify(exactly = 2) { swaps.checkSwapStatus(pendingSecond, any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -362,7 +362,7 @@ class SwapActivityStatusTest {
             }
             coEvery { updateSwap(pending, result) } returns terminal
         }
-        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending, any()) } returns result }
         val poll = UpdateSwapActivityMetadataUseCase(
             accounts, metadata, GetSwapStatusUseCase(metadata, swaps), backgroundScope, testScheduler.timeSource,
         )
@@ -370,16 +370,16 @@ class SwapActivityStatusTest {
         poll(ActivityData.BySwap(pending))
         runCurrent()
         coVerify(exactly = 1) { metadata.getSwapMetadata(deposit, owner) }
-        coVerify(exactly = 0) { swaps.checkSwapStatus(any()) }
+        coVerify(exactly = 0) { swaps.checkSwapStatus(any(), any()) }
 
         readable = true
         advanceTimeBy(15_000)
         runCurrent()
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
         advanceTimeBy(16_000)
         runCurrent()
         coVerify(exactly = 2) { metadata.getSwapMetadata(deposit, owner) }
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -396,7 +396,7 @@ class SwapActivityStatusTest {
             }
             coEvery { updateSwap(pending, result) } returns terminal
         }
-        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending) } returns result }
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(pending, any()) } returns result }
         val status = GetSwapStatusUseCase(metadata, swaps)
         val observations = mutableListOf<SwapQuoteStatusData>()
         backgroundScope.launch { status.observeForAccount(deposit, owner).collect { observations += it } }
@@ -408,7 +408,7 @@ class SwapActivityStatusTest {
         runCurrent()
         assertEquals(terminal, observations.last().savedMetadata)
         assertNull(observations.last().error)
-        coVerify(exactly = 1) { swaps.checkSwapStatus(pending) }
+        coVerify(exactly = 1) { swaps.checkSwapStatus(pending, any()) }
     }
 
     @Test
