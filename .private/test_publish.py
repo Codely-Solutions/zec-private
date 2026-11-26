@@ -278,6 +278,21 @@ class PublishMetadataTest(unittest.TestCase):
                 integrate_release.push_integration('main')
             push.assert_not_called()
 
+    def test_real_publisher_retry_checks_its_own_prior_attestations(self):
+        metadata = MagicMock()
+        publish.require_unattested_retry(metadata, '91', '1')
+        metadata.pages.assert_not_called()
+        metadata.pages.return_value = [{'name': 'validated-unsigned-apk'}]
+        publish.require_unattested_retry(metadata, '91', '2')
+        metadata.pages.assert_called_once_with('/actions/runs/91/artifacts', 'artifacts')
+        for expired in (False, True):
+            metadata.pages.return_value = [{'name': 'release-attestation-1', 'expired': expired}]
+            with self.subTest(expired=expired), self.assertRaisesRegex(ValueError, 'Reconcile its original attempt'):
+                publish.require_unattested_retry(metadata, '91', '2')
+        metadata.pages.side_effect = OSError('synthetic unreadable listing')
+        with self.assertRaisesRegex(OSError, 'unreadable listing'):
+            publish.require_unattested_retry(metadata, '91', '2')
+
     def test_attestation_requires_exact_bytes(self):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / 'release-attestation.json'

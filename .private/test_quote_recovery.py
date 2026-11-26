@@ -37,6 +37,7 @@ class QuoteRecoveryTests(unittest.TestCase):
     def setUp(self):
         # These fixtures exercise run/job decisions. Archive and receipt validation uses separate fixtures.
         self.verify_receipts = self.enterContext(patch.object(hosted_release, 'verify_recovered_receipts'))
+        self.enterContext(patch('quote_recovery.verify_receipt_delta'))
 
     def test_only_a_durable_zero_request_cutoff_can_prove_no_post_after_ledger_creation(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -422,6 +423,7 @@ class QuoteRecoveryTests(unittest.TestCase):
         ):
             metadata = self.recovery_metadata((run, jobs, artifacts))
             with self.subTest(delta=delta, error=error), patch('quote_recovery.verify_delta'), \
+                patch('quote_recovery.verify_receipt_delta', wraps=verify_receipt_delta), \
                 patch('quote_recovery.git', side_effect=[quote_head.encode(), delta]):
                 if error:
                     with self.assertRaisesRegex(ValueError, error):
@@ -530,7 +532,9 @@ class QuoteRecoveryTests(unittest.TestCase):
                 self.assertNotIn('run_missing_core', outputs)
                 transient.assert_called_once()
                 reservation.assert_called_once_with(SOURCE, OLD, '7', '8', meta)
-                delta.assert_called_once_with(Path('.'), OLD, signer, 'Quote', preclaim_stage=None)
+                self.assertEqual(delta.call_count, 2)
+                delta.assert_any_call(Path('.'), OLD, signer, 'Wallet')
+                delta.assert_any_call(Path('.'), OLD, signer, 'Quote', preclaim_stage=None)
                 if not selector:
                     self.assertIn('/actions/runs/8/attempts/1/jobs', [call.args[0] for call in meta.pages.call_args_list])
                 reservation.side_effect = ValueError('Protected reservation belongs to different inputs')
@@ -853,7 +857,7 @@ class QuoteRecoveryTests(unittest.TestCase):
             (root / 'artifact').mkdir()
             (root / 'artifact/proof.json').write_text('{}')
             env = dict(GITHUB_REPOSITORY=REPOSITORY, SOURCE_SHA=SOURCE, CONTROLLER_SHA=MAIN,
-                       RECOVER_RUN='7', HOSTED_ACCEPTANCE='true')
+                       RECOVER_RUN='7', HOSTED_ACCEPTANCE='true', GITHUB_RUN_ID='8', GITHUB_RUN_ATTEMPT='1')
             with patch_environment(env):
                 import publish
 
@@ -861,6 +865,15 @@ class QuoteRecoveryTests(unittest.TestCase):
                         patch('quote_recovery.resolve', side_effect=ValueError('Recovery admission reached')):
                     with self.assertRaisesRegex(ValueError, 'Recovery admission reached'):
                         publish.main()
+                with patch_environment(dict(env, GITHUB_RUN_ATTEMPT='2')), patch.object(publish, 'ROOT', root), \
+                        patch.object(publish, 'require_current_controller'), patch.object(publish, 'Metadata') as metadata, \
+                        patch('quote_recovery.resolve') as resolve_recovery, patch.object(publish, 'sign_apk') as sign:
+                    metadata.return_value.pages.return_value = [{'name': 'release-attestation-1'}]
+                    with self.assertRaisesRegex(ValueError, 'Reconcile its original attempt'):
+                        publish.main()
+                    metadata.return_value.pages.assert_called_once_with('/actions/runs/8/artifacts', 'artifacts')
+                    resolve_recovery.assert_not_called()
+                    sign.assert_not_called()
 
     def test_recovery_rejects_quote_receipt_from_a_different_controller(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -879,6 +892,28 @@ class QuoteRecoveryTests(unittest.TestCase):
                     hosted_release.read_receipts(root, proof={'workflow_run_id': '7', 'versionCode': 42},
                                                  source=SOURCE, controller=MAIN, production_id='5', core_id='6',
                                                  quote_id='9', recovery={'run': 7, 'original_controller': OLD})
+
+    def test_original_passing_receipts_require_current_wallet_and_quote_execution_inputs(self):
+        states = dict(BUILD_JOBS, publish='failure', **{WALLET: 'success', QUOTE: 'success'})
+        original = self.recovery_run(7, OLD, states, (*ARTIFACTS.values(), 'hosted-quote-receipt'))
+        for path, error in (
+                (b'.private/publish.py\0', None),
+                (b'.private/tor_resident_ui_driver.py\0', 'Quote execution inputs changed'),
+                (b'.private/hosted_core.py\0', 'Wallet execution inputs changed'),
+        ):
+            with self.subTest(path=path), patch('quote_recovery.require_dispatch'), \
+                    patch('quote_recovery.verify_delta', return_value=None), \
+                    patch('quote_recovery.verify_receipt_delta', wraps=verify_receipt_delta), \
+                    patch('quote_recovery.git', side_effect=lambda _root, verb, *_: OLD.encode()
+                          if verb == 'merge-base' else path):
+                metadata = self.recovery_metadata(original)
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                else:
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                    self.assertIn('core_receipt_id', result)
+                    self.assertEqual(result['quote_receipt_id'], '75')
 
     def test_recovery_rejects_product_and_wallet_harness_changes(self):
         for changed in (b'gradle.properties\0', b'.private/core_testnet_driver.py\0'):
@@ -925,6 +960,8 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     def test_verified_diagnostic_repair_can_reuse_quotes_but_requires_a_fresh_wallet_receipt(self):
         changed = b'.private/core_testnet_driver.py\0'
+        with patch('quote_recovery.git', side_effect=[OLD.encode(), b'.private/hosted_core.py\0']):
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote')
         with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
             verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote', preclaim_stage='torModeResume')
         with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]), \

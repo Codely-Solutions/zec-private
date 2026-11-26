@@ -293,6 +293,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     builds = {key: history.retained(name) for key, name in ARTIFACTS.items() if key != 'core_receipt_id'}
     outputs = {'original_controller': original, **{key: value[0] for key, value in builds.items()}}
     if wallet == 'success':
+        verify_receipt_delta(root, original, controller, 'Wallet')
         receipt = 'hosted-upgrade-receipt' if approved_upgrade else 'hosted-core-receipt'
         other = next(name for name in WALLET_RECEIPTS if name != receipt)
         require(not history.contains(other), 'Ambiguous original wallet receipts')
@@ -362,6 +363,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         require(original_quote, 'Same-controller quote retry requires the original transient quote failure')
     if original_quote:
         require(not quote_run, 'The original run already has a passing quote receipt')
+        verify_receipt_delta(root, original, controller, 'Quote',
+                             preclaim_stage=outputs.get('preclaim_diagnostic'))
         outputs.update(quote_receipt_id=history.retained('hosted-quote-receipt', QUOTE_JOBS[0])[0],
                        quote_controller=original, quote_run=int(run_id))
     if quote_run:
@@ -496,7 +499,10 @@ def verify_receipt_delta(root, producer, controller, stage, *, preclaim_stage=No
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', producer, controller)
     paths = PUBLICATION_PATHS
     if stage == 'Quote':
-        paths = paths | {'.private/prepare_direct_core.py'}
+        paths = paths | {
+            '.github/workflows/hosted-core.yml', '.private/hosted_core.py', '.private/hosted_claim.py',
+            '.private/prepare_direct_core.py', '.private/core-coverage.md',
+        }
         if preclaim_stage in PRECLAIM_DIAGNOSTIC_STAGES:
             paths = paths | PRECLAIM_DIAGNOSTIC_PATHS
     elif stage == 'Wallet':

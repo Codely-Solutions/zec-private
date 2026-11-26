@@ -56,6 +56,16 @@ def verify_attestation_publisher(proof, run, attempt):
                 'Publication attestation belongs to a different publisher run or attempt')
 
 
+def require_unattested_retry(metadata, run, attempt):
+    require(re.fullmatch(r'[1-9][0-9]*', run) and re.fullmatch(r'[1-9][0-9]*', attempt),
+            'Expected an exact signing run and attempt')
+    if attempt == '1':
+        return
+    artifacts = metadata.pages(f'/actions/runs/{run}/artifacts', 'artifacts')
+    require(not any(re.fullmatch(r'release-attestation-[1-9][0-9]*', entry['name']) for entry in artifacts),
+            'This publisher run already has a release attestation. Reconcile its original attempt before signing.')
+
+
 def verify_release_identity(proof, source):
     properties = run('git', 'show', f'{source}:gradle.properties')
     codes = re.findall(r'^ZCASH_VERSION_CODE=([0-9]+)$', properties, re.MULTILINE)
@@ -213,6 +223,8 @@ def main():
     simulation = os.environ.get('SIMULATION') == 'true'
     if simulation:
         require_simulation_context(expected, controller, hosted, recover_run)
+    else:
+        require_unattested_retry(Metadata(), os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT'])
     if recover_run:
         if not hosted:
             raise RuntimeError('Quote recovery requires hosted acceptance')
