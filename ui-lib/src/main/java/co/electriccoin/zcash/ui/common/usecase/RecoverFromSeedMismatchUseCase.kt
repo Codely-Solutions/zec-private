@@ -20,9 +20,9 @@ import kotlin.time.Duration.Companion.seconds
  * Recovers from the SDK's `SeedNotRelevant` state ([WalletCoordinator.isSeedMismatch]). Withdraws
  * the SDK input and records [WalletInitMode.RestoreWallet] for the current wallet before
  * erasing inactive data. An interrupted erase leaves enough information to resume provisioning.
- * A reported failure throws [SeedMismatchRecoveryException]; after [MAX_RECOVERY_ATTEMPTS]
- * failures no further erase is attempted for that wallet generation. Wallet reset and replacement drain
- * admitted SDK erases. Recovery rereads the wallet under the same fence as endpoint changes.
+ * A reported failure throws [SeedMismatchRecoveryException]. One completed erase or
+ * [MAX_RECOVERY_ATTEMPTS] failures end automatic recovery for the wallet session.
+ * Wallet reset and replacement drain admitted SDK erases.
  */
 class RecoverFromSeedMismatchUseCase(
     private val persistableWalletProvider: PersistableWalletProvider,
@@ -32,6 +32,7 @@ class RecoverFromSeedMismatchUseCase(
 ) {
     private var attemptVersion: Long? = null
     private var failedAttempts = 0
+    private var recovered = false
 
     suspend operator fun invoke(version: Long, onEraseDelayed: () -> Unit = {}) {
         val wallet = persistableWalletProvider.getPersistableWallet() ?: return
@@ -44,26 +45,31 @@ class RecoverFromSeedMismatchUseCase(
         if (attemptVersion != version) {
             attemptVersion = version
             failedAttempts = 0
+            recovered = false
         }
-        if (failedAttempts >= MAX_RECOVERY_ATTEMPTS) {
-            Twig.error {
-                "Seed-mismatch recovery: giving up after $failedAttempts failed attempt(s), not retrying erase again"
-            }
-            throw SeedMismatchRecoveryException(failedAttempts)
+        if (recovered || failedAttempts >= MAX_RECOVERY_ATTEMPTS) {
+            throw SeedMismatchRecoveryException(failedAttempts, alreadyErased = recovered)
         }
 
         val readable = canReadSdkPreferences()
-        val erased = if (readable) waitForErase(wallet, version, onEraseDelayed) else false
-        if (erased == false) {
+        val attempt = runCatchingRecoverable {
+            if (readable) waitForErase(wallet, version, onEraseDelayed) else false
+        }
+        val erased = attempt.getOrNull()
+        if (erased == false || attempt.isFailure) {
             failedAttempts += 1
             Twig.error {
-                val stage = if (readable) "SDK erase failed" else "SDK encrypted preferences unreadable"
+                val stage = when {
+                    !readable -> "SDK encrypted preferences unreadable"
+                    attempt.isFailure -> "SDK recovery preparation failed"
+                    else -> "SDK erase failed"
+                }
                 "Seed-mismatch recovery: $stage (attempt $failedAttempts/$MAX_RECOVERY_ATTEMPTS)"
             }
             throw SeedMismatchRecoveryException(failedAttempts)
         }
 
-        if (erased == true) failedAttempts = 0
+        if (erased == true) recovered = true
     }
 
     private suspend fun canReadSdkPreferences(): Boolean {
@@ -117,9 +123,12 @@ class RecoverFromSeedMismatchUseCase(
 }
 
 /**
- * Thrown when the SDK reports that an erase failed or [RecoverFromSeedMismatchUseCase.MAX_RECOVERY_ATTEMPTS]
- * is exhausted.
+ * Reports a failed recovery attempt or exhaustion of safe automatic recovery.
  */
 class SeedMismatchRecoveryException(
-    val failedAttempts: Int
-) : Exception("Seed-mismatch recovery failed after $failedAttempts attempt(s)")
+    val failedAttempts: Int,
+    alreadyErased: Boolean = false,
+) : Exception(
+    if (alreadyErased) "Seed mismatch persisted after the completed SDK erase"
+    else "Seed-mismatch recovery failed after $failedAttempts attempt(s)"
+)

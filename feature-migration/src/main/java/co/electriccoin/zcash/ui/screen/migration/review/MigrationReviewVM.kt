@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedExceptio
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.migration.MigrationKeystoneRound
@@ -68,12 +69,15 @@ import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneS
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.stageResultFrom
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
 import java.math.MathContext
+import java.util.concurrent.atomic.AtomicBoolean
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 // Protocol target block interval in seconds, used as the fallback until a measured rate is
@@ -385,6 +389,10 @@ class MigrationReviewVM(
     private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
         confirmLce.execute {
             if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
+            val account = requireReviewAccount()
+            val canOperate = walletActionAccess.capture(account) ?: return@execute
+            val canConfirm = { canOperate() && ownsReviewEntry() && proposeLce.state.value.success === proposal }
+            if (!canConfirm()) return@execute
             try {
                 biometricRepository.requestBiometrics(
                     request =
@@ -401,8 +409,8 @@ class MigrationReviewVM(
             } catch (_: BiometricsCancelledException) {
                 return@execute
             }
-            if (ownsReviewEntry() && proposeLce.state.value.success === proposal) {
-                confirmAutomatic(proposal.reviewed)
+            if (canConfirm()) {
+                confirmAutomatic(proposal.reviewed, account, canConfirm)
             }
         }
 
@@ -424,22 +432,25 @@ class MigrationReviewVM(
         }
     }
 
-    private suspend fun confirmAutomatic(reviewed: ReviewedMigrationSchedule) {
-        val account = requireReviewAccount()
+    private suspend fun confirmAutomatic(
+        reviewed: ReviewedMigrationSchedule,
+        account: WalletAccount,
+        canConfirm: () -> Boolean,
+    ) {
         val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
-        if (resumeCommittedMigration(sdk, reviewed, accountKeyId)) return
+        if (!canConfirm() || resumeCommittedMigration(sdk, reviewed, accountKeyId)) return
         val nativePlanActive = sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         val pending = pendingMigrationScheduleRepository.review(accountKeyId)
         check(!nativePlanActive || (account is KeystoneAccount && pending === reviewed)) {
             "The migration changed. Return to Home to recover it."
         }
-        if (!ownsReviewEntry()) return
+        if (!canConfirm()) return
         val newTorPreference = args.useTor?.takeUnless { requestedTor -> !requestedTor && nativePlanActive }
         if (account is KeystoneAccount) {
-            confirmKeystone(reviewed, accountKeyId, newTorPreference)
+            confirmKeystone(reviewed, accountKeyId, newTorPreference, canConfirm)
         } else {
-            confirmSoftwareAutomatic(sdk, reviewed, accountKeyId, newTorPreference)
+            confirmSoftwareAutomatic(sdk, reviewed, accountKeyId, newTorPreference, canConfirm)
         }
     }
 
@@ -448,32 +459,29 @@ class MigrationReviewVM(
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
         newTorPreference: Boolean?,
+        canConfirm: () -> Boolean,
     ) {
         val split = reviewed.noteSplit
         if (split != null && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
             throw PrivateNoteSplitUnavailable()
         }
+        if (!canConfirm()) return
         newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
         try {
             val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
-            requireReviewAccount()
-            if (!ownsReviewEntry()) return
-            val splitResult = if (split != null) {
-                val result = sdk.submitNoteSplit(split, spendingKey)
-                if (result !is TransferResult.Success) {
-                    onSplitFailure(result, sdk, reviewed, accountKeyId)
-                    return
-                }
-                requireReviewAccount()
-                result
-            } else {
-                null
+            currentCoroutineContext().ensureActive()
+            if (!canConfirm()) return
+            val splitResult = split?.let { sdk.submitNoteSplit(it, spendingKey) }
+            currentCoroutineContext().ensureActive()
+            if (splitResult != null && splitResult !is TransferResult.Success) {
+                onSplitFailure(splitResult, sdk, reviewed, accountKeyId)
+            } else if (canConfirm()) {
+                sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
+                val saved = CommittedMigration(reviewed, showSchedule = true)
+                committedMigration = saved
+                finishCommittedMigration(saved, accountKeyId)
+                synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult as? TransferResult.Success)
             }
-            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
-            val saved = CommittedMigration(reviewed, showSchedule = true)
-            committedMigration = saved
-            finishCommittedMigration(saved, accountKeyId)
-            synchronizerProvider.enhanceFinalizedSplit(viewModelScope, splitResult)
         } catch (e: RuntimeException) {
             if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
@@ -538,12 +546,14 @@ class MigrationReviewVM(
         reviewed: ReviewedMigrationSchedule,
         accountKeyId: String,
         newTorPreference: Boolean?,
+        canConfirm: () -> Boolean,
     ) {
+        if (!canConfirm()) return
         newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
         // Keystone can't sign in-process — hand the unsigned schedule off to the QR
         // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
         // instead (MigrationKeystoneScanVM), not here.
-        if (!ownsReviewEntry()) return
+        if (!canConfirm()) return
         val existingPlan = pendingMigrationScheduleRepository.review(accountKeyId)
         val existingSignatures = pendingKeystone.peek(accountKeyId)
         if (existingPlan === reviewed && existingSignatures?.isFullySigned == true) {
@@ -593,29 +603,39 @@ class MigrationReviewVM(
                 } catch (_: BiometricsCancelledException) {
                     return@execute
                 }
-                requireReviewAccount()
-                if (!canSign() || !ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
-                val reviewed = keystoneProposalRepository.setMigrationSweepProposal(review.proposal)
-                // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
-                // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
-                // cached proposalPczt); it never calls createPCZTFromProposal() itself.
-                keystoneProposalRepository.createPCZTFromProposal(account)
-                requireReviewAccount()
-                if (!canSign() || !ownsReviewEntry() || proposeLce.state.value.success !== review) {
-                    keystoneProposalRepository.clear(reviewed)
-                    return@execute
-                }
-                keystoneProposalRepository.approveForSigning(reviewed, canSign = canSign)
-                navigationRouter.stageResultFrom(sourceEntryId, {
-                    canSign() && keystoneProposalRepository.transactionProposal.value === reviewed
-                }) {
-                    NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
-                }
+                prepareImmediateKeystone(review, account, canSign)
             } else {
                 val reviewed = zashiProposalRepository.setMigrationSweepProposal(review.proposal)
                 submitProposal(reviewed, sourceEntryId = sourceEntryId, reviewedOwner = account.sdkAccount.accountUuid)
             }
         }
+
+    private suspend fun prepareImmediateKeystone(
+        review: ReviewProposal.Immediate,
+        account: KeystoneAccount,
+        canSign: () -> Boolean,
+    ) {
+        val canPrepare = { canSign() && ownsReviewEntry() && proposeLce.state.value.success === review }
+        if (!canPrepare()) return
+        val reviewed = keystoneProposalRepository.setMigrationSweepProposal(review.proposal)
+        val handedOff = AtomicBoolean(false)
+        val canProve = { canSign() && (handedOff.get() || canPrepare()) }
+        var staged = false
+        try {
+            keystoneProposalRepository.prepareReviewedMigration(reviewed, account, canPrepare, canProve)
+            if (!canPrepare()) return
+            keystoneProposalRepository.approveForSigning(reviewed, canSign = canProve)
+            navigationRouter.stageResultFrom(sourceEntryId, {
+                canPrepare() && keystoneProposalRepository.transactionProposal.value === reviewed
+            }) {
+                handedOff.set(true)
+                NavigationCommand.Forward(listOf(SignKeystoneTransactionArgs))
+            }
+            staged = true
+        } finally {
+            if (!staged) keystoneProposalRepository.clear(reviewed)
+        }
+    }
 
     private fun ownsReviewEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
 

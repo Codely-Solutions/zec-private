@@ -627,7 +627,7 @@ private data class SwapInternalState(
                 if (tokenAmount == null || usdPrice == null) {
                     null
                 } else {
-                    tokenAmount.multiply(usdPrice, MathContext.DECIMAL128)
+                    tokenAmount.multiply(usdPrice)
                 }
             }
 

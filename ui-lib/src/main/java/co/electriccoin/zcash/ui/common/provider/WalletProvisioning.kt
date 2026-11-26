@@ -11,6 +11,7 @@ import co.electriccoin.zcash.global.WalletSdkTransportGate
 class WalletProvisioning(
     private val wallets: PersistableWalletProviderImpl,
     private val transport: WalletSdkTransportGate,
+    private val walletTransport: WalletTransportAccess,
 ) {
     internal suspend fun confirm(
         engine: Synchronizer,
@@ -28,7 +29,9 @@ class WalletProvisioning(
             it.walletInitMode != WalletInitMode.ExistingWallet && it.network == engine.network
         }
         if (wallet != null && storedKey == deriveFirstFullViewingKey(wallet)) {
-            wallets.markProvisioned(wallet, version, ::current)
+            walletTransport.switchWhenIdle {
+                wallets.markProvisioned(wallet, version, ::current) { walletTransport.retire(engine) }
+            }
         }
     }
 }

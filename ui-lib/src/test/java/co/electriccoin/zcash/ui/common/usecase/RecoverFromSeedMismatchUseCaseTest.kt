@@ -161,7 +161,7 @@ class RecoverFromSeedMismatchUseCaseTest {
     }
 
     @Test
-    fun successAfterPriorFailuresResetsTheCounter() = runTest {
+    fun successfulEraseStopsAdditionalAutomaticErasesForTheSameWalletSession() = runTest {
         sdkRecovery.eraseResult { false }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
         assertFailsWith<SeedMismatchRecoveryException> { useCase() }
@@ -171,11 +171,28 @@ class RecoverFromSeedMismatchUseCaseTest {
 
         assertEquals(3, walletProvider.replacements.size)
 
-        sdkRecovery.eraseResult { false }
-        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-        assertFailsWith<SeedMismatchRecoveryException> { useCase() }
-        coVerify(exactly = 5) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
-        assertEquals(5, walletProvider.replacements.size)
+        val error = assertFailsWith<SeedMismatchRecoveryException> { useCase() }
+        assertEquals("Seed mismatch persisted after the completed SDK erase", error.message)
+        coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
+        assertEquals(3, walletProvider.replacements.size)
+    }
+
+    @Test
+    fun restorePreparationExceptionsAreBoundedAndPreserveTheWallet() = runTest {
+        walletProvider.failRestoreWrite = true
+        var erases = 0
+        sdkRecovery.eraseResult {
+            erases += 1
+            true
+        }
+
+        for (failure in listOf(1, 2, 3, 3)) {
+            assertEquals(failure, assertFailsWith<SeedMismatchRecoveryException> { useCase() }.failedAttempts)
+        }
+
+        coVerify(exactly = 3) { sdkRecovery.eraseAndRestore(any(), any(), any()) }
+        assertEquals(0, erases)
+        assertEquals(wallet, walletProvider.persistableWallet.value)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -209,6 +226,7 @@ class RecoverFromSeedMismatchUseCaseTest {
         override val writeVersion get() = access.token()
         val replacements = mutableListOf<PersistableWallet>()
         var readRetries = 0
+        var failRestoreWrite = false
 
         override fun retryRead() {
             assertEquals(WalletInitMode.RestoreWallet, replacements.last().walletInitMode)
@@ -225,6 +243,7 @@ class RecoverFromSeedMismatchUseCaseTest {
         ): Boolean {
             assertEquals(writeVersion, version)
             assertEquals(persistableWallet.value, expected)
+            check(!failRestoreWrite) { "Synthetic restore persistence failure" }
             replacements += replacement
             persistableWallet.value = replacement
             return true

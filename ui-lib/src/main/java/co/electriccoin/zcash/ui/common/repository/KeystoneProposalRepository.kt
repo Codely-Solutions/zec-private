@@ -117,6 +117,13 @@ interface KeystoneProposalRepository {
 
     suspend fun createPCZTFromProposal(account: WalletAccount)
 
+    suspend fun prepareReviewedMigration(
+        proposal: MigrationSweepTransactionProposal,
+        account: WalletAccount,
+        canPrepare: () -> Boolean,
+        canProve: () -> Boolean,
+    )
+
     fun approveForSigning(
         expectedProposal: TransactionProposal? = null,
         reviewedQuote: SwapQuoteData.Success? = null,
@@ -276,6 +283,24 @@ class KeystoneProposalRepositoryImpl(
 
     override suspend fun createPCZTFromProposal(account: WalletAccount) = createAccountBoundPczt { account }
 
+    override suspend fun prepareReviewedMigration(
+        proposal: MigrationSweepTransactionProposal,
+        account: WalletAccount,
+        canPrepare: () -> Boolean,
+        canProve: () -> Boolean,
+    ) {
+        fun requireCurrent() {
+            check(canPrepare() && transactionProposal.value === proposal) {
+                "The migration review changed during preparation."
+            }
+        }
+        requireCurrent()
+        val pczt = createReviewPczt(proposal, account, ::requireCurrent)
+        currentCoroutineContext().ensureActive()
+        requireCurrent()
+        prepareSigning(proposal, pczt, account, canProve)
+    }
+
     private suspend fun createAccountBoundPczt(resolveAccount: suspend () -> WalletAccount) {
         val current = getTransactionProposal()
         current.requireCurrentShieldingApproval()
@@ -301,11 +326,17 @@ class KeystoneProposalRepositoryImpl(
             if (proposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
         }
 
-    private fun prepareSigning(proposal: TransactionProposal, result: Pczt, owner: WalletAccount) {
+    private fun prepareSigning(
+        proposal: TransactionProposal,
+        result: Pczt,
+        owner: WalletAccount,
+        canProve: () -> Boolean = { true },
+    ) {
         val prepared = hardwareProposal.prepare(proposal, result, owner.sdkAccount.accountUuid)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope) { pczt ->
             proposalDataSource.addProofsToPczt(pczt) {
+                check(canProve()) { "The reviewed transaction changed before proof preparation." }
                 hardwareProposal.requireProofOwner(prepared, transactionProposal.value)
             }
         }

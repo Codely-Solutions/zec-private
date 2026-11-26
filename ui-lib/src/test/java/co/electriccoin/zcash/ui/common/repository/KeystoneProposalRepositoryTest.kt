@@ -64,6 +64,33 @@ class KeystoneProposalRepositoryTest {
         assertEquals(MigrationSweepTransactionProposal(proposal), stored)
     }
 
+    @Test
+    fun reviewedMigrationRequiresOriginalProposalAndAuthorityAtPcztEntry() = runBlocking {
+        val source = mockk<Proposal>()
+        val original = repository.setMigrationSweepProposal(source)
+        val owner = mockk<WalletAccount>(relaxed = true)
+        var authorized = true
+        coEvery { proposalDataSource.createPcztFromProposal(owner, source, any()) } coAnswers {
+            authorized = false
+            thirdArg<() -> Unit>()()
+            error("Revoked review reached PCZT creation")
+        }
+
+        val staleApproval = assertFailsWith<IllegalStateException> {
+            repository.prepareReviewedMigration(original, owner, { authorized }, { authorized })
+        }
+        assertEquals("The migration review changed during preparation.", staleApproval.message)
+        assertNull(repository.getProposalPCZT())
+        coVerify(exactly = 0) { proposalDataSource.addProofsToPczt(any(), any()) }
+
+        val replacement = repository.setMigrationSweepProposal(mockk())
+        assertFailsWith<IllegalStateException> {
+            repository.prepareReviewedMigration(original, owner, { true }, { true })
+        }
+        assertEquals(replacement, repository.transactionProposal.value)
+        coVerify(exactly = 1) { proposalDataSource.createPcztFromProposal(any(), any(), any()) }
+    }
+
     /**
      * A multi-step PCZT rejection means "TEX is unsupported on Keystone" only when the proposal
      * actually pays a TEX address — the one flow where a multi-step proposal is the expected shape.

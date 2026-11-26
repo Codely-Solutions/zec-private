@@ -199,11 +199,13 @@ class ObserveSeedMismatchUseCaseTest {
         }
 
     @Test
-    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
+    fun aRenewedMismatchDuringEraseOffersSupportWithoutErasingAgain() = runTest {
         val mismatch = MutableStateFlow(true)
         val entered = CompletableDeferred<Unit>()
         val finishErase = CompletableDeferred<Unit>()
+        var erases = 0
         val sdkRecovery = seedRecoveryFixture {
+            erases += 1
             entered.complete(Unit)
             mismatch.value = false
             finishErase.await()
@@ -222,16 +224,31 @@ class ObserveSeedMismatchUseCaseTest {
         runCurrent()
 
         assertTrue(entered.isCompleted)
-        assertEquals(WalletInitMode.ExistingWallet, wallet.requirePersistableWallet().walletInitMode)
+        assertEquals(WalletInitMode.RestoreWallet, wallet.requirePersistableWallet().walletInitMode)
+        mismatch.value = true
+        runCurrent()
         finishErase.complete(Unit)
         runCurrent()
 
+        assertEquals(1, erases)
         assertEquals(initial.copy(walletInitMode = WalletInitMode.RestoreWallet), wallet.requirePersistableWallet())
+        var delivered = false
+        launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
+            val route = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())
+            assertEquals(ErrorArgs.SeedRecoveryFailed, navigateToError.argsFor(route))
+            delivered = true
+            true
+        }
+        assertTrue(delivered)
     }
 
     @Test
-    fun restoreWriteFailureAfterReportedEraseOffersSupportBeforeDelay() = runTest {
-        val sdkRecovery = seedRecoveryFixture { true }
+    fun restoreWriteFailureRefusesTheEraseAndOffersSupportBeforeDelay() = runTest {
+        var eraseAttempts = 0
+        val sdkRecovery = seedRecoveryFixture {
+            eraseAttempts += 1
+            true
+        }
         val initial = existingTestWallet()
         val wallet = RecoveryWallet(initial, failRestoreWrite = true)
         val recover = RecoverFromSeedMismatchUseCase(wallet, sdkRecovery, walletWriteAccess, mockk(relaxed = true))
@@ -245,6 +262,7 @@ class ObserveSeedMismatchUseCaseTest {
         runCurrent()
 
         assertEquals(initial, wallet.requirePersistableWallet())
+        assertEquals(0, eraseAttempts)
         var delivered = false
         launchNavigation.deliver(walletReady = true, hasAppAccess = { true }) { command, _ ->
             val route = assertIs<ErrorRoute>(assertIs<NavigationCommand.Forward>(command).routes.single())

@@ -13,12 +13,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.seconds
 
 interface SynchronizerProvider {
     val error: StateFlow<SynchronizerError?>
@@ -109,14 +112,17 @@ class SynchronizerProviderImpl(
             scope.launch(Dispatchers.IO) {
                 synchronizer.flatMapLatest { engine ->
                     engine?.accountsFlow?.filterNotNull()?.map { engine to it } ?: emptyFlow()
-                }.collect { (engine, accounts) ->
-                    runCatchingRecoverable {
-                        provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
-                            synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
-                        })
-                    }.onFailure {
-                        Twig.warn { "Wallet provisioning could not be confirmed (${it.javaClass.simpleName})" }
+                }.collectLatest { (engine, accounts) ->
+                    repeat(2) { attempt ->
+                        val confirmation = runCatchingRecoverable {
+                            provisioning.confirm(engine, accounts, walletCoordinator.keySource, isCurrentEngine = {
+                                synchronizer.value === engine && walletCoordinator.synchronizer.value === engine
+                            })
+                        }
+                        if (confirmation.isSuccess) return@collectLatest
+                        if (attempt == 0) delay(1.seconds)
                     }
+                    Twig.warn { "Wallet provisioning confirmation is still pending" }
                 }
             }
         }

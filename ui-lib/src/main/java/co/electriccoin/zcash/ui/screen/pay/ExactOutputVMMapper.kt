@@ -125,7 +125,7 @@ internal class ExactOutputVMMapper {
     ): NumberTextFieldInnerState {
         val amount = amountInnerState.amount
         val fiat =
-            asset.positiveUsdPrice?.let { amount?.multiply(it, MathContext.DECIMAL128) }
+            asset.positiveUsdPrice?.let { amount?.multiply(it) }
         return fiatInnerState.copy(
             innerTextFieldState =
                 fiatInnerState.innerTextFieldState.copy(

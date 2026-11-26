@@ -239,7 +239,7 @@ class WalletRepositoryImplTest {
             assertEquals(WalletInitMode.RestoreWallet, recovered.walletInitMode)
             assertEquals(listOf("wallet", "restoring=RESTORING", "onboarding=3"), harness.events)
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
-            coVerify(exactly = 0) { harness.backupProvider.store(any()) }
+            coVerify(exactly = 1) { harness.backupProvider.store(true) }
         }
 
     @Test

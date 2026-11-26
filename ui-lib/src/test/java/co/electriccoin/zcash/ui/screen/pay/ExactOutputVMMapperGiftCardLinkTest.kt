@@ -136,6 +136,18 @@ class ExactOutputVMMapperGiftCardLinkTest {
     }
 
     @Test
+    fun editableFiatProductPreservesEveryAtomicUnitOfTheToken() {
+        val price = BigDecimal("5.123456789010")
+        val asset = SwapAssetTestFixture.asset(usdPrice = price, decimals = 24)
+        val token = BigDecimal("1.123456789012345678901234")
+        val amount = NumberTextFieldInnerState.fromAmount(token)
+        val fiat = mapper.createFiatAmountInnerState(amount, NumberTextFieldInnerState(), asset)
+
+        assertEquals(token.multiply(price), fiat.amount)
+        assertEquals(token, mapper.createAmountInnerState(fiat, amount, asset).amount)
+    }
+
+    @Test
     fun fiatEditForwardsTheTypedFiatState() {
         val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
         var updated: NumberTextFieldInnerState? = null

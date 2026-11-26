@@ -533,12 +533,13 @@ class WalletRepositoryImpl(
     }
 
     private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
-        val committed = walletWriteAccess.withSdkRecovery(version) {
+        val setup = walletWriteAccess.withSdkRecovery(version) {
             val current = persistableWalletProvider.getPersistableWallet()?.takeIf {
                 it.network == wallet.network && it.seedPhrase == wallet.seedPhrase
-            } ?: return@withSdkRecovery false
-            // Keep the durably accepted provisioning mode. Older records need a supported restore height.
-            val replacement = if (current.walletInitMode == WalletInitMode.ExistingWallet) {
+            } ?: return@withSdkRecovery null
+            val initialSetup = persistableWalletProvider.getSetupMode()
+            // Older interrupted records have no setup kind. Preserve their existing backup preference.
+            val replacement = if (current.walletInitMode == WalletInitMode.ExistingWallet && initialSetup == null) {
                 current.copy(
                     birthday = current.birthday ?: current.network.saplingActivationHeight,
                     walletInitMode = WalletInitMode.RestoreWallet,
@@ -546,11 +547,16 @@ class WalletRepositoryImpl(
             } else {
                 current
             }
-            persistableWalletProvider.storeIfCurrent(current, replacement, version)
+            if (!persistableWalletProvider.storeIfCurrent(current, replacement, version)) return@withSdkRecovery null
+            initialSetup ?: WalletInitMode.ExistingWallet
+        } ?: throw WalletInitializationConflictException()
+        if (setup == WalletInitMode.NewWallet) {
+            walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
+        } else {
+            walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
+            if (setup == WalletInitMode.RestoreWallet) walletBackupFlagStorageProvider.store(true)
+            restoreTimestampDataSource.getOrCreate()
         }
-        if (committed != true) throw WalletInitializationConflictException()
-        walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
-        restoreTimestampDataSource.getOrCreate()
         persistOnboardingStateInternal(OnboardingState.READY)
     }
 

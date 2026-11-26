@@ -604,6 +604,7 @@ class MetadataDataSourceTest {
             every { status } returns currentStatus
             every { quotedAmountOut } returns BigDecimal.ONE
             every { executedAmountOut } returns output
+            every { refundedFormatted } returns null
             every { mode } returns SwapMode.EXACT_INPUT
             every { originAsset } returns SwapCatalogTestFixture.nativeZec
             every { destinationAsset } returns SwapCatalogTestFixture.nativeZec

@@ -9,8 +9,11 @@ import co.electriccoin.zcash.ui.screen.error.ErrorRoute
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SeedRecoveryPhase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * Runs [RecoverFromSeedMismatchUseCase] whenever [SynchronizerProvider.isSeedMismatch] flips to `true`.
@@ -24,15 +27,19 @@ class ObserveSeedMismatchUseCase(
     private val launchNavigation: LaunchNavigationRequests,
     private val walletWriteAccess: WalletWriteAccess,
 ) {
-    suspend operator fun invoke() {
-        // Withdrawing the SDK input clears the previous coordinator's mismatch signal.
-        synchronizerProvider.isSeedMismatch
-            .collect { if (it) runRecovery() }
+    suspend operator fun invoke(): Unit = coroutineScope {
+        val signals = Channel<Long>(Channel.CONFLATED)
+        launch {
+            // Withdrawing the SDK input clears the old coordinator's signal during a recovery.
+            synchronizerProvider.isSeedMismatch.collect { if (it) signals.trySend(walletWriteAccess.token()) }
+        }
+        for (token in signals) {
+            if (synchronizerProvider.isSeedMismatch.value) runRecovery(token)
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun runRecovery() {
-        val token = walletWriteAccess.token()
+    private suspend fun runRecovery(token: Long) {
         val stillApplies = { walletWriteAccess.permits(token) }
         if (!stillApplies()) return
         val phase = MutableStateFlow(SeedRecoveryPhase.WAITING)

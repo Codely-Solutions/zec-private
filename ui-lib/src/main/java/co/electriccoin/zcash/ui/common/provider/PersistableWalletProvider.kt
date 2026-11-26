@@ -4,10 +4,13 @@ import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceDefault
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+import co.electriccoin.zcash.ui.common.model.OnboardingState
+import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,7 +25,9 @@ import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -51,7 +56,9 @@ interface PersistableWalletProvider {
 
     suspend fun getPersistableWallet(): PersistableWallet?
 
-    suspend fun requirePersistableWallet(): PersistableWallet
+    suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(getPersistableWallet())
+
+    suspend fun getSetupMode(): WalletInitMode? = getPersistableWallet()?.walletInitMode?.pendingMode()
 }
 
 private val initialWalletReadGeneration = MutableStateFlow(0L).asStateFlow()
@@ -87,6 +94,7 @@ class PersistableWalletProviderImpl(
     private val preferenceHolder: EncryptedPreferenceProvider,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
     resetProgressStore: ResetProgressStore? = null,
+    private val standardPreferences: StandardPreferenceProvider? = null,
 ) : PersistableWalletProvider, WalletServerSelectionProvider {
     private val persistableWalletStorageProvider = PersistableWalletStorageProviderImpl(preferenceHolder)
     override val writeVersion get() = walletWriteAccess.token()
@@ -115,22 +123,18 @@ class PersistableWalletProviderImpl(
 
     override val availability = availabilityRead.map { it.availability }.distinctUntilChanged()
 
-    override val sdkWalletReads = records.map { (generation, result) ->
-        val wallet = result.getOrNull()?.wallet
-        WalletSdkRead(
-            generation,
-            wallet?.copy(seedPhrase = wallet.seedPhrase.copy(split = wallet.seedPhrase.split.map { it.trim() })),
-        )
-    }.distinctUntilChanged { previous, current ->
-        // Recording successful account creation only changes the next engine's initialization mode.
-        previous.generation == current.generation && when {
-            previous.wallet == null -> current.wallet == null
-            current.wallet == null -> false
-            else -> previous.wallet.matchesPersistedSnapshot(current.wallet)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val sdkWalletReads = records.flatMapLatest { (generation, result) ->
+        val record = result.getOrNull() ?: return@flatMapLatest flowOf(WalletSdkRead(generation, null))
+        val wallet = record.wallet.withNormalizedSeed()
+        record.sdkAdmission(standardPreferences).map { admitted ->
+            WalletSdkRead(generation, wallet.takeIf { admitted })
         }
-    }
+    }.buffer(0).distinctUntilChanged()
 
-    override val persistableWallet = sdkWalletReads.map { it.wallet }.distinctUntilChanged()
+    override val persistableWallet = records.map { (_, result) ->
+        result.getOrNull()?.wallet?.withNormalizedSeed()
+    }.distinctUntilChanged()
 
     override val serverSelection =
         records.map { (_, result) -> result.getOrNull()?.serverSelection() }.distinctUntilChanged()
@@ -142,7 +146,11 @@ class PersistableWalletProviderImpl(
     override suspend fun getServerSelection() = currentRecord()?.serverSelection()
 
     override suspend fun store(persistableWallet: PersistableWallet) {
-        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
+        walletWriteAccess.replaceWallet {
+            persistableWalletStorageProvider.store(
+                WalletRecord(persistableWallet, setupMode = persistableWallet.walletInitMode.pendingMode())
+            )
+        }
     }
 
     override suspend fun storeIfCurrent(
@@ -194,6 +202,7 @@ class PersistableWalletProviderImpl(
         expected: PersistableWallet,
         version: Long,
         stillUsesEngine: () -> Boolean,
+        onCommitted: () -> Unit,
     ) {
         walletWriteAccess.withSdkRecovery(version) {
             walletWriteAccess.write(version) {
@@ -201,9 +210,13 @@ class PersistableWalletProviderImpl(
                 if (stillUsesEngine() && current.wallet.walletInitMode == expected.walletInitMode &&
                     current.wallet.matchesPersistedSnapshot(expected)
                 ) {
-                    persistableWalletStorageProvider.store(
-                        current.copy(wallet = current.wallet.copy(walletInitMode = WalletInitMode.ExistingWallet))
-                    )
+                    currentCoroutineContext().ensureActive()
+                    withContext(NonCancellable) {
+                        persistableWalletStorageProvider.store(
+                            current.copy(wallet = current.wallet.copy(walletInitMode = WalletInitMode.ExistingWallet))
+                        )
+                        onCommitted()
+                    }
                 }
             }
         }
@@ -211,7 +224,7 @@ class PersistableWalletProviderImpl(
 
     override suspend fun getPersistableWallet() = currentRecord()?.wallet
 
-    override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
+    override suspend fun getSetupMode() = currentRecord()?.setupMode
 
     private suspend fun currentRecord() =
         if (readsSuppressed?.value == true) null else persistableWalletStorageProvider.get()
@@ -222,6 +235,20 @@ class PersistableWalletProviderImpl(
             isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
         )
 }
+
+private fun WalletRecord.sdkAdmission(standard: StandardPreferenceProvider?): Flow<Boolean> {
+    val hasAcceptedSetup = setupMode != null || wallet.walletInitMode != WalletInitMode.ExistingWallet
+    return if (hasAcceptedSetup || standard == null) {
+        flowOf(true)
+    } else {
+        flow { emitAll(StandardPreferenceKeys.ONBOARDING_STATE.observe(standard())) }
+            .recoverableReads()
+            .map { it.getOrNull()?.let(OnboardingState::fromNumber) == OnboardingState.READY }
+    }
+}
+
+private fun PersistableWallet.withNormalizedSeed(): PersistableWallet =
+    copy(seedPhrase = seedPhrase.copy(split = seedPhrase.split.map { it.trim() }))
 
 private fun PersistableWalletStorageProviderImpl.observeRecords(suppressed: Boolean): Flow<Result<WalletRecord?>> =
     if (suppressed) {
@@ -243,8 +270,30 @@ private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault
 
 private const val SERVER_SELECTION_AUTOMATIC = "server_selection_automatic"
 private const val APP_WALLET_PROVISIONING = "app_wallet_provisioning"
+private const val APP_WALLET_SETUP = "app_wallet_setup"
 
-private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
+private data class WalletRecord(
+    val wallet: PersistableWallet,
+    val isAutomatic: Boolean? = null,
+    val setupMode: WalletInitMode? = null,
+)
+
+private fun WalletInitMode.pendingMode(): WalletInitMode? = takeUnless { it == WalletInitMode.ExistingWallet }
+
+private fun JSONObject.readProvisioningMode(field: String): WalletInitMode? =
+    when (opt(field)) {
+        null -> null
+        "new" -> WalletInitMode.NewWallet
+        "restore" -> WalletInitMode.RestoreWallet
+        else -> error("Unsupported wallet provisioning mode")
+    }
+
+private fun WalletInitMode?.provisioningValue(): String? =
+    when (this) {
+        WalletInitMode.NewWallet -> "new"
+        WalletInitMode.RestoreWallet -> "restore"
+        WalletInitMode.ExistingWallet, null -> null
+    }
 
 private class PersistableWalletStorageProviderImpl(
     override val preferenceHolder: EncryptedPreferenceProvider,
@@ -259,15 +308,11 @@ private class PersistableWalletPreferenceDefault(
         preferenceProvider.getString(key)?.let { serialized ->
             runCatchingRecoverable {
                 val json = JSONObject(serialized)
-                val mode = when (json.opt(APP_WALLET_PROVISIONING)) {
-                    null -> WalletInitMode.ExistingWallet
-                    "new" -> WalletInitMode.NewWallet
-                    "restore" -> WalletInitMode.RestoreWallet
-                    else -> error("Unsupported wallet provisioning mode")
-                }
+                val mode = json.readProvisioningMode(APP_WALLET_PROVISIONING) ?: WalletInitMode.ExistingWallet
                 WalletRecord(
                     PersistableWallet.from(json).copy(walletInitMode = mode),
-                    json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean
+                    json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean,
+                    json.readProvisioningMode(APP_WALLET_SETUP)
                 )
             }.getOrElse {
                 // JSONObject and SDK parse errors can contain the original decrypted record.
@@ -282,14 +327,8 @@ private class PersistableWalletPreferenceDefault(
         val value = newValue?.let { record ->
             record.wallet.toJson().apply {
                 put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic)
-                put(
-                    APP_WALLET_PROVISIONING,
-                    when (record.wallet.walletInitMode) {
-                        WalletInitMode.NewWallet -> "new"
-                        WalletInitMode.RestoreWallet -> "restore"
-                        WalletInitMode.ExistingWallet -> null
-                    }
-                )
+                put(APP_WALLET_PROVISIONING, record.wallet.walletInitMode.provisioningValue())
+                put(APP_WALLET_SETUP, record.setupMode.provisioningValue())
             }.toString()
         }
         preferenceProvider.putStringWithRollback(key, value)

@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.swap
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.DEFAULT_SLIPPAGE
@@ -20,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The swap direction toggle is offered only for an account with spend authority: a view-only account may only swap
@@ -80,6 +82,39 @@ class SwapVMMapperChangeModeTest {
 
         assertNotNull(screen.primaryButton).onClick()
         assertEquals(listOf(BigDecimal("0.99999999")), requested)
+    }
+
+    @Test
+    fun switchingToFiatWithoutEditingPreservesTheQuotedTokenAmount() {
+        val token = BigDecimal("1.123456789012345678901234")
+        val exactAsset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
+        for (price in listOf(BigDecimal("5.123456789010"), BigDecimal("9.123456789064"))) {
+            val asset = exactAsset.copy(usdPrice = price)
+            val tokenDraft = internalState(account(isSpendable = true)).copy(
+                swapAsset = asset,
+                swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
+                amountTextState = NumberTextFieldInnerState.fromAmount(token),
+                addressText = "fixture.near",
+            )
+            var switchedAmount: BigDecimal? = null
+            var requested: BigDecimal? = null
+            val controls = callbacks.copy(
+                onSwapCurrencyTypeClick = { switchedAmount = it },
+                onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
+            )
+            mapper.createState(tokenDraft, controls).amountTextField.onSwapChange()
+            val fiatDraft = tokenDraft.copy(
+                currencyType = CurrencyType.FIAT,
+                amountTextState = NumberTextFieldInnerState.fromAmount(assertNotNull(switchedAmount)),
+            )
+            val fiatView = mapper.createState(fiatDraft, controls)
+            val quote = assertNotNull(fiatView.primaryButton)
+            assertTrue(quote.isEnabled)
+            quote.onClick()
+            assertEquals(token, requested)
+            fiatView.amountTextField.onSwapChange()
+            assertEquals(token, switchedAmount)
+        }
     }
 
     @Test

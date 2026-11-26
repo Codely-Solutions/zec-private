@@ -175,7 +175,7 @@ class MigrationReviewVMTest {
 
             coVerifyOrder {
                 keystoneProposalRepository.setMigrationSweepProposal(proposal)
-                keystoneProposalRepository.createPCZTFromProposal(any())
+                keystoneProposalRepository.prepareReviewedMigration(adopted, any(), any(), any())
             }
             assertEquals(
                 listOf<Any>(SignKeystoneTransactionArgs),
@@ -681,65 +681,119 @@ class MigrationReviewVMTest {
         )
     }
 
-    private suspend fun MigrationReviewVM.currentReview() =
-        requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
-
-    private fun schedule(handle: Long, amount: Long) = MigrationSchedule(
-        transfers = listOf(TransferProposal(
-            id = handle, amountZatoshi = amount, anchorHeight = 10L,
-            nextExecutableAfterHeight = 20L, expiryHeight = 30L,
-        )),
-        estimatedDurationHours = 1,
-        proposalHandle = handle,
-    )
-
-    private fun vm(
-        router: NavigationRouter,
-        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = selectedAccount(spendable<ZodlAccount>()),
-        zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource =
-            mockk {
-                coEvery { getZashiSpendingKey() } returns mockk<UnifiedSpendingKey>()
-            },
-        getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk<GetOrchardMigrationSdkUseCase>(relaxed = true),
-        keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
-        zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
-        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
-        finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
-        migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
-        mode: MigrationMode = MigrationMode.IMMEDIATE,
-        pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
-            PendingMigrationScheduleRepositoryImpl(),
-        draftTor: Boolean? = null,
-        restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
-            mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
-        synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
-        sourceEntryId: String? = null,
-        walletActionAccess: WalletActionAccess = mockk(),
-    ) = MigrationReviewVM(
-        args = MigrationReviewArgs(mode = mode, useTor = draftTor),
-        getOrchardMigrationSdk = getOrchardMigrationSdk,
-        pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
-        pendingKeystone = mockk { every { peek(any()) } returns null },
-        restartMigrationScheduleRepository = restartMigrationScheduleRepository,
-        finalizeMigrationSchedule = finalizeMigrationSchedule,
-        migrationTorEnabled = migrationTorEnabled,
-        navigationRouter = router,
-        exchangeRateRepository =
-            mockk<ExchangeRateRepository>(relaxed = true) {
-                every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
-            },
-        getSelectedWalletAccount = getSelectedWalletAccount,
-        errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
-        zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
-        biometricRepository = mockk<BiometricRepository>(relaxed = true),
-        zashiProposalRepository = zashiProposalRepository,
-        keystoneProposalRepository = keystoneProposalRepository,
-        submitProposal = submitProposal,
-        synchronizerProvider = synchronizerProvider,
-        sourceEntryId = sourceEntryId,
-        walletActionAccess = walletActionAccess,
-    )
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class MigrationReviewAuthorityTest {
+    @BeforeTest
+    fun setUp() {
+        Dispatchers.setMain(StandardTestDispatcher())
+    }
+
+    @AfterTest
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun revokedWalletAuthorityAfterEnteredSplitBlocksNewScheduleSigning() = runTest {
+        val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
+        val reviewed = schedule(42L, 100_000L)
+        val returned = CompletableDeferred<TransferResult>()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
+            coEvery { isNoteSplitNeeded() } returns true
+            coEvery { prepareNoteSplit() } returns split
+            coEvery { proposeMigrationTransfersFromSplit(split) } returns reviewed
+            coEvery { submitNoteSplit(split, any()) } coAnswers { returned.await() }
+        }
+        var authorityCurrent = true
+        val authority = mockk<WalletActionAccess> {
+            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
+        }
+        val router = FakeNavigationRouter("automatic-split")
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            mode = MigrationMode.AUTOMATIC,
+            sourceEntryId = "automatic-split",
+            walletActionAccess = authority,
+        )
+
+        vm.currentReview().onConfirm()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
+        authorityCurrent = false
+        returned.complete(TransferResult.Success(TransactionId.new("isolated-split".toByteArray())))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        assertTrue(router.scopedCommands.isEmpty())
+    }
+}
+
+
+private suspend fun MigrationReviewVM.currentReview() =
+    requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
+
+private fun schedule(handle: Long, amount: Long) = MigrationSchedule(
+    transfers = listOf(TransferProposal(
+        id = handle, amountZatoshi = amount, anchorHeight = 10L,
+        nextExecutableAfterHeight = 20L, expiryHeight = 30L,
+    )),
+    estimatedDurationHours = 1,
+    proposalHandle = handle,
+)
+
+private fun vm(
+    router: NavigationRouter,
+    getSelectedWalletAccount: GetSelectedWalletAccountUseCase = selectedAccount(spendable<ZodlAccount>()),
+    zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource =
+        mockk {
+            coEvery { getZashiSpendingKey() } returns mockk<UnifiedSpendingKey>()
+        },
+    getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk<GetOrchardMigrationSdkUseCase>(relaxed = true),
+    keystoneProposalRepository: KeystoneProposalRepository = mockk(relaxed = true),
+    zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
+    submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
+    finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
+    migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
+    mode: MigrationMode = MigrationMode.IMMEDIATE,
+    pendingMigrationScheduleRepository: PendingMigrationScheduleRepository =
+        PendingMigrationScheduleRepositoryImpl(),
+    draftTor: Boolean? = null,
+    restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
+        mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
+    synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
+    sourceEntryId: String? = null,
+    walletActionAccess: WalletActionAccess = mockk {
+        coEvery { capture(any<WalletAccount>()) } returns { true }
+    },
+) = MigrationReviewVM(
+    args = MigrationReviewArgs(mode = mode, useTor = draftTor),
+    getOrchardMigrationSdk = getOrchardMigrationSdk,
+    pendingMigrationScheduleRepository = pendingMigrationScheduleRepository,
+    pendingKeystone = mockk { every { peek(any()) } returns null },
+    restartMigrationScheduleRepository = restartMigrationScheduleRepository,
+    finalizeMigrationSchedule = finalizeMigrationSchedule,
+    migrationTorEnabled = migrationTorEnabled,
+    navigationRouter = router,
+    exchangeRateRepository =
+        mockk<ExchangeRateRepository>(relaxed = true) {
+            every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
+        },
+    getSelectedWalletAccount = getSelectedWalletAccount,
+    errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
+    zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
+    biometricRepository = mockk<BiometricRepository>(relaxed = true),
+    zashiProposalRepository = zashiProposalRepository,
+    keystoneProposalRepository = keystoneProposalRepository,
+    submitProposal = submitProposal,
+    synchronizerProvider = synchronizerProvider,
+    sourceEntryId = sourceEntryId,
+    walletActionAccess = walletActionAccess,
+)
 
 private class FakeNavigationRouter(entryId: String? = null) : NavigationRouter {
     override val activeEntry = MutableStateFlow(entryId?.let { ActiveNavigationEntry(it, null) })
