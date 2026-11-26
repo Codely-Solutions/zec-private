@@ -169,6 +169,13 @@ class HostedReleaseTests(unittest.TestCase):
                 self.assertEqual(accepted['artifact_id'], 8)
                 with self.assertRaisesRegex(ValueError, 'exact APK and instrumentation'):
                     read(dict(core, candidate_apk_sha256='e'*64), quote)
+                for field, value in (
+                        ('original_core', prepared), ('harness_controller', SOURCE),
+                        ('candidate_instrumentation_sha256', 'e' * 64),
+                ):
+                    wrong = dict(core['direct_preparation'], **{field: value})
+                    with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'exact APK and instrumentation'):
+                        read(dict(core, direct_preparation=wrong), quote)
                 for change in ({'candidate_version_code': VERSION+1}, {'workflow_run_id': RUN+1},
                                {'production_artifact': dict(production, id=8)}, {'build_source_sha': CONTROLLER}):
                     with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'not bound'):

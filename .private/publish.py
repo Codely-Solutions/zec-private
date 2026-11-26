@@ -308,6 +308,8 @@ def main():
     if recovery:
         origin['quote_recovery'] = {'original_controller': recovery['original_controller'],
                                     'quote_run_id': quote['workflow_run_id']}
+        if recovery.get('preclaim_diagnostic'):
+            origin['quote_recovery']['preclaim_diagnostic'] = recovery['preclaim_diagnostic']
     archive_binding = {'production_artifact': quote['production_artifact']} if hosted else {}
     if not simulation:
         if not hosted and str(proof['workflow_run_id']) != os.environ['GITHUB_RUN_ID']:

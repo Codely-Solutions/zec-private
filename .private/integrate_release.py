@@ -35,7 +35,8 @@ def integration_base(candidate, controller, original, root, *, recovery=None, fu
     else:
         from quote_recovery import verify_delta
 
-        verify_delta(root, candidate, build_controller, original, funded=funded)
+        verify_delta(root, candidate, build_controller, original, funded=funded,
+                     preclaim_stage=recovery.get('preclaim_diagnostic'))
         late = False
 
     if controller != original:

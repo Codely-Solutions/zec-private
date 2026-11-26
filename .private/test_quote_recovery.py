@@ -13,7 +13,8 @@ import hosted_release
 from hosted_core import funding_claim_state, network_startup_diagnostics
 from hosted_quote_probe import BRIDGE_ARTIFACT, retained_bridge, stage_bridge, stage_quote_apk
 from quote_recovery import (
-    ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
+    ARTIFACTS, OPERATOR_ID, PreclaimReservation, REPOSITORY, WORKFLOW,
+    diagnostic_stage_for_linked_wallet, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta, verify_receipt_delta,
 )
 from size_workflow_ui_scenario import market_reference_state, quote_footer, quote_footer_needs_scroll, tor_http_failure
@@ -299,12 +300,14 @@ class QuoteRecoveryTests(unittest.TestCase):
                         unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
                     verify.assert_not_called()
                 else:
-                    self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata), reservation)
+                    self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata).commit,
+                                     reservation)
                     self.assertEqual(verify.call_args.args[0]['run'], 8)
         with patch('quote_recovery.git', return_value=prior.encode()), \
                 patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify'), \
                 patch('quote_recovery.subprocess.check_output', return_value=preclaim):
-            self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '8', prior, '8', metadata), reservation)
+            self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '8', prior, '8', metadata),
+                             PreclaimReservation(reservation, 'preclaim_readiness'))
         next(job for job in run[1] if job['name'] == 'build / ' + WALLET)['conclusion'] = 'success'
         with patch('quote_recovery.git', return_value=prior.encode()), \
                 patch('quote_recovery.verify_delta'), patch('quote_recovery.subprocess.check_output') as log:
@@ -355,7 +358,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                             prepared_id='75')
             self.assertEqual(run_case(states, names, [claim]), expected)
             self.assertEqual(run_case(states, names, [claim], signing=True), expected)
-            delta.assert_called_with(Path('.'), SOURCE, OLD, MAIN, funded=True)
+            delta.assert_called_with(Path('.'), SOURCE, OLD, MAIN, funded=True, preclaim_stage=None)
             self.assertEqual(select.call_count, 2)
             self.assertEqual(verify.call_args.args[0], dict(source=SOURCE, controller=OLD, version=42, run=7,
                                                             rehearsal=False))
@@ -527,7 +530,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                 self.assertNotIn('run_missing_core', outputs)
                 transient.assert_called_once()
                 reservation.assert_called_once_with(SOURCE, OLD, '7', '8', meta)
-                delta.assert_called_once_with(Path('.'), OLD, signer, 'Quote')
+                delta.assert_called_once_with(Path('.'), OLD, signer, 'Quote', preclaim_stage=None)
                 if not selector:
                     self.assertIn('/actions/runs/8/attempts/1/jobs', [call.args[0] for call in meta.pages.call_args_list])
                 reservation.side_effect = ValueError('Protected reservation belongs to different inputs')
@@ -666,7 +669,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                     verify.assert_not_called()
                 else:
                     self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '7', metadata),
-                                     reservation)
+                                     PreclaimReservation(reservation, 'networkTargets'))
                     no_post.assert_called_once()
                     verify.assert_called_once()
 
@@ -885,6 +888,52 @@ class QuoteRecoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'outside quote recovery paths'):
                     verify_delta(Path('.'), SOURCE, OLD, MAIN)
 
+    def test_tor_diagnostic_repair_requires_the_specific_verified_no_post_boundary(self):
+        paths = b'.private/core_testnet_driver.py\0'
+        for changed, stage, allowed in (
+                (paths, 'rpcProbe', True),
+                (paths, 'torModeResume', True),
+                (paths, 'networkTargets', False),
+                (paths, None, False),
+                (paths + b'gradle.properties\0', 'rpcProbe', False),
+                (paths + b'.private/acceptance_policy.py\0', 'torModeResume', False),
+        ):
+            with self.subTest(changed=changed, stage=stage), patch('quote_recovery.verify_build_candidate'), \
+                    patch('acceptance_policy.needs_live_tor_probe', return_value=True), \
+                    patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
+                if allowed:
+                    self.assertEqual(verify_delta(Path('.'), SOURCE, OLD, MAIN, preclaim_stage=stage), stage)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'outside quote recovery paths'):
+                        verify_delta(Path('.'), SOURCE, OLD, MAIN, preclaim_stage=stage)
+
+    def test_recovered_wallet_diagnostic_checks_both_the_protected_link_and_its_prior_proof(self):
+        primary, linked = 'd' * 40, 'e' * 40
+        metadata = Mock()
+        metadata.api.side_effect = [
+            {'object': {'sha': primary}}, {'object': {'sha': linked}}, {'message': '{"run": 7}'},
+        ]
+        with patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify') as verify, \
+                patch('quote_recovery.unused_reservation',
+                      return_value=PreclaimReservation(primary, 'torModeSave')) as proof:
+            stage = diagnostic_stage_for_linked_wallet(Path('.'), SOURCE, OLD, MAIN, '7', '8', metadata)
+        self.assertEqual(stage, 'torModeSave')
+        self.assertEqual(verify.call_args.args[0]['previous'], primary)
+        self.assertEqual(verify.call_args.args[0]['run'], 8)
+        self.assertEqual(verify.call_args.args[1], linked)
+        proof.assert_called_once_with(Path('.'), SOURCE, MAIN, '7', OLD, '7', metadata)
+
+    def test_verified_diagnostic_repair_can_reuse_quotes_but_requires_a_fresh_wallet_receipt(self):
+        changed = b'.private/core_testnet_driver.py\0'
+        with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote', preclaim_stage='torModeResume')
+        with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]), \
+                self.assertRaisesRegex(ValueError, 'Wallet execution inputs changed'):
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Wallet', preclaim_stage='torModeResume')
+        with patch('quote_recovery.git', side_effect=[OLD.encode(), changed]), \
+                self.assertRaisesRegex(ValueError, 'Quote execution inputs changed'):
+            verify_receipt_delta(Path('.'), OLD, MAIN, 'Quote')
+
     def test_direct_recovery_accepts_controller_only_instrumentation_preparation(self):
         with patch('quote_recovery.verify_build_candidate'), \
                 patch('acceptance_policy.needs_live_tor_probe', return_value=False), \
@@ -912,7 +961,8 @@ class QuoteRecoveryTests(unittest.TestCase):
                 original = self.recovery_run(7, OLD, states, filter(None, names))
                 metadata = self.recovery_metadata(original, refs=[])
                 with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
-                        patch('quote_recovery.unused_reservation', return_value='e' * 40), \
+                        patch('quote_recovery.unused_reservation',
+                              return_value=PreclaimReservation('e' * 40, 'networkTargets')), \
                         patch('release_inputs.version_code', return_value=42), \
                         patch('funded_reuse.select', return_value={'core': {}} if funded else None):
                     result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, preclaim_run=preclaim)

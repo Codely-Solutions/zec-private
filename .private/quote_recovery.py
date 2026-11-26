@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 
+from typing import NamedTuple
+
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
 from maintenance_cadence import MARKER as MAINTENANCE_MARKER, changed_marker, git
 from release_metadata import (UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job, copied_job_matches,
@@ -28,6 +30,19 @@ DIRECT_RECOVERY_PATHS = {
     '.private/prepare_direct_core.py', '.private/test_acceptance_policy.py',
     '.private/test_hosted_release.py', '.private/core-coverage.md',
 }
+PRECLAIM_DIAGNOSTIC_PATHS = {
+    '.private/core_testnet_driver.py',
+    '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt',
+    '.private/core-coverage.md',
+}
+PRECLAIM_DIAGNOSTIC_STAGES = {'receiptProbe', 'rpcProbe', 'torModeSave', 'torModeResume'}
+
+
+class PreclaimReservation(NamedTuple):
+    commit: str
+    stage: str
+
+
 FUNDED_RECOVERY_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/hosted-core.yml',
     '.private/funded_reuse.py', '.private/test_funded_reuse.py', '.private/acceptance_policy.py',
@@ -141,22 +156,32 @@ def verify_maintenance_recovery(root, source, original, run, metadata):
     admit_cadence(root, source, original, metadata, api)
 
 
-def verify_delta(root, source, original, controller, *, funded=False):
+def recovery_paths(root, original, controller):
+    delta = git(root, 'diff', '--no-renames', '--name-only', '-z', original, controller)
+    return set(filter(None, delta.decode().split('\0')))
+
+
+def verify_delta(root, source, original, controller, *, funded=False, preclaim_stage=None, find_linked_preclaim=None):
     verify_build_candidate(root, source, original)
     require(original != controller and git(root, 'merge-base', original, controller).decode().strip() == original,
             'Quote recovery requires a descendant controller')
-    delta = git(root, 'diff', '--no-renames', '--name-only', '-z', original, controller)
-    paths = set(filter(None, delta.decode().split('\0')))
+    paths = recovery_paths(root, original, controller)
     if funded:
         require(paths <= FUNDED_RECOVERY_PATHS | PUBLICATION_PATHS, 'Controller changed outside funded recovery paths')
-        return
+        return None
     changed = paths - RECOVERY_PATHS - PUBLICATION_PATHS
     if changed:
         require(changed <= DIRECT_RECOVERY_PATHS, 'Controller changed outside quote recovery paths')
         from acceptance_policy import needs_live_tor_probe
 
-        require(not needs_live_tor_probe(source, root), 'Controller changed outside quote recovery paths for a Tor candidate')
-
+        if needs_live_tor_probe(source, root):
+            require(changed <= PRECLAIM_DIAGNOSTIC_PATHS,
+                    'Controller changed outside quote recovery paths for a Tor candidate')
+            stage = find_linked_preclaim() if find_linked_preclaim else preclaim_stage
+            require(stage in PRECLAIM_DIAGNOSTIC_STAGES,
+                    'Controller changed outside quote recovery paths for a Tor candidate')
+            return stage
+    return None
 
 class UnpublishedRun:
     """Keep the original stage decisions and inspect every attempt for publication."""
@@ -292,8 +317,9 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         from funded_reuse import select
 
         funded = select(source, controller, metadata, root=root) is not None
-    if not same:
-        verify_delta(root, source, original, controller, funded=funded)
+    if not same and not preclaim_run:
+        verify_delta(root, source, original, controller, funded=funded,
+                     preclaim_stage=outputs.get('preclaim_diagnostic'))
     if approved_upgrade:
         outputs['reuse_funded'] = 'true'
     elif funded and not core_run:
@@ -319,8 +345,11 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
 
         ref = PREFIX + 'release-' + str(version_code(root, source))
         if preclaim_run:
-            outputs['previous_reservation'] = unused_reservation(root, source, controller, run_id, original,
-                                                                 preclaim_run, metadata)
+            preclaim = unused_reservation(root, source, controller, run_id, original, preclaim_run, metadata)
+            outputs['previous_reservation'] = preclaim.commit
+            diagnostic = verify_delta(root, source, original, controller, preclaim_stage=preclaim.stage)
+            if diagnostic:
+                outputs['preclaim_diagnostic'] = diagnostic
         elif not signing:
             reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
             require(not any(row['ref'] in (ref, ref + '-preclaim-recovery') for row in reservations),
@@ -338,7 +367,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     if quote_run:
         outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata, original_run=run_id,
                                       retry_allowed=quote_result == 'failure', funded=funded,
-                                      preclaim=bool(preclaim_run)))
+                                      preclaim=bool(preclaim_run),
+                                      preclaim_stage=outputs.get('preclaim_diagnostic')))
     if own_quote_retry:
         outputs.update(resolve_quotes(root, source, controller, original, os.environ['GITHUB_RUN_ID'], metadata,
                                       original_run=run_id, retry_allowed=True, historical=True))
@@ -445,7 +475,7 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
     value = binding(source, prior, version_code(root, source), int(prior_run), False)
     commit = metadata.api('/git/ref/' + ref_for(value).removeprefix('refs/'))['object']['sha']
     verify(value, commit, metadata)
-    return commit
+    return PreclaimReservation(commit, failure_lines[0].split(b',', 1)[0].decode('ascii'))
 
 
 def stopped_recovery(run_id, metadata, *, historical=False):
@@ -458,7 +488,7 @@ def stopped_recovery(run_id, metadata, *, historical=False):
     return history
 
 
-def verify_receipt_delta(root, producer, controller, stage):
+def verify_receipt_delta(root, producer, controller, stage, *, preclaim_stage=None):
     if producer == controller:
         return
     require(git(root, 'merge-base', producer, controller).decode().strip() == producer,
@@ -467,6 +497,8 @@ def verify_receipt_delta(root, producer, controller, stage):
     paths = PUBLICATION_PATHS
     if stage == 'Quote':
         paths = paths | {'.private/prepare_direct_core.py'}
+        if preclaim_stage in PRECLAIM_DIAGNOSTIC_STAGES:
+            paths = paths | PRECLAIM_DIAGNOSTIC_PATHS
     elif stage == 'Wallet':
         paths = paths | {
             '.private/hosted_quote_probe.py', '.private/tor_resident_ui_driver.py',
@@ -477,6 +509,22 @@ def verify_receipt_delta(root, producer, controller, stage):
             stage + ' execution inputs changed after the passing receipt')
 
 
+def diagnostic_stage_for_linked_wallet(root, source, original, controller, original_run, core_run, metadata):
+    from hosted_claim import binding, ref_for, verify
+    from release_inputs import version_code
+
+    version = version_code(root, source)
+    value = binding(source, controller, version, int(core_run), False)
+    primary_ref = ref_for(value).removeprefix('refs/')
+    primary = metadata.api('/git/ref/' + primary_ref)['object']['sha']
+    linked = metadata.api('/git/ref/' + primary_ref + '-preclaim-recovery')['object']['sha']
+    verify(binding(source, controller, version, int(core_run), False, primary), linked, metadata)
+    first = json.loads(metadata.api('/git/commits/' + primary)['message'])
+    prior = unused_reservation(root, source, controller, original_run, original, str(first['run']), metadata)
+    require(prior.commit == primary, 'Linked recovery names a different unused reservation')
+    return prior.stage
+
+
 def resolve_core(root, source, controller, original, core_run, metadata, *, original_history):
     require(re.fullmatch(r'[1-9][0-9]*', core_run), 'Exact wallet recovery run required')
     history = stopped_recovery(core_run, metadata)
@@ -484,13 +532,20 @@ def resolve_core(root, source, controller, original, core_run, metadata, *, orig
     state('hosted_core / wallet', ('success',))
     reserve = state('hosted_core / reserve', ('success', 'skipped'))
     funded = reserve == 'skipped'
-    verify_delta(root, source, original, core_controller, funded=funded)
+    def find_linked_preclaim():
+        return diagnostic_stage_for_linked_wallet(
+            root, source, original, core_controller, str(original_history.run['id']), core_run, metadata)
+
+    diagnostic = verify_delta(root, source, original, core_controller, funded=funded,
+                              find_linked_preclaim=find_linked_preclaim)
     verify_receipt_delta(root, core_controller, controller, 'Wallet')
     receipt = 'hosted-upgrade-receipt' if funded else 'hosted-core-receipt'
     other = 'hosted-core-receipt' if funded else 'hosted-upgrade-receipt'
     require(not history.contains(other), 'Ambiguous wallet recovery receipts')
     result = dict(core_receipt_id=history.retained(receipt, first_attempt=True)[0],
                   core_run=int(core_run), core_controller=core_controller)
+    if diagnostic:
+        result['preclaim_diagnostic'] = diagnostic
     prepared = state('hosted_core / prepare-direct', ('success', 'skipped', None) if funded else ('success',))
     if prepared == 'success':
         prepared_history = history
@@ -506,7 +561,7 @@ def resolve_core(root, source, controller, original, core_run, metadata, *, orig
 
 
 def resolve_quotes(root, source, controller, original, quote_run, metadata, *, original_run='', retry_allowed=False,
-                   funded=False, historical=False, preclaim=False):
+                   funded=False, historical=False, preclaim=False, preclaim_stage=None):
     require(re.fullmatch(r'[1-9][0-9]*', quote_run) and quote_run != original_run, 'Exact quote recovery run required')
     history = stopped_recovery(quote_run, metadata, historical=historical)
     quote_controller = history.run['head_sha']
@@ -520,7 +575,8 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata, *, o
         verify_quote_reservation(source, original, original_run, quote_run, metadata)
     else:
         require(not historical, 'Signer rerun requires the original quote retry controller')
-        verify_delta(root, source, original, quote_controller, funded=funded and not linked)
+        verify_delta(root, source, original, quote_controller, funded=funded and not linked,
+                     preclaim_stage=preclaim_stage)
     if preclaim and linked:
         require(quote_controller != controller and producer['run_attempt'] == 1,
                 'Linked claim requires the prior stopped quote recovery')
@@ -528,5 +584,5 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata, *, o
         history.state('hosted_core / reserve', ('skipped',))
         history.state('hosted_core / wallet', ('skipped',))
         history.state('publish', ('skipped',))
-    verify_receipt_delta(root, quote_controller, controller, 'Quote')
+    verify_receipt_delta(root, quote_controller, controller, 'Quote', preclaim_stage=preclaim_stage)
     return dict(quote_receipt_id=receipt, quote_controller=quote_controller, quote_run=int(quote_run))

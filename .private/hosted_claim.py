@@ -113,7 +113,6 @@ def main():
         from quote_recovery import verify_delta
 
         require(not rehearsal, 'Recovery requires the original release candidate')
-        verify_delta(ROOT, source, original, controller)
     else:
         verify_promotion_revision(source, controller, ROOT)
     base = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']
@@ -126,9 +125,13 @@ def main():
         from quote_recovery import unused_reservation
 
         run_id = os.environ['PRECLAIM_RUN']
-        require(previous == unused_reservation(ROOT, source, controller, os.environ['ORIGINAL_ARTIFACT_RUN'],
-                                               original, run_id, metadata),
-                'Pre-claim failure or reservation changed after admission')
+        require(bool(original), 'Linked recovery requires the original build controller')
+        preclaim = unused_reservation(ROOT, source, controller, os.environ['ORIGINAL_ARTIFACT_RUN'],
+                                      original, run_id, metadata)
+        require(previous == preclaim.commit, 'Pre-claim failure or reservation changed after admission')
+        verify_delta(ROOT, source, original, controller, preclaim_stage=preclaim.stage)
+    elif original:
+        verify_delta(ROOT, source, original, controller)
     value = binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), rehearsal, previous)
 
     commit = reserve(value, metadata, lambda path, data: post_ref(metadata, path, data))
