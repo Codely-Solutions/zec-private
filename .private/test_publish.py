@@ -293,6 +293,26 @@ class PublishMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(OSError, 'unreadable listing'):
             publish.require_unattested_retry(metadata, '91', '2')
 
+    def test_signing_rechecks_protected_main_at_key_access_and_attestation_handoff(self):
+        source = 'a' * 40
+        stale = RuntimeError('Protected main moved')
+        expected = [(['check'], [stale]), (['check', 'sign', 'check'], [None, stale])]
+        for calls, outcomes in expected:
+            events = []
+
+            def read_main(revision):
+                self.assertEqual(revision, source)
+                events.append('check')
+                outcome = outcomes.pop(0)
+                if outcome:
+                    raise outcome
+
+            with patch.object(publish, 'require_current_controller', side_effect=read_main), \
+                    patch.object(publish, 'sign_apk', side_effect=lambda *_: events.append('sign')), \
+                    self.assertRaisesRegex(RuntimeError, 'Protected main moved'):
+                publish.sign_current_apk(Path('unsigned'), Path('signed'), Path('tools'), source)
+            self.assertEqual(events, calls)
+
     def test_attestation_requires_exact_bytes(self):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / 'release-attestation.json'

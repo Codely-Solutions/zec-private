@@ -32,6 +32,11 @@ def require_current_controller(controller):
     if current_main() != controller:
         raise RuntimeError('Main changed since validation began; resolve a new promotion')
 
+def sign_current_apk(apk, signed, tools, controller):
+    require_current_controller(controller)
+    sign_apk(apk, signed, tools)
+    require_current_controller(controller)
+
 
 def require_current_local_upgrade(root=ROOT, metadata=None):
     local = json.loads((root / '.private/upgrade-baseline.json').read_text())
@@ -364,7 +369,7 @@ def main():
             raise RuntimeError('Signing job rejected missing or altered license')
     dist=ROOT/'dist';dist.mkdir(exist_ok=True)
     signed=dist/'zec-private-latest.apk'
-    sign_apk(apk, signed, tools)
+    sign_current_apk(apk, signed, tools, controller)
     signed_bytes = signed.read_bytes()
     if not simulation:
         require(0 < len(signed_bytes) <= PUBLIC_APK_LIMIT and payload(signed_bytes) == payload(checked_apk),

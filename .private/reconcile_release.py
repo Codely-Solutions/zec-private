@@ -250,7 +250,7 @@ def resume_draft(run_id, attempt, artifact_id):
                 ['gh', 'api', f'{API}/releases/assets/{asset_id}', '-H', 'Accept: application/octet-stream'],
                 timeout=90)
         else:
-            from publish import sign_apk
+            from publish import sign_current_apk
             from release_metadata import Metadata
             from signing_wiring import environment_wiring
 
@@ -262,7 +262,8 @@ def resume_draft(run_id, attempt, artifact_id):
             # of the initial publisher's exact signed bytes.
             original = dist / 'original-unsigned.apk'
             original.write_bytes(unsigned)
-            sign_apk(original, dist / APK, Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0')
+            sign_current_apk(original, dist / APK, Path(os.environ['ANDROID_HOME']) / 'build-tools/36.0.0',
+                             controller)
             signed = (dist / APK).read_bytes()
         if draft is None:
             (dist / NOTES).write_text(notes, encoding='utf-8')
