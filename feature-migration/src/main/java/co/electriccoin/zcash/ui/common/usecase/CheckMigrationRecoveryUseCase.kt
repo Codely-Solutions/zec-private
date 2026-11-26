@@ -5,7 +5,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationNextAction
 import cash.z.ecc.android.sdk.MigrationState
-import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -22,6 +21,7 @@ import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -106,22 +106,23 @@ class CheckMigrationRecoveryUseCase(
 
     private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
         if (persistableWalletProvider.getPersistableWallet() == null) return
-        val ownerKey = awaitOwnerKey() ?: return
-        val accounts = accountDataSource.getAllAccounts()
+        val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
+        val initialOwner = accounts.firstOrNull { it.isSelected }
+        val reconciled = reviveAccountWorkers(accounts)
         if (accounts.isNotEmpty() && !resetPending.value) reconcileRemovalNotices(accounts)
-        val sdk = if (resetPending.value) null else getOrchardMigrationSdk(ownerKey)
-        if (sdk != null && !resetPending.value) {
-            reviveAccountWorkers(accounts)
-            recoverBroadcast(sdk, ownerKey, requestProgress)
-            if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
+        val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount)
+        val ownerKey = owner?.sdkAccount?.accountUuid?.toStorageKeyId()
+        if (ownerKey != null && !resetPending.value) {
+            recoverBroadcast(ownerKey, requestProgress)
+            if (reconciled && !resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun awaitOwnerKey(): String? =
+    private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>): T? =
         resetPending.flatMapLatest { pending ->
-            if (pending) flowOf(null) else accountDataSource.selectedAccount.filterNotNull()
-        }.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
+            if (pending) flowOf(null) else values.filterNotNull()
+        }.first()
 
     private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>) = withContext(Dispatchers.IO) {
         val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
@@ -139,18 +140,28 @@ class CheckMigrationRecoveryUseCase(
         }
     }
 
-    private suspend fun reviveAccountWorkers(accounts: List<WalletAccount>) {
+    @Suppress("TooGenericExceptionCaught") // A transient failure stays with the owner that could not be restored.
+    private suspend fun reviveAccountWorkers(accounts: List<WalletAccount>): Boolean {
         // The process-scoped driver accelerates committed migrations. WorkManager keeps the same work
         // alive after process death, reboot or an update. Recover both for every spendable account.
+        var reconciled = true
         for (account in accounts.filter { it.isSpendable }) {
-            if (resetPending.value) return
-            val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
-            val sdk = getOrchardMigrationSdk(accountKey)
-            if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
-                migrationLiveDriver.startIfNotRunning(accountKey)
-                reviveScheduledWorker(accountKey)
+            if (resetPending.value) return false
+            try {
+                val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
+                val sdk = getOrchardMigrationSdk(accountKey)
+                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
+                    migrationLiveDriver.startIfNotRunning(accountKey)
+                    reviveScheduledWorker(accountKey)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                migrationLog("MigrationRecovery: account worker unavailable (${e.javaClass.simpleName}).")
+                reconciled = false
             }
         }
+        return reconciled
     }
 
     private suspend fun reviveScheduledWorker(accountKey: String) {
@@ -160,11 +171,11 @@ class CheckMigrationRecoveryUseCase(
     }
 
     private suspend fun recoverBroadcast(
-        sdk: OrchardMigrationSdk,
         ownerKey: String,
         requestProgress: (String) -> Unit,
     ) {
         if (!resetPending.value && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
+            val sdk = getOrchardMigrationSdk(ownerKey) ?: return
             // The flag only records THAT a background attempt once failed on Tor, not what the
             // engine's next due transfer needs NOW — the plan moves on (proving, dependency
             // mining, rescheduling) between when it was set and the next app open, and the flag

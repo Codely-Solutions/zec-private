@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui
 
 import android.app.Activity
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -15,6 +17,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 import co.electriccoin.zcash.ui.design.KeyboardManager
+import co.electriccoin.zcash.ui.design.theme.AppearanceMode
+import co.electriccoin.zcash.ui.design.theme.colors.BrowserChromeColors
+import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
@@ -36,9 +41,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -48,6 +56,49 @@ class NavigationResultDeliveryTest {
     val compose = createComposeRule()
 
     private lateinit var controller: NavHostController
+
+    @Test
+    fun browserUsesCurrentRenderedAppearanceAndLeavesNavigationAvailable() {
+        install()
+        compose.runOnIdle {
+            val host = Robolectric.buildActivity(Activity::class.java).setup()
+            try {
+                runTest {
+                    val activity = host.get()
+                    var renderedTheme = AppearanceMode.SYSTEM to false
+                    val navigator = NavigatorImpl(
+                        activity, controller, KeyboardManager(false, null), mockk(relaxed = true),
+                        browserAppearance = { renderedTheme },
+                    )
+                    val url = ExternalUrl("https://example.invalid/releases")
+                    val open = NavigationCommand.Forward(listOf(url))
+
+                    navigator.executeCommand(open)
+                    val fallback = assertNotNull(shadowOf(activity).nextStartedActivity)
+                    assertEquals(url.url, fallback.dataString)
+                    assertEquals(
+                        CustomTabsIntent.COLOR_SCHEME_SYSTEM,
+                        fallback.getIntExtra(CustomTabsIntent.EXTRA_COLOR_SCHEME, -1),
+                    )
+
+                    renderedTheme = AppearanceMode.DARK to true
+                    navigator.executeCommand(open)
+                    val dark = assertNotNull(shadowOf(activity).nextStartedActivity)
+                    assertEquals(
+                        CustomTabsIntent.COLOR_SCHEME_DARK,
+                        dark.getIntExtra(CustomTabsIntent.EXTRA_COLOR_SCHEME, -1),
+                    )
+                    val chrome = CustomTabsIntent.getColorSchemeParams(dark, CustomTabsIntent.COLOR_SCHEME_DARK)
+                    assertEquals(BrowserChromeColors.oledDark.toArgb(), chrome.toolbarColor)
+
+                    navigator.executeCommand(NavigationCommand.Forward(listOf(ActivityHistoryArgs)))
+                    assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                }
+            } finally {
+                host.pause().stop().destroy()
+            }
+        }
+    }
 
     @Test
     fun navigationTracksOnlyTheExactTypedProgressIdentity() {
@@ -113,7 +164,7 @@ class NavigationResultDeliveryTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 val requests = LaunchNavigationRequests()
                 backgroundScope.launch {
                     requests.deliverOnChanges(
@@ -155,7 +206,7 @@ class NavigationResultDeliveryTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 val requests = LaunchNavigationRequests()
                 val errors = NavigateToErrorUseCase(mockk())
                 val recovery = errors.stage(ErrorArgs.SeedRecoveryFailed) as ErrorDialog
@@ -270,7 +321,7 @@ class NavigationResultDeliveryTest {
             runTest {
                 val router = NavigationRouterImpl()
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                     router.observePipeline().collect { command ->
                         if (command is CustomNavigationCommand) navigator.executeCommand(command)
@@ -298,7 +349,7 @@ class NavigationResultDeliveryTest {
             runTest {
                 val router = NavigationRouterImpl()
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                     router.observePipeline().collect { command ->
                         if (command is CustomNavigationCommand) navigator.executeCommand(command)
@@ -354,7 +405,7 @@ class NavigationResultDeliveryTest {
         val router = NavigationRouterImpl()
         val stopTracking = controller.trackActiveEntry(router)
         val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {
                 router.collectPendingForwards(navigator, canCommit)

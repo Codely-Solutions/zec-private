@@ -51,6 +51,7 @@ class CheckMigrationRecoveryUseCaseTest {
         mockk(relaxed = true) {
             every { sdkAccount } returns testSdkAccount
             every { isSpendable } returns true
+            every { isSelected } returns true
         }
 
     private val ownerKey = testSdkAccount.accountUuid.toStorageKeyId()
@@ -87,6 +88,7 @@ class CheckMigrationRecoveryUseCaseTest {
         scheduleNow: suspend (String) -> Unit = {},
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
+        accountsState: MutableStateFlow<List<WalletAccount>?> = MutableStateFlow(accounts),
         selectedAccountState: MutableStateFlow<WalletAccount?> = MutableStateFlow(testWalletAccount),
         resetState: MutableStateFlow<Boolean> = MutableStateFlow(false),
         context: Context = mockk(relaxed = true),
@@ -111,7 +113,7 @@ class CheckMigrationRecoveryUseCaseTest {
         pendingMigrationTorFailureStorageProvider = pendingMigrationTorFailureStorageProvider,
         accountDataSource =
             mockk<AccountDataSource>(relaxed = true) {
-                coEvery { getAllAccounts() } returns accounts
+                every { allAccounts } returns accountsState
                 every { selectedAccount } returns selectedAccountState
             },
         context = context,
@@ -196,19 +198,25 @@ class CheckMigrationRecoveryUseCaseTest {
     // ── Task 6: auto-navigation removal — only Tor-failure fires on app-open ─────────────
 
     @Test
-    fun foregroundRecoveryWaitsForTheAccountWithoutAnotherLifecycleEvent() = runTest {
+    fun foregroundWorkerRecoveryDoesNotWaitForTheSelectedPresentationAccount() = runTest {
         val selection = MutableStateFlow<WalletAccount?>(null)
+        val listedAccount = mockk<WalletAccount> {
+            every { sdkAccount } returns testSdkAccount
+            every { isSpendable } returns true
+            every { isSelected } returns false
+        }
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
         }
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         val recovery = useCase(
             sdk, mockk(relaxed = true), migrationLiveDriver = driver, selectedAccountState = selection,
+            accounts = listOf(listedAccount),
         )
         val work = async { recovery() }
         runCurrent()
         assertFalse(work.isCompleted)
-        coVerify(exactly = 0) { driver.startIfNotRunning(any()) }
+        coVerify(exactly = 1) { driver.startIfNotRunning(ownerKey) }
 
         selection.value = testWalletAccount
         work.await()
@@ -224,6 +232,7 @@ class CheckMigrationRecoveryUseCaseTest {
         val acquire = mockk<GetOrchardMigrationSdkUseCase>()
         val recovery = useCase(
             sdk, mockk(relaxed = true), selectedAccountState = selection, resetState = reset,
+            accountsState = MutableStateFlow(null),
             getOrchardMigrationSdk = acquire,
         )
         val work = async { recovery() }
@@ -260,8 +269,44 @@ class CheckMigrationRecoveryUseCaseTest {
         recovery()
         coVerify(exactly = 0) { driver.startIfNotRunning(any()) }
         recovery()
-        assertEquals(3, opens)
+        assertEquals(2, opens)
         coVerify(exactly = 1) { driver.startIfNotRunning(testSdkAccount.accountUuid.toStorageKeyId()) }
+    }
+
+    @Test
+    fun anUnavailableSelectedOwnerDoesNotBlockAnotherCommittedAccountsWorker() = runTest {
+        val otherSdkAccount = AccountFixture.new(accountUuid = UUID.fromString("00000000-0000-0000-0000-000000000002"))
+        val other = mockk<WalletAccount> {
+            every { sdkAccount } returns otherSdkAccount
+            every { isSpendable } returns true
+        }
+        val otherKey = otherSdkAccount.accountUuid.toStorageKeyId()
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        for (openFailure in listOf(false, true)) {
+            CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
+            val resolver = mockk<GetOrchardMigrationSdkUseCase> {
+                coEvery { this@mockk(ownerKey) } coAnswers {
+                    if (openFailure) error("Preference temporarily unavailable")
+                    null
+                }
+                coEvery { this@mockk(otherKey) } returns sdk
+            }
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val scheduled = mutableListOf<String>()
+            useCase(
+                sdk = sdk,
+                navigationRouter = router,
+                accounts = listOf(testWalletAccount, other),
+                pendingMigrationTorFailure = true,
+                getWorkerRunState = { MigrationWorkerRunState.ABSENT },
+                scheduleNow = { scheduled += it },
+                getOrchardMigrationSdk = resolver,
+            ).invoke()
+            assertEquals(listOf(otherKey), scheduled)
+            verify(exactly = 0) { router.replaceAll(any()) }
+        }
     }
 
     @Test

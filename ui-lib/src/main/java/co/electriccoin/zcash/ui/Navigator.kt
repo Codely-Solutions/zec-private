@@ -5,11 +5,9 @@ import android.app.Activity
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.serialization.generateHashCode
-import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
-import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
-import co.electriccoin.zcash.ui.common.provider.getOrSystem
 import co.electriccoin.zcash.ui.design.KeyboardManager
+import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.util.WebBrowserUtil
 import kotlinx.coroutines.sync.Mutex
@@ -29,8 +27,7 @@ class NavigatorImpl(
     private val navController: NavHostController,
     private val keyboardManager: KeyboardManager,
     private val applicationStateProvider: ApplicationStateProvider,
-    private val appearanceModeStorageProvider: AppearanceModeStorageProvider,
-    private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
+    private val browserAppearance: () -> Pair<AppearanceMode, Boolean> = { AppearanceMode.SYSTEM to false },
     private val canCommitOwnedNavigation: () -> Boolean = { true },
 ) : Navigator {
     private val commandLock = Mutex()
@@ -217,12 +214,13 @@ class NavigatorImpl(
         }
     }
 
-    private suspend fun startWebBrowser(route: ExternalUrl) {
+    private fun startWebBrowser(route: ExternalUrl) {
+        val (appearanceMode, isOledEnabled) = browserAppearance()
         WebBrowserUtil.startActivity(
             activity = activity,
             url = route.url,
-            appearanceMode = appearanceModeStorageProvider.getOrSystem(),
-            isOledEnabled = isOledEnabledStorageProvider.get() == true
+            appearanceMode = appearanceMode,
+            isOledEnabled = isOledEnabled
         )
     }
 

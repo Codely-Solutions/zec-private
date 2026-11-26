@@ -24,6 +24,30 @@ import kotlin.time.Duration.Companion.seconds
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationLiveDriverTest {
     @Test
+    fun aTransientSdkOpenFailureDuringPrimingDoesNotStopTheFirstDrive() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val driveOnce = mockk<MigrationDriveOnce> {
+            coEvery { run(sdk, "priming-owner", true, true) } returns DriveOnceResult.Terminal
+        }
+        var opens = 0
+        val driver = MigrationLiveDriverImpl(
+            migrationDriveOnce = driveOnce,
+            getOrchardMigrationSdk = {
+                if (++opens == 1) error("SDK temporarily unavailable")
+                sdk
+            },
+            migrationTransferStateRepository = mockk(relaxed = true),
+            scope = this,
+        )
+
+        driver.startIfNotRunning("priming-owner")
+        advanceUntilIdle()
+
+        assertEquals(2, opens)
+        io.mockk.coVerify(exactly = 1) { driveOnce.run(sdk, "priming-owner", true, true) }
+    }
+
+    @Test
     fun resetWaitsForEnteredWorkAndRefusesNewDriverStarts() = runTest {
         val finish = CompletableDeferred<Unit>()
         var pendingReset = false

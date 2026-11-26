@@ -105,9 +105,12 @@ class MigrationLiveDriverImpl(
         // Best-effort and non-fatal: if the SDK can't be resolved yet, this priming step is
         // silently skipped and the loop below's own first-iteration resolution decides the
         // loop's fate the same way it always has — this line must never itself decide that.
-        getOrchardMigrationSdk(accountKeyId)?.let { sdk ->
-            runCatching { migrationTransferStateRepository.publish(accountKeyId, sdk.readUnreconciledLiveReadout()) }
-                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+        runCatching {
+            getOrchardMigrationSdk(accountKeyId)?.let { sdk ->
+                migrationTransferStateRepository.publish(accountKeyId, sdk.readUnreconciledLiveReadout())
+            }
+        }.onFailure {
+            if (it is kotlinx.coroutines.CancellationException) throw it
         }
 
         while (true) {

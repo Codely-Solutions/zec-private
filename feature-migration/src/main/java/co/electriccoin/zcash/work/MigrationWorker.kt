@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import kotlinx.coroutines.CancellationException
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -35,17 +36,34 @@ class MigrationWorker(
     private val migrationDriveOnce: MigrationDriveOnce by inject()
     private val resetProgress: ResetProgressStore by inject()
 
+    @Suppress("TooGenericExceptionCaught") // Re-enter through the SDK's current state on the next wake.
     override suspend fun doWork(): Result {
         // Old unbound work cannot recover an owner from the foreground selection.
         // Normal startup restores committed work for each actual wallet account.
         val accountKeyId = inputData.getString(MigrationScheduler.KEY_ACCOUNT_KEY_ID)
         if (accountKeyId.isNullOrBlank() || resetProgress.isPending.value) return Result.success()
 
-        return when (val lookup = getOrchardMigrationSdk.lookup(accountKeyId)) {
-            is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId)
-            MigrationSdkLookup.RemovalManaged -> retryWhileRemoving(accountKeyId)
-            MigrationSdkLookup.NotReady -> waitForSdk(accountKeyId)
-            MigrationSdkLookup.Gone -> stopMissingAccount(accountKeyId)
+        return try {
+            runForOwner(accountKeyId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("Migration worker state unavailable (${e.javaClass.simpleName}). Rechecking on retry.")
+            if (resetProgress.isPending.value) Result.success() else retryWhileRemoving(accountKeyId)
+        }
+    }
+
+    private suspend fun runForOwner(accountKeyId: String): Result {
+        val lookup = getOrchardMigrationSdk.lookup(accountKeyId)
+        return if (resetProgress.isPending.value) {
+            Result.success()
+        } else {
+            when (lookup) {
+                is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId)
+                MigrationSdkLookup.RemovalManaged -> retryWhileRemoving(accountKeyId)
+                MigrationSdkLookup.NotReady -> waitForSdk(accountKeyId)
+                MigrationSdkLookup.Gone -> stopMissingAccount(accountKeyId)
+            }
         }
     }
 

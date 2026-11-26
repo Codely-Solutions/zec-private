@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationGateBypassStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.work.MigrationAccountRetirement
+import kotlinx.coroutines.CancellationException
 
 /**
  * Resolves the real, Rust-backed [OrchardMigrationSdk] for the wallet account the migration flow
@@ -59,21 +60,29 @@ class GetOrchardMigrationSdkUseCase(
      * tell a boot race (retry) from a deleted wallet / disconnected account (kill the chain —
      * a worker retrying forever for an account that no longer exists is a zombie).
      */
+    @Suppress("TooGenericExceptionCaught") // Workers retry temporary storage and native SDK acquisition errors.
     suspend fun lookup(accountKeyId: String): MigrationSdkLookup {
         if (MigrationAccountRetirement.blocks(accountKeyId)) return MigrationSdkLookup.RemovalManaged
-        val result = if (persistableWalletProvider.getPersistableWallet() == null) {
-            MigrationSdkLookup.Gone
-        } else {
-            lookupPersistedAccount(accountKeyId)
+        val result = try {
+            if (persistableWalletProvider.getPersistableWallet() == null) {
+                MigrationSdkLookup.Gone
+            } else {
+                lookupPersistedAccount(accountKeyId)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            migrationLog("Migration worker SDK unavailable (${e.javaClass.simpleName}).")
+            MigrationSdkLookup.NotReady
         }
         return MigrationAccountRetirement.admit(accountKeyId) { result } ?: MigrationSdkLookup.RemovalManaged
     }
 
     private suspend fun lookupPersistedAccount(accountKeyId: String): MigrationSdkLookup {
-        val accounts = runCatching { accountDataSource.getAllAccounts() }.getOrNull()
-        val account = accounts?.findByAccountKeyId(accountKeyId)
+        val accounts = accountDataSource.getAllAccounts()
+        val account = accounts.findByAccountKeyId(accountKeyId)
         return when {
-            accounts.isNullOrEmpty() -> MigrationSdkLookup.NotReady
+            accounts.isEmpty() -> MigrationSdkLookup.NotReady
             account == null -> MigrationSdkLookup.Gone
             else -> MigrationSdkLookup.Ready(buildFor(account))
         }

@@ -241,7 +241,7 @@ class KeystoneEnrollmentSavedStateTest {
     }
 
     private fun newNavigator(controller: NavHostController) =
-        NavigatorImpl(mockk(), controller, KeyboardManager(false, null), mockk(), mockk(), mockk())
+        NavigatorImpl(mockk(), controller, KeyboardManager(false, null), mockk())
 
     private fun NavHostController.installGraph() {
         graph = createGraph(startDestination = HomeArgs) {

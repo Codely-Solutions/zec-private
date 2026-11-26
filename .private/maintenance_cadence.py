@@ -208,7 +208,7 @@ def admit_cadence(root, source, controller, metadata, advisory_api, *, preflight
 
 
 def main():
-    from maintenance_watch import api, verified_wrapper
+    from maintenance_watch import WrapperUpdate, api, verified_wrapper
     from prepare_maintenance import prepare, prepare_security
     from release_metadata import Metadata
     import sync
@@ -240,7 +240,10 @@ def main():
     if upstream_commit:
         wrapper = None
         if proposal:
-            wrapper = (*verified_wrapper(metadata.repo, int(proposal), controller, head, metadata.api('')['id']), head)
+            number = int(proposal)
+            repo_id = metadata.api('')['id']
+            release, properties = verified_wrapper(metadata.repo, number, controller, head, repo_id)
+            wrapper = WrapperUpdate(release, properties, head, number, repo_id)
         sync.main(latest, wrapper, expected_commit=upstream_commit)
     elif proposal:
         sync.output(source_sha=prepare(proposal, head, controller))

@@ -1,5 +1,6 @@
 """Read-only maintenance discovery. A shadow finding grants no promotion authority."""
 import base64
+from dataclasses import dataclass
 import datetime as dt
 import json
 import os
@@ -135,6 +136,23 @@ class ProposalChanged(ValueError):
     """The candidate changed while the controller was verifying it."""
 
 
+@dataclass(frozen=True)
+class WrapperUpdate:
+    version: str
+    properties: str
+    head: str
+    number: int
+    repository_id: int
+
+
+def require_current_wrapper_proposal(prefix, number, base, head, repository_id):
+    current = api(f'{prefix}/pulls/{number}')
+    if (not trusted_proposal(current, repository_id) or current['head']['sha'] != head
+            or current['base']['sha'] != base or current['changed_files'] != 1
+            or api(f'{prefix}/commits/main')['sha'] != base):
+        raise ProposalChanged('Proposal or main changed during verification; check discovery again')
+
+
 def verified_wrapper(prefix, number, base, head, repository_id):
     detail = api(f'{prefix}/pulls/{number}')
     if (not trusted_proposal(detail, repository_id) or detail['head']['sha'] != head
@@ -146,10 +164,7 @@ def verified_wrapper(prefix, number, base, head, repository_id):
         raise ValueError('Wrapper-only proposal required')
     proposed = wrapper_source(prefix, head)
     version = wrapper_patch(wrapper_source(prefix, base), proposed, official_checksum)
-    final = api(f'{prefix}/pulls/{number}')
-    if (not trusted_proposal(final, repository_id) or final['head']['sha'] != head
-            or final['base']['sha'] != base or api(f'{prefix}/commits/main')['sha'] != base):
-        raise ProposalChanged('Proposal or main changed during verification')
+    require_current_wrapper_proposal(prefix, number, base, head, repository_id)
     return version, proposed
 
 

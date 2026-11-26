@@ -290,7 +290,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 val progress = FixtureMigrationProgress("fixture-owner")
                 repeat(2) {
@@ -405,7 +405,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 val requests = LaunchNavigationRequests()
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 var resumed = true
@@ -433,7 +433,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
                 val requests = LaunchNavigationRequests()
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 requests.requestGiftScan()
@@ -552,7 +552,9 @@ class RestoredWalletRoutesLayoutTest {
             observer.update(nav.currentBackStackEntry?.toActiveNavigationEntry())
         }
         controller.addOnDestinationChangedListener(listener)
-        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk(), mockk(), mockk(), canCommit)
+        val navigator = NavigatorImpl(
+            mockk<Activity>(), controller, keyboard, mockk(), canCommitOwnedNavigation = canCommit,
+        )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {
                 router.observePipeline().collect {

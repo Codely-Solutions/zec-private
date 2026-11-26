@@ -22,9 +22,7 @@ import androidx.navigation.toRoute
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
-import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
-import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
@@ -34,6 +32,8 @@ import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.enterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.exitTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popEnterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popExitTransition
+import co.electriccoin.zcash.ui.design.theme.LocalAppearanceMode
+import co.electriccoin.zcash.ui.design.theme.LocalOledEnabled
 import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
@@ -104,31 +104,27 @@ private fun WalletNavHost(
     val keyboardManager = LocalKeyboardManager.current
     val navigationRouter = koinInject<NavigationRouter>()
     val applicationStateProvider = koinInject<ApplicationStateProvider>()
-    val appearanceModeStorageProvider = koinInject<AppearanceModeStorageProvider>()
-    val isOledEnabledStorageProvider = koinInject<IsOledEnabledStorageProvider>()
     val migrationAppHooks = koinInject<MigrationAppHooks>()
     val launchNavigation = koinInject<LaunchNavigationRequests>()
     val navController = LocalNavController.current
     val activity = LocalActivity.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val currentAccess = rememberUpdatedState(hasAppAccess)
+    val browserAppearance = rememberUpdatedState(LocalAppearanceMode.current to LocalOledEnabled.current)
     val navigator =
         remember(
             activity,
             lifecycle,
             navController,
             keyboardManager,
-            applicationStateProvider,
-            appearanceModeStorageProvider,
-            isOledEnabledStorageProvider
+            applicationStateProvider
         ) {
             NavigatorImpl(
                 activity = activity,
                 navController = navController,
                 keyboardManager = keyboardManager,
                 applicationStateProvider = applicationStateProvider,
-                appearanceModeStorageProvider = appearanceModeStorageProvider,
-                isOledEnabledStorageProvider = isOledEnabledStorageProvider,
+                browserAppearance = { browserAppearance.value },
                 canCommitOwnedNavigation = {
                     lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()
                 }

@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 from test_support import patch_environment
 
 import maintenance_cadence as cadence
+from maintenance_watch import WrapperUpdate
 
 
 TAG = 'v3.19.0-private.21'
@@ -109,7 +110,9 @@ class CadenceTest(unittest.TestCase):
                     patch('maintenance_cadence.urlopen', side_effect=central) as maven, \
                     patch('prepare_maintenance.prepare', return_value=SHA) as wrapper, \
                     patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
-                    patch('release_metadata.Metadata'), patch('sync.main') as upstream, patch('sync.output') as output:
+                    patch('release_metadata.Metadata') as metadata, patch('sync.main') as upstream, \
+                    patch('sync.output') as output:
+                metadata.return_value.api.return_value = {'id': 7}
                 cadence.main()
                 maven.assert_not_called()
                 wrapper.assert_not_called()
@@ -126,7 +129,9 @@ class CadenceTest(unittest.TestCase):
                 upstream.side_effect = RuntimeError('Critical upstream changes require review')
                 with self.assertRaisesRegex(RuntimeError, 'Critical upstream changes'):
                     cadence.main()
-                upstream.assert_called_once_with(latest, ('9.9.2', 'verified properties', SHA), expected_commit=SHA)
+                upstream.assert_called_once_with(
+                    latest, WrapperUpdate('9.9.2', 'verified properties', SHA, 7, 7), expected_commit=SHA,
+                )
                 wrapper.assert_called_once()
 
     def test_window_rollover_missed_poll_and_one_routine_publication(self):
@@ -160,15 +165,18 @@ class CadenceTest(unittest.TestCase):
                     patch('sync.ROOT', root), patch('sync.discover', side_effect=lambda cutoff=None: old if cutoff else new), \
                     patch('maintenance_cadence.security_review', return_value=None), patch('sync.main') as upstream, \
                     patch('maintenance_cadence.sdk_ready_commit', return_value=SHA), \
-                    patch('prepare_maintenance.prepare') as wrapper, patch('release_metadata.Metadata'), \
+                    patch('prepare_maintenance.prepare') as wrapper, patch('release_metadata.Metadata') as metadata, \
                     patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
                     patch('maintenance_cadence.routine_window', return_value=None) as window:
+                metadata.return_value.api.return_value = {'id': 7}
                 cadence.main()
                 upstream.assert_not_called()
                 wrapper.assert_not_called()
                 window.return_value = cadence.FIRST_WINDOW
                 cadence.main()
-                upstream.assert_called_once_with(old, ('9.9.2', 'verified properties', SHA), expected_commit=SHA)
+                upstream.assert_called_once_with(
+                    old, WrapperUpdate('9.9.2', 'verified properties', SHA, 7, 7), expected_commit=SHA,
+                )
                 wrapper.assert_not_called()
 
     def test_routine_admission_rejects_a_post_cutoff_candidate(self):

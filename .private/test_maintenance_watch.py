@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 from test_support import patch_environment, public_baseline_metadata
 
-from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, proposal_inventory,
+from maintenance_watch import (ProposalChanged, WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, proposal_inventory,
                                trusted_proposal, verified_wrapper, wrapper_patch)
 
 
@@ -813,6 +813,13 @@ class MaintenanceWatchTest(unittest.TestCase):
             environment = dict(GITHUB_ACTIONS='true', GITHUB_REF='refs/heads/main',
                                GITHUB_REPOSITORY=prepare.REPOSITORY)
             remote = {}
+            open_detail = dict(
+                state='open', draft=False, changed_files=1,
+                user={'login': 'dependabot[bot]', 'type': 'Bot'},
+                head={'repo': {'id': 7}, 'ref': 'dependabot/gradle/wrapper', 'sha': head},
+                base={'repo': {'id': 7}, 'ref': 'main', 'sha': base},
+            )
+            detail = open_detail
 
             def remote_git(*args):
                 if args[:2] == ('ls-remote', 'origin'):
@@ -835,8 +842,8 @@ class MaintenanceWatchTest(unittest.TestCase):
                     patch.object(prepare.Metadata, 'api', side_effect=lambda path, **_: (
                         {'id': 7} if not path else [[{'tag_name': 'v3.19.0-private.21'}]])), \
                     patch.object(prepare, 'verified_wrapper', return_value=('9.9.2', new_properties)), \
-                    patch.object(prepare, 'api', side_effect=lambda path: (
-                        {'state': 'open', 'head': {'sha': head}} if '/pulls/' in path else {'sha': base})), \
+                    patch('maintenance_watch.api', side_effect=lambda path: (
+                        detail if '/pulls/' in path else {'sha': base})), \
                     patch.object(prepare, 'refresh_source', side_effect=refresh), patch('builtins.print') as output:
                 original_run = subprocess.run
 
@@ -846,11 +853,25 @@ class MaintenanceWatchTest(unittest.TestCase):
                     return original_run(command, *args, **kwargs)
 
                 with patch.object(subprocess, 'run', side_effect=run):
+                    detail = dict(open_detail, draft=True)
+                    with self.assertRaisesRegex(ProposalChanged, 'changed during verification'):
+                        prepare.prepare('2', head, base)
+                    self.assertEqual({}, remote)
+                    output.assert_not_called()
+                    git('reset', '-q', '--hard', base)
+                    detail = open_detail
                     prepare.prepare('2', head, base)
                     first = json.loads(output.call_args.args[0])
                     git('reset', '-q', '--hard', base)
                     prepare.prepare('2', head, base)
                     self.assertEqual(first, json.loads(output.call_args.args[0]))
+                    git('reset', '-q', '--hard', base)
+                    output.reset_mock()
+                    detail = dict(open_detail, base=dict(open_detail['base'], ref='review/internal'))
+                    with self.assertRaisesRegex(ProposalChanged, 'changed during verification'):
+                        prepare.prepare('2', head, base)
+                    output.assert_not_called()
+                    self.assertEqual(1, len(remote))
             sha = first['source_sha']
             self.assertEqual(base, git('rev-parse', sha+'^'))
             self.assertEqual(new_properties.strip(), git('show', f'{sha}:{WRAPPER_PROPERTIES}'))

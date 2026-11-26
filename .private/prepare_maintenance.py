@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-from maintenance_watch import REPOSITORY, WRAPPER_PROPERTIES, api, verified_wrapper
+from maintenance_watch import REPOSITORY, WRAPPER_PROPERTIES, api, require_current_wrapper_proposal, verified_wrapper
 from release_metadata import Metadata, next_release_version, require, reserved_release_versions, wallet_release_versions
 from refresh_source import main as refresh_source
 from sync import version
@@ -109,11 +109,9 @@ def prepare(number, head, controller):
         source = git('-c', 'user.name=ZEC Private automation',
                      '-c', 'user.email=zec-private@users.noreply.github.com', 'commit-tree', tree, '-p', controller,
                      '-m', f'Prepare Gradle {release} maintenance update')
-        current = api(f'{metadata.repo}/pulls/{number}')
-        require(current['state'] == 'open' and current['head']['sha'] == head
-                and api(f'{metadata.repo}/commits/main')['sha'] == controller,
-                'Proposal or main changed before staging')
         subprocess.run(['gh', 'auth', 'setup-git', '--hostname', 'github.com'], check=True, timeout=15)
+    require_current_wrapper_proposal(metadata.repo, number, controller, head, repo_id)
+    if not remote:
         git('push', 'origin', f'{source}:refs/heads/{branch}')
     print(json.dumps(dict(identity, source_sha=source, branch=branch)))
     return source

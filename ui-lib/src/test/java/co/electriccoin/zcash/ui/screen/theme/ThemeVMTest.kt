@@ -4,11 +4,15 @@ import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -166,6 +170,39 @@ class ThemeVMTest {
     }
 
     @Test
+    fun anObservationFailureKeepsTheLastRenderedPairUntilReconnected() = runTest(dispatcher) {
+        val mode = FakeAppearanceModeStorageProvider(stored = AppearanceMode.DARK)
+        val oledValue = MutableStateFlow(true)
+        val failRead = CompletableDeferred<Unit>()
+        var observations = 0
+        val oled = mockk<IsOledEnabledStorageProvider> {
+            every { observe() } returns flow {
+                if (++observations == 1) {
+                    emit(oledValue.value)
+                    failRead.await()
+                    error("Preference temporarily unavailable")
+                }
+                emitAll(oledValue)
+            }
+        }
+        val vm = startedVm(mode, oled, advanceToIdle = false)
+        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
+        assertTrue(vm.isOledEnabled.value)
+
+        failRead.complete(Unit)
+        runCurrent()
+        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
+        assertTrue(vm.isOledEnabled.value)
+
+        mode.store(AppearanceMode.LIGHT)
+        oledValue.value = false
+        advanceTimeBy(THEME_READ_TIMEOUT)
+        runCurrent()
+        assertEquals(AppearanceMode.LIGHT, vm.appearanceMode.value)
+        assertFalse(vm.isOledEnabled.value)
+    }
+
+    @Test
     fun themeResolutionIsObservableWithoutSubscribingToIt() =
         runTest(dispatcher) {
             val vm =
@@ -196,7 +233,7 @@ class ThemeVMTest {
 
     private fun TestScope.startedVm(
         modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
-        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
+        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
         advanceToIdle: Boolean = true,
     ): ThemeVM {
         val vm =

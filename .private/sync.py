@@ -185,7 +185,7 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
             current = run('git', 'hash-object', '--path', WRAPPER_PROPERTIES, WRAPPER_PROPERTIES, cwd=candidate)
             if current != base:
                 raise RuntimeError('Upstream patch changed the verified Gradle wrapper base')
-            path.write_text(wrapper[1], encoding='ascii', newline='\n')
+            path.write_text(wrapper.properties, encoding='ascii', newline='\n')
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
@@ -199,8 +199,8 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
         record = dict(tag=tag, sha=commit, published_at=latest['published_at'], versionCode=code,
                       acceptance=requirements(changes))
         if wrapper:
-            record['wrapper'] = wrapper[0]
-            record['wrapper_head'] = wrapper[2]
+            record['wrapper'] = wrapper.version
+            record['wrapper_head'] = wrapper.head
         (candidate/'.private/candidate.json').write_text(json.dumps(record,indent=2)+'\n')
         run('python3','-B','.private/check.py',cwd=candidate)
         run('python3','-B','.private/foundation_architecture.py',cwd=candidate)
@@ -218,7 +218,7 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
                 '-p',controller,'-p',commit,'-m',f'Integrate upstream {tag} with verified private patch',cwd=candidate)
         # Do not replace a previous candidate. A repeated poll can reuse only the exact same tree.
         if wrapper:
-            branch += '-gradle-' + wrapper[0] + '-' + wrapper[2][:12]
+            branch += '-gradle-' + wrapper.version + '-' + wrapper.head[:12]
         existing=run('git','ls-remote','origin',f'refs/heads/{branch}')
         if existing:
             prior=existing.split()[0]
@@ -226,7 +226,13 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
             if run('git','rev-parse',prior+'^{tree}')!=run('git','rev-parse',sha+'^{tree}',cwd=candidate):
                 raise RuntimeError('Candidate branch differs; review required')
             sha=prior
-        else: run('git','push','origin',f'{sha}:refs/heads/{branch}')
+        if wrapper:
+            from maintenance_watch import REPOSITORY, require_current_wrapper_proposal
+
+            require_current_wrapper_proposal(f'repos/{REPOSITORY}', wrapper.number, controller, wrapper.head,
+                                             wrapper.repository_id)
+        if not existing:
+            run('git','push','origin',f'{sha}:refs/heads/{branch}')
         output(changed='true',source_sha=sha,branch=branch)
     finally:
         run('git','worktree','remove','--force',str(candidate))

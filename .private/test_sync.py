@@ -308,13 +308,18 @@ class SyncTests(unittest.TestCase):
                 with runner_temp(temp),patch.object(sync,'gh',
                         return_value=[self.release(self.next_tag)]),patch.object(sync,'run',
                         side_effect=commands),patch.object(sync,'output') as output:
-                    from maintenance_watch import WRAPPER_PROPERTIES
+                    from maintenance_watch import ProposalChanged, REPOSITORY, WRAPPER_PROPERTIES, WrapperUpdate
                     wrapper = (sync.ROOT / WRAPPER_PROPERTIES).read_text()
                     installed = re.search(r'gradle-(\d+)\.(\d+)\.(\d+)-bin.zip', wrapper)
                     release = f'{installed[1]}.{installed[2]}.{int(installed[3]) + 1}'
                     combined = wrapper.replace(installed[0], f'gradle-{release}-bin.zip')
                     combined = re.sub(r'(?m)^distributionSha256Sum=.*$', 'distributionSha256Sum=' + 'a'*64, combined)
-                    sync.main(wrapper=(release, combined, 'a' * 40), expected_commit=changed_sha)
+                    update = WrapperUpdate(release, combined, 'a' * 40, 7, 9)
+                    with patch('maintenance_watch.require_current_wrapper_proposal') as verify:
+                        sync.main(wrapper=update, expected_commit=changed_sha)
+                    verify.assert_called_once_with(
+                        f'repos/{REPOSITORY}', 7, original('git', 'rev-parse', 'HEAD'), 'a' * 40, 9,
+                    )
                     tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                     self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                     self.assertIn('.github/dependabot.yml',tree)
@@ -327,6 +332,13 @@ class SyncTests(unittest.TestCase):
                         self.assertFalse(verify_promotion_revision(output.call_args.kwargs['source_sha'],
                                                                    original('git','rev-parse','HEAD'), root=sync.ROOT))
                     self.assertEqual(1,len(writes))
+                    output.reset_mock()
+                    with patch('maintenance_watch.require_current_wrapper_proposal',
+                               side_effect=ProposalChanged('Proposal became draft')):
+                        with self.assertRaisesRegex(ProposalChanged, 'became draft'):
+                            sync.main(wrapper=update, expected_commit=changed_sha)
+                    self.assertEqual(1, len(writes))
+                    output.assert_not_called()
             finally:
                 original('git','worktree','remove','--force',str(upstream))
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())

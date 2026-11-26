@@ -16,6 +16,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import java.util.UUID
@@ -110,7 +111,7 @@ class MigrationBackgroundRecoveryScenarioTest {
             mockk<GetOrchardMigrationSdkUseCase> {
                 coEvery { this@mockk() } returns driver.sdk
                 // Explicit-account overload — used by the driver-start/worker-revival loop, which
-                // now enumerates accountDataSource.getAllAccounts() instead of only the selected
+                // now enumerates accountDataSource.allAccounts instead of only the selected
                 // account.
                 coEvery { this@mockk(any()) } returns driver.sdk
             },
@@ -125,7 +126,7 @@ class MigrationBackgroundRecoveryScenarioTest {
             },
         accountDataSource =
             mockk<AccountDataSource>(relaxed = true) {
-                coEvery { getAllAccounts() } returns listOf(testWalletAccount)
+                every { allAccounts } returns MutableStateFlow(listOf(testWalletAccount))
                 every { selectedAccount } returns flowOf(testWalletAccount)
             },
         context = mockk<Context>(relaxed = true),
