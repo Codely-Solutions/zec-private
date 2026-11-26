@@ -22,7 +22,6 @@ import androidx.navigation.toRoute
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
-import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
@@ -103,7 +102,6 @@ private fun WalletNavHost(
 ) {
     val keyboardManager = LocalKeyboardManager.current
     val navigationRouter = koinInject<NavigationRouter>()
-    val applicationStateProvider = koinInject<ApplicationStateProvider>()
     val migrationAppHooks = koinInject<MigrationAppHooks>()
     val launchNavigation = koinInject<LaunchNavigationRequests>()
     val navController = LocalNavController.current
@@ -117,13 +115,11 @@ private fun WalletNavHost(
             lifecycle,
             navController,
             keyboardManager,
-            applicationStateProvider
         ) {
             NavigatorImpl(
                 activity = activity,
                 navController = navController,
                 keyboardManager = keyboardManager,
-                applicationStateProvider = applicationStateProvider,
                 browserAppearance = { browserAppearance.value },
                 canCommitOwnedNavigation = {
                     lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && currentAccess.value()

@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.guava.await
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
 
@@ -50,10 +51,13 @@ class MigrationScheduler(
     }
 
     internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration) {
-        val existing = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
+        val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
         // An interrupted worker may already have committed its child before acknowledging it.
-        if (existing.none { it.state == WorkInfo.State.BLOCKED }) {
+        val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
+        if (existing == null) {
             check(enqueueConfirmed(accountKeyId, delay, ExistingWorkPolicy.APPEND)) { "Migration scheduling is paused" }
+        } else {
+            armFallback(accountKeyId, existing.initialDelayMillis.milliseconds) { true }
         }
     }
 
@@ -66,29 +70,30 @@ class MigrationScheduler(
     private suspend fun enqueueConfirmed(accountKeyId: String, delay: Duration, policy: ExistingWorkPolicy): Boolean {
         val manager = WorkManager.getInstance(context)
         val request = newWorkRequest(accountKeyId, delay)
-        val requestedAt = System.currentTimeMillis()
         val operation = MigrationAccountRetirement.keepWake(accountKeyId) {
             manager.enqueueUniqueWork(workId(accountKeyId), policy, request)
         } ?: return false
         operation.result.await()
-        if (policy != ExistingWorkPolicy.KEEP || manager.getWorkInfoById(request.id).await() != null) {
-            MigrationAccountRetirement.keepWake(accountKeyId) { armFallback(accountKeyId, delay, requestedAt, policy) }
+        armFallback(accountKeyId, delay) {
+            // KEEP can acknowledge without inserting this request. An older wake or live-driver
+            // heartbeat must not stand in for the exact WorkManager request.
+            policy == ExistingWorkPolicy.APPEND ||
+                manager.getWorkInfoById(request.id).await()?.state == WorkInfo.State.ENQUEUED
         }
         return true
     }
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
-    private fun armFallback(accountKeyId: String, delay: Duration, requestedAt: Long, policy: ExistingWorkPolicy) {
-        migrationLog("MigrationScheduler: scheduling the next migration wake.")
-        // Dead-man's switch: record when this run is EXPECTED, and arm the fallback alarm a late
-        // margin past it — the alarm firing means the worker had its chance and did not run
-        // (Doze/OEM kill/background restriction); MigrationTransferDueReceiver then raises the
-        // step-due notification whose tap re-kicks the worker through the app.
+    private suspend fun armFallback(accountKeyId: String, delay: Duration, isPending: suspend () -> Boolean) {
         try {
-            val workerStarted = (MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId) ?: -1L) >= requestedAt
-            if (policy == ExistingWorkPolicy.APPEND || !workerStarted) {
-                MigrationWorkerHeartbeat.stampScheduled(context, accountKeyId, requestedAt + delay.inWholeMilliseconds)
-                migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
+            if (isPending()) {
+                MigrationAccountRetirement.keepWake(accountKeyId) {
+                    migrationLog("MigrationScheduler: arming the fallback for the next migration wake.")
+                    MigrationWorkerHeartbeat.stampScheduled(
+                        context, accountKeyId, System.currentTimeMillis() + delay.inWholeMilliseconds
+                    )
+                    migrationDueAlarmScheduler.schedule(accountKeyId, delay + WORKER_LATE_MARGIN)
+                }
             }
         } catch (e: CancellationException) {
             throw e

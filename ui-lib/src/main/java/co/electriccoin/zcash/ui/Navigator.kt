@@ -2,10 +2,10 @@ package co.electriccoin.zcash.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.widget.Toast
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.serialization.generateHashCode
-import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.screen.ExternalUrl
@@ -26,7 +26,6 @@ class NavigatorImpl(
     private val activity: Activity,
     private val navController: NavHostController,
     private val keyboardManager: KeyboardManager,
-    private val applicationStateProvider: ApplicationStateProvider,
     private val browserAppearance: () -> Pair<AppearanceMode, Boolean> = { AppearanceMode.SYSTEM to false },
     private val canCommitOwnedNavigation: () -> Boolean = { true },
 ) : Navigator {
@@ -106,7 +105,11 @@ class NavigatorImpl(
             when (route) {
 
                 is ExternalUrl -> {
-                    if (index == 0) {
+                    if (index != command.routes.lastIndex) {
+                        throw UnsupportedOperationException("External url can be opened as last screen only")
+                    }
+
+                    if (startWebBrowser(route) && index == 0) {
                         navController.currentDestination?.parent?.startDestinationId?.let {
                             navController.popBackStack(
                                 route = it,
@@ -114,12 +117,6 @@ class NavigatorImpl(
                             )
                         }
                     }
-
-                    if (index != command.routes.lastIndex) {
-                        throw UnsupportedOperationException("External url can be opened as last screen only")
-                    }
-
-                    startWebBrowser(route)
                 }
 
                 else -> {
@@ -145,15 +142,13 @@ class NavigatorImpl(
             when (route) {
 
                 is ExternalUrl -> {
-                    if (index == 0) {
-                        navController.popBackStack(destinationId = popUpToId, inclusive = true)
-                    }
-
                     if (index != command.routes.lastIndex) {
                         throw UnsupportedOperationException("External url can be opened as last screen only")
                     }
 
-                    startWebBrowser(route)
+                    if (startWebBrowser(route) && index == 0) {
+                        navController.popBackStack(destinationId = popUpToId, inclusive = true)
+                    }
                 }
 
                 else -> {
@@ -174,15 +169,13 @@ class NavigatorImpl(
             when (route) {
 
                 is ExternalUrl -> {
-                    if (index == 0) {
-                        navController.popBackStack()
-                    }
-
                     if (index != command.routes.lastIndex) {
                         throw UnsupportedOperationException("External url can be opened as last screen only")
                     }
 
-                    startWebBrowser(route)
+                    if (startWebBrowser(route) && index == 0) {
+                        navController.popBackStack()
+                    }
                 }
 
                 else -> {
@@ -207,7 +200,7 @@ class NavigatorImpl(
         }
     }
 
-    private fun startWebBrowser(route: ExternalUrl) {
+    private fun startWebBrowser(route: ExternalUrl): Boolean {
         val (appearanceMode, isOledEnabled) = browserAppearance()
         val launched = WebBrowserUtil.startActivity(
             activity = activity,
@@ -215,7 +208,8 @@ class NavigatorImpl(
             appearanceMode = appearanceMode,
             isOledEnabled = isOledEnabled
         )
-        if (launched) applicationStateProvider.onThirdPartyUiShown()
+        if (!launched) Toast.makeText(activity, R.string.general_could_not_open_link, Toast.LENGTH_SHORT).show()
+        return launched
     }
 
     private fun NavHostController.executeNavigation(

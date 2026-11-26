@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.os.Bundle
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
@@ -32,8 +33,6 @@ import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.BoundTransactionProgressArgs
 import io.mockk.mockk
-import io.mockk.every
-import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
@@ -49,6 +48,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToast
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -75,7 +75,7 @@ class NavigationResultDeliveryTest {
                     val application = ApplicationStateProviderImpl()
                     application.onApplicationLifecycleChanged(Lifecycle.Event.ON_START)
                     val navigator = NavigatorImpl(
-                        activity, controller, KeyboardManager(false, null), application,
+                        activity, controller, KeyboardManager(false, null),
                         browserAppearance = { renderedTheme },
                     )
                     val url = ExternalUrl("https://example.invalid/releases")
@@ -101,8 +101,11 @@ class NavigationResultDeliveryTest {
 
                     navigator.executeCommand(NavigationCommand.Forward(listOf(ActivityHistoryArgs)))
                     assertEquals(ActivityHistoryArgs, controller.currentBackStackEntry?.toRoute<ActivityHistoryArgs>())
+                    navigator.executeCommand(NavigationCommand.Replace(listOf(url)))
+                    assertNotNull(shadowOf(activity).nextStartedActivity)
+                    assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
                     application.onApplicationLifecycleChanged(Lifecycle.Event.ON_STOP)
-                    assertTrue(application.isInForeground.first())
+                    assertFalse(application.isInForeground.first())
                 }
             } finally {
                 host.pause().stop().destroy()
@@ -111,21 +114,45 @@ class NavigationResultDeliveryTest {
     }
 
     @Test
-    fun aRefusedBrowserLaunchDoesNotKeepTheWalletInTheForeground() {
+    fun aRefusedBrowserLaunchKeepsTheOriginatingRouteAndShowsFeedback() {
         install()
         compose.runOnIdle {
-            runTest {
-                val activity = mockk<Activity>()
-                every { activity.startActivity(any<Intent>(), any()) } throws ActivityNotFoundException()
-                val application = ApplicationStateProviderImpl()
-                application.onApplicationLifecycleChanged(Lifecycle.Event.ON_START)
-                val navigator = NavigatorImpl(activity, controller, KeyboardManager(false, null), application)
+            val host = Robolectric.buildActivity(BrowserUnavailableActivity::class.java).setup()
+            try {
+                runTest {
+                    val activity = host.get()
+                    val application = ApplicationStateProviderImpl()
+                    application.onApplicationLifecycleChanged(Lifecycle.Event.ON_START)
+                    val navigator = NavigatorImpl(activity, controller, KeyboardManager(false, null))
+                    val link = listOf(ExternalUrl("https://example.invalid/"))
+                    val origin = controller.currentBackStackEntry
 
-                navigator.executeCommand(NavigationCommand.Forward(listOf(ExternalUrl("https://example.invalid/"))))
-                verify(exactly = 1) { activity.startActivity(any<Intent>(), any()) }
-                application.onApplicationLifecycleChanged(Lifecycle.Event.ON_STOP)
-                assertFalse(application.isInForeground.first())
+                    navigator.executeCommand(NavigationCommand.Forward(link))
+                    assertEquals(origin, controller.currentBackStackEntry)
+                    assertEquals(
+                        activity.getString(R.string.general_could_not_open_link),
+                        ShadowToast.getTextOfLatestToast(),
+                    )
+
+                    navigator.executeCommand(NavigationCommand.Replace(link))
+                    assertEquals(origin, controller.currentBackStackEntry)
+                    assertEquals(2, activity.launchAttempts)
+                    application.onApplicationLifecycleChanged(Lifecycle.Event.ON_STOP)
+                    assertFalse(application.isInForeground.first())
+                }
+            } finally {
+                host.pause().stop().destroy()
             }
+        }
+    }
+
+    class BrowserUnavailableActivity : Activity() {
+        var launchAttempts = 0
+            private set
+
+        override fun startActivity(intent: Intent, options: Bundle?) {
+            launchAttempts += 1
+            throw ActivityNotFoundException()
         }
     }
 
@@ -193,7 +220,7 @@ class NavigationResultDeliveryTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 val requests = LaunchNavigationRequests()
                 backgroundScope.launch {
                     requests.deliverOnChanges(
@@ -235,7 +262,7 @@ class NavigationResultDeliveryTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 val requests = LaunchNavigationRequests()
                 val errors = NavigateToErrorUseCase(mockk())
                 val recovery = errors.stage(ErrorArgs.SeedRecoveryFailed) as ErrorDialog
@@ -350,7 +377,7 @@ class NavigationResultDeliveryTest {
             runTest {
                 val router = NavigationRouterImpl()
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                     router.observePipeline().collect { command ->
                         if (command is CustomNavigationCommand) navigator.executeCommand(command)
@@ -378,7 +405,7 @@ class NavigationResultDeliveryTest {
             runTest {
                 val router = NavigationRouterImpl()
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                     router.observePipeline().collect { command ->
                         if (command is CustomNavigationCommand) navigator.executeCommand(command)
@@ -434,7 +461,7 @@ class NavigationResultDeliveryTest {
         val router = NavigationRouterImpl()
         val stopTracking = controller.trackActiveEntry(router)
         val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+        val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {
                 router.collectPendingForwards(navigator, canCommit)

@@ -28,6 +28,7 @@ class OnMigrationSyncCompletedUseCase(
     }
 
     private suspend fun reconcileAfterSync(accountKeyId: String) {
+        lastNetworkActivity.stampNow()
         val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
         val proved = sdk.finalizeReadyTransfers()
         val invalidated = sdk.reconcileInvalidations()
@@ -35,10 +36,8 @@ class OnMigrationSyncCompletedUseCase(
         if (invalidated) {
             migrationNotifier.notifyMigrationPlanInvalid(accountKeyId)
             migrationScheduler.cancel(accountKeyId)
-            lastNetworkActivity.stampNow()
             return
         }
-        lastNetworkActivity.stampNow()
         // Worker revival: this hook fires exactly when the wallet is provably up and synced — the
         // one moment a dead self-rechaining worker (process killed mid-run, app update consumed
         // the restored job before the SDK was ready) can be safely re-armed. The worker has NO

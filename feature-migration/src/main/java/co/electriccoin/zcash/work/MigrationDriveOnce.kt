@@ -255,6 +255,7 @@ class MigrationDriveOnce(
             return DriveOnceResult.NextWake(nextWakeDelay(sdk, floor = sdk.privacySyncBufferDuration()))
         }
         val burst = synchronizerProvider.getSynchronizerOrNull()?.syncToTip(timeout = SYNC_TIMEOUT)
+        lastNetworkActivity.stampNow()
         migrationLog("MigrationDriveOnce: syncToTip outcome=${burst?.javaClass?.simpleName}")
         val proved = sdk.finalizeReadyTransfers()
         migrationLog("MigrationDriveOnce: proved=$proved")
@@ -271,7 +272,6 @@ class MigrationDriveOnce(
             migrationLog("MigrationDriveOnce: reconcile found an invalidation — stopping the work chain.")
             return DriveOnceResult.Terminal
         }
-        lastNetworkActivity.stampNow()
 
         return when (val nextStep = sdk.nextStep()?.step) {
             is MigrationAdvanceStep.Broadcast -> {

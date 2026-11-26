@@ -58,6 +58,7 @@
     <string name="walletStatus_disconnected">Sin conexión…</string>
     <string name="unable_to_open_play_store">No se pudo abrir la app de Google Play Store…</string>
     <string name="general_copied_to_clipboard">Copiado al portapapeles</string>
+    <string name="general_could_not_open_link">No se pudo abrir el enlace.</string>
     <string name="general_etc">…</string>
     <string name="recoveryPhraseDisplay_button_remindMeLater">Recordármelo más tarde</string>
     <string name="general_remind_me_in">Recordármelo en %s</string>

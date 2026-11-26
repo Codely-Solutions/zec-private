@@ -63,6 +63,7 @@
     <string name="walletStatus_disconnected">Disconnected…</string>
     <string name="unable_to_open_play_store">Unable to launch Google Play Store app…</string>
     <string name="general_copied_to_clipboard">Copied to clipboard</string>
+    <string name="general_could_not_open_link">Could not open the link.</string>
     <string name="general_etc">…</string>
     <string name="recoveryPhraseDisplay_button_remindMeLater">Remind me later</string>
     <string name="general_remind_me_in">Remind me in %s</string>

@@ -290,7 +290,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = false, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 val progress = FixtureMigrationProgress("fixture-owner")
                 repeat(2) {
@@ -405,7 +405,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 val requests = LaunchNavigationRequests()
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 var resumed = true
@@ -433,7 +433,7 @@ class RestoredWalletRoutesLayoutTest {
         compose.runOnIdle {
             runTest {
                 val keyboard = KeyboardManager(isOpen = true, rootSoftwareKeyboardController = null)
-                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard, mockk())
+                val navigator = NavigatorImpl(mockk<Activity>(), controller, keyboard)
                 val requests = LaunchNavigationRequests()
                 val home = checkNotNull(controller.currentBackStackEntry).id
                 requests.requestGiftScan()
@@ -553,7 +553,7 @@ class RestoredWalletRoutesLayoutTest {
         }
         controller.addOnDestinationChangedListener(listener)
         val navigator = NavigatorImpl(
-            mockk<Activity>(), controller, keyboard, mockk(), canCommitOwnedNavigation = canCommit,
+            mockk<Activity>(), controller, keyboard, canCommitOwnedNavigation = canCommit,
         )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             try {

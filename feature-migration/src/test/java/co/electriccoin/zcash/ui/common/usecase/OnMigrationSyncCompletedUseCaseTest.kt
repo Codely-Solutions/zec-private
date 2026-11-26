@@ -42,7 +42,7 @@ class OnMigrationSyncCompletedUseCaseTest {
     )
 
     @Test
-    fun happyPathCallsFinalizeThenReconcileThenStamp() =
+    fun theObservedSyncTimePrecedesProofAndReconciliation() =
         runTest {
             val sdk =
                 mockk<OrchardMigrationSdk>(relaxed = true) {
@@ -61,9 +61,9 @@ class OnMigrationSyncCompletedUseCaseTest {
             ).invoke("account-key-1")
 
             coVerifyOrder {
+                lastNetworkActivity.stampNow()
                 sdk.finalizeReadyTransfers()
                 sdk.reconcileInvalidations()
-                lastNetworkActivity.stampNow()
             }
             coVerify(exactly = 0) { migrationNotifier.notifyMigrationPlanInvalid(any()) }
             verify(exactly = 0) { migrationScheduler.cancel(any()) }
@@ -91,6 +91,20 @@ class OnMigrationSyncCompletedUseCaseTest {
             coVerify(exactly = 1) { migrationNotifier.notifyMigrationPlanInvalid("account-key-2") }
             verify(exactly = 1) { migrationScheduler.cancel("account-key-2") }
             coVerify(exactly = 1) { lastNetworkActivity.stampNow() }
+        }
+
+    @Test
+    fun failedProofPreservesTheObservedSyncTime() =
+        runTest {
+            val sdk = mockk<OrchardMigrationSdk> {
+                coEvery { finalizeReadyTransfers() } throws IOException("Proof temporarily unavailable")
+            }
+            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
+            assertFailsWith<IOException> { useCase(sdk, lastNetworkActivity).invoke("proof-fixture") }
+            coVerifyOrder {
+                lastNetworkActivity.stampNow()
+                sdk.finalizeReadyTransfers()
+            }
         }
 
     @Test
