@@ -9,7 +9,7 @@ import tempfile
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW as CUSTOM_WORKFLOW
 from publish import (APK, NOTES, exact_assets, expose_release, release_for_tag, release_title,
                      verify_attestation_publisher, verify_tag)
-from release_metadata import (ARCHIVE_LIMITS, UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job,
+from release_metadata import (ARCHIVE_LIMITS, ATTESTATION_ARTIFACT, UPSTREAM_DISCOVERY_WORKFLOW, artifact_producer_job,
                               hosted_release_job_names, job_timestamp)
 from verify_public_release import API, bounded_zip, digest, gh, require, unsigned_proof
 
@@ -54,14 +54,15 @@ def publisher_job(run, jobs, run_id, repository, *, attempt=None):
 
 
 def verify_attestation_upload(job, artifact):
-    def successful_step(pattern):
+    def recorded_step(pattern, conclusions):
         matches = [step for step in job.get('steps', []) if re.fullmatch(pattern, step['name'])]
         require(len(matches) == 1 and matches[0]['status'] == 'completed'
-                and matches[0]['conclusion'] == 'success', 'Expected successful publisher signing and attestation upload')
+                and matches[0]['conclusion'] in conclusions, 'Expected successful publisher signing and attestation upload')
         return matches[0]
 
-    signing = successful_step('Sign and verify the validated APK')
-    upload = successful_step(r'Run actions/upload-artifact@\S+')
+    signing = recorded_step('Sign and verify the validated APK', ('success',))
+    # GitHub can persist the archive before the upload action receives its acknowledgment.
+    upload = recorded_step(r'Run actions/upload-artifact@\S+', PUBLISHER_CONCLUSIONS)
     require(job_timestamp(job['started_at']) <= job_timestamp(signing.get('started_at'))
             <= job_timestamp(signing.get('completed_at')) <= job_timestamp(upload.get('started_at'))
             <= job_timestamp(artifact.get('created_at')) <= job_timestamp(upload.get('completed_at'))
@@ -93,10 +94,10 @@ def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
     pages = proof_api(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     artifacts = [item for page in pages for item in page['artifacts']]
     attestations = [item for item in artifacts if item['expired'] is False
-                    and re.fullmatch(r'release-attestation-[1-9][0-9]*', item['name'])]
+                    and ATTESTATION_ARTIFACT.fullmatch(item['name'])]
     if artifact_id:
         attestations = [row for row in attestations if row['id'] == int(artifact_id)
-                        and row['name'] == f'release-attestation-{attempt}']
+                        and ATTESTATION_ARTIFACT.fullmatch(row['name'])[1] == attempt]
         require(len(attestations) == 1, 'Expected the exact live publisher attestation')
     matches = []
     for item in attestations:
@@ -112,7 +113,9 @@ def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
 
 
 def read_publisher_attestation(run_id, artifact, artifacts):
-    attempt = int(artifact['name'].removeprefix('release-attestation-'))
+    name = ATTESTATION_ARTIFACT.fullmatch(artifact['name'])
+    require(name is not None, 'Invalid publisher attestation name')
+    attempt = int(name[1])
     require(sum(row['name'] == artifact['name'] and row['expired'] is False for row in artifacts) == 1,
             'Ambiguous attestation for the original publisher attempt')
     run = proof_api(f'actions/runs/{run_id}/attempts/{attempt}')
@@ -141,6 +144,10 @@ def read_publisher_attestation(run_id, artifact, artifacts):
     require(re.fullmatch(r'[a-f0-9]{40}', attestation['source_sha']), 'Attestation requires an exact source SHA')
     tag = attestation['release_tag']
     release_title(tag)
+    version = attestation.get('versionCode')
+    require(type(version) is int and 0 < version <= 2_100_000_000, 'Invalid attested Android version code')
+    require(name[2] is None or (int(name[2]) == version and name[3] == tag),
+            'Attestation content differs from its indexed release identity')
     return attempt, data, attestation
 
 
@@ -172,29 +179,26 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
 
 def require_unattested_release(metadata, tag, version, current_run):
     """Find prior trusted signers, including recovery runs that added no receipts."""
-    for page in range(1, 11):
-        result = metadata.api(f'/actions/artifacts?per_page=100&page={page}')
-        artifacts = result['artifacts']
-        for artifact in artifacts:
-            if artifact['expired'] or not re.fullmatch(r'release-attestation-[1-9][0-9]*', artifact['name']):
-                continue
-            origin = artifact['workflow_run']
-            run_id = origin['id']
-            if (str(run_id) == current_run or origin.get('head_branch') != 'main'
-                    or origin.get('head_repository_id') != origin.get('repository_id')):
-                continue
-            run = metadata.api(f'/actions/runs/{run_id}')
-            if (run.get('event') not in PUBLISHERS.get(run.get('path'), set())
-                    or run['head_repository']['full_name'] != REPOSITORY or run['head_branch'] != 'main'):
-                continue
-            siblings = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
-            attempt, _, proof = read_publisher_attestation(str(run_id), artifact, siblings)
-            require(proof['release_tag'] != tag and proof['versionCode'] != version,
-                    f'Prior release signing found. Reconcile publisher {run_id}, attempt {attempt}, '
-                    f'attestation {artifact["id"]}.')
-        if len(artifacts) < 100:
-            return
-    raise IncompleteProofSearch('Signing proof search reached 1000 artifacts; reconcile the prior publisher first')
+    for artifact in metadata.pages('/actions/artifacts', 'artifacts'):
+        name = ATTESTATION_ARTIFACT.fullmatch(artifact['name'])
+        if artifact['expired'] or name is None:
+            continue
+        if name[2] is not None and int(name[2]) != version and name[3] != tag:
+            continue
+        origin = artifact['workflow_run']
+        run_id = origin['id']
+        if (str(run_id) == current_run or origin.get('head_branch') != 'main'
+                or origin.get('head_repository_id') != origin.get('repository_id')):
+            continue
+        run = metadata.api(f'/actions/runs/{run_id}')
+        if (run.get('event') not in PUBLISHERS.get(run.get('path'), set())
+                or run['head_repository']['full_name'] != REPOSITORY or run['head_branch'] != 'main'):
+            continue
+        siblings = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
+        attempt, _, proof = read_publisher_attestation(str(run_id), artifact, siblings)
+        require(proof['release_tag'] != tag and proof['versionCode'] != version,
+                f'Prior release signing found. Reconcile publisher {run_id}, attempt {attempt}, '
+                f'attestation {artifact["id"]}.')
 
 
 def resolve(run_id, attempt='', artifact_id='', *, target=None):

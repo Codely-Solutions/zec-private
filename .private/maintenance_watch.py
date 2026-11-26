@@ -11,6 +11,7 @@ from urllib.request import urlopen
 
 from maintenance_cadence import window
 from notify import PUBLICATION_OPERATIONS, blocker_issues, current_blockers, matches_recovery
+from release_metadata import ATTESTATION_ARTIFACT
 
 
 REPOSITORY = 'Codely-Solutions/zec-private'
@@ -204,8 +205,8 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
     for page in range(1, 11):
         artifacts = api(f'{prefix}/actions/artifacts?per_page=100&page={page}')['artifacts']
         for artifact in artifacts:
-            match = re.fullmatch(r'release-attestation-([1-9][0-9]*)', artifact['name'])
-            if artifact['expired'] or match is None:
+            match = ATTESTATION_ARTIFACT.fullmatch(artifact['name'])
+            if artifact['expired'] or match is None or (match[3] is not None and match[3] != tag):
                 continue
             run_id = str(artifact['workflow_run']['id'])
             attempt, artifact_id = match[1], str(artifact['id'])

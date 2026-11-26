@@ -316,11 +316,16 @@ class PublishMetadataTest(unittest.TestCase):
                    head_branch='main', head_repository={'full_name': repository})
         metadata = MagicMock()
         paths = {
-            '/actions/artifacts?per_page=100&page=1': {'artifacts': [artifact]},
             '/actions/runs/7': run,
         }
         metadata.api.side_effect = paths.__getitem__
-        metadata.pages.return_value = [artifact]
+        unrelated = [dict(id=index, name='validated-unsigned-apk', expired=False) for index in range(1001)]
+        unrelated.append(dict(artifact, id=55, name='release-attestation-2-3234035-v3.19.0-private.32'))
+        pages = {
+            '/actions/artifacts': [*unrelated, artifact],
+            '/actions/runs/7/artifacts': [artifact],
+        }
+        metadata.pages.side_effect = lambda path, key: pages[path]
         with patch.object(reconcile, 'read_publisher_attestation',
                           return_value=(2, b'', {'release_tag': tag, 'versionCode': version})) as read:
             with self.assertRaisesRegex(ValueError, 'publisher 7, attempt 2, attestation 53'):
@@ -508,16 +513,27 @@ class PublishMetadataTest(unittest.TestCase):
             with patch.object(reconcile, 'release_for_tag', return_value=draft):
                 self.assertEqual(reconcile.lookup('7', '1', '53', allow_draft=True), (result, proof, draft))
 
-            for failing_step in (0, 1):
-                with self.subTest(failing_step=failing_step):
-                    failed = [step.copy() for step in steps]
-                    failed[failing_step]['conclusion'] = 'failure'
-                    job.update(conclusion='failure', steps=failed)
-                    download.reset_mock()
-                    with self.assertRaisesRegex(ValueError, 'successful publisher signing and attestation upload'):
-                        reconcile.resolve('7', '1', '53')
-                    download.assert_not_called()
+            for upload_result in ('failure', 'cancelled'):
+                interrupted = [step.copy() for step in steps]
+                interrupted[1]['conclusion'] = upload_result
+                job.update(conclusion=upload_result, steps=interrupted)
+                self.assertEqual(reconcile.resolve('7', '1', '53'), result)
+            failed = [step.copy() for step in steps]
+            failed[0]['conclusion'] = 'failure'
+            job.update(conclusion='failure', steps=failed)
+            download.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'successful publisher signing and attestation upload'):
+                reconcile.resolve('7', '1', '53')
+            download.assert_not_called()
             job.update(conclusion='success', steps=steps)
+
+            legacy_name = artifact['name']
+            artifact['name'] = f'release-attestation-1-3234034-{tag}'
+            self.assertEqual(reconcile.resolve('7', '1', '53'), result)
+            artifact['name'] = f'release-attestation-1-3234035-{tag}'
+            with self.assertRaisesRegex(ValueError, 'differs from its indexed release identity'):
+                reconcile.resolve('7', '1', '53')
+            artifact['name'] = legacy_name
 
             # A copied job can retain the original step timestamps and status under a new attempt.
             copy = dict(job, id=76, run_attempt=2)

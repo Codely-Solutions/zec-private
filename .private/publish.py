@@ -10,7 +10,7 @@ from acceptance_policy import (
 from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
 from release_metadata import (
-    ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
+    ARCHIVE_LIMITS, ATTESTATION_ARTIFACT, Metadata, PUBLIC_APK_LIMIT, WALLET_APK, checksum_bytes, find_release_tag, require,
     require_public_version, verify_direct_assembly, wallet_release_versions,
 )
 
@@ -62,7 +62,7 @@ def require_unattested_retry(metadata, run, attempt):
     if attempt == '1':
         return
     artifacts = metadata.pages(f'/actions/runs/{run}/artifacts', 'artifacts')
-    require(not any(re.fullmatch(r'release-attestation-[1-9][0-9]*', entry['name']) for entry in artifacts),
+    require(not any(ATTESTATION_ARTIFACT.fullmatch(entry['name']) for entry in artifacts),
             'This publisher run already has a release attestation. Reconcile its original attempt before signing.')
 
 
@@ -394,7 +394,9 @@ def main():
     (dist/'release-attestation.json').write_bytes(data)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
         output.write(f'release_tag={tag}\nattestation_digest={hashlib.sha256(data).hexdigest()}\n')
-        output.write(f'attestation_attempt={attestation["publisher"]["attempt"]}\n')
+        attempt = attestation['publisher']['attempt']
+        output.write(f'attestation_attempt={attempt}\n')
+        output.write(f'attestation_name=release-attestation-{attempt}-{proof["versionCode"]}-{tag}\n')
 
 
 APK = WALLET_APK
