@@ -111,7 +111,7 @@ def lookup(run_id, attempt, artifact_id, *, allow_draft=False, target=None):
     return matches[0]
 
 
-def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
+def read_publisher_attestation(run_id, artifact, artifacts):
     attempt = int(artifact['name'].removeprefix('release-attestation-'))
     require(sum(row['name'] == artifact['name'] and row['expired'] is False for row in artifacts) == 1,
             'Ambiguous attestation for the original publisher attempt')
@@ -141,6 +141,12 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
     require(re.fullmatch(r'[a-f0-9]{40}', attestation['source_sha']), 'Attestation requires an exact source SHA')
     tag = attestation['release_tag']
     release_title(tag)
+    return attempt, data, attestation
+
+
+def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
+    attempt, data, attestation = read_publisher_attestation(run_id, artifact, artifacts)
+    tag = attestation['release_tag']
     require(target is None or target['tag_name'] == tag, 'Attestation names a different public release')
     if target is not None:
         release = target
@@ -160,8 +166,35 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
         require(obj is not None and release_tag_matches(tag, attestation['source_sha'], attestation['apk_sha256'],
                                                         release['id'], obj, proof_api), 'Public tag differs from the attestation')
     output = dict(release_tag=tag, attestation_id=artifact['id'], attestation_digest=digest(data),
-                  attestation_attempt=attempt, controller_sha=run['head_sha'])
+                  attestation_attempt=attempt, controller_sha=attestation['controller_sha'])
     return output, attestation, release
+
+
+def require_unattested_release(metadata, tag, version, current_run):
+    """Find prior trusted signers, including recovery runs that added no receipts."""
+    for page in range(1, 11):
+        result = metadata.api(f'/actions/artifacts?per_page=100&page={page}')
+        artifacts = result['artifacts']
+        for artifact in artifacts:
+            if artifact['expired'] or not re.fullmatch(r'release-attestation-[1-9][0-9]*', artifact['name']):
+                continue
+            origin = artifact['workflow_run']
+            run_id = origin['id']
+            if (str(run_id) == current_run or origin.get('head_branch') != 'main'
+                    or origin.get('head_repository_id') != origin.get('repository_id')):
+                continue
+            run = metadata.api(f'/actions/runs/{run_id}')
+            if (run.get('event') not in PUBLISHERS.get(run.get('path'), set())
+                    or run['head_repository']['full_name'] != REPOSITORY or run['head_branch'] != 'main'):
+                continue
+            siblings = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
+            attempt, _, proof = read_publisher_attestation(str(run_id), artifact, siblings)
+            require(proof['release_tag'] != tag and proof['versionCode'] != version,
+                    f'Prior release signing found. Reconcile publisher {run_id}, attempt {attempt}, '
+                    f'attestation {artifact["id"]}.')
+        if len(artifacts) < 100:
+            return
+    raise IncompleteProofSearch('Signing proof search reached 1000 artifacts; reconcile the prior publisher first')
 
 
 def resolve(run_id, attempt='', artifact_id='', *, target=None):

@@ -333,6 +333,9 @@ def main():
             })
         if release_for_tag(tag):
             raise RuntimeError('Release already exists; use reconciliation with its original attestation')
+        from reconcile_release import require_unattested_release
+
+        require_unattested_release(Metadata(), tag, proof['versionCode'], os.environ['GITHUB_RUN_ID'])
         require_advancing_version(proof['versionCode'], tag)
         verify_tag(tag, expected)
         from verify_public_release import payload, unsigned_proof

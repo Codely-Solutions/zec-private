@@ -304,6 +304,44 @@ class PublishMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'digest or size mismatch'):
                 publish.read_attestation(path, digest)
 
+    def test_signing_finds_a_separate_recovery_publisher_even_without_selected_receipts(self):
+        import reconcile_release as reconcile
+
+        repository = reconcile.REPOSITORY
+        version = 3234036
+        tag = 'v3.19.0-private.33'
+        artifact = dict(id=53, name='release-attestation-2', expired=False,
+                        workflow_run=dict(id=7, head_branch='main', repository_id=10, head_repository_id=10))
+        run = dict(id=7, event='workflow_dispatch', path='.github/workflows/custom-release.yml',
+                   head_branch='main', head_repository={'full_name': repository})
+        metadata = MagicMock()
+        paths = {
+            '/actions/artifacts?per_page=100&page=1': {'artifacts': [artifact]},
+            '/actions/runs/7': run,
+        }
+        metadata.api.side_effect = paths.__getitem__
+        metadata.pages.return_value = [artifact]
+        with patch.object(reconcile, 'read_publisher_attestation',
+                          return_value=(2, b'', {'release_tag': tag, 'versionCode': version})) as read:
+            with self.assertRaisesRegex(ValueError, 'publisher 7, attempt 2, attestation 53'):
+                reconcile.require_unattested_release(metadata, tag, version, '8')
+            read.assert_called_once_with('7', artifact, [artifact])
+            read.reset_mock()
+            reconcile.require_unattested_release(metadata, 'v3.19.0-private.34', version + 1, '8')
+            read.assert_called_once()
+            read.reset_mock()
+            reconcile.require_unattested_release(metadata, tag, version, '7')
+            read.assert_not_called()
+
+        with patch.object(reconcile, 'read_publisher_attestation', side_effect=OSError('interrupted proof read')):
+            with self.assertRaisesRegex(OSError, 'interrupted proof read'):
+                reconcile.require_unattested_release(metadata, tag, version, '8')
+
+        paths['/actions/runs/7'] = dict(run, head_repository={'full_name': 'other/zec-private'})
+        with patch.object(reconcile, 'read_publisher_attestation') as read:
+            reconcile.require_unattested_release(metadata, tag, version, '8')
+            read.assert_not_called()
+
     def test_state_commit_changes_only_release_metadata_without_checking_out_candidate(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch) / 'repo'
