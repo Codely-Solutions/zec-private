@@ -276,7 +276,9 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationScheduledVM_resolvesFromKoin() {
-        koin.koin.get<MigrationScheduledVM> { parametersOf(MigrationScheduledArgs("fixture-owner")) }
+        koin.koin.get<MigrationScheduledVM> {
+            parametersOf(MigrationScheduledArgs("fixture-owner"), "fixture-scheduled-entry")
+        }
     }
 
     @Test

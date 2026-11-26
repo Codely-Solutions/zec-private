@@ -3,9 +3,9 @@ package co.electriccoin.zcash.ui.screen.tor.settings
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,14 +46,40 @@ internal fun TorRestartRequiredView(onOpenSettings: () -> Unit) {
 }
 
 @Composable
+internal fun TorSettingsLoadView(isLoading: Boolean, onBack: () -> Unit, onRetry: () -> Unit) {
+    ZashiBaseSettingsOptIn(
+        header = stringResource(R.string.torSetup_title),
+        image = R.drawable.ic_tor_settings,
+        onDismiss = onBack,
+        info = null,
+        content = {
+            Spacer(modifier = Modifier.height(16.dp))
+            if (isLoading) {
+                CircularProgressIndicator(color = ZashiColors.Text.textPrimary)
+            } else {
+                Text(
+                    text = stringResource(R.string.tor_settings_read_failed),
+                    style = ZashiTypography.textSm,
+                    color = ZashiColors.Text.textTertiary,
+                )
+            }
+        },
+        footer = {
+            if (!isLoading) {
+                ZashiButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = onRetry),
+                )
+            }
+        },
+    )
+}
+
+@Composable
 fun TorSettingsView(state: TorSettingsState) {
     var isOptInSelected by remember(state.isOptedIn) { mutableStateOf(state.isOptedIn) }
 
-    val isButtonDisabled by remember {
-        derivedStateOf {
-            (state.isOptedIn && isOptInSelected) || (!state.isOptedIn && !isOptInSelected)
-        }
-    }
+    val isButtonDisabled = state.isOptedIn == isOptInSelected
 
     ZashiBaseSettingsOptIn(
         header = stringResource(R.string.torSetup_title),

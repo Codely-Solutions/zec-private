@@ -343,7 +343,7 @@ fun NavGraphBuilder.walletNavGraph(
         composable<UpdateGenericABContactArgs> { UpdateGenericABContactScreen(it.toRoute()) }
         composable<TorSettingsArgs> { TorSettingsScreen(it.id) }
         composable<ThemeSettingsArgs> { ThemeSettingsScreen(it.id) }
-        dialogComposable<ThemeDarkLookArgs> { ThemeDarkLookScreen(it.toRoute()) }
+        dialogComposable<ThemeDarkLookArgs> { ThemeDarkLookScreen(it.toRoute(), it.id) }
         composable<TorOptInArgs> { TorOptInScreen(it.id) }
         dialogComposable<ShieldedAddressInfoArgs> { ShieldedAddressInfoScreen() }
         dialogComposable<TransparentAddressInfoArgs> { TransparentAddressInfoScreen() }

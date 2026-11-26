@@ -11,8 +11,8 @@ import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ThemeDarkLookScreen(args: ThemeDarkLookArgs) {
-    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args) }
+fun ThemeDarkLookScreen(args: ThemeDarkLookArgs, sourceEntryId: String) {
+    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args, sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
     ThemeDarkLookView(state)
 }

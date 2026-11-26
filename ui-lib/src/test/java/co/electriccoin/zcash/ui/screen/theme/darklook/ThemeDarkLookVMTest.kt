@@ -1,15 +1,18 @@
 package co.electriccoin.zcash.ui.screen.theme.darklook
 
 import androidx.navigation.NavBackStackEntry
+import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.NavigationRouterImpl
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.screen.more.MoreArgs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +31,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -256,11 +260,36 @@ class ThemeDarkLookVMTest {
         isOledEnabled: Boolean
     ) = state.options.first { it.isOledEnabled == isOledEnabled }
 
+    @Test
+    fun theDelayedSaveQueuesOnlyForItsOwnAppearanceDialog() = runTest(dispatcher) {
+        val router = NavigationRouterImpl()
+        val entries = router.registerEntryObserver()
+        entries.update(ActiveNavigationEntry("appearance", null))
+        val commit = CompletableDeferred<Unit>()
+        val oled = FakeIsOledEnabledStorageProvider(false) { commit.await() }
+        val vm = startedVm(
+            args = ThemeDarkLookArgs(AppearanceMode.DARK),
+            oledProvider = oled,
+            router = router,
+            sourceEntryId = "appearance",
+        )
+        assertNotNull(vm.state.value).saveButton.onClick()
+        advanceUntilIdle()
+        entries.update(ActiveNavigationEntry("scanner", null))
+        commit.complete(Unit)
+        advanceUntilIdle()
+
+        val commands = assertNotNull(router.pendingNavigation).commands.value
+        assertEquals(setOf("appearance"), commands.keys)
+        assertEquals(NavigationCommand.BackTo(MoreArgs::class), commands["appearance"]?.buildCommand?.invoke())
+    }
+
     private fun TestScope.startedVm(
         args: ThemeDarkLookArgs = ThemeDarkLookArgs(AppearanceMode.SYSTEM),
         modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
         oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
-        router: FakeNavigationRouter = FakeNavigationRouter(),
+        router: NavigationRouter = FakeNavigationRouter(),
+        sourceEntryId: String? = null,
     ): ThemeDarkLookVM {
         val vm =
             ThemeDarkLookVM(
@@ -268,7 +297,8 @@ class ThemeDarkLookVMTest {
                 navigationRouter = router,
                 appearanceModeStorageProvider = modeProvider,
                 isOledEnabledStorageProvider = oledProvider,
-                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
+                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider),
+                sourceEntryId = sourceEntryId,
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()
@@ -298,7 +328,8 @@ private class FakeAppearanceModeStorageProvider(
 }
 
 private class FakeIsOledEnabledStorageProvider(
-    stored: Boolean?
+    stored: Boolean?,
+    private val beforeStore: suspend () -> Unit = {},
 ) : IsOledEnabledStorageProvider {
     private val state = MutableStateFlow(stored)
 
@@ -308,6 +339,7 @@ private class FakeIsOledEnabledStorageProvider(
     override suspend fun get(): Boolean? = state.value
 
     override suspend fun store(amount: Boolean) {
+        beforeStore()
         state.value = amount
     }
 

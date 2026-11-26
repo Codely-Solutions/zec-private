@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.getOrSystem
@@ -27,6 +28,7 @@ internal class ThemeDarkLookVM(
     private val appearanceModeStorageProvider: AppearanceModeStorageProvider,
     private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
     private val setAppearanceMode: SetAppearanceModeUseCase,
+    private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private var storedMode = AppearanceMode.SYSTEM
 
@@ -44,6 +46,7 @@ internal class ThemeDarkLookVM(
             )
 
     init {
+        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
         viewModelScope.launch {
             storedMode = appearanceModeStorageProvider.getOrSystem()
             storedOledEnabled = isOledEnabledStorageProvider.get() == true
@@ -85,6 +88,10 @@ internal class ThemeDarkLookVM(
 
     private fun onSaveClick() =
         viewModelScope.launch {
-            setAppearanceMode(args.mode, isOledEnabled = selectedOledEnabled.value == true)
+            setAppearanceMode(
+                args.mode,
+                isOledEnabled = selectedOledEnabled.value == true,
+                sourceEntryId = sourceEntryId,
+            )
         }
 }

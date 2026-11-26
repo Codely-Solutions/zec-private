@@ -135,10 +135,7 @@ fun ChooseServerView(state: ChooseServerState?) {
                 }
 
                 if (state.connectionMode.isManualSelected) {
-                    if (state.fastest.servers.isNotEmpty()) {
-                        serverListItems(state.fastest)
-                    }
-
+                    serverListItems(state.fastest)
                     serverListItems(state.other)
                 }
             }
@@ -415,7 +412,7 @@ private fun FastestServersHeader(state: ServerListState.Fastest) {
                 } else {
                     Image(
                         painter = painterResource(id = R.drawable.ic_retry),
-                        contentDescription = state.retryButton.text.getValue(),
+                        contentDescription = null,
                         colorFilter = ColorFilter.tint(ZashiColors.Text.textPrimary)
                     )
                 }

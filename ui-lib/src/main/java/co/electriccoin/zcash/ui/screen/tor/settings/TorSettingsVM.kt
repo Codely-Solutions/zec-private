@@ -13,7 +13,12 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
 import co.electriccoin.zcash.ui.common.usecase.TorChangeWalletBusyException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.update
 import co.electriccoin.zcash.ui.design.util.stringRes
 
 class TorSettingsVM(
@@ -24,19 +29,26 @@ class TorSettingsVM(
     private val sourceEntryId: String? = null,
 ) : ViewModel() {
     private val save = mutableLce<Unit>()
+    private val readAttempts = MutableStateFlow(0)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    internal val preference = readAttempts.flatMapLatest {
+        isTorEnabledUseCase.observe().map<Boolean?, TorPreferenceRead> { enabled ->
+            if (enabled == null) TorPreferenceRead.Unavailable else TorPreferenceRead.Available(enabled)
+        }.onStart { emit(TorPreferenceRead.Loading) }
+    }.stateIn(this, TorPreferenceRead.Loading)
 
     init {
         addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
     }
 
     val state =
-        isTorEnabledUseCase
-            .observe()
-            .map { isEnabled ->
-                isEnabled?.let {
+        preference
+            .map { read ->
+                (read as? TorPreferenceRead.Available)?.let {
                     TorSettingsState(
-                        isOptedIn = it,
-                        onSaveClick = ::onOptInClick,
+                        isOptedIn = it.enabled,
+                        onSaveClick = { optedIn -> onOptInClick(it, optedIn) },
                         onDismiss = ::onBack,
                     )
                 }
@@ -48,11 +60,23 @@ class TorSettingsVM(
                 )
             }.stateIn(this)
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 
-    private fun onOptInClick(optIn: Boolean) = save.guardLoading {
-        save.execute { optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId) }
+    fun retryRead() {
+        if (preference.value == TorPreferenceRead.Unavailable) readAttempts.update { it + 1 }
     }
+
+    private fun onOptInClick(displayed: TorPreferenceRead.Available, optIn: Boolean) = save.guardLoading {
+        if (preference.value === displayed && displayed.enabled != optIn) {
+            save.execute { optInExchangeRateAndTor(optIn, sourceEntryId = sourceEntryId) }
+        }
+    }
+}
+
+internal sealed interface TorPreferenceRead {
+    data object Loading : TorPreferenceRead
+    data object Unavailable : TorPreferenceRead
+    data class Available(val enabled: Boolean) : TorPreferenceRead
 }
 
 internal fun torSaveErrorMessage(error: Throwable?) = stringRes(

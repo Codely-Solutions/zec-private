@@ -906,6 +906,7 @@
 
     <!-- ===== tor ===== -->
     <string name="torSetup_title">Protección con Tor</string>
+    <string name="tor_settings_read_failed">No se pudo leer la configuración de Tor.</string>
     <string name="tor_settings_subtitle">Brinda protección adicional para tu dirección IP. Utiliza
         Tor para obtener tasas de cambio, enviar transacciones, recuperar datos de transacciones y conectarse a APIs
         de terceros.\n\nSi el uso de Tor está permitido en tu región, te recomendamos habilitarlo.</string>

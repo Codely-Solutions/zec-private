@@ -8,6 +8,7 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletSdkRead
 import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
@@ -18,6 +19,7 @@ import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
 import co.electriccoin.zcash.ui.common.usecase.TorChangeWalletBusyException
 import co.electriccoin.zcash.ui.screen.tor.optin.TorOptInVM
 import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsVM
+import co.electriccoin.zcash.ui.screen.tor.settings.TorPreferenceRead
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -29,6 +31,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -46,6 +49,53 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TorProtectionSaveTest {
+    @Test
+    fun torSettingsCanRetryInitialAndLaterReadFailuresWithoutUsingTheOldForm() {
+        val dispatcher = UnconfinedTestDispatcher()
+        Dispatchers.setMain(dispatcher)
+        try {
+            runTest(dispatcher) {
+                val readFailsLater = CompletableDeferred<Unit>()
+                var reads = 0
+                val provider = mockk<IsTorEnabledStorageProvider> {
+                    every { observe() } returns flow {
+                        when (++reads) {
+                            1 -> throw IOException("Synthetic initial read failure")
+                            2 -> {
+                                emit(true)
+                                readFailsLater.await()
+                                throw IOException("Synthetic observer failure")
+                            }
+                            else -> emit(false)
+                        }
+                    }
+                }
+                val save = mockk<OptInExchangeRateAndTorUseCase>(relaxed = true)
+                val settings = TorSettingsVM(
+                    IsTorEnabledUseCase(provider), mockk(relaxed = true), save, mockk(relaxed = true),
+                )
+                backgroundScope.launch { settings.state.collect { } }
+                assertEquals(TorPreferenceRead.Unavailable, settings.preference.value)
+                assertNull(settings.state.value.content)
+
+                settings.retryRead()
+                val prior = assertNotNull(settings.state.value.content)
+                assertTrue(prior.isOptedIn)
+                readFailsLater.complete(Unit)
+                assertEquals(TorPreferenceRead.Unavailable, settings.preference.value)
+                prior.onSaveClick(false)
+                coVerify(exactly = 0) { save(any(), any()) }
+
+                settings.retryRead()
+                assertFalse(assertNotNull(settings.state.value.content).isOptedIn)
+                assertEquals(3, reads)
+                settings.viewModelScope.cancel()
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test
     fun nativeWorkFinishesBeforeCommitAndRecreatedSettingsCannotReadAStaleRoute() = runTest {
         val key = PreferenceKey("is_tor_Enabled")

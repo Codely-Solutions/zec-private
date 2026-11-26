@@ -272,7 +272,8 @@ class MigrationNotifier(
      * migration STEP (prove or broadcast; everything is pre-signed, no user review exists) is due
      * and nothing is executing it. The normal tap re-kicks the worker. If an interrupted removal
      * left ownership unresolved, the notice asks the user to check status and opens progress only
-     * after the app resolves the original account. [cancelStepDue] dismisses either form.
+     * after the app resolves the original account. The step-due notice stays available if the tap
+     * fails to select the original wallet or wake its worker. [cancelStepDue] dismisses either form.
      *
      * @param accountKeyId storage-key id ([toStorageKeyId]) of the migrating account; also selects
      *   the per-account notification id so [cancelStepDue] can dismiss exactly this one.
@@ -292,7 +293,7 @@ class MigrationNotifier(
                 .setContentText(context.getString(text))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(tap)
-                .setAutoCancel(true)
+                .setAutoCancel(removalUnresolved)
                 .build()
 
         NotificationManagerCompat.from(context).notify(accountKeyId, NOTIFICATION_ID_STEP_DUE, notification)

@@ -13,9 +13,12 @@ import org.koin.core.parameter.parametersOf
 fun TorSettingsScreen(sourceEntryId: String) {
     val vm = koinViewModel<TorSettingsVM> { parametersOf(sourceEntryId) }
     val state by vm.state.collectAsStateWithLifecycle()
-    LceRenderer(state = state, loading = { }) { content ->
-        BackHandler { content.onDismiss() }
-        TorSettingsView(state = content)
+    val preference by vm.preference.collectAsStateWithLifecycle()
+    BackHandler(onBack = vm::onBack)
+    if (preference is TorPreferenceRead.Available && state.content != null) {
+        LceRenderer(state = state) { TorSettingsView(state = it) }
+    } else {
+        TorSettingsLoadView(preference != TorPreferenceRead.Unavailable, vm::onBack, vm::retryRead)
     }
 }
 
