@@ -8740,7 +8740,7 @@ index 2c9a83423..20fd87cae 100644
 @@ -271,0 +274 @@ internal fun ImmediateDetailsRow(label: String, value: String) {
 +            textAlign = TextAlign.End,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..fe72f7b75 100644
+index ccdc9db31..b4aeb0692 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -4,0 +5 @@ import androidx.lifecycle.ViewModel
@@ -8752,24 +8752,25 @@ index ccdc9db31..fe72f7b75 100644
 +import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 @@ -11,0 +16 @@ import co.electriccoin.zcash.migration.migrationLog
 +import co.electriccoin.zcash.ui.NavigationCommand
-@@ -12,0 +18,2 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -12,0 +18,3 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.commitFrom
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -18,0 +26 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
++import co.electriccoin.zcash.ui.isForegroundAtEntry
+@@ -18,0 +27 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
-@@ -37,0 +46 @@ import co.electriccoin.zcash.ui.common.model.withLce
+@@ -37,0 +47 @@ import co.electriccoin.zcash.ui.common.model.withLce
 +import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
-@@ -38,0 +48 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -38,0 +49 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletActionAccess
-@@ -44,0 +55 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+@@ -44,0 +56 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 +import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
-@@ -46,0 +58 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
+@@ -46,0 +59 @@ import co.electriccoin.zcash.ui.common.repository.RestartMigrationScheduleReposi
 +import co.electriccoin.zcash.ui.common.repository.ReviewedMigrationSchedule
-@@ -50 +61,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
+@@ -50 +62,0 @@ import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetOrchardBalanceUseCase
-@@ -53,0 +65 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+@@ -53,0 +66 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 +import co.electriccoin.zcash.ui.common.usecase.enhanceFinalizedSplit
-@@ -60,0 +73,7 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
+@@ -60,0 +74,7 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTrans
 +import co.electriccoin.zcash.ui.stageResultFrom
 +import co.electriccoin.zcash.work.MigrationDriveOnce
 +import kotlinx.coroutines.Job
@@ -8777,19 +8778,19 @@ index ccdc9db31..fe72f7b75 100644
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.job
-@@ -64,0 +84 @@ import kotlinx.coroutines.flow.map
+@@ -64,0 +85 @@ import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.withContext
-@@ -76,0 +97 @@ class MigrationReviewVM(
+@@ -76,0 +98 @@ class MigrationReviewVM(
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
-@@ -82 +102,0 @@ class MigrationReviewVM(
+@@ -82 +103,0 @@ class MigrationReviewVM(
 -    private val getOrchardBalance: GetOrchardBalanceUseCase,
-@@ -88,0 +109 @@ class MigrationReviewVM(
+@@ -88,0 +110 @@ class MigrationReviewVM(
 +    private val sourceEntryId: String? = null,
-@@ -89,0 +111,3 @@ class MigrationReviewVM(
+@@ -89,0 +112,3 @@ class MigrationReviewVM(
 +    private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 +    private val walletActionAccess: WalletActionAccess,
 +    private val migrationDrive: MigrationDriveOnce,
-@@ -91,4 +115,6 @@ class MigrationReviewVM(
+@@ -91,4 +116,6 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
 -    // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
 -    // destination of its own (only totalFeeRequired()/transactionCount()); the amount shown is
@@ -8800,16 +8801,16 @@ index ccdc9db31..fe72f7b75 100644
 +    }
 +
 +    // The SDK binds the Orchard-only sweep in the proposal and exposes its exact fee.
-@@ -97 +123 @@ class MigrationReviewVM(
+@@ -97 +124 @@ class MigrationReviewVM(
 -            val schedule: MigrationSchedule,
 +            val reviewed: ReviewedMigrationSchedule,
-@@ -101,4 +127 @@ class MigrationReviewVM(
+@@ -101,4 +128 @@ class MigrationReviewVM(
 -        data class Immediate(
 -            val proposal: Proposal,
 -            val amountZatoshi: Zatoshi
 -        ) : ReviewProposal()
 +        data class Immediate(val proposal: Proposal) : ReviewProposal()
-@@ -134,0 +158,8 @@ class MigrationReviewVM(
+@@ -134,0 +159,8 @@ class MigrationReviewVM(
 +    private var reviewedOwnerKey: String? = null
 +    private var committedMigration: CommittedMigration? = null
 +
@@ -8818,12 +8819,12 @@ index ccdc9db31..fe72f7b75 100644
 +    private class ConfirmationAuthority(private val owner: Job, val canPresent: () -> Boolean) {
 +        fun canConfirm() = owner.isActive && canPresent()
 +    }
-@@ -138,0 +170,4 @@ class MigrationReviewVM(
+@@ -138,0 +171,4 @@ class MigrationReviewVM(
 +        loadProposal()
 +    }
 +
 +    private fun loadProposal() {
-@@ -147 +182,7 @@ class MigrationReviewVM(
+@@ -147 +183,7 @@ class MigrationReviewVM(
 -            val sdk = getOrchardMigrationSdk()
 +            val account = getSelectedWalletAccount()
 +            val key = account.sdkAccount.accountUuid.toStorageKeyId()
@@ -8832,12 +8833,12 @@ index ccdc9db31..fe72f7b75 100644
 +            }
 +            reviewedOwnerKey = key
 +            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
-@@ -151 +191,0 @@ class MigrationReviewVM(
+@@ -151 +192,0 @@ class MigrationReviewVM(
 -                        val amount = getOrchardBalance()
-@@ -159 +199 @@ class MigrationReviewVM(
+@@ -159 +200 @@ class MigrationReviewVM(
 -                        ReviewProposal.Immediate(proposal, amount)
 +                        ReviewProposal.Immediate(proposal)
-@@ -171,13 +211,2 @@ class MigrationReviewVM(
+@@ -171,13 +212,2 @@ class MigrationReviewVM(
 -                        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -                        val reused = restartMigrationScheduleRepository.consume(accountKeyId)
 -                        val schedule =
@@ -8853,15 +8854,15 @@ index ccdc9db31..fe72f7b75 100644
 -                            }
 +                        val reviewed = loadAutomaticPlan(sdk, key, account is KeystoneAccount)
 +                        val schedule = reviewed.schedule
-@@ -189 +218 @@ class MigrationReviewVM(
+@@ -189 +219 @@ class MigrationReviewVM(
 -                            if (getSelectedWalletAccount() is KeystoneAccount) {
 +                            if (account is KeystoneAccount) {
-@@ -213,2 +242,2 @@ class MigrationReviewVM(
+@@ -213,2 +243,2 @@ class MigrationReviewVM(
 -                        logProposedPlan(schedule)
 -                        ReviewProposal.Automatic(schedule, keystoneRunCount)
 +                        migrationLog("MigrationReviewVM: proposed ${schedule.transfers.size} transfer(s).")
 +                        ReviewProposal.Automatic(reviewed, keystoneRunCount)
-@@ -233 +262,8 @@ class MigrationReviewVM(
+@@ -233 +263,8 @@ class MigrationReviewVM(
 -        }.withLce(groupLce(proposeLce, confirmLce), errorStateMapper::mapToState)
 +        }.withLce(groupLce(proposeLce, confirmLce)) { error ->
 +            val message = when (error.cause) {
@@ -8871,43 +8872,43 @@ index ccdc9db31..fe72f7b75 100644
 +            }
 +            errorStateMapper.mapToState(error, message = message)
 +        }
-@@ -249 +285 @@ class MigrationReviewVM(
+@@ -249 +286 @@ class MigrationReviewVM(
 -                createImmediateState(proposal, isConfirming, exchangeRateState)
 +                createImmediateState(proposal, isConfirming)
-@@ -260 +296 @@ class MigrationReviewVM(
+@@ -260 +297 @@ class MigrationReviewVM(
 -        val sched = proposal.schedule
 +        val sched = proposal.reviewed.schedule
-@@ -305 +341 @@ class MigrationReviewVM(
+@@ -305 +342 @@ class MigrationReviewVM(
 -            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(sched) } },
 +            onConfirm = { proposeLce.guardLoading { onConfirmAutomatic(proposal) } },
-@@ -313 +349 @@ class MigrationReviewVM(
+@@ -313 +350 @@ class MigrationReviewVM(
 -                            proposeLce.guardLoading { onConfirmAutomatic(sched) }
 +                            proposeLce.guardLoading { onConfirmAutomatic(proposal) }
-@@ -321,4 +357 @@ class MigrationReviewVM(
+@@ -321,4 +358 @@ class MigrationReviewVM(
 -    // proposeImmediateMigration()'s raw send-max Proposal carries no destination-facing
 -    // "list of transfers" the way a MigrationSchedule does — this renders it as a single
 -    // synthetic row so the (shared) review layout still has something to show, using the real
 -    // fee from Proposal.totalFeeRequired() instead of AUTOMATIC's placeholder.
 +    // The public SDK exposes the sweep fee. The exact eligible amount is available in history after creation.
-@@ -328 +360,0 @@ class MigrationReviewVM(
+@@ -328 +361,0 @@ class MigrationReviewVM(
 -        exchangeRateState: ExchangeRateState,
-@@ -333,2 +365,2 @@ class MigrationReviewVM(
+@@ -333,2 +366,2 @@ class MigrationReviewVM(
 -            totalAmount = stringRes(proposal.amountZatoshi),
 -            totalFiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +            totalAmount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +            totalFiatAmount = null,
-@@ -341,2 +373,2 @@ class MigrationReviewVM(
+@@ -341,2 +374,2 @@ class MigrationReviewVM(
 -                        amount = stringRes(proposal.amountZatoshi),
 -                        fiatAmount = fiatAmount(proposal.amountZatoshi, exchangeRateState),
 +                        amount = stringRes(DesignR.string.migrationReview_eligibleOrchardFunds),
 +                        fiatAmount = null,
-@@ -348 +380 @@ class MigrationReviewVM(
+@@ -348 +381 @@ class MigrationReviewVM(
 -            onConfirm = { onConfirmImmediate(proposal.proposal, proposal.amountZatoshi) },
 +            onConfirm = { confirmLce.guardLoading { onConfirmImmediate(proposal) } },
-@@ -368 +400 @@ class MigrationReviewVM(
+@@ -368 +401 @@ class MigrationReviewVM(
 -    private fun onConfirmAutomatic(sched: MigrationSchedule) =
 +    private fun onConfirmAutomatic(proposal: ReviewProposal.Automatic) =
-@@ -369,0 +402,7 @@ class MigrationReviewVM(
+@@ -369,0 +403,7 @@ class MigrationReviewVM(
 +            if (!ownsReviewEntry() || proposeLce.state.value.success !== proposal) return@execute
 +            val account = requireReviewAccount()
 +            val canOperate = walletActionAccess.capture(account) ?: return@execute
@@ -8915,12 +8916,12 @@ index ccdc9db31..fe72f7b75 100644
 +                canOperate() && ownsReviewEntry() && proposeLce.state.value.success === proposal
 +            }
 +            if (!authority.canConfirm()) return@execute
-@@ -386 +425,3 @@ class MigrationReviewVM(
+@@ -386 +426,3 @@ class MigrationReviewVM(
 -            confirmAutomatic(sched)
 +            if (authority.canConfirm()) {
 +                confirmAutomatic(proposal.reviewed, account, authority)
 +            }
-@@ -389,3 +430,9 @@ class MigrationReviewVM(
+@@ -389,3 +431,9 @@ class MigrationReviewVM(
 -    private suspend fun confirmAutomatic(sched: MigrationSchedule) {
 -        if (getSelectedWalletAccount() is LedgerAccount) {
 -            throw AccountOperationUnsupportedException.ledger()
@@ -8933,7 +8934,7 @@ index ccdc9db31..fe72f7b75 100644
 +            return checkNotNull(pendingMigrationScheduleRepository.review(accountKeyId).takeIf { usesKeystone }) {
 +                "Return to Home to recover the existing migration."
 +            }
-@@ -393,8 +440,27 @@ class MigrationReviewVM(
+@@ -393,8 +441,27 @@ class MigrationReviewVM(
 -        getSelectedWalletAccount().requireSpendable()
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
 -            // Keystone can't sign in-process — hand the unsigned schedule off to the QR
@@ -8969,7 +8970,7 @@ index ccdc9db31..fe72f7b75 100644
 +    ) {
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        if (!authority.canConfirm() || resumeCommittedMigration(sdk, reviewed, accountKeyId, authority.canPresent)) {
-@@ -403,36 +469,34 @@ class MigrationReviewVM(
+@@ -403,36 +470,34 @@ class MigrationReviewVM(
 -        val sdk = getOrchardMigrationSdk()
 -        // Note-split is the first step of this confirm action (design spec §7) — a schedule with
 -        // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
@@ -9040,7 +9041,7 @@ index ccdc9db31..fe72f7b75 100644
 +            withContext(NonCancellable) {
 +                if (authority.canConfirm()) {
 +                    commitSoftwareMigration(sdk, reviewed, accountKeyId, spendingKey, authority)
-@@ -440,6 +504,6 @@ class MigrationReviewVM(
+@@ -440,6 +505,6 @@ class MigrationReviewVM(
 -                // Classify zip318_kind (PREPARATION) immediately — this broadcast's raw bytes are
 -                // already stored locally, so without this the normal enhancement queue would skip
 -                // it forever and the Activity row would stay "Sent" instead of "Note split"/
@@ -9053,10 +9054,10 @@ index ccdc9db31..fe72f7b75 100644
 +            if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
 +                // The SDK owns the already-committed plan. Do not draw or sign a replacement.
 +                navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) { NavigationCommand.BackToRoot }
-@@ -447 +511 @@ class MigrationReviewVM(
+@@ -447 +512 @@ class MigrationReviewVM(
 -                sched
 +                loadProposal()
-@@ -448,0 +513,69 @@ class MigrationReviewVM(
+@@ -448,0 +514,69 @@ class MigrationReviewVM(
 +        }
 +    }
 +
@@ -9126,7 +9127,7 @@ index ccdc9db31..fe72f7b75 100644
 +        canPresent: () -> Boolean,
 +    ) {
 +        if (!migrationDrive.permitsForeground(accountKeyId)) return
-@@ -450,24 +583,42 @@ class MigrationReviewVM(
+@@ -450,24 +584,42 @@ class MigrationReviewVM(
 -            sdk.signAndStoreMigrationSchedule(scheduleToSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
 -            // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
 -            // also never eagerly starts a drive loop right after signAndStoreMigrationSchedule —
@@ -9193,10 +9194,10 @@ index ccdc9db31..fe72f7b75 100644
 +            navigationRouter.stageResultFrom(sourceEntryId, authority.canPresent) {
 +                NavigationCommand.Forward(listOf(MigrationKeystoneSignArgs(args.mode, accountKeyId)))
 +            }
-@@ -482 +633 @@ class MigrationReviewVM(
+@@ -482 +634 @@ class MigrationReviewVM(
 -    private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
 +    private fun onConfirmImmediate(review: ReviewProposal.Immediate) =
-@@ -484,5 +635,3 @@ class MigrationReviewVM(
+@@ -484,5 +636,3 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
@@ -9205,9 +9206,9 @@ index ccdc9db31..fe72f7b75 100644
 +            val account = requireReviewAccount()
 +            if (!ownsReviewEntry() || proposeLce.state.value.success !== review) return@execute
 +            if (account is KeystoneAccount) {
-@@ -493,0 +643 @@ class MigrationReviewVM(
+@@ -493,0 +644 @@ class MigrationReviewVM(
 +                val canSign = walletActionAccess.capture(account) ?: return@execute
-@@ -510,6 +660 @@ class MigrationReviewVM(
+@@ -510,6 +661 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
 -                // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
@@ -9215,12 +9216,12 @@ index ccdc9db31..fe72f7b75 100644
 -                keystoneProposalRepository.createPCZTFromProposal()
 -                navigationRouter.forward(SignKeystoneTransactionArgs)
 +                prepareImmediateKeystone(review, account, canSign)
-@@ -517,2 +662,2 @@ class MigrationReviewVM(
+@@ -517,2 +663,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
 +                val reviewed = zashiProposalRepository.setMigrationSweepProposal(review.proposal)
 +                submitProposal(reviewed, sourceEntryId = sourceEntryId, reviewedOwner = account.sdkAccount.accountUuid)
-@@ -521,0 +667,37 @@ class MigrationReviewVM(
+@@ -521,0 +668,37 @@ class MigrationReviewVM(
 +    private suspend fun prepareImmediateKeystone(
 +        review: ReviewProposal.Immediate,
 +        account: KeystoneAccount,
@@ -9246,7 +9247,7 @@ index ccdc9db31..fe72f7b75 100644
 +        }
 +    }
 +
-+    private fun ownsReviewEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
++    private fun ownsReviewEntry() = navigationRouter.isForegroundAtEntry(sourceEntryId)
 +
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
@@ -9258,7 +9259,7 @@ index ccdc9db31..fe72f7b75 100644
 +
 +    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
 +
-@@ -532,36 +713,0 @@ class MigrationReviewVM(
+@@ -532,36 +714,0 @@ class MigrationReviewVM(
 -    // Only ever called for AUTOMATIC (createImmediateState hardcodes its own single-row label
 -    // instead — a raw send-max Proposal carries no per-transfer schedule to derive one from).
 -
@@ -9295,7 +9296,7 @@ index ccdc9db31..fe72f7b75 100644
 -        )
 -    }
 -
-@@ -636,0 +783,39 @@ class MigrationReviewVM(
+@@ -636,0 +784,39 @@ class MigrationReviewVM(
 +
 +internal fun Throwable.requiresNewMigrationReview(): Boolean =
 +    message?.contains("StalePlan") == true ||
@@ -13227,7 +13228,7 @@ index 20a8edf27..3a543cadb 100644
 +            walletActionAccess = mockk(),
 +            migrationDrive = mockk(),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
-index d0838db0c..5e48ded9c 100644
+index d0838db0c..ecd9917ec 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
 @@ -13,0 +14 @@ import cash.z.ecc.android.sdk.model.Zatoshi
@@ -13255,16 +13256,18 @@ index d0838db0c..5e48ded9c 100644
 +import kotlinx.coroutines.CompletableDeferred
 @@ -50,0 +63 @@ import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.flow.first
-@@ -54,0 +68 @@ import kotlinx.coroutines.test.resetMain
+@@ -52,0 +66 @@ import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestScope
+@@ -54,0 +69 @@ import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runCurrent
-@@ -61,0 +76,2 @@ import kotlin.test.assertEquals
+@@ -61,0 +77,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -85,0 +102,3 @@ class MigrationReviewVMTest {
+@@ -85,0 +103,3 @@ class MigrationReviewVMTest {
 +            val reviewed = MigrationSweepTransactionProposal(proposal)
 +            val account = spendable<ZodlAccount>()
 +            every { zashiProposalRepository.setMigrationSweepProposal(proposal) } returns reviewed
-@@ -89,0 +109,7 @@ class MigrationReviewVMTest {
+@@ -89,0 +110,7 @@ class MigrationReviewVMTest {
 +                    getSelectedWalletAccount = selectedAccount(account),
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
@@ -13272,19 +13275,19 @@ index d0838db0c..5e48ded9c 100644
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -94 +120 @@ class MigrationReviewVMTest {
+@@ -94 +121 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
-@@ -95,0 +122,3 @@ class MigrationReviewVMTest {
+@@ -95,0 +123,3 @@ class MigrationReviewVMTest {
 +            assertNotNull(vm.state.value.content).onConfirm()
 +            advanceUntilIdle()
 +            collector.cancel()
-@@ -101,2 +130,2 @@ class MigrationReviewVMTest {
+@@ -101,2 +131,2 @@ class MigrationReviewVMTest {
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                submitProposal()
 +                zashiProposalRepository.setMigrationSweepProposal(proposal)
 +                submitProposal(reviewed, reviewedOwner = account.sdkAccount.accountUuid)
-@@ -114 +143,8 @@ class MigrationReviewVMTest {
+@@ -114 +144,8 @@ class MigrationReviewVMTest {
 -            val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
 +            val adopted = MigrationSweepTransactionProposal(proposal)
 +            var authorityCurrent = true
@@ -13294,57 +13297,57 @@ index d0838db0c..5e48ded9c 100644
 +                every { transactionProposal } returns MutableStateFlow(adopted)
 +                every { activateReviewedMigration(adopted, capture(approval)) } returns true
 +            }
-@@ -117,0 +154,6 @@ class MigrationReviewVMTest {
+@@ -117,0 +155,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -118,0 +161,3 @@ class MigrationReviewVMTest {
+@@ -118,0 +162,3 @@ class MigrationReviewVMTest {
 +                    walletActionAccess = mockk<WalletActionAccess> {
 +                        coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
 +                    },
-@@ -127 +172,3 @@ class MigrationReviewVMTest {
+@@ -127 +173,3 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            val collector = launch { vm.state.collect {} }
 +            advanceUntilIdle()
 +            assertNotNull(vm.state.value.content).onConfirm()
-@@ -128,0 +176 @@ class MigrationReviewVMTest {
+@@ -128,0 +177 @@ class MigrationReviewVMTest {
 +            collector.cancel()
-@@ -131,2 +179,2 @@ class MigrationReviewVMTest {
+@@ -131,2 +180,2 @@ class MigrationReviewVMTest {
 -                keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.setMigrationSweepProposal(proposal)
 +                keystoneProposalRepository.prepareReviewedMigration(adopted, any(), any())
-@@ -137,0 +186,3 @@ class MigrationReviewVMTest {
+@@ -137,0 +187,3 @@ class MigrationReviewVMTest {
 +            assertTrue(approval.captured())
 +            authorityCurrent = false
 +            assertFalse(approval.captured())
-@@ -170 +221 @@ class MigrationReviewVMTest {
+@@ -170 +222 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -221 +272 @@ class MigrationReviewVMTest {
+@@ -221 +273 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -248 +299 @@ class MigrationReviewVMTest {
+@@ -248 +300 @@ class MigrationReviewVMTest {
 -            val router = FakeNavigationRouter()
 +            val router = FakeNavigationRouter("scheduled-review")
-@@ -272 +323 @@ class MigrationReviewVMTest {
+@@ -272 +324 @@ class MigrationReviewVMTest {
 -                    coEvery { getMigrationState() } returns MigrationState.NotStarted
 +                    coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
-@@ -283 +334 @@ class MigrationReviewVMTest {
+@@ -283 +335 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -286,0 +338 @@ class MigrationReviewVMTest {
+@@ -286,0 +339 @@ class MigrationReviewVMTest {
 +                    sourceEntryId = "scheduled-review",
-@@ -289 +341,4 @@ class MigrationReviewVMTest {
+@@ -289 +342,4 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(vm, scheduleFromSplit)
 +            val review = vm.currentReview()
 +            assertEquals(stringRes(Zatoshi(100_000L)), review.totalAmount)
 +            coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
 +            review.onConfirm()
-@@ -297,0 +353,222 @@ class MigrationReviewVMTest {
+@@ -297,0 +354,16 @@ class MigrationReviewVMTest {
 +            val handoff = router.scopedCommands.single()
 +            assertEquals("scheduled-review", handoff.sourceEntryId)
 +            val route = assertIs<NavigationCommand.Forward>(handoff.buildCommand()).routes.single()
@@ -13361,7 +13364,7 @@ index d0838db0c..5e48ded9c 100644
 +            coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +            coEvery { proposeMigrationTransfers() } returnsMany listOf(unusable, first, replacement)
 +            coEvery { signAndStoreMigrationSchedule(first, any()) } throws IllegalStateException("StalePlan")
-+        }
+@@ -298,0 +371,237 @@ class MigrationReviewVMTest {
 +        val vm = vm(
 +            router = FakeNavigationRouter(),
 +            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
@@ -13476,7 +13479,16 @@ index d0838db0c..5e48ded9c 100644
 +    }
 +
 +    @Test
-+    fun automaticConfirmationDoesNotMutateTheWalletAfterItsReviewIsCovered() = runTest {
++    fun automaticConfirmationDoesNotMutateTheWalletAfterItsReviewIsCovered() =
++        runTest { assertConfirmationNeedsForeground(ActiveNavigationEntry("scanner", null)) }
++
++    @Test
++    fun automaticConfirmationDoesNotMutateTheWalletWhileItsReviewIsBackgrounded() =
++        runTest {
++            assertConfirmationNeedsForeground(ActiveNavigationEntry("automatic-review", null, hostResumed = false))
++        }
++
++    private suspend fun TestScope.assertConfirmationNeedsForeground(afterKeyRequest: ActiveNavigationEntry) {
 +        val review = "automatic-review"
 +        val router = FakeNavigationRouter(review)
 +        val resolvedKey = CompletableDeferred<UnifiedSpendingKey>()
@@ -13497,7 +13509,7 @@ index d0838db0c..5e48ded9c 100644
 +        vm.currentReview().onConfirm()
 +        runCurrent()
 +        coVerify(exactly = 1) { spendingKey.getZashiSpendingKey() }
-+        router.activeEntry.value = ActiveNavigationEntry("scanner", null)
++        router.activeEntry.value = afterKeyRequest
 +        resolvedKey.complete(mockk())
 +        advanceUntilIdle()
 +
@@ -13567,7 +13579,7 @@ index d0838db0c..5e48ded9c 100644
 +        }
 +        val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true) {
 +            coEvery { this@mockk.get(any<String>()) } returns false
-@@ -298,0 +576,22 @@ class MigrationReviewVMTest {
++        }
 +        val pending = PendingMigrationScheduleRepositoryImpl().apply {
 +            set(account.sdkAccount.accountUuid.toStorageKeyId(), ReviewedMigrationSchedule(schedule(1L, 200_000L)))
 +        }
@@ -13590,17 +13602,17 @@ index d0838db0c..5e48ded9c 100644
 +        coVerify(exactly = 1) { tor.store(any<String>(), true) }
 +        coVerify(exactly = 0) { tor.store(any<String>(), false) }
 +    }
-@@ -311,0 +611,6 @@ class MigrationReviewVMTest {
+@@ -311,0 +621,6 @@ class MigrationReviewVMTest {
 +                    getOrchardMigrationSdk = mockk {
 +                        val sdk = mockk<OrchardMigrationSdk> {
 +                            coEvery { proposeImmediateMigration() } returns proposal
 +                        }
 +                        coEvery { this@mockk(any<String>()) } returns sdk
 +                    },
-@@ -317 +622 @@ class MigrationReviewVMTest {
+@@ -317 +632 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmImmediate(vm, proposal)
 +            vm.currentReview().onConfirm()
-@@ -321,4 +626,4 @@ class MigrationReviewVMTest {
+@@ -321,4 +636,4 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
 -            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
@@ -13609,34 +13621,34 @@ index d0838db0c..5e48ded9c 100644
 +            coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any()) }
 +            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
 +            coVerify(exactly = 0) { submitProposal(any(), any(), any(), any()) }
-@@ -336 +641,4 @@ class MigrationReviewVMTest {
+@@ -336 +651,4 @@ class MigrationReviewVMTest {
 -            val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
 +            val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
 +                coEvery { getMigrationStateUnreconciled() } returns MigrationState.NotStarted
 +                coEvery { proposeMigrationTransfers() } returns schedule(1L, 200_000L)
 +            }
-@@ -342 +650 @@ class MigrationReviewVMTest {
+@@ -342 +660 @@ class MigrationReviewVMTest {
 -                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
 +                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
-@@ -347,4 +655 @@ class MigrationReviewVMTest {
+@@ -347,4 +665 @@ class MigrationReviewVMTest {
 -            invokeOnConfirmAutomatic(
 -                vm,
 -                MigrationSchedule(transfers = emptyList(), estimatedDurationHours = 1, proposalHandle = 0L)
 -            )
 +            vm.currentReview().onConfirm()
-@@ -354 +659 @@ class MigrationReviewVMTest {
+@@ -354 +669 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { sdk.isNoteSplitNeeded() }
 +            coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
-@@ -359 +664 @@ class MigrationReviewVMTest {
+@@ -359 +674 @@ class MigrationReviewVMTest {
 -            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
 +            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
-@@ -365,4 +670 @@ class MigrationReviewVMTest {
+@@ -365,4 +680 @@ class MigrationReviewVMTest {
 -        return mockk {
 -            coEvery { this@mockk() } returns viewOnly
 -            every { observe() } returns flowOf(viewOnly)
 -        }
 +        return selectedAccount(viewOnly)
-@@ -385,5 +687,7 @@ class MigrationReviewVMTest {
+@@ -385,5 +697,7 @@ class MigrationReviewVMTest {
 -    private fun invokeOnConfirmAutomatic(vm: MigrationReviewVM, sched: MigrationSchedule) {
 -        val method =
 -            MigrationReviewVM::class.java.getDeclaredMethod("onConfirmAutomatic", MigrationSchedule::class.java)
@@ -13649,7 +13661,7 @@ index d0838db0c..5e48ded9c 100644
 +    @BeforeTest
 +    fun setUp() {
 +        Dispatchers.setMain(StandardTestDispatcher())
-@@ -392,20 +696,3 @@ class MigrationReviewVMTest {
+@@ -392,20 +706,3 @@ class MigrationReviewVMTest {
 -    // MigrationReviewVM's IMMEDIATE-mode `onConfirm` callback only becomes reachable through
 -    // `state.value.content`, which is backed by a `combine(...).stateIn(WhileSubscribed)` chain
 -    // that (by design, same as every other LCE-driven VM in this codebase, e.g.
@@ -13673,7 +13685,7 @@ index d0838db0c..5e48ded9c 100644
 +    @AfterTest
 +    fun tearDown() {
 +        Dispatchers.resetMain()
-@@ -414,47 +701,7 @@ class MigrationReviewVMTest {
+@@ -414,47 +711,55 @@ class MigrationReviewVMTest {
 -    private fun vm(
 -        router: NavigationRouter,
 -        getSelectedWalletAccount: GetSelectedWalletAccountUseCase =
@@ -13728,7 +13740,7 @@ index d0838db0c..5e48ded9c 100644
 +        val keystone = mockk<KeystoneProposalRepository>(relaxed = true) {
 +            every { setMigrationSweepProposal(sdkProposal) } returns adopted
 +            every { transactionProposal } returns MutableStateFlow(adopted)
-@@ -461,0 +709,9 @@ class MigrationReviewVMTest {
++        }
 +        val router = FakeNavigationRouter("keystone-review")
 +        val sdk = mockk<OrchardMigrationSdk> { coEvery { proposeImmediateMigration() } returns sdkProposal }
 +        val vm = vm(
@@ -13738,8 +13750,7 @@ index d0838db0c..5e48ded9c 100644
 +            keystoneProposalRepository = keystone,
 +            sourceEntryId = "keystone-review",
 +        )
-@@ -463 +719,7 @@ class MigrationReviewVMTest {
--        override fun replace(vararg routes: Any) = Unit
++
 +        vm.currentReview().onConfirm()
 +        runCurrent()
 +        val handoff = router.scopedCommands.single()
@@ -13747,13 +13758,11 @@ index d0838db0c..5e48ded9c 100644
 +        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
 +        handoff.acknowledge(false)
 +        advanceUntilIdle()
-@@ -465 +727,3 @@ class MigrationReviewVMTest {
--        override fun replaceAll(vararg routes: Any) = Unit
++
 +        verify(exactly = 1) { keystone.clear(adopted) }
 +        verify(exactly = 0) { keystone.activateReviewedMigration(any(), any()) }
 +    }
-@@ -467 +731,128 @@ class MigrationReviewVMTest {
--        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
++
 +    @Test
 +    fun revokedWalletAuthorityPreservesTheEnteredSplitWithoutNewScheduleSigning() = runTest {
 +        val split = NoteSplitProposal(listOf(100_000L), 1_000L, 42L)
@@ -13779,7 +13788,7 @@ index d0838db0c..5e48ded9c 100644
 +        var authorityCurrent = true
 +        val authority = mockk<WalletActionAccess> {
 +            coEvery { this@mockk.capture(any<WalletAccount>()) } answers { { authorityCurrent } }
-+        }
+@@ -461,0 +767,10 @@ class MigrationReviewVMTest {
 +        val router = FakeNavigationRouter("automatic-split")
 +        val finalize = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true)
 +        val vm = vm(
@@ -13790,7 +13799,8 @@ index d0838db0c..5e48ded9c 100644
 +            walletActionAccess = authority,
 +            finalizeMigrationSchedule = finalize,
 +        )
-+
+@@ -463 +778,13 @@ class MigrationReviewVMTest {
+-        override fun replace(vararg routes: Any) = Unit
 +        vm.currentReview().onConfirm()
 +        advanceUntilIdle()
 +        coVerify(exactly = 1) { sdk.submitNoteSplit(split, any()) }
@@ -13804,8 +13814,10 @@ index d0838db0c..5e48ded9c 100644
 +        assertTrue(router.scopedCommands.isEmpty())
 +    }
 +}
-+
-+
+@@ -465 +791,0 @@ class MigrationReviewVMTest {
+-        override fun replaceAll(vararg routes: Any) = Unit
+@@ -467 +793,76 @@ class MigrationReviewVMTest {
+-        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
 +private suspend fun MigrationReviewVM.currentReview() =
 +    requireNotNull(state.first { state -> !state.isLoading && state.content != null }.content)
 +
@@ -13882,24 +13894,24 @@ index d0838db0c..5e48ded9c 100644
 +    }
 +
 +    override fun replace(vararg routes: Any) = Unit
-@@ -469 +860 @@ class MigrationReviewVMTest {
+@@ -469 +870 @@ class MigrationReviewVMTest {
 -        override fun back() = Unit
 +    override fun replaceAll(vararg routes: Any) = Unit
-@@ -471 +862 @@ class MigrationReviewVMTest {
+@@ -471 +872 @@ class MigrationReviewVMTest {
 -        override fun backTo(route: KClass<*>) = Unit
 +    override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
-@@ -473 +864 @@ class MigrationReviewVMTest {
+@@ -473 +874 @@ class MigrationReviewVMTest {
 -        override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 +    override fun back() = Unit
-@@ -475 +866 @@ class MigrationReviewVMTest {
+@@ -475 +876 @@ class MigrationReviewVMTest {
 -        override fun backToRoot() = Unit
 +    override fun backTo(route: KClass<*>) = Unit
-@@ -477 +868,3 @@ class MigrationReviewVMTest {
+@@ -477 +878,3 @@ class MigrationReviewVMTest {
 -        override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
 +    override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) {
 +        val current = activeEntry.value?.let { entry -> mockk<NavBackStackEntry> { every { id } returns entry.id } }
 +        (block(current) as? NavigationCommand.ForEntry)?.let(scopedCommands::add)
-@@ -480,2 +873,11 @@ class MigrationReviewVMTest {
+@@ -480,2 +883,11 @@ class MigrationReviewVMTest {
 -    private inline fun <reified T : WalletAccount> spendable(): T =
 -        mockk<T>(relaxed = true) { every { isSpendable } returns true }
 +    override fun backToRoot() = Unit
@@ -35690,7 +35702,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..3bd28fb75 100644
+index 7b9af8bf7..5ad3c102a 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -52,0 +53 @@
@@ -35710,55 +35722,56 @@ index 7b9af8bf7..3bd28fb75 100644
 -        Está optimizada para almacenar y usar en el mundo real $ZEC protegido: la criptomoneda verdaderamente privada.\n\nDesarrollada por el equipo que estableció el estándar de la industria en privacidad en cadena (on-chain), los desarrolladores originales del protocolo Zcash.
 -    </string>
 +    <string name="about_description">ZEC Private es una bifurcación independiente de una billetera Zcash para pagos protegidos.\n\nBasada en la billetera de código abierto Zodl. Se conservan los avisos de derechos de autor y licencias en el código fuente y los avisos de dependencias.</string>
-@@ -90,0 +89,3 @@
+@@ -90,0 +89,4 @@
 +    <string name="account_list_selection_error_title">No se pudo cambiar de billetera</string>
 +    <string name="account_list_selection_error_message">Tu billetera actual sigue seleccionada.</string>
 +    <string name="account_list_selection_retry">Reintentar</string>
-@@ -92 +93 @@
++    <string name="appearance_save_failed">No se pudo guardar la apariencia. Inténtalo de nuevo.</string>
+@@ -92 +94 @@
 -    <string name="hwWallet_section_zodl">Billetera Zodl</string>
 +    <string name="hwWallet_section_zodl">Billetera ZEC Private</string>
-@@ -98,2 +98,0 @@
+@@ -98,2 +99,0 @@
 -    <string name="hwWallet_promo_title">Billetera de hardware Keystone</string>
 -    <string name="hwWallet_promo_message">Obtén un 5%% de descuento en una billetera de hardware aislada. Código promocional “Zodl”.</string>
-@@ -121 +120 @@
+@@ -121 +121 @@
 -    <string name="settings_recoveryPhrase">Frase de recuperación de Zodl</string>
 +    <string name="settings_recoveryPhrase">Frase de recuperación de ZEC Private</string>
-@@ -128 +127 @@
+@@ -128 +128 @@
 -    <string name="settings_deleteZashi">Restablecer Zodl</string>
 +    <string name="settings_deleteZashi">Restablecer ZEC Private</string>
-@@ -140,2 +139,2 @@
+@@ -140,2 +140,2 @@
 -    <string name="connectedHWInfo">Si desconectas ahora, tu Keystone dejará de estar vinculado con tu billetera Zodl.</string>
 -    <string name="connectedHWInfo_ledger">Si desconectas ahora, tu Ledger dejará de estar vinculado con tu billetera Zodl.</string>
 +    <string name="connectedHWInfo">Si desconectas ahora, tu Keystone dejará de estar vinculado con tu billetera ZEC Private.</string>
 +    <string name="connectedHWInfo_ledger">Si desconectas ahora, tu Ledger dejará de estar vinculado con tu billetera ZEC Private.</string>
-@@ -150 +149 @@
+@@ -150 +150 @@
 -        Autenticación para <xliff:g id="app_name" example="Zodl">%1$s</xliff:g>
 +        Autenticación para <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g>
-@@ -160 +158,0 @@
+@@ -160 +159,0 @@
 -    <string name="authentication_use_case_adress_book">Función de Libreta de Direcciones</string>
-@@ -165 +163 @@
+@@ -165 +164 @@
 -    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.</string>
 +    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o exporta el diagnóstico si el problema continúa.</string>
-@@ -170 +168 @@
+@@ -170 +169 @@
 -    <string name="errorPage_action_contactSupport">Contactar Soporte</string>
 +    <string name="errorPage_action_contactSupport">Exportar diagnóstico</string>
-@@ -173 +171 @@
+@@ -173 +172 @@
 -        La autenticación fue presentada pero no reconocida. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.
 +        La autenticación fue presentada pero no reconocida. Intenta nuevamente o exporta el diagnóstico si el problema continúa.
-@@ -175,3 +173,3 @@
+@@ -175,3 +174,3 @@
 -    <string name="disconnectHWWallet_contactSupport">Contactar Soporte</string>
 -    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="Zodl">%1$s</xliff:g></string>
 -    <string name="splash_authTitle">Tu cuenta de Zodl está protegida.</string>
 +    <string name="disconnectHWWallet_contactSupport">Exportar diagnóstico</string>
 +    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g></string>
 +    <string name="splash_authTitle">Tu cuenta de ZEC Private está protegida.</string>
-@@ -207,0 +206,2 @@
+@@ -207,0 +207,2 @@
 +    <string name="choose_server_save_error_title">No se pudo guardar la selección del servidor</string>
 +    <string name="choose_server_save_error_text">Toca Guardar selección para intentarlo de nuevo.</string>
-@@ -238 +238 @@
+@@ -238 +239 @@
 -    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a Zodl requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
 +    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a ZEC Private requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
-@@ -258,0 +259,8 @@
+@@ -258,0 +260,8 @@
 +    <string name="accessibility_recovery_phrase_help">Información sobre las frases de recuperación</string>
 +    <string name="accessibility_wallet_birthday_help">Información sobre la fecha de creación de la billetera</string>
 +    <string name="accessibility_swap_help">Información sobre los intercambios</string>
@@ -35767,15 +35780,15 @@ index 7b9af8bf7..3bd28fb75 100644
 +    <string name="accessibility_swap_direction">Cambiar la dirección del intercambio</string>
 +    <string name="accessibility_add_bookmark">Añadir marcador</string>
 +    <string name="accessibility_remove_bookmark">Quitar marcador</string>
-@@ -274 +282 @@
+@@ -274 +283 @@
 -    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar Zodl</string>
 +    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar ZEC Private</string>
-@@ -277,2 +285,2 @@
+@@ -277,2 +286,2 @@
 -    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de Zodl.</string>
 -    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de Zodl.</string>
 +    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
-@@ -282,9 +290,8 @@
+@@ -282,9 +291,8 @@
 -    <string name="deleteWallet_title">Restablecer Zodl</string>
 -    <string name="deleteWallet_message2">Asegúrate de haber guardado tanto tu frase de recuperación secreta como la altura de cumpleaños de la billetera antes de continuar.</string>
 -    <string name="delete_wallet_text_2">Restablecer la aplicación Zodl eliminará la base de datos y los datos en
@@ -35793,23 +35806,23 @@ index 7b9af8bf7..3bd28fb75 100644
 +    <string name="deleteWallet_metadataWarn2">Desactivar esta opción elimina las copias de seguridad locales de todas las billeteras. El restablecimiento no afecta las copias guardadas por Android.</string>
 +    <string name="deleteWallet_sheet_msg">El restablecimiento es irreversible. Asegúrate de tener lo necesario para restaurar tus billeteras.</string>
 +    <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
-@@ -295 +302 @@
+@@ -295 +303 @@
 -    <string name="error_general_message">Causa desconocida. Por favor, contacta a nuestro equipo de soporte si el problema persiste.\n\n%s</string>
 +    <string name="error_general_message">Causa desconocida. Por favor, exporta el diagnóstico si el problema persiste.\n\n%s</string>
-@@ -309 +316 @@
+@@ -309 +317 @@
 -    <string name="currencyConversion_ipDesc">La función de conversión de moneda de Zodl no compromete tu dirección IP.</string>
 +    <string name="currencyConversion_ipDesc">La función de conversión de moneda de ZEC Private no compromete tu dirección IP.</string>
-@@ -311,0 +319 @@
+@@ -311,0 +320 @@
 +    <string name="currencyConversion_refreshAction">Actualizar tasa de cambio</string>
-@@ -342 +350 @@
+@@ -342 +351 @@
 -        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con Zodl.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
 +        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con ZEC Private.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
-@@ -344,2 +352,2 @@
+@@ -344,2 +353,2 @@
 -    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de Zodl</string>
 -    <string name="export_data_export_data_chooser_title">Compartir datos internos de Zodl con:</string>
 +    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de ZEC Private</string>
 +    <string name="export_data_export_data_chooser_title">Compartir datos internos de ZEC Private con:</string>
-@@ -349,8 +357,5 @@
+@@ -349,8 +358,5 @@
 -    <string name="sendFeedback_title">Envíanos tus comentarios</string>
 -    <string name="sendFeedback_ratingQuestion">¿Cómo ha sido tu experiencia con Zodl?</string>
 -    <string name="sendFeedback_howCanWeHelp">¿En qué podemos ayudarte?</string>
@@ -35823,103 +35836,103 @@ index 7b9af8bf7..3bd28fb75 100644
 +    <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
 +    <string name="support_confirmation_explanation">Elige una aplicación y destinatario para compartir el diagnóstico. Revisa su contenido antes de compartirlo; ningún equipo de soporte lo recibe automáticamente.</string>
 +    <string name="support_email_part_1">¿Cómo ha sido tu experiencia con ZEC Private?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
-@@ -367 +372 @@
+@@ -367 +373 @@
 -    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga Zodl</string>
 +    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga ZEC Private</string>
-@@ -375 +380 @@
+@@ -375 +381 @@
 -    <string name="smartBanner_content_restore_info">Mantén Zodl abierto en la pantalla activa del teléfono</string>
 +    <string name="smartBanner_content_restore_info">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
-@@ -378 +383 @@
+@@ -378 +384 @@
 -    <string name="home_message_resyncing_subtitle">Mantén Zodl abierto en la pantalla activa del teléfono</string>
 +    <string name="home_message_resyncing_subtitle">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
-@@ -396 +401 @@
+@@ -396 +402 @@
 -    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, Zodl no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en Zodl sea privado.</string>
 +    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, ZEC Private no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en ZEC Private sea privado.</string>
-@@ -399 +404 @@
+@@ -399 +405 @@
 -    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet Zodl.</string>
 +    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet ZEC Private.</string>
-@@ -401,2 +406,2 @@
+@@ -401,2 +407,2 @@
 -    <string name="smartBanner_help_restore_info">Zodl está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
 -    <string name="home_info_restoring_bullet_1">Mantén la app de Zodl abierta en la pantalla activa del teléfono.</string>
 +    <string name="smartBanner_help_restore_info">ZEC Private está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="home_info_restoring_bullet_1">Mantén la app de ZEC Private abierta en la pantalla activa del teléfono.</string>
-@@ -406 +411 @@
+@@ -406 +412 @@
 -    <string name="home_info_resyncing_message">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
 +    <string name="home_info_resyncing_message">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
-@@ -408 +413 @@
+@@ -408 +414 @@
 -    <string name="smartBanner_help_sync_info">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
 +    <string name="smartBanner_help_sync_info">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
-@@ -411 +416 @@
+@@ -411 +417 @@
 -    <string name="crash_report_detail_title">Ayuda a Mejorar Zodl</string>
 +    <string name="crash_report_detail_title">Ayuda a Mejorar ZEC Private</string>
-@@ -415 +420 @@
+@@ -415 +421 @@
 -    <string name="crash_report_detail_item_subtitle_2">Zodl no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
 +    <string name="crash_report_detail_item_subtitle_2">ZEC Private no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
-@@ -419 +424 @@
+@@ -419 +425 @@
 -    <string name="home_message_crash_reporting_title">Ayuda a mejorar Zodl</string>
 +    <string name="home_message_crash_reporting_title">Ayuda a mejorar ZEC Private</string>
-@@ -424 +429 @@
+@@ -424 +430 @@
 -    <string name="balances_infoSyncing">Zodl está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
 +    <string name="balances_infoSyncing">ZEC Private está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
-@@ -433 +438 @@
+@@ -433 +439 @@
 -    <string name="sheet_insufficientBalance_msg">No pudimos crear esta transacción. Tu billetera no tiene suficiente saldo para cubrir tanto el monto de la transacción como las comisiones. Por favor, reduce el monto para considerar las comisiones.</string>
 +    <string name="sheet_insufficientBalance_msg">Tu saldo no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
-@@ -437,4 +442,2 @@
+@@ -437,4 +443,2 @@
 -    <string name="integrations_coinbase">Compra <xliff:g id="currency" example="ZEC">%1$s</xliff:g> con Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">Una manera fácil de comprar <xliff:g id="currency" example="ZEC">%1$s</xliff:g> y recibirlo directamente en tu wallet Zodl.</string>
 -    <string name="integrations_info">Las integraciones de Zodl brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
 -    <string name="integrations_dialog_info">La información que compartas con los socios de integración de Zodl está sujeta a sus políticas de privacidad.</string>
 +    <string name="integrations_info">Las integraciones de ZEC Private brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
 +    <string name="integrations_dialog_info">La información que compartas con los socios de integración de ZEC Private está sujeta a sus políticas de privacidad.</string>
-@@ -442,4 +444,0 @@
+@@ -442,4 +445,0 @@
 -    <string name="settings_flexa">Pagar con Flexa</string>
 -    <string name="settings_flexaDesc">Gasta ZEC en miles de establecimientos comerciales.</string>
 -    <string name="integrations_flexa_biometric_message">Autentícate para pagar con Flexa</string>
 -    <string name="integrations_disabled_info_flexa">Cambia de Keystone a Zodl para usar Flexa.</string>
-@@ -449 +447,0 @@
+@@ -449 +448,0 @@
 -    <string name="integrations_coinbase_subtitle_disabled">Coinbase Onramp está temporalmente no disponible.</string>
-@@ -454,3 +452,3 @@
+@@ -454,3 +453,3 @@
 -    <string name="restoreInfo_title">¡Mantén Zodl abierto!</string>
 -    <string name="keep_open_description">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 -    <string name="keep_open_bullet_1">Mantén la app de Zodl abierta con la pantalla del teléfono activa.</string>
 +    <string name="restoreInfo_title">¡Mantén ZEC Private abierto!</string>
 +    <string name="keep_open_description">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keep_open_bullet_1">Mantén la app de ZEC Private abierta con la pantalla del teléfono activa.</string>
-@@ -458 +456 @@
+@@ -458 +457 @@
 -    <string name="keepZodlOpenInstructionsHWWallet">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keepZodlOpenInstructionsHWWallet">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
-@@ -460 +458 @@
+@@ -460 +459 @@
 -    <string name="keep_open_keystone_warning">No podrás usar tus fondos de Zodl hasta que tu billetera Keystone esté sincronizada.</string>
 +    <string name="keep_open_keystone_warning">No podrás usar tus fondos de ZEC Private hasta que tu billetera Keystone esté sincronizada.</string>
-@@ -463 +461 @@
+@@ -463 +462 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
-@@ -478,2 +476,2 @@
+@@ -478,2 +477,2 @@
 -    <string name="pay_info_subtitle">Haz pagos entre cadenas en cualquier moneda o token compatible con NEAR.\n\nSi el deslizamiento o las condiciones de la red resultan en que tu destinatario reciba menos de la cantidad prometida, tu pago será reembolsado menos las comisiones de red.\n\nLos reembolsos solo se aplican a pagos de $300 o más. Los pagos de menos de $300 no son elegibles para reembolso. Verifica todos los detalles antes de continuar.</string>
 -    <string name="swapAndPay_slippageWarn">Cualquier parte no utilizada de la comisión por deslizamiento será reembolsada si el intercambio se ejecuta con un deslizamiento menor al esperado.</string>
 +    <string name="pay_info_subtitle">Paga un importe fijo en un activo compatible. Si el pago falla o llega incompleto, consulta Actividad antes de volver a pagar. El proveedor puede emitir un reembolso con comisiones descontadas.</string>
 +    <string name="swapAndPay_slippageWarn">El deslizamiento permite cambios de precio. El proveedor puede devolver los fondos no utilizados tras descontar las comisiones.</string>
-@@ -487 +484,0 @@
+@@ -487 +485,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transacción Fallida</string>
-@@ -490 +487 @@
+@@ -490 +488 @@
 -    <string name="payment_request_dialog_error_grpc_text">Zodl encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
 +    <string name="payment_request_dialog_error_grpc_text">ZEC Private encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
-@@ -506 +503 @@
+@@ -506 +504 @@
 -    <string name="qr_code_share_chooser_title">Mi Dirección %s en Zodl</string>
 +    <string name="qr_code_share_chooser_title">Mi Dirección %s en ZEC Private</string>
-@@ -508 +505 @@
+@@ -508 +506 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -531 +528 @@
+@@ -531 +529 @@
 -    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, Zodl te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
 +    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, ZEC Private te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
-@@ -537 +534 @@
+@@ -537 +535 @@
 -    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con Zodl.</string>
 +    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con ZEC Private.</string>
-@@ -550 +547 @@
+@@ -550 +548 @@
 -    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="Zodl">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
 +    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
-@@ -583,0 +581,7 @@
+@@ -583,0 +582,7 @@
 +    <string name="amount_switch_unit">Cambiar unidad del monto</string>
 +    <string name="amount_switch_to_fiat">Cambiar a moneda fiduciaria</string>
 +    <string name="amount_switch_to_asset">Cambiar a %1$s</string>
@@ -35927,218 +35940,218 @@ index 7b9af8bf7..3bd28fb75 100644
 +    <string name="request_amount_rate_loading">Actualizando la tasa de cambio…</string>
 +    <string name="request_amount_rate_stale">La tasa de cambio está desactualizada.</string>
 +    <string name="request_amount_rate_unavailable">Tasa de cambio no disponible.</string>
-@@ -603 +607 @@
+@@ -603 +608 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -607 +611,3 @@
+@@ -607 +612,3 @@
 -    <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
 +    <string name="restoreWallet_info">Ingresa tu frase secreta de recuperación de 24 palabras en orden o pega la frase completa.</string>
 +    <string name="restore_seed_paste">Pegar frase de recuperación</string>
 +    <string name="restore_seed_paste_error">Ingresa o pega una frase de recuperación válida de 24 palabras.</string>
-@@ -609 +615 @@
+@@ -609 +616 @@
 -    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de Zodl.</string>
 +    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
-@@ -611 +617 @@
+@@ -611 +618 @@
 -    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de Zodl y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
 +    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de ZEC Private y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
-@@ -613 +619 @@
+@@ -613 +620 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
-@@ -618,2 +624,2 @@
+@@ -618,2 +625,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 -    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). Zodl escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
-@@ -622 +628 @@
+@@ -622 +629 @@
 -    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, Zodl se resincronizará desde la fecha mostrada.</string>
 +    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, ZEC Private se resincronizará desde la fecha mostrada.</string>
-@@ -635 +641 @@
+@@ -635 +642 @@
 -    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de Zodl y actívala.</string>
 +    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de ZEC Private y actívala.</string>
-@@ -645,2 +651,2 @@
+@@ -645,2 +652,2 @@
 -    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con Zodl.</string>
 -    <string name="deeplinkWarning_cta">Reescanear en Zodl</string>
 +    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Reescanear en ZEC Private</string>
-@@ -654 +660 @@
+@@ -654 +661 @@
 -        Zodl y actívala.</string>
 +        ZEC Private y actívala.</string>
-@@ -736 +742 @@
+@@ -736 +743 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
-@@ -742 +748 @@
+@@ -742 +749 @@
 -    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
 +    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
-@@ -770,0 +777 @@
+@@ -770,0 +778 @@
 +    <string name="send_pendingSdkStateInfo">Es posible que se haya enviado tu transacción. Comprueba su estado antes de volver a intentarlo.</string>
-@@ -772 +779 @@
+@@ -772 +780 @@
 -    <string name="swapAndPay_pendingSwapInfo">Tu swap se está procesando. Siga el estado en la pantalla de transacción.</string>
 +    <string name="swapAndPay_pendingSwapInfo">El envío del intercambio sigue sin confirmar. Consulta su estado en Actividad.</string>
-@@ -774 +781 @@
+@@ -774 +782 @@
 -    <string name="swapAndPay_pendingPayInfo">Tu cross-chain pago se está procesando. Siga el estado en la pantalla de transacción.</string>
 +    <string name="swapAndPay_pendingPayInfo">El envío del pago sigue sin confirmar. Consulta su estado en Actividad.</string>
-@@ -804 +811 @@
+@@ -804 +812 @@
 -    <string name="swap_info_message">Haz swap entre %1$s y cualquier moneda o token compatible con NEAR.\n\nSi haces swap HACIA %2$s, enviarás fondos desde una wallet de terceros y deberás proporcionar una dirección donde se puedan reembolsar los fondos.\n\nLos reembolsos solo se aplican a swaps de $300 o más. Los swaps de menos de $300 no son elegibles para reembolso si se envía el activo incorrecto o se envía por la red incorrecta.\n\nSi haces swap DESDE %3$s, debes proporcionar una dirección válida para el activo al que haces swap.</string>
 +    <string name="swap_info_message">Intercambia %1$s por activos compatibles.\n\nPara cambiar a %2$s, deposita desde otra billetera y proporciona una dirección de reembolso en la red de envío.\n\nNEAR no recupera transferencias de menos de $300 enviadas con un activo incorrecto o en la red equivocada.\n\nAl cambiar desde %3$s, ingresa una dirección de destino en la red de recepción.</string>
-@@ -810 +817 @@
+@@ -810 +818 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
-@@ -816 +823 @@
+@@ -816 +824 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -846 +853 @@
+@@ -846 +854 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
-@@ -853,2 +860,2 @@
+@@ -853,2 +861,2 @@
 -    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
-@@ -857,3 +864,3 @@
+@@ -857,3 +865,3 @@
 -    <string name="swap_refund_address_info_message_empty">Si el swap falla o cambian las condiciones del mercado, tu transacción puede ser reembolsada menos las comisiones de red.\n\nLos reembolsos solo se aplican a swaps de $300 o más. Los swaps de menos de $300 no son elegibles para reembolso.\n\nEl monto reembolsado será devuelto a tu wallet en la moneda de origen. Por favor, ingresa una dirección válida para evitar la pérdida de fondos.</string>
 -    <string name="swap_refund_address_info_message">Si el swap falla o cambian las condiciones del mercado, tu transacción puede ser reembolsada menos las comisiones de red.\n\nLos reembolsos solo se aplican a swaps de $300 o más. Los swaps de menos de $300 no son elegibles para reembolso.\n\nEl monto reembolsado será devuelto a tu wallet en la moneda de origen en la misma red. Por favor, ingresa una dirección válida para evitar la pérdida de fondos.</string>
 -    <string name="swap_refund_warning_title">Sin reembolsos por debajo de $300</string>
 +    <string name="swap_refund_address_info_message_empty">Ingresa una dirección para el activo y la red de envío. Si hay un reembolso, se enviará a esa dirección y las comisiones de red pueden reducirlo.</string>
 +    <string name="swap_refund_address_info_message">Si hay un reembolso, se enviará a esta dirección en el activo y la red de origen. Las comisiones de red pueden reducir el importe devuelto.</string>
 +    <string name="swap_refund_warning_title">Verifica el activo y la red</string>
-@@ -878 +885 @@
+@@ -878 +886 @@
 -    <string name="depositFunds_bulletPoint1">Envía el monto exacto del activo que se muestra. Enviar menos resultará en un reembolso.</string>
 +    <string name="depositFunds_bulletPoint1">Usa el importe sugerido. Un depósito menor puede completar el swap si alcanza el mínimo de la cotización.</string>
-@@ -884 +891 @@
+@@ -884 +892 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
 +    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
-@@ -894,2 +901,2 @@
+@@ -894,2 +902,2 @@
 -    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
 -    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
 +    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
 +    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
-@@ -897,2 +904,2 @@
+@@ -897,2 +905,2 @@
 -    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
 -    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
 +    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
 +    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
-@@ -901,0 +909 @@
+@@ -901,0 +910 @@
 +    <string name="tor_settings_read_failed">No se pudo leer la configuración de Tor.</string>
-@@ -948 +956 @@
+@@ -948 +957 @@
 -    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
 +    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
-@@ -951 +959 @@
+@@ -951 +960 @@
 -    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
 +    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
-@@ -953 +961 @@
+@@ -953 +962 @@
 -    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
 +    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
-@@ -957 +965,3 @@
+@@ -957 +966,3 @@
 -    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
 +    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
 +    <string name="reportSwap_shareQuote">Compartir cotización original</string>
 +    <string name="reportSwap_shareQuoteDescription">Comparte la cotización firmada por el proveedor con alguien de confianza. Incluye el importe del swap y las direcciones de destino y de reembolso.</string>
-@@ -962 +972 @@
+@@ -962 +973 @@
 -    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
 +    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
-@@ -965,2 +975,2 @@
+@@ -965,2 +976,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
-@@ -985,0 +996,2 @@
+@@ -985,0 +997,2 @@
 +    <string name="private_swap_incomplete_check_support">Consulta con soporte antes de enviar más.</string>
 +    <string name="private_swap_check_status">Consultar estado</string>
-@@ -996 +1008 @@
+@@ -996 +1009 @@
 -    <string name="transaction_detail_info_incomplete_deposit_message">Deposita %1$s adicionales para completar este swap antes del %2$s, o tu depósito será reembolsado.</string>
 +    <string name="transaction_detail_info_incomplete_deposit_message">Faltan %1$s en el depósito. La cotización vence el %2$s.</string>
-@@ -1036,0 +1049,2 @@
+@@ -1036,0 +1050,2 @@
 +    <string name="private_payment_shortfall">Pago inferior al solicitado</string>
 +    <string name="private_payment_shortfall_info">Comprueba el estado del pago o contacta con Soporte antes de enviar más.</string>
-@@ -1051 +1065 @@
+@@ -1051 +1066 @@
 -    <string name="update_title_available">Zodl aquí.</string>
 +    <string name="update_title_available">ZEC Private aquí.</string>
-@@ -1054 +1068 @@
+@@ -1054 +1069 @@
 -        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
 +        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
-@@ -1057 +1071 @@
+@@ -1057 +1072 @@
 -        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
 +        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
-@@ -1069 +1083 @@
+@@ -1069 +1084 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1105 @@
+@@ -1091 +1106 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1107,3 @@
+@@ -1093,2 +1108,3 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
 +    <string name="migration_notification_checkStatusText">Abre la aplicación para comprobar el estado de la migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1121 @@
+@@ -1106 +1122 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1132 +1147 @@
+@@ -1132 +1148 @@
 -    <string name="migrationPrivacy_bodyImmediate">Si Tor está disponible en tu región, te recomendamos encarecidamente activarlo para evitar vincular tu saldo con tu dirección IP. También puedes usar una VPN de confianza si Tor no está disponible en tu región.</string>
 +    <string name="migrationPrivacy_bodyImmediate">La migración inmediata usa el ajuste de Tor de tu monedero. Activa Tor en Ajustes para usarlo.</string>
-@@ -1140 +1155 @@
+@@ -1140 +1156 @@
 -    <string name="migrationSuccess_subtitle">Tus ZEC se migraron\ncorrectamente a Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migración enviada. Consulta Actividad para ver la confirmación.</string>
-@@ -1160 +1175 @@
+@@ -1160 +1176 @@
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Un monto tan específico puede identificarte en la red. Para proteger tu privacidad, te recomendamos bloquear este saldo en lugar de migrarlo.</string>
 +    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s permaneció en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
-@@ -1165,2 +1180,2 @@
+@@ -1165,2 +1181,2 @@
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Saldo de Orchard bloqueado</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s ahora está bloqueado en Orchard. El bloqueo hace que este monto no se pueda gastar para proteger tu privacidad.</string>
 +    <string name="migrationComplete_lockRequestFailed">No se pudieron bloquear los fondos de Orchard. Inténtalo de nuevo.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Solicitud de bloqueo completada.</string>
-@@ -1172 +1187 @@
+@@ -1172 +1188 @@
 -    <string name="migrationComplete_residueTitle">Te has movido a Ironwood</string>
 +    <string name="migrationComplete_residueTitle">Saldo pequeño en Orchard</string>
-@@ -1176 +1191 @@
+@@ -1176 +1192 @@
 -    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover ese monto exacto puede vincular tus transacciones. Puedes bloquear todos los fondos disponibles de Orchard de esta cuenta.</string>
-@@ -1179 +1194 @@
+@@ -1179 +1195 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1201 @@
+@@ -1186 +1202 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1212 +1227 @@
+@@ -1212 +1228 @@
 -    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca este saldo como </string>
 +    <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca todos los fondos disponibles de Orchard de esta cuenta como </string>
-@@ -1215 +1230 @@
+@@ -1215 +1231 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1263 @@
+@@ -1248 +1264 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1256 +1271 @@
+@@ -1256 +1272 @@
 -    <string name="migrationReview_immediateBody">Todo tu saldo de Orchard se transferirá a Ironwood en una sola transferencia en cadena. Una vez confirmada, esta transferencia no se puede cancelar.</string>
 +    <string name="migrationReview_immediateBody">La transferencia mueve los fondos elegibles de Orchard a Ironwood. Una vez confirmada, esta transferencia no se puede cancelar.</string>
-@@ -1257,0 +1273 @@
+@@ -1257,0 +1274 @@
 +    <string name="migrationReview_eligibleOrchardFunds">Fondos elegibles de Orchard</string>
-@@ -1262 +1278 @@
+@@ -1262 +1279 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1293 @@
+@@ -1277 +1294 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1295 @@
+@@ -1279 +1296 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1299,2 @@
+@@ -1283,2 +1300,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1294,0 +1311,2 @@
+@@ -1294,0 +1312,2 @@
 +    <string name="migrationHome_finishScheduling">Termina de programar la migración</string>
 +    <string name="migrationScheduled_signatureRequired">Vuelve a Inicio para terminar de firmar con Keystone.</string>
-@@ -1306 +1323,0 @@
+@@ -1306 +1324,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1329,2 @@
+@@ -1312,2 +1330,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
-@@ -1337,0 +1355 @@
+@@ -1337,0 +1356 @@
 +    <string name="currencyConversion_preferenceUnavailable">La configuración de conversión de divisas no está disponible.</string>
 diff --git a/ui-design-lib/src/main/res/ui/common/values/font_certs.xml b/ui-design-lib/src/main/res/ui/common/values/font_certs.xml
 deleted file mode 100644
@@ -36180,7 +36193,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..abebbe4bd 100644
+index f41234151..aa7dd0f57 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -36204,53 +36217,54 @@ index f41234151..abebbe4bd 100644
 -        It’s optimized for storage and real-world use of shielded $ZEC—the truly private cryptocurrency.\n\nDeveloped by the team that set the industry standard for onchain privacy, the original developers of the Zcash protocol.
 -    </string>
 +    <string name="about_description">ZEC Private is an independent Zcash wallet fork for shielded payments.\n\nBased on the open-source Zodl wallet. Upstream copyright and license notices are preserved in the source and bundled dependency notices.</string>
-@@ -96,0 +96,3 @@
+@@ -96,0 +96,4 @@
 +    <string name="account_list_selection_error_title">Couldn’t switch wallets</string>
 +    <string name="account_list_selection_error_message">Your current wallet is still selected.</string>
 +    <string name="account_list_selection_retry">Try again</string>
-@@ -98 +100 @@
++    <string name="appearance_save_failed">Couldn’t save appearance. Try again.</string>
+@@ -98 +101 @@
 -    <string name="hwWallet_section_zodl">Zodl Wallet</string>
 +    <string name="hwWallet_section_zodl">ZEC Private Wallet</string>
-@@ -104,2 +105,0 @@
+@@ -104,2 +106,0 @@
 -    <string name="hwWallet_promo_title">Keystone Hardware Wallet</string>
 -    <string name="hwWallet_promo_message">Get 5%% off an airgapped hardware wallet. Promo code “Zodl”.</string>
-@@ -127 +127 @@
+@@ -127 +128 @@
 -    <string name="settings_recoveryPhrase">Zodl Recovery Phrase</string>
 +    <string name="settings_recoveryPhrase">ZEC Private Recovery Phrase</string>
-@@ -134 +134 @@
+@@ -134 +135 @@
 -    <string name="settings_deleteZashi">Reset Zodl</string>
 +    <string name="settings_deleteZashi">Reset ZEC Private</string>
-@@ -148,2 +148,2 @@
+@@ -148,2 +149,2 @@
 -    <string name="connectedHWInfo">If you disconnect now, your Keystone will no longer be paired with your Zodl wallet.</string>
 -    <string name="connectedHWInfo_ledger">If you disconnect now, your Ledger will no longer be paired with your Zodl wallet.</string>
 +    <string name="connectedHWInfo">If you disconnect now, your Keystone will no longer be paired with your ZEC Private wallet.</string>
 +    <string name="connectedHWInfo_ledger">If you disconnect now, your Ledger will no longer be paired with your ZEC Private wallet.</string>
-@@ -157 +157 @@
+@@ -157 +158 @@
 -        Authentication for <xliff:g id="app_name" example="Zodl">%1$s</xliff:g>
 +        Authentication for <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g>
-@@ -167 +166,0 @@
+@@ -167 +167,0 @@
 -    <string name="authentication_use_case_adress_book">Address Book feature</string>
-@@ -172 +171 @@
+@@ -172 +172 @@
 -    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or contact the support team for help.</string>
 +    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or export diagnostics if the problem persists.</string>
-@@ -177 +176 @@
+@@ -177 +177 @@
 -    <string name="errorPage_action_contactSupport">Contact Support</string>
 +    <string name="errorPage_action_contactSupport">Export diagnostics</string>
-@@ -180 +179 @@
+@@ -180 +180 @@
 -        Authentication was presented but not recognized. Retry authentication, or contact the support team for help.
 +        Authentication was presented but not recognized. Retry authentication, or export diagnostics if the problem persists.
-@@ -182,2 +181,2 @@
+@@ -182,2 +182,2 @@
 -    <string name="authentication_failed_welcome_icon_cont_desc">Tap to unlock <xliff:g id="app_name" example="Zodl">%1$s</xliff:g> app</string>
 -    <string name="splash_authTitle">Your Zodl account is secured.</string>
 +    <string name="authentication_failed_welcome_icon_cont_desc">Tap to unlock <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g> app</string>
 +    <string name="splash_authTitle">Your ZEC Private account is secured.</string>
-@@ -213,0 +213,2 @@
+@@ -213,0 +214,2 @@
 +    <string name="choose_server_save_error_title">Unable to save server selection</string>
 +    <string name="choose_server_save_error_text">Tap Save selection to try again.</string>
-@@ -244 +245 @@
+@@ -244 +246 @@
 -    <string name="keystone_addHWWallet_deviceDesc">Connecting to a hardware wallet that was previously connected to Zodl will require synchronization to discover your transaction history. We\'ll guide you through it.</string>
 +    <string name="keystone_addHWWallet_deviceDesc">Connecting to a hardware wallet that was previously connected to ZEC Private will require synchronization to discover your transaction history. We\'ll guide you through it.</string>
-@@ -264,0 +266,8 @@
+@@ -264,0 +267,8 @@
 +    <string name="accessibility_recovery_phrase_help">About recovery phrases</string>
 +    <string name="accessibility_wallet_birthday_help">About wallet birthdays</string>
 +    <string name="accessibility_swap_help">About swaps</string>
@@ -36259,16 +36273,16 @@ index f41234151..abebbe4bd 100644
 +    <string name="accessibility_swap_direction">Change swap direction</string>
 +    <string name="accessibility_add_bookmark">Add bookmark</string>
 +    <string name="accessibility_remove_bookmark">Remove bookmark</string>
-@@ -281 +290 @@
+@@ -281 +291 @@
 -    <string name="crash_reporting_opt_in_title">Help Improve Zodl</string>
 +    <string name="crash_reporting_opt_in_title">Help Improve ZEC Private</string>
-@@ -289 +298 @@
+@@ -289 +299 @@
 -    <string name="crash_reporting_opt_in_positive_desc">Share crash reports with Zodl developers.</string>
 +    <string name="crash_reporting_opt_in_positive_desc">Share crash reports with ZEC Private developers.</string>
-@@ -291 +300 @@
+@@ -291 +301 @@
 -    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with Zodl developers.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with ZEC Private developers.</string>
-@@ -294,8 +303,8 @@
+@@ -294,8 +304,8 @@
 -    <string name="deleteWallet_title">Reset Zodl</string>
 -    <string name="deleteWallet_message2">Make sure you have both your secret recovery phrase and wallet birthday height saved before you proceed.</string>
 -    <string name="delete_wallet_text_2">Resetting the Zodl app will delete the Zodl database and cache, and will disconnect all connected hardware wallets.</string>
@@ -36285,30 +36299,30 @@ index f41234151..abebbe4bd 100644
 +    <string name="deleteWallet_metadataWarn2">Turning this off removes local backups for all wallets. Copies held by Android backup services are outside this reset.</string>
 +    <string name="deleteWallet_sheet_msg">Resetting the app cannot be undone. Make sure you have what you need to restore your wallets.</string>
 +    <string name="deleteWallet_actionButtonTitle">Reset ZEC Private</string>
-@@ -306 +315 @@
+@@ -306 +316 @@
 -    <string name="error_general_message">Unknown cause. Please contact our support team if the problem persists
 +    <string name="error_general_message">Unknown cause. Export diagnostics if the problem persists
-@@ -322 +331 @@
+@@ -322 +332 @@
 -    <string name="currencyConversion_ipDesc">Zodl\'s currency conversion feature doesn\'t compromise your IP address.</string>
 +    <string name="currencyConversion_ipDesc">ZEC Private\'s currency conversion feature doesn\'t compromise your IP address.</string>
-@@ -324,0 +334 @@
+@@ -324,0 +335 @@
 +    <string name="currencyConversion_refreshAction">Refresh exchange rate</string>
-@@ -361 +371 @@
+@@ -361 +372 @@
 -        gives the ability to see certain future actions you take with Zodl.\n\nSharing this private data is
 +        gives the ability to see certain future actions you take with ZEC Private.\n\nSharing this private data is
-@@ -366,2 +376,2 @@
+@@ -366,2 +377,2 @@
 -    <string name="privateDataConsent_confirmation">I agree to Zodl\'s Export Private Data Policies and Privacy Policy</string>
 -    <string name="export_data_export_data_chooser_title">Share internal Zodl data with:</string>
 +    <string name="privateDataConsent_confirmation">I agree to ZEC Private\'s Export Private Data Policies and Privacy Policy</string>
 +    <string name="export_data_export_data_chooser_title">Share internal ZEC Private data with:</string>
-@@ -372,4 +382,2 @@
+@@ -372,4 +383,2 @@
 -    <string name="sendFeedback_title">Send Us Feedback</string>
 -    <string name="sendFeedback_ratingQuestion">How is your Zodl experience?</string>
 -    <string name="sendFeedback_howCanWeHelp">How can we help you?</string>
 -    <string name="sendFeedback_hcwhPlaceholder">I would like to ask about…</string>
 +    <string name="wallet_seed_recovery_failed_title">Wallet recovery needs attention</string>
 +    <string name="wallet_seed_recovery_failed_message">Wallet data was kept. Reopen the app to retry or contact Support.</string>
-@@ -377,5 +385,3 @@
+@@ -377,5 +386,3 @@
 -    <string name="support_confirmation_dialog_title">Open e-mail app</string>
 -    <string name="support_confirmation_explanation">Zodl is about to
 -        open your e-mail app with a pre-filled message.\n\nBe sure to hit send within your e-mail app.</string>
@@ -36317,271 +36331,271 @@ index f41234151..abebbe4bd 100644
 +    <string name="support_confirmation_dialog_title">Export diagnostics</string>
 +    <string name="support_confirmation_explanation">Choose an app and recipient to share diagnostics. Review the contents before sharing; no support team receives them automatically.</string>
 +    <string name="support_email_part_1">How is your ZEC Private experience?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
-@@ -393 +399 @@
+@@ -393 +400 @@
 -    <string name="smartBanner_content_disconnected_info">Check your connection and reload Zodl</string>
 +    <string name="smartBanner_content_disconnected_info">Check your connection and reload ZEC Private</string>
-@@ -401 +407 @@
+@@ -401 +408 @@
 -    <string name="smartBanner_content_restore_info">Keep Zodl open on active phone screen</string>
 +    <string name="smartBanner_content_restore_info">Keep ZEC Private open on active phone screen</string>
-@@ -405 +411 @@
+@@ -405 +412 @@
 -    <string name="home_message_resyncing_subtitle">Keep Zodl open on an active phone screen</string>
 +    <string name="home_message_resyncing_subtitle">Keep ZEC Private open on an active phone screen</string>
-@@ -426,2 +432,2 @@
+@@ -426,2 +433,2 @@
 -    <string name="smartBanner_help_shield_info1">To protect user privacy, Zodl doesn\'t support spending transparent
 -        %s. Tap the \"Shield\" button below to make your transparent funds spendable and your total Zodl balance private. </string>
 +    <string name="smartBanner_help_shield_info1">To protect user privacy, ZEC Private doesn\'t support spending transparent
 +        %s. Tap the \"Shield\" button below to make your transparent funds spendable and your total ZEC Private balance private. </string>
-@@ -431 +437 @@
+@@ -431 +438 @@
 -        to use Zodl wallet.</string>
 +        to use ZEC Private wallet.</string>
-@@ -433 +439 @@
+@@ -433 +440 @@
 -    <string name="smartBanner_help_restore_info">Zodl is scanning the blockchain to retrieve your transactions. Older
 +    <string name="smartBanner_help_restore_info">ZEC Private is scanning the blockchain to retrieve your transactions. Older
-@@ -435 +441 @@
+@@ -435 +442 @@
 -    <string name="home_info_restoring_bullet_1">Keep the Zodl app open on an active phone screen.</string>
 +    <string name="home_info_restoring_bullet_1">Keep the ZEC Private app open on an active phone screen.</string>
-@@ -440,2 +446,2 @@
+@@ -440,2 +447,2 @@
 -    <string name="home_info_resyncing_message">Zodl is scanning the blockchain for your latest transactions to make sure
 -        your balances are displayed correctly. Keep the Zodl app open on an active phone screen to avoid interruptions.</string>
 +    <string name="home_info_resyncing_message">ZEC Private is scanning the blockchain for your latest transactions to make sure
 +        your balances are displayed correctly. Keep the ZEC Private app open on an active phone screen to avoid interruptions.</string>
-@@ -443,2 +449,2 @@
+@@ -443,2 +450,2 @@
 -    <string name="smartBanner_help_sync_info">Zodl is scanning the blockchain for your latest transactions to make sure
 -        your balances are displayed correctly. Keep the Zodl app open on an active phone screen to avoid interruptions.</string>
 +    <string name="smartBanner_help_sync_info">ZEC Private is scanning the blockchain for your latest transactions to make sure
 +        your balances are displayed correctly. Keep the ZEC Private app open on an active phone screen to avoid interruptions.</string>
-@@ -447 +453 @@
+@@ -447 +454 @@
 -    <string name="crash_report_detail_title">Help Improve Zodl</string>
 +    <string name="crash_report_detail_title">Help Improve ZEC Private</string>
-@@ -451 +457 @@
+@@ -451 +458 @@
 -    <string name="crash_report_detail_item_subtitle_2">Zodl does not and cannot access or collect information about individual users, their devices, transactions, or their in-app activity. The data is completely anonymized.</string>
 +    <string name="crash_report_detail_item_subtitle_2">ZEC Private does not and cannot access or collect information about individual users, their devices, transactions, or their in-app activity. The data is completely anonymized.</string>
-@@ -453 +459 @@
+@@ -453 +460 @@
 -    <string name="home_message_crash_reporting_title">Help improve Zodl</string>
 +    <string name="home_message_crash_reporting_title">Help improve ZEC Private</string>
-@@ -460 +466 @@
+@@ -460 +467 @@
 -    <string name="balances_infoSyncing">Zodl is scanning the blockchain to make sure your balances are displayed correctly.</string>
 +    <string name="balances_infoSyncing">ZEC Private is scanning the blockchain to make sure your balances are displayed correctly.</string>
-@@ -469 +475 @@
+@@ -469 +476 @@
 -    <string name="sheet_insufficientBalance_msg">We couldn\'t create this transaction for you. Your wallet doesn\'t have enough balance to cover both the transaction amount and transaction fees. Please lower the transaction amount to account for the fees.</string>
 +    <string name="sheet_insufficientBalance_msg">Your balance cannot cover both the amount and the Zcash network fee. Lower the amount and try again.</string>
-@@ -473,4 +479,2 @@
+@@ -473,4 +480,2 @@
 -    <string name="integrations_coinbase">Buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> with Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">A hassle-free way to buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> and get it directly into your Zodl wallet.</string>
 -    <string name="integrations_info">Zodl integrations provide access to third party services. Features and information shared with them are outside of our control and subject to their privacy policies.</string>
 -    <string name="integrations_dialog_info">Information shared with Zodl integrations is subject to their privacy policies.</string>
 +    <string name="integrations_info">ZEC Private integrations provide access to third party services. Features and information shared with them are outside of our control and subject to their privacy policies.</string>
 +    <string name="integrations_dialog_info">Information shared with ZEC Private integrations is subject to their privacy policies.</string>
-@@ -478,4 +481,0 @@
+@@ -478,4 +482,0 @@
 -    <string name="settings_flexa">Pay with Flexa</string>
 -    <string name="settings_flexaDesc">Spend ZEC at thousands of retail locations.</string>
 -    <string name="integrations_flexa_biometric_message">Authenticate yourself to pay with Flexa</string>
 -    <string name="integrations_disabled_info_flexa">Switch from Keystone to Zodl to use Flexa.</string>
-@@ -485 +484,0 @@
+@@ -485 +485,0 @@
 -    <string name="integrations_coinbase_subtitle_disabled">Coinbase Onramp is temporarily unavailable.</string>
-@@ -490,3 +489,3 @@
+@@ -490,3 +490,3 @@
 -    <string name="restoreInfo_title">Keep Zodl open!</string>
 -    <string name="keep_open_description">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to sync. Follow these steps to prevent interruption:</string>
 -    <string name="keep_open_bullet_1">Keep the Zodl app open on an active phone screen.</string>
 +    <string name="restoreInfo_title">Keep ZEC Private open!</string>
 +    <string name="keep_open_description">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to sync. Follow these steps to prevent interruption:</string>
 +    <string name="keep_open_bullet_1">Keep the ZEC Private app open on an active phone screen.</string>
-@@ -494 +493 @@
+@@ -494 +494 @@
 -    <string name="keepZodlOpenInstructionsHWWallet">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
 +    <string name="keepZodlOpenInstructionsHWWallet">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
-@@ -496 +495 @@
+@@ -496 +496 @@
 -    <string name="keep_open_keystone_warning">Your Zodl funds cannot be spent until your Keystone wallet is synced.</string>
 +    <string name="keep_open_keystone_warning">Your ZEC Private funds cannot be spent until your Keystone wallet is synced.</string>
-@@ -499 +498 @@
+@@ -499 +499 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
-@@ -514,2 +513,2 @@
+@@ -514,2 +514,2 @@
 -    <string name="pay_info_subtitle">Make cross-chain payments in any NEAR-supported coin or token.\n\nIf slippage or network conditions result in your recipient receiving less than the promised amount, your payment will be refunded minus network fees.\n\nRefunds only apply to payments of $300 or more. Payments under $300 aren\'t eligible for a refund. Please double-check all details before continuing.</string>
 -    <string name="swapAndPay_slippageWarn">Any unused portion of the slippage fee will be refunded if the swap executes with lower slippage than expected.</string>
 +    <string name="pay_info_subtitle">Pay a fixed amount in a supported asset. If the payment fails or arrives short, check Activity before paying again. The provider may issue a refund after fees.</string>
 +    <string name="swapAndPay_slippageWarn">Slippage allows for price changes. The provider may return unused funds after fees.</string>
-@@ -523 +521,0 @@
+@@ -523 +522,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transaction Failed</string>
-@@ -526 +524 @@
+@@ -526 +525 @@
 -    <string name="payment_request_dialog_error_grpc_text">Zodl encountered some connection issues when submitting
 +    <string name="payment_request_dialog_error_grpc_text">ZEC Private encountered some connection issues when submitting
-@@ -543 +541 @@
+@@ -543 +542 @@
 -    <string name="qr_code_share_chooser_title">My Zodl %s Address</string>
 +    <string name="qr_code_share_chooser_title">My ZEC Private %s Address</string>
-@@ -545 +543 @@
+@@ -545 +544 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -559 +557 @@
+@@ -559 +558 @@
 -    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %s privately. Transparent and shielded %s sent to this address will be received and stored as shielded %s.</string>
 +    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %1$s privately. Transparent and shielded %2$s sent to this address will be received and stored as shielded %3$s.</string>
-@@ -566 +564 @@
+@@ -566 +565 @@
 -    <string name="receive_help_transparent_desc3">To protect your privacy, Zodl will guide you to shield any transparent %s you receive with just one click.</string>
 +    <string name="receive_help_transparent_desc3">To protect your privacy, ZEC Private will guide you to shield any transparent %s you receive with just one click.</string>
-@@ -572 +570 @@
+@@ -572 +571 @@
 -    <string name="redeemGift_scan_externalLink">Looks like you opened a gift card from another app. For better safety and security, scan the gift card\'s QR code with Zodl.</string>
 +    <string name="redeemGift_scan_externalLink">Looks like you opened a gift card from another app. For better safety and security, scan the gift card\'s QR code with ZEC Private.</string>
-@@ -585 +583 @@
+@@ -585 +584 @@
 -    <string name="redeemGift_ready_disclaimer">The funds will be sent to your <xliff:g id="wallet" example="Zodl">%1$s</xliff:g> wallet. The network fee is already deducted from the amount shown.</string>
 +    <string name="redeemGift_ready_disclaimer">The funds will be sent to your <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g> wallet. The network fee is already deducted from the amount shown.</string>
-@@ -618,0 +617,3 @@
+@@ -618,0 +618,3 @@
 +    <string name="amount_switch_unit">Switch amount unit</string>
 +    <string name="amount_switch_to_fiat">Switch to fiat</string>
 +    <string name="amount_switch_to_asset">Switch to %1$s</string>
-@@ -638 +639 @@
+@@ -638 +640 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -643 +644,3 @@
+@@ -643 +645,3 @@
 -    <string name="restoreWallet_info">Please type in your 24-word secret recovery phrase in the correct order.</string>
 +    <string name="restoreWallet_info">Enter your 24-word secret recovery phrase in order, or paste the complete phrase.</string>
 +    <string name="restore_seed_paste">Paste recovery phrase</string>
 +    <string name="restore_seed_paste_error">Enter or paste a valid 24-word recovery phrase.</string>
-@@ -647 +650 @@
+@@ -647 +651 @@
 -        Think of it as the master key to your wallet. It is stored in Zodl’s Advanced Settings.</string>
 +        Think of it as the master key to your wallet. It is stored in ZEC Private’s Advanced Settings.</string>
-@@ -650 +653 @@
+@@ -650 +654 @@
 -        blockchain) at which your wallet was created. If you ever lose access to your Zodl app and need to recover
 +        blockchain) at which your wallet was created. If you ever lose access to your ZEC Private app and need to recover
-@@ -654 +657 @@
+@@ -654 +658 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide how far Zodl should scan. Enter a date before your first received transaction. If you\’re not sure, choose an earlier date.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide how far ZEC Private should scan. Enter a date before your first received transaction. If you\’re not sure, choose an earlier date.</string>
-@@ -658,2 +661,2 @@
+@@ -658,2 +662,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide how far Zodl should resync. Enter a date before your first received transaction. If you\'re not sure, choose an earlier date.</string>
 -    <string name="resync_bd_estimation_message">Your wallet will be resynced from %1$s (%2$s blocks). Zodl will scan and recover all transactions made after the following block number.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide how far ZEC Private should resync. Enter a date before your first received transaction. If you\'re not sure, choose an earlier date.</string>
 +    <string name="resync_bd_estimation_message">Your wallet will be resynced from %1$s (%2$s blocks). ZEC Private will scan and recover all transactions made after the following block number.</string>
-@@ -663,2 +666,2 @@
+@@ -663,2 +667,2 @@
 -        balance.\n\nUnless you specify otherwise below, Zodl will resync from the date displayed.</string>
 -    <string name="resyncWallet_dateInfo">Unless you specify otherwise below, Zodl will resync from the date displayed.</string>
 +        balance.\n\nUnless you specify otherwise below, ZEC Private will resync from the date displayed.</string>
 +    <string name="resyncWallet_dateInfo">Unless you specify otherwise below, ZEC Private will resync from the date displayed.</string>
-@@ -676 +679 @@
+@@ -676 +680 @@
 -    <string name="scan_cameraSettings">The camera is not authorized. Please go to the system settings of Zodl and turn in on.</string>
 +    <string name="scan_cameraSettings">The camera is not authorized. Please go to the system settings of ZEC Private and turn in on.</string>
-@@ -686,2 +689,2 @@
+@@ -686,2 +690,2 @@
 -    <string name="deeplinkWarning_desc">For better safety and security, rescan the QR code with Zodl.</string>
 -    <string name="deeplinkWarning_cta">Rescan in Zodl</string>
 +    <string name="deeplinkWarning_desc">For better safety and security, rescan the QR code with ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Rescan in ZEC Private</string>
-@@ -694 +697 @@
+@@ -694 +698 @@
 -        Zodl and turn in on.</string>
 +        ZEC Private and turn in on.</string>
-@@ -778 +781 @@
+@@ -778 +782 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encountered connection issues when submitting the
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encountered connection issues when submitting the
-@@ -786 +789 @@
+@@ -786 +790 @@
 -    <string name="send_confirmation_multiple_report_text">Hi, Zodl Team.\n\nWhile sending a transaction to a TEX
 +    <string name="send_confirmation_multiple_report_text">Hi, ZEC Private Team.\n\nWhile sending a transaction to a TEX
-@@ -816,0 +820 @@
+@@ -816,0 +821 @@
 +    <string name="send_pendingSdkStateInfo">Your transaction may have been sent. Check its status before trying again.</string>
-@@ -818 +822 @@
+@@ -818 +823 @@
 -    <string name="swapAndPay_pendingSwapInfo">Your swap is being processed. Follow its status on the transaction screen.</string>
 +    <string name="swapAndPay_pendingSwapInfo">Swap submission is unconfirmed. Check Activity for updates.</string>
-@@ -820 +824 @@
+@@ -820 +825 @@
 -    <string name="swapAndPay_pendingPayInfo">Your cross-chain payment is being processed. Follow its status on the transaction screen.</string>
 +    <string name="swapAndPay_pendingPayInfo">Payment submission is unconfirmed. Check Activity for updates.</string>
-@@ -849,3 +852,0 @@
+@@ -849,3 +853,0 @@
 -    <string name="coinVote_common_confirmation" tools:ignore="MissingTranslation">Confirmation</string>
 -    <string name="coinVote_delegationSigning_instruction" tools:ignore="MissingTranslation" translatable="false">After you have signed with Keystone, tap on the Scan Signature button below.</string>
 -    <string name="coinVote_delegationSigning_scanSignature" tools:ignore="MissingTranslation" translatable="false">Scan Signature</string>
-@@ -857,2 +857,0 @@
+@@ -857,2 +858,0 @@
 -    <string name="coinVote_delegationSigning_duplicateSignature" tools:ignore="MissingTranslation" translatable="false">That Keystone signature was already scanned for bundle %1$d of %2$d. Sign the current bundle on Keystone, then scan the new QR.</string>
 -    <string name="coinVote_delegationSigning_wrongSignature" tools:ignore="MissingTranslation" translatable="false">That signature is for a different bundle. Sign bundle %1$d of %2$d on Keystone, then scan the new QR.</string>
-@@ -864,2 +862,0 @@
+@@ -864,2 +863,0 @@
 -    <string name="coinVote_delegationSigning_title" tools:ignore="MissingTranslation" translatable="false">Authorize Vote</string>
 -    <string name="coinVote_delegationSigning_currentBundleProgress" tools:ignore="MissingTranslation" translatable="false">Signature %1$d of %2$d</string>
-@@ -869 +865,0 @@
+@@ -869 +866,0 @@
 -    <string name="coinVote_delegationSigning_useSignedBundlesOnly" tools:ignore="MissingTranslation" translatable="false">Use signed bundles only</string>
-@@ -871 +866,0 @@
+@@ -871 +867,0 @@
 -    <string name="coinVote_delegationSigning_memo" tools:ignore="MissingTranslation" translatable="false">Memo</string>
-@@ -874 +869 @@
+@@ -874 +870 @@
 -    <string name="swap_info_message">Swap between %1$s and any NEAR-supported coin or token.\n\nIf swapping TO %2$s, you will send funds from a third-party wallet and provide an address where funds can be refunded.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund if the wrong asset is sent, or sent on the wrong network.\n\nIf swapping FROM %3$s, you must provide a valid address for the asset you are swapping to.</string>
 +    <string name="swap_info_message">Swap between %1$s and supported assets.\n\nSwapping into %2$s requires a deposit from another wallet and a refund address on the sending network.\n\nNEAR offers no recovery for wrong-asset or wrong-network transfers under $300.\n\nWhen swapping from %3$s, enter a recipient address on the receiving network.</string>
-@@ -880 +875 @@
+@@ -880 +876 @@
 -    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of Zodl\'s control.</string>
 +    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of ZEC Private\'s control.</string>
-@@ -886 +881 @@
+@@ -886 +882 @@
 -    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
 +    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
-@@ -916 +911 @@
+@@ -916 +912 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %s less based on the %s slippage you set.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %1$s less based on the %2$s slippage you set.</string>
-@@ -923,2 +918,2 @@
+@@ -923,2 +919,2 @@
 -    <string name="swapToZec_info2">%s on %s</string>
 -    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in Zodl</string>
 +    <string name="swapToZec_info2">%1$s on %2$s</string>
 +    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
-@@ -927,3 +922,3 @@
+@@ -927,3 +923,3 @@
 -    <string name="swap_refund_address_info_message_empty">If the swap fails or market conditions change, your transaction may be refunded minus network fees.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund.\n\nThe refunded amount will be returned to your wallet in the source currency. Please enter a valid address to avoid loss of funds.</string>
 -    <string name="swap_refund_address_info_message">If the swap fails or market conditions change, your transaction may be refunded minus network fees.\n\nRefunds only apply to swaps of $300 or more. Swaps under $300 aren\'t eligible for a refund.\n\nThe refunded amount will be returned to your wallet in the source currency on the same network. Please enter a valid address to avoid loss of funds.</string>
 -    <string name="swap_refund_warning_title">No Refunds Under $300</string>
 +    <string name="swap_refund_address_info_message_empty">Enter an address for the asset and network you send from. If a refund is available, it goes to that address and network fees may reduce it.</string>
 +    <string name="swap_refund_address_info_message">Any refund goes to this address in the original asset and network. Network fees may reduce the amount returned.</string>
 +    <string name="swap_refund_warning_title">Check asset and network</string>
-@@ -948 +943 @@
+@@ -948 +944 @@
 -    <string name="depositFunds_bulletPoint1">Send the exact amount of the asset displayed. Sending less will result in a refund.</string>
 +    <string name="depositFunds_bulletPoint1">Use the suggested amount. A smaller deposit may complete if it meets the quoted minimum.</string>
-@@ -954 +949 @@
+@@ -954 +950 @@
 -    <string name="taxExport_desc">Download your <xliff:g example="Zodl" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
 +    <string name="taxExport_desc">Download your <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
-@@ -955,0 +951,6 @@
+@@ -955,0 +952,6 @@
 +    <string name="taxExport_error">Could not export transaction history. Try again.</string>
 +    <string name="request_amount_minimum">Enter at least 0.00000001 ZEC.</string>
 +    <string name="request_amount_fiat_minimum">Enter the equivalent of at least 0.00005 ZEC.</string>
 +    <string name="request_amount_rate_loading">Refreshing exchange rate…</string>
 +    <string name="request_amount_rate_stale">The exchange rate is out of date.</string>
 +    <string name="request_amount_rate_unavailable">Exchange rate unavailable.</string>
-@@ -964,2 +965,2 @@
+@@ -964,2 +966,2 @@
 -    <string name="texKeystone_step1_title">Send to Zodl first</string>
 -    <string name="texKeystone_step1_desc">Transfer ZEC to your Zodl shielded address</string>
 +    <string name="texKeystone_step1_title">Send to ZEC Private first</string>
 +    <string name="texKeystone_step1_desc">Transfer ZEC to your ZEC Private shielded address</string>
-@@ -967,2 +968,2 @@
+@@ -967,2 +969,2 @@
 -    <string name="texKeystone_step2_title">Send from Zodl to TEX address</string>
 -    <string name="texKeystone_step2_desc">Once received in Zodl, send the tokens to your final TEX destination address</string>
 +    <string name="texKeystone_step2_title">Send from ZEC Private to TEX address</string>
 +    <string name="texKeystone_step2_desc">Once received in ZEC Private, send the tokens to your final TEX destination address</string>
-@@ -971,0 +973 @@
+@@ -971,0 +974 @@
 +    <string name="tor_settings_read_failed">Couldn’t read the Tor setting.</string>
-@@ -1019 +1021 @@
+@@ -1019 +1022 @@
 -    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. Your funds have been returned, minus transaction fees. If you haven\'t received them, contact the Zodl support team.</string>
 +    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. The provider reports a refund, minus transaction fees. If it has not arrived, preserve the swap details and check its status with the provider.</string>
-@@ -1022 +1024 @@
+@@ -1022 +1025 @@
 -    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds and didn\'t receive your swap, contact support so we can help resolve it.</string>
 +    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds, preserve the swap details and inspect its status or refund with the provider before sending again.</string>
-@@ -1024 +1026 @@
+@@ -1024 +1027 @@
 -    <string name="swapAndPay_expiredMsg">This swap expired after its 24-hour validity window. If you didn\'t send funds, no action is needed. If you did send funds, contact support so we can help.</string>
 +    <string name="swapAndPay_expiredMsg">This swap expired. If you did not send funds, no action is needed. If you did, preserve the swap details and inspect its status or refund with the provider.</string>
-@@ -1028 +1030,3 @@
+@@ -1028 +1031,3 @@
 -    <string name="reportSwap_msg">Tapping the button below will send details about this swap (like the deposit address and target asset) to the Zodl support team so they can help resolve your issue. The transaction info is included automatically.</string>
 +    <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
 +    <string name="reportSwap_shareQuote">Share original quote</string>
 +    <string name="reportSwap_shareQuoteDescription">Share the provider-signed quote with a recipient you trust. It includes the swap amount, recipient address and refund address.</string>
-@@ -1033 +1037 @@
+@@ -1033 +1038 @@
 -    <string name="swap_mismatch_msg_2">We\’d appreciate you reporting this to us so we can investigate it with the swap provider.</string>
 +    <string name="swap_mismatch_msg_2">You can export diagnostic details for investigation. Review them before choosing a recipient.</string>
-@@ -1036,2 +1040,2 @@
+@@ -1036,2 +1041,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: API mismatch</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detected the following error in the API response from the swap provider. Providing these details allows us to raise it with them to investigate. We won\’t relay your personal details to the swap provider. You can send this as-is, or include a note to us. Thanks in advance.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: API mismatch</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rejected a swap-provider response that did not match the request. Review these diagnostic details before sharing.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
-@@ -1056,0 +1061 @@
+@@ -1056,0 +1062 @@
 +    <string name="private_swap_incomplete_check_support">Check with support before sending more.</string>
-@@ -1067 +1072 @@
+@@ -1067 +1073 @@
 -    <string name="transaction_detail_info_incomplete_deposit_message">Deposit an additional %1$s to complete this swap before %2$s, or your deposit will be refunded.</string>
 +    <string name="transaction_detail_info_incomplete_deposit_message">Deposit short by %1$s. Quote expires %2$s.</string>
-@@ -1107,0 +1113,2 @@
+@@ -1107,0 +1114,2 @@
 +    <string name="private_payment_shortfall">Paid less than requested</string>
 +    <string name="private_payment_shortfall_info">Check the payment status or contact support before sending more.</string>
-@@ -1122 +1129 @@
+@@ -1122 +1130 @@
 -    <string name="update_title_available">Zodl here.</string>
 +    <string name="update_title_available">ZEC Private here.</string>
-@@ -1125 +1132 @@
+@@ -1125 +1133 @@
 -        There is a required update\nfor Zodl that makes major improvements to\nperformance and/or security.
 +        There is a required update\nfor ZEC Private that makes major improvements to\nperformance and/or security.
-@@ -1128 +1135 @@
+@@ -1128 +1136 @@
 -        There is a new version of Zodl that makes minor updates to
 +        There is a new version of ZEC Private that makes minor updates to
-@@ -1140,7 +1146,0 @@
+@@ -1140,7 +1147,0 @@
 -    <string name="coinVote_common_continue" tools:ignore="MissingTranslation">Continue</string>
 -    <string name="coinVote_pollsList_chainConfigAccessibility" tools:ignore="MissingTranslation">Voting chain config</string>
 -    <string name="coinVote_configSettings_screenTitle" tools:ignore="MissingTranslation">Select Data Source</string>
@@ -36589,7 +36603,7 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_configSettings_sectionSubtitle" tools:ignore="MissingTranslation">Pick a poll source, or add your own.</string>
 -    <string name="coinVote_configSettings_bundledName" tools:ignore="MissingTranslation">Coinholder Poll</string>
 -    <string name="coinVote_configSettings_defaultBadge" tools:ignore="MissingTranslation">Default</string>
-@@ -1149,15 +1148,0 @@
+@@ -1149,15 +1149,0 @@
 -    <string name="coinVote_configSettings_addCustomSource" tools:ignore="MissingTranslation">Add custom source</string>
 -    <string name="coinVote_configSettings_edit" tools:ignore="MissingTranslation">Edit</string>
 -    <string name="coinVote_configSettings_delete" tools:ignore="MissingTranslation">Delete</string>
@@ -36605,13 +36619,13 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_configSettings_titleField" tools:ignore="MissingTranslation">Title</string>
 -    <string name="coinVote_configSettings_urlField" tools:ignore="MissingTranslation">URL</string>
 -    <string name="coinVote_configSettings_urlPlaceholder" tools:ignore="MissingTranslation">Enter...</string>
-@@ -1166 +1150,0 @@
+@@ -1166 +1151,0 @@
 -    <string name="coinVote_configSettings_errorTitleTooLong" tools:ignore="MissingTranslation">Title must be 15 characters or less, including spaces.</string>
-@@ -1168 +1151,0 @@
+@@ -1168 +1152,0 @@
 -    <string name="coinVote_configSettings_errorInvalidUrl" tools:ignore="MissingTranslation">Please enter a valid URL (e.g. https://zodl.com/polls)</string>
-@@ -1170 +1152,0 @@
+@@ -1170 +1153,0 @@
 -    <string name="coinVote_configSettings_errorDuplicateUrl" tools:ignore="MissingTranslation">This source URL is already added.</string>
-@@ -1172,24 +1153,0 @@
+@@ -1172,24 +1154,0 @@
 -    <string name="coinVote_howToVote_titleZodl" tools:ignore="MissingTranslation">How to vote with %1$s</string>
 -    <string name="coinVote_howToVote_subtitle" tools:ignore="MissingTranslation">Your ZEC gives you a voice. Shape the future of the Zcash network by voting on active proposals.</string>
 -    <string name="coinVote_howToVote_stepVotingTitle" tools:ignore="MissingTranslation">Voting on Proposals</string>
@@ -36636,11 +36650,11 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_common_viewResults" tools:ignore="MissingTranslation">View Results</string>
 -    <string name="coinVote_delegationSigning_signedProgress" tools:ignore="MissingTranslation">%1$d of %2$d voted</string>
 -    <string name="coinVote_pollsList_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load polls</string>
-@@ -1201 +1158,0 @@
+@@ -1201 +1159,0 @@
 -    <string name="coinVote_error_configUnavailableTitle" tools:ignore="MissingTranslation">Voting unavailable</string>
-@@ -1203 +1159,0 @@
+@@ -1203 +1160,0 @@
 -    <string name="coinVote_results_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load results</string>
-@@ -1210,15 +1165,0 @@
+@@ -1210,15 +1166,0 @@
 -    <string name="coinVote_common_goBack" tools:ignore="MissingTranslation">Go Back</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedTitle" tools:ignore="MissingTranslation">Authorization Failed</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedMessage" tools:ignore="MissingTranslation">We couldn\'t authorize your vote. Check your connection and try again.</string>
@@ -36656,11 +36670,11 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_common_close" tools:ignore="MissingTranslation">Close</string>
 -    <string name="coinVote_confirmSubmission_confirmWithKeystone" tools:ignore="MissingTranslation">Confirm with Keystone</string>
 -    <string name="coinVote_common_confirm" tools:ignore="MissingTranslation">Confirm</string>
-@@ -1228,3 +1168,0 @@ Your vote can no longer be submitted.</string>
+@@ -1228,3 +1169,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_bundleProgress" tools:ignore="MissingTranslation">Sign bundle %1$d/%2$d</string>
 -    <string name="coinVote_submission_continuedProcessingTitle" tools:ignore="MissingTranslation">Submitting votes</string>
 -    <string name="coinVote_confirmSubmission_progressAuthorizing" tools:ignore="MissingTranslation">Authorizing...</string>
-@@ -1232,14 +1169,0 @@ Your vote can no longer be submitted.</string>
+@@ -1232,14 +1170,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_store_submissionAuthorizingVote" tools:ignore="MissingTranslation">Authorizing vote...</string>
 -    <string name="coinVote_confirmSubmission_progressSubmittingVoteCount" tools:ignore="MissingTranslation">Submitting vote %1$d of %2$d...</string>
 -    <string name="coinVote_confirmSubmission_progressRetrying" tools:ignore="MissingTranslation">Reconnecting...</string>
@@ -36675,29 +36689,29 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_confirmSubmission_headerSubtitleSubmitting" tools:ignore="MissingTranslation">Vote submission is in progress, please don\'t leave this screen until it is finished.</string>
 -    <string name="coinVote_confirmSubmission_headerSubtitleCompleted" tools:ignore="MissingTranslation">Your vote was successfully published and cannot be changed.</string>
 -    <string name="coinVote_confirmSubmission_submissionFailedMessage" tools:ignore="MissingTranslation">Your vote couldn\'t be submitted. Check your connection and try again.</string>
-@@ -1252 +1175,0 @@ Your vote can no longer be submitted.</string>
+@@ -1252 +1176,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_memoMessage" tools:ignore="MissingTranslation">I am authorizing this hotkey managed by my wallet to vote on %1$s with %2$s.</string>
-@@ -1254,5 +1176,0 @@ Your vote can no longer be submitted.</string>
+@@ -1254,5 +1177,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_confirmSubmission_detailPoll" tools:ignore="MissingTranslation">Poll</string>
 -    <string name="coinVote_confirmSubmission_detailVotingPower" tools:ignore="MissingTranslation">Voting power</string>
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluded from this vote</string>
 -    <string name="coinVote_confirmSubmission_detailVotingHotkey" tools:ignore="MissingTranslation">Voting hotkey</string>
 -    <string name="coinVote_confirmSubmission_detailMemo" tools:ignore="MissingTranslation">Memo</string>
-@@ -1266,2 +1183,0 @@ Your vote can no longer be submitted.</string>
+@@ -1266,2 +1184,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_ineligible_titleNoVote" tools:ignore="MissingTranslation">Not Eligible for This Round</string>
 -    <string name="coinVote_ineligible_noNotesMessage" tools:ignore="MissingTranslation">Your wallet has no shielded notes from before the snapshot block. Only funds that existed at block #%@ are eligible for this voting round.</string>
-@@ -1271,5 +1186,0 @@ Your vote can no longer be submitted.</string>
+@@ -1271,5 +1187,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalDetail_position" tools:ignore="MissingTranslation">%1$d OF %2$d</string>
 -    <string name="coinVote_proposalList_ctaConfirmSubmit" tools:ignore="MissingTranslation">Confirm &amp; Submit</string>
 -    <string name="coinVote_proposalList_ctaStartVoting" tools:ignore="MissingTranslation">Start Voting</string>
 -    <string name="coinVote_proposalList_ctaContinueVoting" tools:ignore="MissingTranslation">Continue Voting</string>
 -    <string name="coinVote_proposalList_reviewTitle" tools:ignore="MissingTranslation">Review and submit vote</string>
-@@ -1277,4 +1187,0 @@ Your vote can no longer be submitted.</string>
+@@ -1277,4 +1188,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_headerEndsAt" tools:ignore="MissingTranslation">Ends %1$s</string>
 -    <string name="coinVote_common_votedDate" tools:ignore="MissingTranslation">Voted %1$s</string>
 -    <string name="coinVote_proposalList_votingPower" tools:ignore="MissingTranslation">Voting Power %1$s</string>
 -    <string name="coinVote_tallying_detailEnded" tools:ignore="MissingTranslation">Ended</string>
-@@ -1285,13 +1191,0 @@ Your vote can no longer be submitted.</string>
+@@ -1285,13 +1192,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_viewMore" tools:ignore="MissingTranslation">View more</string>
 -    <string name="coinVote_common_viewLess" tools:ignore="MissingTranslation">View less</string>
 -    <string name="coinVote_proposalList_viewForumDiscussions" tools:ignore="MissingTranslation">View Forum Discussions</string>
@@ -36711,13 +36725,13 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_proposalDetail_unansweredTitle" tools:ignore="MissingTranslation">Unanswered Questions</string>
 -    <string name="coinVote_proposalDetail_skippedMessageSingle" tools:ignore="MissingTranslation">You have not responded to 1 question. Confirm to skip this question or go back to respond.</string>
 -    <string name="coinVote_proposalDetail_skippedMessageMultiple" tools:ignore="MissingTranslation">You have not responded to %1$d questions. Confirm to skip these questions or go back to respond.</string>
-@@ -1299,5 +1192,0 @@ Your vote can no longer be submitted.</string>
+@@ -1299,5 +1193,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_reviewSubtitle" tools:ignore="MissingTranslation">Tap on the question to edit any of your answers. After you review your answers, tap on Confirm &amp; Submit.</string>
 -    <string name="coinVote_proposalList_yourVote" tools:ignore="MissingTranslation">Your vote:</string>
 -    <string name="coinVote_results_title" tools:ignore="MissingTranslation">Results</string>
 -    <string name="coinVote_common_zecValue" tools:ignore="MissingTranslation">%1$.3f ZEC</string>
 -    <string name="coinVote_results_total" tools:ignore="MissingTranslation">Total: %1$.3f ZEC</string>
-@@ -1306,30 +1194,0 @@ Your vote can no longer be submitted.</string>
+@@ -1306,30 +1195,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_votingPower" tools:ignore="MissingTranslation">Voting Power %1$.3f ZEC</string>
 -    <string name="coinVote_results_metaLine" tools:ignore="MissingTranslation">%1$s  &#8226;  %2$s</string>
 -    <string name="coinVote_results_votedLine" tools:ignore="MissingTranslation">Voted: %1$s</string>
@@ -36748,46 +36762,46 @@ index f41234151..abebbe4bd 100644
 -    <string name="coinVote_store_userError_recoveredVoteMismatch" tools:ignore="MissingTranslation">The network reported an existing vote for this wallet that does not match this submission. If you voted from another device, check that device\'s voting status.</string>
 -    <string name="coinVote_store_userError_recoveredVoteUnverified" tools:ignore="MissingTranslation">An earlier vote transaction may already be on the network, but it could not be verified with the vote servers. Please try again in a moment.</string>
 -    <string name="coinVote_store_userError_roundNotPrepared" tools:ignore="MissingTranslation">This voting round\'s prepared data is missing on this device. Reopen the round to prepare it again.</string>
-@@ -1338 +1196,0 @@ Your vote can no longer be submitted.</string>
+@@ -1338 +1197,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegation_insufficientSnapshotBalance" tools:ignore="MissingTranslation">Your shielded balance at the snapshot (%1$s ZEC) is below the minimum required to vote (%2$s ZEC).</string>
-@@ -1343,2 +1200,0 @@ Your vote can no longer be submitted.</string>
+@@ -1343,2 +1201,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_walletSyncing_title" tools:ignore="MissingTranslation">Wallet Syncing</string>
 -    <string name="coinVote_walletSyncing_subtitle" tools:ignore="MissingTranslation">Your wallet needs to sync to the snapshot block height before you can participate in voting.</string>
-@@ -1355 +1211 @@ Your vote can no longer be submitted.</string>
+@@ -1355 +1212 @@ Your vote can no longer be submitted.</string>
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
-@@ -1377 +1233 @@ Your vote can no longer be submitted.</string>
+@@ -1377 +1234 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
 +    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1235,3 @@ Your vote can no longer be submitted.</string>
+@@ -1379,2 +1236,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
 +    <string name="migration_notification_checkStatusText">Open the app to check migration status.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
-@@ -1392 +1249 @@ Your vote can no longer be submitted.</string>
+@@ -1392 +1250 @@ Your vote can no longer be submitted.</string>
 -    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to Zodl Support via Send Feedback.</string>
 +    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
-@@ -1403,0 +1261 @@ Your vote can no longer be submitted.</string>
+@@ -1403,0 +1262 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_migration_finish_scheduling">Migration saved. Try again to finish scheduling.</string>
-@@ -1406,0 +1265 @@ Your vote can no longer be submitted.</string>
+@@ -1406,0 +1266 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationProgress_unavailable">Migration progress unavailable</string>
-@@ -1425 +1284,2 @@ Your vote can no longer be submitted.</string>
+@@ -1425 +1285,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationPrivacy_bodyImmediate">If Tor is available in your region, we strongly recommend enabling it to prevent linking your balance to your IP address. You can also use a trusted VPN if Tor is unavailable in your region.</string>
 +    <string name="migrationPrivacy_bodyImmediate">Immediate migration uses your wallet’s Tor setting. Enable Tor in Settings to use it.</string>
 +    <string name="migrationReview_privateSplitUnavailable">This plan needs a preparation transaction that can only be sent without Tor. To keep Tor on, choose immediate migration with wallet Tor enabled.</string>
-@@ -1433 +1293 @@ Your vote can no longer be submitted.</string>
+@@ -1433 +1294 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationSuccess_subtitle">Your ZEC was successfully\nmigrated to Ironwood.</string>
 +    <string name="migrationSuccess_subtitle">Migration submitted. Check Activity for confirmation.</string>
-@@ -1453 +1313 @@ Your vote can no longer be submitted.</string>
+@@ -1453 +1314 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. An amount this specific can identify you on the network. To protect your privacy, we recommend locking this balance rather than migrating it.</string>
 +    <string name="migrationComplete_orchardBalanceRemainingBody">%1$s stayed in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
-@@ -1458,2 +1318,2 @@ Your vote can no longer be submitted.</string>
+@@ -1458,2 +1319,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_orchardBalanceLockedTitle">Orchard balance locked</string>
 -    <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
 +    <string name="migrationComplete_lockRequestFailed">Couldn\'t lock Orchard funds. Try again.</string>
 +    <string name="migrationComplete_lockRequestCompleted">Lock request completed.</string>
-@@ -1462,4 +1322,4 @@ Your vote can no longer be submitted.</string>
+@@ -1462,4 +1323,4 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
@@ -36796,52 +36810,52 @@ index f41234151..abebbe4bd 100644
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_residueTitle">Small Orchard balance</string>
-@@ -1469 +1329 @@ Your vote can no longer be submitted.</string>
+@@ -1469 +1330 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving an amount this specific would link your Ironwood funds back to your Orchard history. We recommend locking it instead.</string>
 +    <string name="migrationComplete_residueRecommendationBody">%1$s is still in Orchard. Moving that exact amount can link your transactions. You can lock all currently available Orchard funds in this account.</string>
-@@ -1472 +1332 @@ Your vote can no longer be submitted.</string>
+@@ -1472 +1333 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
-@@ -1479 +1339 @@ Your vote can no longer be submitted.</string>
+@@ -1479 +1340 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening Zodl at every step to send each transfer.</string>
 +    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening ZEC Private at every step to send each transfer.</string>
-@@ -1507,2 +1367,2 @@ Your vote can no longer be submitted.</string>
+@@ -1507,2 +1368,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationTipUnavailable_title">Zodl is still syncing</string>
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
-@@ -1511 +1371 @@ Your vote can no longer be submitted.</string>
+@@ -1511 +1372 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet1Prefix">Locking marks this balance as </string>
 +    <string name="migrationLockExplainer_bullet1Prefix">Locking marks all available Orchard funds in this account as </string>
-@@ -1514 +1374 @@ Your vote can no longer be submitted.</string>
+@@ -1514 +1375 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
-@@ -1547 +1407 @@ Your vote can no longer be submitted.</string>
+@@ -1547 +1408 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1555 +1415 @@ Your vote can no longer be submitted.</string>
+@@ -1555 +1416 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_immediateBody">Your full Orchard balance will be transferred to Ironwood in a single on-chain transfer. Once confirmed, this transfer cannot be cancelled.</string>
 +    <string name="migrationReview_immediateBody">The transfer moves eligible Orchard funds to Ironwood. Once confirmed, this transfer cannot be cancelled.</string>
-@@ -1556,0 +1417 @@ Your vote can no longer be submitted.</string>
+@@ -1556,0 +1418 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationReview_eligibleOrchardFunds">Eligible Orchard funds</string>
-@@ -1561 +1422 @@ Your vote can no longer be submitted.</string>
+@@ -1561 +1423 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1437 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1438 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1439 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1440 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1443,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1444,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1593,0 +1455,2 @@ Your vote can no longer be submitted.</string>
+@@ -1593,0 +1456,2 @@ Your vote can no longer be submitted.</string>
 +    <string name="migrationHome_finishScheduling">Finish scheduling migration</string>
 +    <string name="migrationScheduled_signatureRequired">Return to Home to finish signing with Keystone.</string>
-@@ -1629,0 +1493,9 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1494,9 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
 +    <string name="private_swap_funding_status">Funding status</string>
 +    <string name="private_swap_status_unavailable">Unavailable</string>
@@ -44384,6 +44398,28 @@ index 4847780f4..71e8053de 100644
 +        val legacy = getLegacyUnencryptedStorageTarget()
 +        Files.deleteIfExists(legacy.toPath())
 +        directorySync.sync(checkNotNull(legacy.parentFile))
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AppearanceModeStorageProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AppearanceModeStorageProvider.kt
+index 0bda12282..cbe48d09d 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AppearanceModeStorageProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AppearanceModeStorageProvider.kt
+@@ -13 +13,3 @@ import co.electriccoin.zcash.ui.design.theme.AppearanceMode
+-interface AppearanceModeStorageProvider : NullableStorageProvider<AppearanceMode>
++interface AppearanceModeStorageProvider : NullableStorageProvider<AppearanceMode> {
++    suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean)
++}
+@@ -23 +25,11 @@ class AppearanceModeStorageProviderImpl(
+-        AppearanceModePreferenceDefault(PreferenceKey("appearance_mode"))
++        AppearanceModePreferenceDefault(MODE_KEY)
++
++    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
++        preferenceHolder().putStringsWithRollback(
++            mapOf(MODE_KEY to mode.name, OLED_APPEARANCE_KEY to isOledEnabled.toString())
++        )
++    }
++
++    private companion object {
++        val MODE_KEY = PreferenceKey("appearance_mode")
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/CMCApiProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/CMCApiProvider.kt
 index 82e233c68..036bfd21e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/CMCApiProvider.kt
@@ -44697,6 +44733,16 @@ index de53aef49..ae8a6b3ee 100644
 +
 +private val CONVERSION_READ_BACKOFF_STEP = 5.seconds
 +private const val MAX_CONVERSION_READ_BACKOFF_STEPS = 6
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsOledEnabledStorageProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsOledEnabledStorageProvider.kt
+index 0ef6d6a39..699448431 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsOledEnabledStorageProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsOledEnabledStorageProvider.kt
+@@ -15 +15 @@ class IsOledEnabledStorageProviderImpl(
+-        key = PreferenceKey("is_oled_enabled"),
++        key = OLED_APPEARANCE_KEY,
+@@ -17,0 +18,2 @@ class IsOledEnabledStorageProviderImpl(
++
++internal val OLED_APPEARANCE_KEY = PreferenceKey("is_oled_enabled")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsServerSelectionAutomaticProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsServerSelectionAutomaticProvider.kt
 deleted file mode 100644
 index 308662bcf..000000000
@@ -55329,19 +55375,26 @@ index 5c148d4ed..e451af747 100644
 +    private fun selectedAccountId() =
 +        accounts.allAccounts.value?.firstOrNull { it.isSelected }?.sdkAccount?.accountUuid
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetAppearanceModeUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetAppearanceModeUseCase.kt
-index d5d4441bf..380db61e9 100644
+index d5d4441bf..80b24cc2c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetAppearanceModeUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetAppearanceModeUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.NavigationCommand
 @@ -3,0 +5 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.stageResultFrom
-@@ -16 +18,2 @@ class SetAppearanceModeUseCase(
+@@ -5 +6,0 @@ import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
+-import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
+@@ -12 +12,0 @@ class SetAppearanceModeUseCase(
+-    private val isOledEnabledStorageProvider: IsOledEnabledStorageProvider,
+@@ -16 +16,2 @@ class SetAppearanceModeUseCase(
 -        isOledEnabled: Boolean
 +        isOledEnabled: Boolean,
 +        sourceEntryId: String? = null,
-@@ -20 +23 @@ class SetAppearanceModeUseCase(
+@@ -18,3 +19,2 @@ class SetAppearanceModeUseCase(
+-        appearanceModeStorageProvider.store(appearanceMode)
+-        isOledEnabledStorageProvider.store(isOledEnabled)
 -        navigationRouter.backTo(MoreArgs::class)
++        appearanceModeStorageProvider.storeAppearance(appearanceMode, isOledEnabled)
 +        navigationRouter.stageResultFrom(sourceEntryId) { NavigationCommand.BackTo(MoreArgs::class) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetTransactionBookmarkUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SetTransactionBookmarkUseCase.kt
 new file mode 100644
@@ -69744,23 +69797,69 @@ index f2e90ac7e..beb2be641 100644
 -    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args) }
 +fun ThemeDarkLookScreen(args: ThemeDarkLookArgs, sourceEntryId: String) {
 +    val vm = koinViewModel<ThemeDarkLookVM> { parametersOf(args, sourceEntryId) }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt
+index 2782c2448..9916e7c08 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookState.kt
+@@ -9,0 +10 @@ internal data class ThemeDarkLookState(
++    val hasSaveError: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
-index f7ccd703c..1ca03cbdf 100644
+index f7ccd703c..61056ee39 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVM.kt
-@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
+@@ -8,0 +9,3 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -29,0 +31 @@ internal class ThemeDarkLookVM(
++import co.electriccoin.zcash.ui.common.model.guardLoading
++import co.electriccoin.zcash.ui.common.model.mutableLce
+@@ -19 +22 @@ import kotlinx.coroutines.flow.WhileSubscribed
+-import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.combine
+@@ -29,0 +33 @@ internal class ThemeDarkLookVM(
 +    private val sourceEntryId: String? = null,
-@@ -46,0 +49 @@ internal class ThemeDarkLookVM(
+@@ -35,0 +40 @@ internal class ThemeDarkLookVM(
++    private val save = mutableLce<Unit>()
+@@ -38,2 +43,3 @@ internal class ThemeDarkLookVM(
+-        selectedOledEnabled
+-            .map { oledEnabled -> oledEnabled?.let(::createState) }
++        combine(selectedOledEnabled, save.state) { oledEnabled, result ->
++            oledEnabled?.let { createState(it, result.loading, result.error != null) }
++        }
+@@ -46,0 +53 @@ internal class ThemeDarkLookVM(
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -88 +91,5 @@ internal class ThemeDarkLookVM(
+@@ -54 +61 @@ internal class ThemeDarkLookVM(
+-    private fun createState(oledEnabled: Boolean) =
++    private fun createState(oledEnabled: Boolean, isSaving: Boolean, hasSaveError: Boolean) =
+@@ -68 +75 @@ internal class ThemeDarkLookVM(
+-                    isEnabled = isSaveEnabled(oledEnabled),
++                    isEnabled = !isSaving && isSaveEnabled(oledEnabled),
+@@ -71 +78,2 @@ internal class ThemeDarkLookVM(
+-            onBack = ::onBack
++            onBack = ::onBack,
++            hasSaveError = hasSaveError,
+@@ -86,3 +94,10 @@ internal class ThemeDarkLookVM(
+-    private fun onSaveClick() =
+-        viewModelScope.launch {
 -            setAppearanceMode(args.mode, isOledEnabled = selectedOledEnabled.value == true)
++    private fun onSaveClick() = save.guardLoading {
++        val oledEnabled = selectedOledEnabled.value ?: return@guardLoading
++        if (isSaveEnabled(oledEnabled)) save.execute {
 +            setAppearanceMode(
 +                args.mode,
-+                isOledEnabled = selectedOledEnabled.value == true,
++                isOledEnabled = oledEnabled,
 +                sourceEntryId = sourceEntryId,
 +            )
++            storedMode = args.mode
++            storedOledEnabled = oledEnabled
+@@ -89,0 +105 @@ internal class ThemeDarkLookVM(
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
+index 35bf6159c..c1aae9c90 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookView.kt
+@@ -28,0 +29 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceSaveFailure
+@@ -88,0 +90 @@ private fun BottomSheetContent(
++        if (state.hasSaveError) AppearanceSaveFailure()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
 index 67a497e6e..39ef969f4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsScreen.kt
@@ -69772,19 +69871,88 @@ index 67a497e6e..39ef969f4 100644
 -    val vm = koinViewModel<ThemeSettingsVM>()
 +fun ThemeSettingsScreen(sourceEntryId: String) {
 +    val vm = koinViewModel<ThemeSettingsVM> { parametersOf(sourceEntryId) }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt
+index a787fe93b..5207cafc7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsState.kt
+@@ -9,0 +10 @@ internal data class ThemeSettingsState(
++    val hasSaveError: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
-index 38488e94e..0b56fead6 100644
+index 38488e94e..6011a85a1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.discardResultFrom
-@@ -28,0 +30 @@ internal class ThemeSettingsVM(
+@@ -9,0 +11,2 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.guardLoading
++import co.electriccoin.zcash.ui.common.model.mutableLce
+@@ -20 +23 @@ import kotlinx.coroutines.flow.WhileSubscribed
+-import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.combine
+@@ -28,0 +32 @@ internal class ThemeSettingsVM(
 +    private val sourceEntryId: String? = null,
-@@ -43,0 +46 @@ internal class ThemeSettingsVM(
+@@ -32,0 +37 @@ internal class ThemeSettingsVM(
++    private val save = mutableLce<Unit>()
+@@ -35,2 +40,3 @@ internal class ThemeSettingsVM(
+-        selectedMode
+-            .map { mode -> mode?.let(::createState) }
++        combine(selectedMode, save.state) { mode, result ->
++            mode?.let { createState(it, result.loading, result.error != null) }
++        }
+@@ -43,0 +50 @@ internal class ThemeSettingsVM(
 +        addCloseable(AutoCloseable { navigationRouter.discardResultFrom(sourceEntryId) })
-@@ -95 +98 @@ internal class ThemeSettingsVM(
+@@ -50 +57 @@ internal class ThemeSettingsVM(
+-    private fun createState(selectedMode: AppearanceMode) =
++    private fun createState(selectedMode: AppearanceMode, isSaving: Boolean, hasSaveError: Boolean) =
+@@ -64 +71 @@ internal class ThemeSettingsVM(
+-                    isEnabled = selectedMode != storedMode,
++                    isEnabled = !isSaving && selectedMode != storedMode,
+@@ -67 +74,2 @@ internal class ThemeSettingsVM(
+-            onBack = ::onBack
++            onBack = ::onBack,
++            hasSaveError = hasSaveError,
+@@ -85,9 +93,6 @@ internal class ThemeSettingsVM(
+-    private fun onSaveClick() =
+-        viewModelScope.launch {
+-            val mode = selectedMode.value
+-            if (mode != AppearanceMode.LIGHT) {
+-                Twig.warn {
+-                    "Ignoring save for $mode - only AppearanceMode.LIGHT is selectable here, System and Dark " +
+-                        "forward to the dark-look sheet, which persists the mode together with isOledEnabled."
+-                }
+-                return@launch
++    private fun onSaveClick() = save.guardLoading {
++        val mode = selectedMode.value
++        if (mode != AppearanceMode.LIGHT) {
++            Twig.warn {
++                "Ignoring save for $mode - only AppearanceMode.LIGHT is selectable here, System and Dark " +
++                    "forward to the dark-look sheet, which persists the mode together with isOledEnabled."
+@@ -95 +100 @@ internal class ThemeSettingsVM(
 -            setAppearanceMode(mode, isOledEnabled = false)
++            return@guardLoading
+@@ -96,0 +102,5 @@ internal class ThemeSettingsVM(
++        if (mode != storedMode) save.execute {
 +            setAppearanceMode(mode, isOledEnabled = false, sourceEntryId = sourceEntryId)
++            storedMode = mode
++        }
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
+index 087d6ee1c..d34ca4cb7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsView.kt
+@@ -74,0 +75 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
++                if (state.hasSaveError) AppearanceSaveFailure()
+@@ -134,0 +136,10 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
++@Composable
++internal fun AppearanceSaveFailure() {
++    Text(
++        text = stringResource(R.string.appearance_save_failed),
++        modifier = Modifier.padding(bottom = 8.dp),
++        style = ZashiTypography.textSm,
++        color = ZashiColors.Text.textError,
++    )
++}
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/tor/optin/TorOptInScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/tor/optin/TorOptInScreen.kt
 index 52db4a67f..3caca171a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/tor/optin/TorOptInScreen.kt
@@ -110435,10 +110603,10 @@ index 57fcc6f0e..dd71c9e9c 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt
 new file mode 100644
-index 000000000..54c298cff
+index 000000000..54a58bb80
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/settings/SettingsRecoveryLayoutTest.kt
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,111 @@
 +package co.electriccoin.zcash.ui.screen.settings
 +
 +import androidx.compose.ui.test.assertIsDisplayed
@@ -110455,6 +110623,8 @@ index 000000000..54c298cff
 +import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView
 +import co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState
 +import co.electriccoin.zcash.ui.screen.chooseserver.ServerListState
++import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsState
++import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsView
 +import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsLoadView
 +import org.junit.Rule
 +import org.junit.Test
@@ -110524,6 +110694,28 @@ index 000000000..54c298cff
 +
 +        compose.onNodeWithText(resources.getString(R.string.serverSetup_refresh)).assertIsDisplayed().performClick()
 +        compose.runOnIdle { assertEquals(1, refreshes) }
++    }
++
++    @Test
++    fun aFailedAppearanceSaveShowsAnErrorWithSaveStillAvailable() {
++        val resources = RuntimeEnvironment.getApplication().resources
++        var saves = 0
++        compose.setContent {
++            ZcashTheme {
++                ThemeSettingsView(
++                    ThemeSettingsState(
++                        options = emptyList(),
++                        saveButton = ButtonState(stringRes("Save"), onClick = { saves++ }),
++                        onBack = {},
++                        hasSaveError = true,
++                    ),
++                )
++            }
++        }
++
++        compose.onNodeWithText(resources.getString(R.string.appearance_save_failed)).assertIsDisplayed()
++        compose.onNodeWithText("Save").assertIsDisplayed().performClick()
++        compose.runOnIdle { assertEquals(1, saves) }
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVMTest.kt
@@ -114756,19 +114948,41 @@ index 000000000..b3779d0d1
 +        }
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
+index e415d74b4..05ef10590 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
+@@ -210,0 +211,4 @@ private class FakeAppearanceModeStorageProvider(
++    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
++        error("This fixture only observes appearance")
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
-index c923a2c47..ac5593c3d 100644
+index c923a2c47..ca861e8ee 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/darklook/ThemeDarkLookVMTest.kt
-@@ -3,0 +4 @@ import androidx.navigation.NavBackStackEntry
+@@ -3,0 +4,4 @@ import androidx.navigation.NavBackStackEntry
++import co.electriccoin.zcash.preference.StandardPreferenceProvider
++import co.electriccoin.zcash.preference.api.PreferenceProvider
++import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 +import co.electriccoin.zcash.ui.ActiveNavigationEntry
-@@ -6,0 +8 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -6,0 +11 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.NavigationRouterImpl
-@@ -12,0 +15 @@ import kotlinx.coroutines.Dispatchers
+@@ -7,0 +13 @@ import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
++import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProviderImpl
+@@ -8,0 +15 @@ import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
++import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProviderImpl
+@@ -11,0 +19,3 @@ import co.electriccoin.zcash.ui.screen.more.MoreArgs
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.mockk
+@@ -12,0 +23 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.CompletableDeferred
-@@ -30,0 +34 @@ import kotlin.test.assertFalse
+@@ -24,0 +36 @@ import kotlinx.coroutines.test.setMain
++import java.io.IOException
+@@ -30,0 +43 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -258,0 +263,24 @@ class ThemeDarkLookVMTest {
+@@ -258,0 +272,69 @@ class ThemeDarkLookVMTest {
 +    @Test
 +    fun theDelayedSaveQueuesOnlyForItsOwnAppearanceDialog() = runTest(dispatcher) {
 +        val router = NavigationRouterImpl()
@@ -114793,19 +115007,133 @@ index c923a2c47..ac5593c3d 100644
 +        assertEquals(NavigationCommand.BackTo(MoreArgs::class), commands["appearance"]?.buildCommand?.invoke())
 +    }
 +
-@@ -263 +291,2 @@ class ThemeDarkLookVMTest {
++    @Test
++    fun rejectedAppearanceEditPreservesBothValuesAndRetriesTogether() = runTest(dispatcher) {
++        val mode = PreferenceKey("appearance_mode")
++        val oled = PreferenceKey("is_oled_enabled")
++        val stored = mutableMapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false")
++        val expected = mapOf(mode to "DARK", oled to "true")
++        var reject = true
++        val preference = mockk<PreferenceProvider> {
++            coEvery { getString(any()) } answers { stored[firstArg()] }
++            coEvery { putStringsWithRollback(expected) } coAnswers {
++                if (reject) throw IOException("Synthetic preference commit failure")
++                stored.putAll(expected)
++            }
++        }
++        val holder = mockk<StandardPreferenceProvider> {
++            coEvery { this@mockk() } returns preference
++        }
++        val router = FakeNavigationRouter()
++        val vm = startedVm(
++            args = ThemeDarkLookArgs(AppearanceMode.DARK),
++            modeProvider = AppearanceModeStorageProviderImpl(holder),
++            oledProvider = IsOledEnabledStorageProviderImpl(holder),
++            router = router,
++        )
++        optionFor(assertNotNull(vm.state.value), true).onClick()
++        advanceUntilIdle()
++        assertNotNull(vm.state.value).saveButton.onClick()
++        advanceUntilIdle()
++
++        val failed = assertNotNull(vm.state.value)
++        assertTrue(failed.hasSaveError)
++        assertTrue(failed.saveButton.isEnabled)
++        assertEquals(mapOf(mode to "SYSTEM", oled to "false"), stored)
++        assertEquals(null, router.backToRoute)
++
++        reject = false
++        failed.saveButton.onClick()
++        advanceUntilIdle()
++        assertEquals(expected, stored)
++        assertFalse(assertNotNull(vm.state.value).hasSaveError)
++        assertEquals(MoreArgs::class, router.backToRoute)
++        coVerify(exactly = 2) { preference.putStringsWithRollback(expected) }
++        coVerify(exactly = 0) { preference.putString(any(), any()) }
++    }
++
+@@ -261,3 +343,4 @@ class ThemeDarkLookVMTest {
+-        modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
+-        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 -        router: FakeNavigationRouter = FakeNavigationRouter(),
++        modeProvider: AppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
++        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
 +        router: NavigationRouter = FakeNavigationRouter(),
 +        sourceEntryId: String? = null,
-@@ -271 +300,2 @@ class ThemeDarkLookVMTest {
+@@ -264,0 +348 @@ class ThemeDarkLookVMTest {
++        if (modeProvider is FakeAppearanceModeStorageProvider) modeProvider.storeOled = oledProvider::store
+@@ -271 +355,2 @@ class ThemeDarkLookVMTest {
 -                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
-+                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider),
++                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider),
 +                sourceEntryId = sourceEntryId,
-@@ -301 +331,2 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -285,0 +371 @@ private class FakeAppearanceModeStorageProvider(
++    lateinit var storeOled: suspend (Boolean) -> Unit
+@@ -292,0 +379,5 @@ private class FakeAppearanceModeStorageProvider(
++    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
++        storeOled(isOledEnabled)
++        store(mode)
++    }
++
+@@ -301 +392,2 @@ private class FakeIsOledEnabledStorageProvider(
 -    stored: Boolean?
 +    stored: Boolean?,
 +    private val beforeStore: suspend () -> Unit = {},
-@@ -310,0 +342 @@ private class FakeIsOledEnabledStorageProvider(
+@@ -310,0 +403 @@ private class FakeIsOledEnabledStorageProvider(
++        beforeStore()
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
+index abf7abb01..9174975d9 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/settings/ThemeSettingsVMTest.kt
+@@ -31,0 +32 @@ import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
+@@ -182,0 +184,29 @@ class ThemeSettingsVMTest {
++    @Test
++    fun aRejectedLightModeSaveKeepsTheChoiceAvailableForRetry() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK)
++        var fail = true
++        val oled = FakeIsOledEnabledStorageProvider(true) {
++            if (fail) throw java.io.IOException("Synthetic appearance commit failure")
++        }
++        val router = FakeNavigationRouter()
++        val vm = startedVm(modeProvider = mode, oledProvider = oled, router = router)
++        optionFor(assertNotNull(vm.state.value), AppearanceMode.LIGHT).onClick()
++        advanceUntilIdle()
++        assertNotNull(vm.state.value).saveButton.onClick()
++        advanceUntilIdle()
++
++        val failed = assertNotNull(vm.state.value)
++        assertTrue(failed.hasSaveError)
++        assertTrue(failed.saveButton.isEnabled)
++        assertEquals(AppearanceMode.DARK, mode.stored)
++        assertEquals(true, oled.stored)
++        assertEquals(null, router.backToRoute)
++
++        fail = false
++        failed.saveButton.onClick()
++        advanceUntilIdle()
++        assertEquals(AppearanceMode.LIGHT, mode.stored)
++        assertEquals(false, oled.stored)
++        assertEquals(MoreArgs::class, router.backToRoute)
++    }
++
+@@ -187,0 +218 @@ class ThemeSettingsVMTest {
++        modeProvider.storeOled = oledProvider::store
+@@ -192 +223 @@ class ThemeSettingsVMTest {
+-                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
++                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider)
+@@ -206,0 +238 @@ private class FakeAppearanceModeStorageProvider(
++    lateinit var storeOled: suspend (Boolean) -> Unit
+@@ -213,0 +246,5 @@ private class FakeAppearanceModeStorageProvider(
++    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
++        storeOled(isOledEnabled)
++        store(mode)
++    }
++
+@@ -222 +259,2 @@ private class FakeIsOledEnabledStorageProvider(
+-    stored: Boolean?
++    stored: Boolean?,
++    private val beforeStore: suspend () -> Unit = {},
+@@ -231,0 +270 @@ private class FakeIsOledEnabledStorageProvider(
 +        beforeStore()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/tor/TorProtectionSaveTest.kt
 new file mode 100644

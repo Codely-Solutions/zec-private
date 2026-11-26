@@ -1,16 +1,24 @@
 package co.electriccoin.zcash.ui.screen.theme.darklook
 
 import androidx.navigation.NavBackStackEntry
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.ui.ActiveNavigationEntry
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationRouterImpl
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
+import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.screen.more.MoreArgs
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,6 +33,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.io.IOException
 import kotlin.reflect.KClass
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -284,20 +293,66 @@ class ThemeDarkLookVMTest {
         assertEquals(NavigationCommand.BackTo(MoreArgs::class), commands["appearance"]?.buildCommand?.invoke())
     }
 
+    @Test
+    fun rejectedAppearanceEditPreservesBothValuesAndRetriesTogether() = runTest(dispatcher) {
+        val mode = PreferenceKey("appearance_mode")
+        val oled = PreferenceKey("is_oled_enabled")
+        val stored = mutableMapOf<PreferenceKey, String?>(mode to "SYSTEM", oled to "false")
+        val expected = mapOf(mode to "DARK", oled to "true")
+        var reject = true
+        val preference = mockk<PreferenceProvider> {
+            coEvery { getString(any()) } answers { stored[firstArg()] }
+            coEvery { putStringsWithRollback(expected) } coAnswers {
+                if (reject) throw IOException("Synthetic preference commit failure")
+                stored.putAll(expected)
+            }
+        }
+        val holder = mockk<StandardPreferenceProvider> {
+            coEvery { this@mockk() } returns preference
+        }
+        val router = FakeNavigationRouter()
+        val vm = startedVm(
+            args = ThemeDarkLookArgs(AppearanceMode.DARK),
+            modeProvider = AppearanceModeStorageProviderImpl(holder),
+            oledProvider = IsOledEnabledStorageProviderImpl(holder),
+            router = router,
+        )
+        optionFor(assertNotNull(vm.state.value), true).onClick()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value).saveButton.onClick()
+        advanceUntilIdle()
+
+        val failed = assertNotNull(vm.state.value)
+        assertTrue(failed.hasSaveError)
+        assertTrue(failed.saveButton.isEnabled)
+        assertEquals(mapOf(mode to "SYSTEM", oled to "false"), stored)
+        assertEquals(null, router.backToRoute)
+
+        reject = false
+        failed.saveButton.onClick()
+        advanceUntilIdle()
+        assertEquals(expected, stored)
+        assertFalse(assertNotNull(vm.state.value).hasSaveError)
+        assertEquals(MoreArgs::class, router.backToRoute)
+        coVerify(exactly = 2) { preference.putStringsWithRollback(expected) }
+        coVerify(exactly = 0) { preference.putString(any(), any()) }
+    }
+
     private fun TestScope.startedVm(
         args: ThemeDarkLookArgs = ThemeDarkLookArgs(AppearanceMode.SYSTEM),
-        modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
-        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
+        modeProvider: AppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
+        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
         router: NavigationRouter = FakeNavigationRouter(),
         sourceEntryId: String? = null,
     ): ThemeDarkLookVM {
+        if (modeProvider is FakeAppearanceModeStorageProvider) modeProvider.storeOled = oledProvider::store
         val vm =
             ThemeDarkLookVM(
                 args = args,
                 navigationRouter = router,
                 appearanceModeStorageProvider = modeProvider,
                 isOledEnabledStorageProvider = oledProvider,
-                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider),
+                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider),
                 sourceEntryId = sourceEntryId,
             )
         backgroundScope.launch { vm.state.collect { } }
@@ -313,11 +368,17 @@ private class FakeAppearanceModeStorageProvider(
 
     val stored: AppearanceMode?
         get() = state.value
+    lateinit var storeOled: suspend (Boolean) -> Unit
 
     override suspend fun get(): AppearanceMode? = state.value
 
     override suspend fun store(amount: AppearanceMode) {
         state.value = amount
+    }
+
+    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
+        storeOled(isOledEnabled)
+        store(mode)
     }
 
     override fun observe(): Flow<AppearanceMode?> = state

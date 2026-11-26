@@ -10,7 +10,9 @@ import co.electriccoin.zcash.ui.design.theme.AppearanceMode
  * Persists the user's chosen [AppearanceMode]. Modeled on [PreferredFiatProvider] - a missing value is a
  * valid state (resolves to [AppearanceMode.SYSTEM]), not an error.
  */
-interface AppearanceModeStorageProvider : NullableStorageProvider<AppearanceMode>
+interface AppearanceModeStorageProvider : NullableStorageProvider<AppearanceMode> {
+    suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean)
+}
 
 /** The stored [AppearanceMode], resolving a never-chosen preference to [AppearanceMode.SYSTEM]. */
 suspend fun AppearanceModeStorageProvider.getOrSystem(): AppearanceMode = get() ?: AppearanceMode.SYSTEM
@@ -20,7 +22,17 @@ class AppearanceModeStorageProviderImpl(
 ) : BaseNullableStorageProvider<AppearanceMode>(),
     AppearanceModeStorageProvider {
     override val default: PreferenceDefault<AppearanceMode?> =
-        AppearanceModePreferenceDefault(PreferenceKey("appearance_mode"))
+        AppearanceModePreferenceDefault(MODE_KEY)
+
+    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
+        preferenceHolder().putStringsWithRollback(
+            mapOf(MODE_KEY to mode.name, OLED_APPEARANCE_KEY to isOledEnabled.toString())
+        )
+    }
+
+    private companion object {
+        val MODE_KEY = PreferenceKey("appearance_mode")
+    }
 }
 
 private class AppearanceModePreferenceDefault(

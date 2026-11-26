@@ -208,6 +208,10 @@ private class FakeAppearanceModeStorageProvider(
 
     override suspend fun store(amount: AppearanceMode) = emit(amount)
 
+    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
+        error("This fixture only observes appearance")
+    }
+
     override fun observe(): Flow<AppearanceMode?> = state
 
     override suspend fun clear() = emit(null)

@@ -89,6 +89,7 @@
     <string name="account_list_selection_error_title">No se pudo cambiar de billetera</string>
     <string name="account_list_selection_error_message">Tu billetera actual sigue seleccionada.</string>
     <string name="account_list_selection_retry">Reintentar</string>
+    <string name="appearance_save_failed">No se pudo guardar la apariencia. Inténtalo de nuevo.</string>
     <string name="hwWallet_connect">Conectar Billetera de Hardware</string>
     <string name="hwWallet_section_zodl">Billetera ZEC Private</string>
     <string name="hwWallet_section_keystone">Billetera Keystone</string>

@@ -29,6 +29,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -180,16 +181,46 @@ class ThemeSettingsVMTest {
         mode: AppearanceMode
     ) = state.options.first { it.mode == mode }
 
+    @Test
+    fun aRejectedLightModeSaveKeepsTheChoiceAvailableForRetry() = runTest(dispatcher) {
+        val mode = FakeAppearanceModeStorageProvider(AppearanceMode.DARK)
+        var fail = true
+        val oled = FakeIsOledEnabledStorageProvider(true) {
+            if (fail) throw java.io.IOException("Synthetic appearance commit failure")
+        }
+        val router = FakeNavigationRouter()
+        val vm = startedVm(modeProvider = mode, oledProvider = oled, router = router)
+        optionFor(assertNotNull(vm.state.value), AppearanceMode.LIGHT).onClick()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value).saveButton.onClick()
+        advanceUntilIdle()
+
+        val failed = assertNotNull(vm.state.value)
+        assertTrue(failed.hasSaveError)
+        assertTrue(failed.saveButton.isEnabled)
+        assertEquals(AppearanceMode.DARK, mode.stored)
+        assertEquals(true, oled.stored)
+        assertEquals(null, router.backToRoute)
+
+        fail = false
+        failed.saveButton.onClick()
+        advanceUntilIdle()
+        assertEquals(AppearanceMode.LIGHT, mode.stored)
+        assertEquals(false, oled.stored)
+        assertEquals(MoreArgs::class, router.backToRoute)
+    }
+
     private fun TestScope.startedVm(
         modeProvider: FakeAppearanceModeStorageProvider = FakeAppearanceModeStorageProvider(stored = null),
         oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
         router: FakeNavigationRouter = FakeNavigationRouter(),
     ): ThemeSettingsVM {
+        modeProvider.storeOled = oledProvider::store
         val vm =
             ThemeSettingsVM(
                 navigationRouter = router,
                 appearanceModeStorageProvider = modeProvider,
-                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider, oledProvider)
+                setAppearanceMode = SetAppearanceModeUseCase(router, modeProvider)
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()
@@ -204,11 +235,17 @@ private class FakeAppearanceModeStorageProvider(
 
     val stored: AppearanceMode?
         get() = state.value
+    lateinit var storeOled: suspend (Boolean) -> Unit
 
     override suspend fun get(): AppearanceMode? = state.value
 
     override suspend fun store(amount: AppearanceMode) {
         state.value = amount
+    }
+
+    override suspend fun storeAppearance(mode: AppearanceMode, isOledEnabled: Boolean) {
+        storeOled(isOledEnabled)
+        store(mode)
     }
 
     override fun observe(): Flow<AppearanceMode?> = state
@@ -219,7 +256,8 @@ private class FakeAppearanceModeStorageProvider(
 }
 
 private class FakeIsOledEnabledStorageProvider(
-    stored: Boolean?
+    stored: Boolean?,
+    private val beforeStore: suspend () -> Unit = {},
 ) : IsOledEnabledStorageProvider {
     private val state = MutableStateFlow(stored)
 
@@ -229,6 +267,7 @@ private class FakeIsOledEnabledStorageProvider(
     override suspend fun get(): Boolean? = state.value
 
     override suspend fun store(amount: Boolean) {
+        beforeStore()
         state.value = amount
     }
 

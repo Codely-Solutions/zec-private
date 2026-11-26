@@ -20,6 +20,8 @@ GRADLE_LOCK_FILES = {'gradle.lockfile', 'buildscript-gradle.lockfile'}
 WRAPPER_PROPERTIES = 'gradle/wrapper/gradle-wrapper.properties'
 WRAPPER_VERSION = r'([1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RELEASE_EVIDENCE = Path(__file__).resolve().parent / 'release-evidence'
+PROPOSAL_PAGE_SIZE = 100
+PROPOSAL_PAGE_LIMIT = 10
 
 
 def trusted_proposal(pr, repository_id):
@@ -95,6 +97,21 @@ def wrapper_source(prefix, sha):
 
 def api(path, *options):
     return json.loads(subprocess.check_output(['gh', 'api', path, *options], text=True, timeout=30))
+
+
+def open_proposals(prefix):
+    proposals = {}
+    for page in range(1, PROPOSAL_PAGE_LIMIT + 1):
+        batch = api(f'{prefix}/pulls?state=open&base=main&sort=created&direction=asc'
+                    f'&per_page={PROPOSAL_PAGE_SIZE}&page={page}')
+        for proposal in batch:
+            number = proposal['number']
+            if number in proposals:
+                raise RuntimeError('The proposal inventory changed during discovery. Retry the watch.')
+            proposals[number] = proposal
+        if len(batch) < PROPOSAL_PAGE_SIZE:
+            return proposals.values()
+    raise RuntimeError('The complete proposal inventory exceeds the bounded discovery window.')
 
 
 def verified_wrapper(prefix, number, base, head, repository_id):
@@ -199,11 +216,8 @@ def main():
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
             stream.write(f"Reconcile the public release using publisher run {recovery['reconciliation_run']}.\n")
         return
-    proposals = api(f'{prefix}/pulls?state=open&base=main&per_page=30')
-    if len(proposals) == 30:
-        messages.append('- Proposal listing capped at 30 pull requests.')
     eligible = []
-    for pr in proposals:
+    for pr in open_proposals(prefix):
         if not trusted_proposal(pr, repository['id']):
             continue
         number = pr['number']

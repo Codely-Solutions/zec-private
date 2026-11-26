@@ -7,6 +7,7 @@ internal data class ThemeSettingsState(
     val options: List<AppearanceModeOptionState>,
     val saveButton: ButtonState,
     val onBack: () -> Unit,
+    val hasSaveError: Boolean = false,
 )
 
 internal data class AppearanceModeOptionState(

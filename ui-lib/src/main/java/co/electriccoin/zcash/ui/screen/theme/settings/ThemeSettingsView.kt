@@ -72,6 +72,7 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
                         .zashiFrostedFooter(hazeState)
                         .padding(horizontal = ZashiDimensions.Spacing.spacing3xl)
             ) {
+                if (state.hasSaveError) AppearanceSaveFailure()
                 ZashiButton(
                     modifier = Modifier.fillMaxWidth(),
                     state = state.saveButton,
@@ -130,6 +131,16 @@ internal fun ThemeSettingsView(state: ThemeSettingsState) {
             }
         }
     }
+}
+
+@Composable
+internal fun AppearanceSaveFailure() {
+    Text(
+        text = stringResource(R.string.appearance_save_failed),
+        modifier = Modifier.padding(bottom = 8.dp),
+        style = ZashiTypography.textSm,
+        color = ZashiColors.Text.textError,
+    )
 }
 
 private val AppearanceMode.labels: Pair<Int, Int>

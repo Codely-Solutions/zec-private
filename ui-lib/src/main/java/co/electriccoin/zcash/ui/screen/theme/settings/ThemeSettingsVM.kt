@@ -8,6 +8,8 @@ import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.discardResultFrom
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.guardLoading
+import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.getOrSystem
 import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
@@ -18,7 +20,7 @@ import co.electriccoin.zcash.ui.screen.theme.darklook.ThemeDarkLookArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,10 +34,12 @@ internal class ThemeSettingsVM(
     private var storedMode = AppearanceMode.SYSTEM
 
     private val selectedMode = MutableStateFlow<AppearanceMode?>(null)
+    private val save = mutableLce<Unit>()
 
     val state =
-        selectedMode
-            .map { mode -> mode?.let(::createState) }
+        combine(selectedMode, save.state) { mode, result ->
+            mode?.let { createState(it, result.loading, result.error != null) }
+        }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -50,7 +54,7 @@ internal class ThemeSettingsVM(
         }
     }
 
-    private fun createState(selectedMode: AppearanceMode) =
+    private fun createState(selectedMode: AppearanceMode, isSaving: Boolean, hasSaveError: Boolean) =
         ThemeSettingsState(
             options =
                 listOf(AppearanceMode.SYSTEM, AppearanceMode.LIGHT, AppearanceMode.DARK).map { mode ->
@@ -64,10 +68,11 @@ internal class ThemeSettingsVM(
                 ButtonState(
                     stringRes(R.string.currencyConversion_saveBtn),
                     onClick = ::onSaveClick,
-                    isEnabled = selectedMode != storedMode,
+                    isEnabled = !isSaving && selectedMode != storedMode,
                     hapticFeedbackType = HapticFeedbackType.Confirm
                 ),
-            onBack = ::onBack
+            onBack = ::onBack,
+            hasSaveError = hasSaveError,
         )
 
     private fun onBack() = navigationRouter.back()
@@ -85,16 +90,18 @@ internal class ThemeSettingsVM(
         }
     }
 
-    private fun onSaveClick() =
-        viewModelScope.launch {
-            val mode = selectedMode.value
-            if (mode != AppearanceMode.LIGHT) {
-                Twig.warn {
-                    "Ignoring save for $mode - only AppearanceMode.LIGHT is selectable here, System and Dark " +
-                        "forward to the dark-look sheet, which persists the mode together with isOledEnabled."
-                }
-                return@launch
+    private fun onSaveClick() = save.guardLoading {
+        val mode = selectedMode.value
+        if (mode != AppearanceMode.LIGHT) {
+            Twig.warn {
+                "Ignoring save for $mode - only AppearanceMode.LIGHT is selectable here, System and Dark " +
+                    "forward to the dark-look sheet, which persists the mode together with isOledEnabled."
             }
-            setAppearanceMode(mode, isOledEnabled = false, sourceEntryId = sourceEntryId)
+            return@guardLoading
         }
+        if (mode != storedMode) save.execute {
+            setAppearanceMode(mode, isOledEnabled = false, sourceEntryId = sourceEntryId)
+            storedMode = mode
+        }
+    }
 }

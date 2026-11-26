@@ -7,6 +7,7 @@ internal data class ThemeDarkLookState(
     val options: List<DarkLookOptionState>,
     val saveButton: ButtonState,
     override val onBack: () -> Unit,
+    val hasSaveError: Boolean = false,
 ) : ModalBottomSheetState
 
 internal data class DarkLookOptionState(

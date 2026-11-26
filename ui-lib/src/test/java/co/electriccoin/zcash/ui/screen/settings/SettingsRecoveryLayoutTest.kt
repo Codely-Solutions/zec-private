@@ -14,6 +14,8 @@ import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerState
 import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState
 import co.electriccoin.zcash.ui.screen.chooseserver.ServerListState
+import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsState
+import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsView
 import co.electriccoin.zcash.ui.screen.tor.settings.TorSettingsLoadView
 import org.junit.Rule
 import org.junit.Test
@@ -83,5 +85,27 @@ class SettingsRecoveryLayoutTest {
 
         compose.onNodeWithText(resources.getString(R.string.serverSetup_refresh)).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, refreshes) }
+    }
+
+    @Test
+    fun aFailedAppearanceSaveShowsAnErrorWithSaveStillAvailable() {
+        val resources = RuntimeEnvironment.getApplication().resources
+        var saves = 0
+        compose.setContent {
+            ZcashTheme {
+                ThemeSettingsView(
+                    ThemeSettingsState(
+                        options = emptyList(),
+                        saveButton = ButtonState(stringRes("Save"), onClick = { saves++ }),
+                        onBack = {},
+                        hasSaveError = true,
+                    ),
+                )
+            }
+        }
+
+        compose.onNodeWithText(resources.getString(R.string.appearance_save_failed)).assertIsDisplayed()
+        compose.onNodeWithText("Save").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, saves) }
     }
 }

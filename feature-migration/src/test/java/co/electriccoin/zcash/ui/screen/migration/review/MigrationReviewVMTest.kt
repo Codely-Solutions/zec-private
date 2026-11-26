@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -481,7 +482,16 @@ class MigrationReviewVMTest {
     }
 
     @Test
-    fun automaticConfirmationDoesNotMutateTheWalletAfterItsReviewIsCovered() = runTest {
+    fun automaticConfirmationDoesNotMutateTheWalletAfterItsReviewIsCovered() =
+        runTest { assertConfirmationNeedsForeground(ActiveNavigationEntry("scanner", null)) }
+
+    @Test
+    fun automaticConfirmationDoesNotMutateTheWalletWhileItsReviewIsBackgrounded() =
+        runTest {
+            assertConfirmationNeedsForeground(ActiveNavigationEntry("automatic-review", null, hostResumed = false))
+        }
+
+    private suspend fun TestScope.assertConfirmationNeedsForeground(afterKeyRequest: ActiveNavigationEntry) {
         val review = "automatic-review"
         val router = FakeNavigationRouter(review)
         val resolvedKey = CompletableDeferred<UnifiedSpendingKey>()
@@ -502,7 +512,7 @@ class MigrationReviewVMTest {
         vm.currentReview().onConfirm()
         runCurrent()
         coVerify(exactly = 1) { spendingKey.getZashiSpendingKey() }
-        router.activeEntry.value = ActiveNavigationEntry("scanner", null)
+        router.activeEntry.value = afterKeyRequest
         resolvedKey.complete(mockk())
         advanceUntilIdle()
 

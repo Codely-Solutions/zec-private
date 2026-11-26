@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.commitFrom
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.isForegroundAtEntry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
@@ -689,7 +690,7 @@ class MigrationReviewVM(
         }
     }
 
-    private fun ownsReviewEntry() = sourceEntryId == null || navigationRouter.activeEntry.value?.id == sourceEntryId
+    private fun ownsReviewEntry() = navigationRouter.isForegroundAtEntry(sourceEntryId)
 
     private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
         check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {

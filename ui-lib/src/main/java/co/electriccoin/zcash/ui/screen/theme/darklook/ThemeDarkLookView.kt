@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.theme.settings.AppearanceSaveFailure
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +87,7 @@ private fun BottomSheetContent(
             }
         }
         Spacer(28.dp)
+        if (state.hasSaveError) AppearanceSaveFailure()
         ZashiButton(
             modifier = Modifier.fillMaxWidth(),
             state = state.saveButton,

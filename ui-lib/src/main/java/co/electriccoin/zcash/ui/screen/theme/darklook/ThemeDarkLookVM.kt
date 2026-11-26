@@ -7,6 +7,8 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.discardResultFrom
+import co.electriccoin.zcash.ui.common.model.guardLoading
+import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.provider.AppearanceModeStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.getOrSystem
@@ -17,7 +19,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,10 +37,12 @@ internal class ThemeDarkLookVM(
     private var storedOledEnabled = false
 
     private val selectedOledEnabled = MutableStateFlow<Boolean?>(null)
+    private val save = mutableLce<Unit>()
 
     val state =
-        selectedOledEnabled
-            .map { oledEnabled -> oledEnabled?.let(::createState) }
+        combine(selectedOledEnabled, save.state) { oledEnabled, result ->
+            oledEnabled?.let { createState(it, result.loading, result.error != null) }
+        }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -54,7 +58,7 @@ internal class ThemeDarkLookVM(
         }
     }
 
-    private fun createState(oledEnabled: Boolean) =
+    private fun createState(oledEnabled: Boolean, isSaving: Boolean, hasSaveError: Boolean) =
         ThemeDarkLookState(
             options =
                 listOf(false, true).map { isOled ->
@@ -68,10 +72,11 @@ internal class ThemeDarkLookVM(
                 ButtonState(
                     stringRes(R.string.currencyConversion_saveBtn),
                     onClick = ::onSaveClick,
-                    isEnabled = isSaveEnabled(oledEnabled),
+                    isEnabled = !isSaving && isSaveEnabled(oledEnabled),
                     hapticFeedbackType = HapticFeedbackType.Confirm
                 ),
-            onBack = ::onBack
+            onBack = ::onBack,
+            hasSaveError = hasSaveError,
         )
 
     /**
@@ -86,12 +91,16 @@ internal class ThemeDarkLookVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onSaveClick() =
-        viewModelScope.launch {
+    private fun onSaveClick() = save.guardLoading {
+        val oledEnabled = selectedOledEnabled.value ?: return@guardLoading
+        if (isSaveEnabled(oledEnabled)) save.execute {
             setAppearanceMode(
                 args.mode,
-                isOledEnabled = selectedOledEnabled.value == true,
+                isOledEnabled = oledEnabled,
                 sourceEntryId = sourceEntryId,
             )
+            storedMode = args.mode
+            storedOledEnabled = oledEnabled
         }
+    }
 }

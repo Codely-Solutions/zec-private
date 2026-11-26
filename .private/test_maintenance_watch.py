@@ -1,4 +1,5 @@
 import ast
+import datetime as dt
 import fnmatch
 import os
 import sys
@@ -11,7 +12,7 @@ import unittest
 from unittest.mock import patch
 from test_support import patch_environment, public_baseline_metadata
 
-from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, trusted_proposal,
+from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, open_proposals, pending_recovery, trusted_proposal,
                                verified_wrapper, wrapper_patch)
 
 
@@ -672,6 +673,57 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertTrue(trusted_proposal(pr, 7))
         self.assertFalse(trusted_proposal(dict(pr, user={'login': 'dependabot[bot]', 'type': 'User'}), 7))
         self.assertFalse(trusted_proposal(dict(pr, head=dict(pr['head'], repo={'id': 8})), 7))
+
+    def test_monthly_watch_selects_the_highest_eligible_wrapper_from_a_later_page(self):
+        prefix = 'repos/Codely-Solutions/zec-private'
+        created = '2026-11-25T07:00:00+00:00'
+        cutoff = dt.datetime.fromisoformat('2026-12-01T09:00:00+00:00')
+        base = 'a' * 40
+        heads = {1: 'b' * 40, 101: 'c' * 40}
+        drafts = [{'number': n, 'state': 'open', 'draft': True} for n in range(2, 101)]
+        repository = {'id': 7, 'has_pull_requests': True, 'pull_request_creation_policy': 'collaborators_only'}
+        proposals = {number: dict(
+            number=number, state='open', draft=False, changed_files=1, created_at=created,
+            user={'login': 'dependabot[bot]', 'type': 'Bot'},
+            head={'repo': {'id': 7}, 'ref': f'dependabot/gradle/wrapper-{number}', 'sha': head},
+            base={'repo': {'id': 7}, 'ref': 'main', 'sha': base},
+        ) for number, head in heads.items()}
+        paths = {
+            prefix: repository,
+            f'{prefix}/actions/workflows/sync-upstream.yml': {'state': 'active'},
+            f'{prefix}/actions/workflows/sync-upstream.yml/runs?event=schedule&per_page=1': {'workflow_runs': []},
+            f'{prefix}/commits/main': {'sha': base},
+        }
+        query = f'{prefix}/pulls?state=open&base=main&sort=created&direction=asc&per_page=100&page='
+        paths.update({query + '1': [proposals[1]] + drafts, query + '2': [proposals[101]]})
+        for number, head in heads.items():
+            paths[f'{prefix}/pulls/{number}'] = proposals[number]
+            paths[f'{prefix}/pulls/{number}/files?per_page=100'] = [
+                {'filename': WRAPPER_PROPERTIES, 'status': 'modified'}
+            ]
+            paths[f'{prefix}/commits/{head}'] = {'commit': {'committer': {'date': created}}}
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'output'
+            summary = Path(directory) / 'summary'
+            with patch.dict(os.environ, {'GITHUB_SHA': base, 'GITHUB_OUTPUT': str(target),
+                                         'GITHUB_STEP_SUMMARY': str(summary)}), \
+                 patch('maintenance_watch.api', side_effect=paths.__getitem__), \
+                 patch('maintenance_watch.pending_recovery', return_value=None), \
+                 patch('maintenance_watch.window', return_value=cutoff), \
+                 patch('maintenance_watch.verified_wrapper', side_effect=[('9.9.2', ''), ('9.9.3', '')]):
+                main()
+            self.assertEqual(f'proposal=101\nproposal_head={heads[101]}\n', target.read_text())
+
+    def test_proposal_listing_refuses_duplicates_and_an_unconfirmed_end(self):
+        pages = [[{'number': n} for n in range(start, start + 100)] for start in range(1, 1001, 100)]
+        with patch('maintenance_watch.api', side_effect=[pages[0], [{'number': 1}]]):
+            with self.assertRaisesRegex(RuntimeError, 'inventory changed'):
+                open_proposals('repos/fork/wallet')
+        with patch('maintenance_watch.api', side_effect=pages) as api:
+            with self.assertRaisesRegex(RuntimeError, 'bounded discovery window'):
+                open_proposals('repos/fork/wallet')
+            self.assertEqual(10, api.call_count)
 
     def test_verified_wrapper_rechecks_the_proposal_after_resolving_the_checksum(self):
         base, head = 'a'*40, 'b'*40

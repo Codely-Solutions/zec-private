@@ -12,6 +12,8 @@ interface IsOledEnabledStorageProvider : NullableBooleanStorageProvider
 class IsOledEnabledStorageProviderImpl(
     override val preferenceHolder: StandardPreferenceProvider,
 ) : BaseNullableBooleanStorageProvider(
-        key = PreferenceKey("is_oled_enabled"),
+        key = OLED_APPEARANCE_KEY,
     ),
     IsOledEnabledStorageProvider
+
+internal val OLED_APPEARANCE_KEY = PreferenceKey("is_oled_enabled")
