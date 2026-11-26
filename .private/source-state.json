@@ -621,7 +621,7 @@
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt": "8bbd14bc59cbe4ea4ad4807f194ba439f66f3f6a42608ba4eb2c8e6e39cc4c13",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledArgs.kt": "5b9fbd0e7ba74026c1e6e1099ba9b2a1238760ec360a94ac568357adbffceb83",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledState.kt": "ba3466b50d720c968aa41ade1e76bef48049e41d8ec4bdda71a09ced494a870d",
-  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt": "cf92e1e4a47af78623655c34a1625f0cd872215076ccf01d593e55979e14f165",
+  "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt": "4a5c4d2348277f5b8c11f5ed28662ca668711dc2c51c3eccc5c0d3c006e24090",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt": "67c3cdfd7ac88183dc30b549b9e2d9684c46e19382e94127c36028627125ba58",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingScreen.kt": "71743b60ecafd74d8637f660d09ab2e62a54a68b41baa7af17d8cb783c6e7677",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingState.kt": "09d19add5f2f3eb53df2f0a6e373e9e1c40352fdc48973737bb3ec0641986c8d",

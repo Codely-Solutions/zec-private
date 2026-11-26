@@ -128,8 +128,9 @@ class MigrationScheduledVM(
         val canOperate = checkNotNull(walletActionAccess.capture(account)) { "The migration session is unavailable" }
         val owner = currentCoroutineContext().job
         val requireCurrent = {
-            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) &&
-                pendingSchedule.peek(accountKeyId) === schedule && pendingKeystonePczts.peek(accountKeyId) === pending) {
+            val isCurrent = pendingSchedule.peek(accountKeyId) === schedule &&
+                pendingKeystonePczts.peek(accountKeyId) === pending
+            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) && isCurrent) {
                 "The reviewed migration is no longer current"
             }
         }

@@ -9275,7 +9275,7 @@ index d80cbcdb3..af2e04303 100644
 +
 +        else -> LceRenderer(
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
-index c53b8b4a0..ca28ec98b 100644
+index c53b8b4a0..bb7160474 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 @@ -4,0 +5,4 @@ import androidx.lifecycle.viewModelScope
@@ -9382,7 +9382,7 @@ index c53b8b4a0..ca28ec98b 100644
 -            pendingSchedule.clear()
 -            pendingKeystonePczts.clear()
 -            isFinalizing.value = false
-@@ -138,16 +113,21 @@ class MigrationScheduledVM(
+@@ -138,16 +113,22 @@ class MigrationScheduledVM(
 -            // An unguarded failure here (e.g. a transient "database is locked" from the migration
 -            // engine mutex) would otherwise crash the app right after the user completes a
 -            // physical Keystone signing ceremony, with the signed batch already applied. Surface
@@ -9417,10 +9417,11 @@ index c53b8b4a0..ca28ec98b 100644
 +        val canOperate = checkNotNull(walletActionAccess.capture(account)) { "The migration session is unavailable" }
 +        val owner = currentCoroutineContext().job
 +        val requireCurrent = {
-+            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) &&
-+                pendingSchedule.peek(accountKeyId) === schedule && pendingKeystonePczts.peek(accountKeyId) === pending) {
++            val isCurrent = pendingSchedule.peek(accountKeyId) === schedule &&
++                pendingKeystonePczts.peek(accountKeyId) === pending
++            check(owner.isActive && canOperate() && drive.permitsForeground(accountKeyId) && isCurrent) {
 +                "The reviewed migration is no longer current"
-@@ -155,0 +136,65 @@ class MigrationScheduledVM(
+@@ -155,0 +137,65 @@ class MigrationScheduledVM(
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        val migrationState = sdk.getMigrationStateUnreconciled()
 +        requireCurrent()
@@ -9486,7 +9487,7 @@ index c53b8b4a0..ca28ec98b 100644
 +        } else {
 +            null
 +        }
-@@ -157,0 +203,45 @@ class MigrationScheduledVM(
+@@ -157,0 +204,45 @@ class MigrationScheduledVM(
 +    private fun returnToHomeForRecovery(
 +        accountKeyId: String,
 +        schedule: MigrationSchedule,
@@ -9532,10 +9533,10 @@ index c53b8b4a0..ca28ec98b 100644
 +
 +    fun navigateBack() = navigationRouter.backToRoot()
 +
-@@ -162,2 +251,0 @@ class MigrationScheduledVM(
+@@ -162,2 +252,0 @@ class MigrationScheduledVM(
 -                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
 -                // instead of rendering zeroed stats (review L3).
-@@ -191,0 +280,30 @@ class MigrationScheduledVM(
+@@ -191,0 +281,30 @@ class MigrationScheduledVM(
 +
 +private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
 +    states: List<MigrationTransferState>,
