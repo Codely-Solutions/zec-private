@@ -474,7 +474,21 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    if: >-
+      ${{ always() && !cancelled() && needs.preflight.result == 'success'
+      && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true'))
+      && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true'
+      && !inputs.validation_only && !inputs.reconciliation_run
+      && ((inputs.hosted && needs.admit_hosted.result == 'success'
+      && (needs.admit_hosted.outputs.quote_receipt_id != ''
+      || (needs.hosted_quotes.result == 'success' && needs.hosted_quotes.outputs.receipt_id != '')
+      || (needs.recovery_quotes.result == 'success' && needs.recovery_quotes.outputs.receipt_id != ''))
+      && (needs.admit_hosted.outputs.core_receipt_id != ''
+      || (needs.hosted_core.result == 'success'
+      && ((needs.admit_hosted.outputs.reuse_funded != 'true' && needs.hosted_core.outputs.receipt_id != '')
+      || (needs.admit_hosted.outputs.reuse_funded == 'true' && needs.hosted_core.outputs.upgrade_receipt_id != '')))))
+      || (!inputs.hosted && (needs.promotion.result == 'success'
+      || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
     needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04

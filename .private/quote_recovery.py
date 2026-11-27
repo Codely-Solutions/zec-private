@@ -1,4 +1,5 @@
 """Resume an interrupted custom release on its original build."""
+from datetime import datetime
 import hashlib
 import io
 import json
@@ -45,6 +46,12 @@ ARTIFACTS = {
     'quote_id': 'isolated-ui-repro-apk', 'core_receipt_id': 'hosted-core-receipt',
 }
 TRANSIENT_FAILURE = 'HOSTED_QUOTE_FAILURE transient'
+RERUN_PRODUCERS = {
+    'production_id': ('validated-unsigned-apk', 'build / unsigned'),
+    'core_id': ('core-testnet-candidate', 'build / testnet_apk / testnet'),
+    'quote_id': ('isolated-ui-repro-apk', 'build / emulator'),
+    'quote_receipt_id': ('hosted-quote-receipt', 'build / hosted_quotes / quote-cycles'),
+}
 
 
 def require_transient_quote_failure(metadata, job):
@@ -90,6 +97,102 @@ def verify_delta(root, source, original, controller, *, funded=False):
         require(not needs_live_tor_probe(source, root), 'Controller changed outside quote recovery paths for a Tor candidate')
 
 
+def rerun_before_wallet(root, source, controller, run, latest_jobs, metadata, *, signing, preclaim_run=''):
+    """Start one fresh wallet execution after build reruns with no previous wallet entry."""
+    from acceptance_policy import input_fingerprint, validate_quotes
+    from hosted_claim import PREFIX
+    from hosted_release import artifact
+    from release_inputs import version_code
+
+    original = run['head_sha']
+    verify_delta(root, source, original, controller)
+    require(signing or os.environ['GITHUB_RUN_ATTEMPT'] == '1',
+            'Wallet recovery must start on a fresh dispatch')
+    run_id = str(run['id'])
+    jobs_by_attempt = {}
+    for number in range(1, run['run_attempt'] + 1):
+        jobs = (latest_jobs if number == run['run_attempt'] else
+                metadata.pages(f'/actions/runs/{run_id}/attempts/{number}/jobs', 'jobs'))
+        require(jobs and all(job['run_id'] == run['id'] and job['head_sha'] == original
+                             and job['run_attempt'] == number and job['status'] == 'completed' for job in jobs),
+                'Original attempt has incomplete or unrelated jobs')
+        names = {job['name']: job for job in jobs}
+        require(len(names) == len(jobs) and names.get('build / admit_hosted', {}).get('conclusion') == 'success',
+                'Original attempt needs one successful trusted admission')
+        for role in ('reserve', 'wallet'):
+            job = names.get('build / hosted_core / ' + role)
+            require((job is None and number != run['run_attempt'])
+                    or (job is not None and job['conclusion'] == 'skipped' and not job.get('steps')),
+                    'Original attempt entered the wallet or reservation job')
+        publisher = names.get('build / publish')
+        require(publisher is not None and stopped_unpublished(publisher),
+                'Original attempt does not prove signing and publication stopped')
+        jobs_by_attempt[number] = names
+
+    artifacts = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
+    require(not any(row['name'] in ('hosted-core-receipt', 'hosted-upgrade-receipt')
+                    or row['name'].startswith('release-attestation-') for row in artifacts),
+            'Original attempt already has wallet or publication evidence')
+    outputs = dict(original_controller=original, run_missing_core='true',
+                   quote_controller=original, quote_run=run['id'])
+    if preclaim_run:
+        outputs['previous_reservation'] = unused_reservation(root, source, controller, run_id, original,
+                                                             preclaim_run, metadata)
+    if not signing:
+        ref = PREFIX + 'release-' + str(version_code(root, source))
+        reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
+        forbidden = (ref + '-preclaim-recovery',) if preclaim_run else (ref, ref + '-preclaim-recovery')
+        require(not any(row['ref'] in forbidden for row in reservations),
+                'This release already has a protected funding reservation')
+
+    archives = {}
+    for key, (name, job_name) in RERUN_PRODUCERS.items():
+        match = [row for row in artifacts if row['name'] == name]
+        require(len(match) == 1, 'Expected one original artifact: ' + name)
+        row = match[0]
+        verify_rerun_upload(row, (jobs.get(job_name) for jobs in jobs_by_attempt.values()))
+        archives[key] = artifact(metadata, row['id'], name, run_id, original)
+        outputs[key] = str(archives[key]['id'])
+    if not signing:
+        quote = read_quote_archive(metadata, archives['quote_receipt_id'])
+        validate_quotes(quote, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=False)
+        require(quote.get('build_source_sha') == source and quote.get('candidate_version_code') == version_code(root, source)
+                and quote.get('workflow_run_id') == run['id'] and quote.get('artifact_run_id') == run['id']
+                and quote.get('quote_controller_sha') == original
+                and quote.get('producer') == archives['quote_id']
+                and quote.get('production_artifact') == archives['production_id'],
+                'Rerun quote does not match the original release APKs')
+    return outputs
+
+
+def stopped_unpublished(publisher):
+    if publisher['conclusion'] == 'skipped':
+        return not publisher.get('steps')
+    if publisher['conclusion'] != 'failure':
+        return False
+    steps = {step['name']: step for step in publisher.get('steps', ())}
+    return (steps.get('Sign and verify the validated APK', {}).get('conclusion') in ('failure', 'skipped')
+            and steps.get('Publish the signed APK and checksum', {}).get('conclusion') == 'skipped'
+            and not any(step['conclusion'] == 'success' and step['name'].startswith('Run actions/upload-artifact@')
+                        for step in publisher.get('steps', ())))
+
+
+def verify_rerun_upload(archive, jobs):
+    created = datetime.fromisoformat(archive['created_at'])
+    executions = set()
+    for job in jobs:
+        if (job is None or job['conclusion'] != 'success'
+                or type(job.get('runner_id')) is not int or job['runner_id'] < 1):
+            continue
+        for step in job.get('steps', ()):
+            if (step['name'].startswith('Run actions/upload-artifact@') and step['conclusion'] == 'success'
+                    and datetime.fromisoformat(job['started_at']) <= datetime.fromisoformat(step['started_at']) <=
+                    created <= datetime.fromisoformat(step['completed_at']) <= datetime.fromisoformat(job['completed_at'])):
+                # GitHub copies a successful job's runner and timestamps into later attempts.
+                executions.add((job['runner_id'], job['started_at'], job['completed_at'], step['number']))
+    require(len(executions) == 1, 'Artifact does not bind to one successful producer upload: ' + archive['name'])
+
+
 def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing=False, preclaim_run=''):
     from hosted_release import artifact
 
@@ -113,6 +216,11 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     states = {job['name']: job['conclusion'] for job in jobs
               if job['run_id'] == int(run_id) and job['head_sha'] == original}
     wallet = states.get('build / hosted_core / wallet')
+    if (not same and run['run_attempt'] > 1
+            and run['conclusion'] == 'failure' and wallet in (None, 'skipped')):
+        require(not quote_run, 'Build rerun recovery uses the original passing quote receipt')
+        return rerun_before_wallet(root, source, controller, run, jobs, metadata, signing=signing,
+                                   preclaim_run=preclaim_run)
     funded = False
     if (not same and not preclaim_run and not quote_run and run['run_attempt'] == 1
             and (run['conclusion'] == 'cancelled' or (run['conclusion'] == 'failure' and wallet == 'failure'))):
@@ -357,15 +465,7 @@ def resolve_preclaim_quotes(root, source, controller, original, build_run, quote
     matching = [row for row in artifacts if row['name'] == 'hosted-quote-receipt']
     require(len(matching) == 1, 'Expected exactly one linked recovery quote receipt')
     recorded = artifact(metadata, matching[0]['id'], 'hosted-quote-receipt', quote_run, prior)
-    require(recorded['size_in_bytes'] <= 64 * 1024, 'Quote receipt archive is too large')
-    archive = subprocess.check_output([metadata.gh, 'api', metadata.repo +
-                                        f'/actions/artifacts/{recorded["id"]}/zip'], timeout=30)
-    require(len(archive) == recorded['size_in_bytes'] and 'sha256:' + hashlib.sha256(archive).hexdigest() ==
-            recorded['digest'], 'Linked quote receipt archive changed')
-    with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
-        require(bundle.namelist() == ['hosted-quotes.json'] and
-                bundle.getinfo('hosted-quotes.json').file_size <= 64 * 1024, 'Unexpected linked quote receipt archive')
-        receipt = json.loads(bundle.read('hosted-quotes.json'))
+    receipt = read_quote_archive(metadata, recorded)
     validate_quotes(receipt, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=False)
     require(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') ==
             version_code(root, source) and receipt.get('workflow_run_id') == int(quote_run)
@@ -376,3 +476,15 @@ def resolve_preclaim_quotes(root, source, controller, original, build_run, quote
                                                                'validated-unsigned-apk', build_run, original),
             'Linked quote receipt does not match the original release APKs')
     return {'quote_receipt_id': str(recorded['id']), 'quote_controller': prior, 'quote_run': int(quote_run)}
+
+
+def read_quote_archive(metadata, recorded):
+    require(recorded['size_in_bytes'] <= 64 * 1024, 'Quote receipt archive is too large')
+    archive = subprocess.check_output([metadata.gh, 'api', metadata.repo +
+                                        f'/actions/artifacts/{recorded["id"]}/zip'], timeout=30)
+    require(len(archive) == recorded['size_in_bytes'] and 'sha256:' + hashlib.sha256(archive).hexdigest() ==
+            recorded['digest'], 'Linked quote receipt archive changed')
+    with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+        require(bundle.namelist() == ['hosted-quotes.json'] and
+                bundle.getinfo('hosted-quotes.json').file_size <= 64 * 1024, 'Unexpected linked quote receipt archive')
+        return json.loads(bundle.read('hosted-quotes.json'))

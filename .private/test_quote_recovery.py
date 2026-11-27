@@ -12,7 +12,7 @@ import hosted_release
 from hosted_core import network_startup_diagnostics
 from hosted_quote_probe import BRIDGE_ARTIFACT, retained_bridge, stage_bridge, stage_quote_apk
 from quote_recovery import (
-    ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
+    ARTIFACTS, OPERATOR_ID, REPOSITORY, RERUN_PRODUCERS, WORKFLOW, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
 )
 from size_workflow_ui_scenario import market_reference_state, quote_footer, quote_footer_needs_scroll, tor_http_failure
@@ -23,6 +23,109 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_rerun_before_wallet_requires_exact_unspent_build_and_quote_history(self):
+        run = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',
+                   head_sha=OLD, head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                   status='completed', conclusion='failure', run_attempt=2)
+        start, created, end = ('2026-11-27T19:00:00Z', '2026-11-27T19:00:01Z', '2026-11-27T19:00:02Z')
+        upload = dict(name='Run actions/upload-artifact@fixture', conclusion='success',
+                      started_at=start, completed_at=end, number=3)
+
+        def job(name, attempt, result='success', steps=()):
+            return dict(id=100 + attempt, name='build / ' + name, run_id=7, head_sha=OLD,
+                        run_attempt=attempt, status='completed', conclusion=result, runner_id=190,
+                        started_at=start, completed_at=end, steps=list(steps))
+
+        def fixture():
+            first = [job('admit_hosted', 1), job('publish', 1, 'skipped')]
+            second = [job('admit_hosted', 2), job('hosted_core / reserve', 2, 'skipped'),
+                      job('hosted_core / wallet', 2, 'skipped'), job('publish', 2, 'failure', [
+                          dict(name='Sign and verify the validated APK', conclusion='failure'),
+                          dict(name='Publish the signed APK and checksum', conclusion='skipped'),
+                      ])]
+            first.extend(job(label.removeprefix('build / '), 1, steps=[upload])
+                         for key, (_, label) in RERUN_PRODUCERS.items() if key != 'core_id')
+            second.extend(job(label.removeprefix('build / '), 2, steps=[upload])
+                          for _, label in RERUN_PRODUCERS.values())
+            artifacts = [dict(id=i, name=name, expired=False, created_at=created,
+                              size_in_bytes=10, digest='sha256:' + 'a' * 64,
+                              workflow_run={'id': 7, 'head_sha': OLD})
+                         for i, (name, _) in enumerate(RERUN_PRODUCERS.values(), 10)]
+            return first, second, artifacts
+
+        cases = {
+            'clear': None, 'linked': None, 'claim': 'protected funding reservation',
+            'repeated-link': 'protected funding reservation', 'quote-override': 'original passing quote',
+            'wallet': 'entered the wallet', 'no-skipped-job': 'entered the wallet',
+            'previous-signer': 'signing and publication stopped',
+            'duplicate-job': 'one successful trusted admission',
+            'mixed-attempt': 'incomplete or unrelated jobs',
+            'wrong-upload': 'one successful producer upload',
+            'expired': 'exact trusted run and role',
+            'attestation': 'already has wallet or publication evidence',
+            'quote': 'does not match the original release APKs',
+            'repeated-dispatch': 'fresh dispatch',
+        }
+        for scenario, error in cases.items():
+            first, second, artifacts = fixture()
+            claims = []
+            if scenario in ('claim', 'repeated-link'):
+                claims = [dict(ref='refs/heads/testnet-claims/release-42-preclaim-recovery')]
+            elif scenario == 'linked':
+                claims = [dict(ref='refs/heads/testnet-claims/release-42')]
+            elif scenario == 'wallet':
+                first.append(job('hosted_core / wallet', 1, 'failure'))
+            elif scenario == 'no-skipped-job':
+                second.pop(1)
+            elif scenario == 'previous-signer':
+                first[1]['conclusion'] = 'success'
+            elif scenario == 'duplicate-job':
+                second.append(second[0])
+            elif scenario == 'mixed-attempt':
+                first[0]['run_attempt'] = 2
+            elif scenario == 'wrong-upload':
+                artifacts[0]['created_at'] = '2026-11-27T19:00:04Z'
+            elif scenario == 'expired':
+                artifacts[0]['expired'] = True
+            elif scenario == 'attestation':
+                artifacts.append(dict(name='release-attestation-1'))
+            metadata = Mock()
+            responses = {'/actions/runs/7': run, '/git/matching-refs/heads/testnet-claims/release-42': claims}
+            responses.update({f'/actions/artifacts/{row["id"]}': row for row in artifacts if 'id' in row})
+            metadata.api.side_effect = responses.__getitem__
+            metadata.pages.side_effect = {
+                '/actions/runs/7/attempts/1/jobs': first, '/actions/runs/7/attempts/2/jobs': second,
+                '/actions/runs/7/artifacts': artifacts,
+            }.get
+            proof = [{key: row[key] for key in ('id', 'digest', 'size_in_bytes')} for row in artifacts[:4]]
+            quote = dict(build_source_sha=SOURCE, candidate_version_code=42, workflow_run_id=7, artifact_run_id=7,
+                         quote_controller_sha=OLD, producer=proof[2], production_artifact=proof[0])
+            if scenario == 'quote':
+                quote['artifact_run_id'] = 17
+            preclaim = '8' if scenario in ('linked', 'repeated-link') else ''
+            quote_run = '9' if scenario == 'quote-override' else ''
+            with self.subTest(scenario=scenario), \
+                    patch.dict(os.environ, GITHUB_RUN_ATTEMPT='2' if scenario == 'repeated-dispatch' else '1'), \
+                    patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta') as check, \
+                    patch('release_inputs.version_code', return_value=42), \
+                    patch('acceptance_policy.input_fingerprint', return_value='fixture-fingerprint'), \
+                    patch('acceptance_policy.validate_quotes') as validate, \
+                    patch('quote_recovery.unused_reservation', return_value='d' * 40) as reservation, \
+                    patch('quote_recovery.read_quote_archive', return_value=quote):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata, quote_run, preclaim_run=preclaim)
+                else:
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, preclaim_run=preclaim)
+                    expected = dict(original_controller=OLD, run_missing_core='true', quote_controller=OLD,
+                                    quote_run=7, production_id='10', core_id='11', quote_id='12', quote_receipt_id='13')
+                    if preclaim:
+                        expected['previous_reservation'] = 'd' * 40
+                        reservation.assert_called_once_with(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
+                    self.assertEqual(result, expected)
+                    check.assert_called_once_with(Path('.'), SOURCE, OLD, MAIN)
+                    validate.assert_called_once_with(quote, 'fixture-fingerprint', use_tor=False)
+
     def test_market_result_requires_visible_reference_or_warning(self):
         self.assertIsNone(market_reference_state({'quote details', 'market reference'}))
         self.assertIsNone(market_reference_state({'checking market price…', 'confirm'}))

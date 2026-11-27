@@ -68,8 +68,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name: isolated-ui-repro-apk', emulator)
         self.assertNotIn('isolated-ui-repro-apk', production)
         self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
-        self.assertIn("needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''", publish)
-        self.assertIn("needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != ''", publish)
+        admission = publish.split('    needs:', 1)[0]
+        self.assertIn("inputs.hosted && needs.admit_hosted.result == 'success'", admission)
+        for job in ('hosted_quotes', 'recovery_quotes'):
+            self.assertIn(f"needs.{job}.result == 'success' && needs.{job}.outputs.receipt_id != ''", admission)
+        self.assertIn("needs.admit_hosted.outputs.quote_receipt_id != ''", admission)
+        self.assertIn("needs.admit_hosted.outputs.core_receipt_id != ''", admission)
+        self.assertIn("needs.admit_hosted.outputs.reuse_funded != 'true' && needs.hosted_core.outputs.receipt_id != ''", admission)
+        self.assertIn("needs.admit_hosted.outputs.reuse_funded == 'true' && needs.hosted_core.outputs.upgrade_receipt_id != ''", admission)
         hosted_core = workflow.split('  hosted_core:\n', 1)[1].split('  hosted_quotes:\n', 1)[0]
         self.assertIn('!cancelled()', hosted_core)
         self.assertIn("needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true'", hosted_core)
