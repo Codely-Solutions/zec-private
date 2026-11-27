@@ -66,10 +66,15 @@ class LaunchNavigationRequests {
     val resolvingMigrationNotice: MigrationNotice?
         get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }?.migrationNotice
 
-    fun finishMigrationProgress(notice: MigrationNotice, command: NavigationCommand.ReplaceAll?) {
+    fun finishMigrationProgress(
+        notice: MigrationNotice,
+        command: NavigationCommand.ReplaceAll?,
+        stillApplies: () -> Boolean = { true },
+    ) {
         pending.update { queue ->
             queue.mapNotNull { request ->
-                if (request.migrationNotice !== notice) request else command?.let { request.copy(command = it) }
+                if (request.migrationNotice !== notice) request
+                else command?.let { request.copy(command = it, stillApplies = stillApplies) }
             }
         }
     }

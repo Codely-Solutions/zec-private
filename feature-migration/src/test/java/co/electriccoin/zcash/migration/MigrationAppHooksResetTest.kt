@@ -218,7 +218,7 @@ class MigrationAppHooksResetTest {
             assertTrue(navigation.resolvingMigrationNotice == null)
             coVerify(exactly = 0) { accounts.selectAccount(target) }
             verify(exactly = 1) { readouts.clear(key) }
-            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
+            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null, any()) }
         } finally {
             MigrationAccountRetirement.restore(key)
             unmockkConstructor(MigrationScheduler::class)
@@ -316,7 +316,7 @@ class MigrationAppHooksResetTest {
     }
 
     @Test
-    fun restoringProgressKeepsTheAccountAndRefusesSelectionAfterReset() = runTest {
+    fun restoringProgressUsesTheNoticeOwnerWithoutChangingSelectionOrOpeningAfterReset() = runTest {
         val uuid = AccountUuid.new(ByteArray(16))
         val ownerKey = uuid.toStorageKeyId()
         val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -331,18 +331,17 @@ class MigrationAppHooksResetTest {
             appAccess = notificationAccess(), navigationRouter = resumedRouter(),
         )
         val command = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
-        coEvery { accounts.getAllAccounts() } returns listOf(target)
-        coEvery { accounts.selectAccount(target) } throws IllegalStateException("fixture selection failed")
+        coEvery { accounts.getAllAccounts() } throws IllegalStateException("fixture lookup failed")
         hooks.restoreNotificationProgress(ownerKey, this)
         runCurrent()
-        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), null) }
-        verify(exactly = 0) { launchNavigation.finishMigrationProgress(any(), command) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), null, any()) }
+        verify(exactly = 0) { launchNavigation.finishMigrationProgress(any(), command, any()) }
 
-        coEvery { accounts.selectAccount(target) } returns Unit
+        coEvery { accounts.getAllAccounts() } returns listOf(target)
         hooks.restoreNotificationProgress(ownerKey, this)
         runCurrent()
-        coVerify(exactly = 2) { accounts.selectAccount(target) }
-        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
+        coVerify(exactly = 0) { accounts.selectAccount(target) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command, any()) }
 
         val released = CompletableDeferred<List<WalletAccount>>()
         coEvery { accounts.getAllAccounts() } coAnswers { released.await() }
@@ -352,8 +351,8 @@ class MigrationAppHooksResetTest {
         writeAccess.beginReset()
         released.complete(listOf(target))
         runCurrent()
-        coVerify(exactly = 2) { accounts.selectAccount(target) }
-        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
+        coVerify(exactly = 0) { accounts.selectAccount(target) }
+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command, any()) }
     }
 
     @Test
@@ -391,9 +390,9 @@ class MigrationAppHooksResetTest {
             hooks.restoreNotificationProgress(ownerKey, this)
             grants.emit { true }
             runCurrent()
-            coVerify(exactly = 1) { accounts.selectAccount(target) }
+            coVerify(exactly = 0) { accounts.selectAccount(target) }
             val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
-            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
+            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress, any()) }
             verify(exactly = 0) { WorkManager.getInstance(any()) }
         } finally {
             unmockkObject(WorkManager.Companion)

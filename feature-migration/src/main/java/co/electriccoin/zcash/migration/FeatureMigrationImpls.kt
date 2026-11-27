@@ -213,12 +213,20 @@ class MigrationAppHooksImpl(
             try {
                 val foreground = awaitNotificationAccess()
                 val permits = {
-                    foreground() && walletWriteAccess.permits(generation) &&
-                        launchNavigation.resolvingMigrationNotice === notice && !MigrationAccountRetirement.blocks(key)
+                    foreground() && walletWriteAccess.token() == generation && !resetProgress.isPending.value &&
+                        !MigrationAccountRetirement.blocks(key)
                 }
-                val command = if (permits()) resolveNotificationProgress(key, generation, permits) else null
+                val hasOwner = permits() && accountDataSource.getAllAccounts().any {
+                    it.sdkAccount.accountUuid.toStorageKeyId() == key
+                }
+                // Progress reads by owner key. Opening the notice leaves the selected account intact.
+                val command = if (hasOwner && permits()) {
+                    NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
+                } else {
+                    null
+                }
                 val offered = MigrationAccountRetirement.admit(key) {
-                    launchNavigation.finishMigrationProgress(notice, command)
+                    launchNavigation.finishMigrationProgress(notice, command, permits)
                 }
                 if (offered == null) launchNavigation.finishMigrationProgress(notice, null)
             } catch (e: CancellationException) {
@@ -236,20 +244,6 @@ class MigrationAppHooksImpl(
         }.filterNotNull().first()
         return {
             grant() && navigationRouter.activeEntry.value?.let { it.id == entryId && it.hostResumed } == true
-        }
-    }
-
-    private suspend fun resolveNotificationProgress(
-        key: String,
-        generation: Long,
-        permits: () -> Boolean,
-    ): NavigationCommand.ReplaceAll? {
-        val target = accountDataSource.getAllAccounts()
-            .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key } ?: return null
-        return walletWriteAccess.write(generation) {
-            if (!permits()) return@write null
-            accountDataSource.selectAccount(target)
-            if (permits()) NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key))) else null
         }
     }
 

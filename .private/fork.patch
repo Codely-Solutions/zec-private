@@ -5067,7 +5067,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..3f8cf049c 100644
+index 294506ed1..d5db851b2 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -5149,7 +5149,7 @@ index 294506ed1..3f8cf049c 100644
 +            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) ||
 +                intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 +                openNotificationProgress(intent.getStringExtra(MigrationNotifier.EXTRA_ACCOUNT_KEY_ID), scope)
-@@ -164,11 +197,72 @@ class MigrationAppHooksImpl(
+@@ -164,11 +197,66 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -5180,12 +5180,20 @@ index 294506ed1..3f8cf049c 100644
 +            try {
 +                val foreground = awaitNotificationAccess()
 +                val permits = {
-+                    foreground() && walletWriteAccess.permits(generation) &&
-+                        launchNavigation.resolvingMigrationNotice === notice && !MigrationAccountRetirement.blocks(key)
++                    foreground() && walletWriteAccess.token() == generation && !resetProgress.isPending.value &&
++                        !MigrationAccountRetirement.blocks(key)
 +                }
-+                val command = if (permits()) resolveNotificationProgress(key, generation, permits) else null
++                val hasOwner = permits() && accountDataSource.getAllAccounts().any {
++                    it.sdkAccount.accountUuid.toStorageKeyId() == key
++                }
++                // Progress reads by owner key. Opening the notice leaves the selected account intact.
++                val command = if (hasOwner && permits()) {
++                    NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key)))
++                } else {
++                    null
++                }
 +                val offered = MigrationAccountRetirement.admit(key) {
-+                    launchNavigation.finishMigrationProgress(notice, command)
++                    launchNavigation.finishMigrationProgress(notice, command, permits)
 +                }
 +                if (offered == null) launchNavigation.finishMigrationProgress(notice, null)
 +            } catch (e: CancellationException) {
@@ -5206,20 +5214,6 @@ index 294506ed1..3f8cf049c 100644
 +        }
 +    }
 +
-+    private suspend fun resolveNotificationProgress(
-+        key: String,
-+        generation: Long,
-+        permits: () -> Boolean,
-+    ): NavigationCommand.ReplaceAll? {
-+        val target = accountDataSource.getAllAccounts()
-+            .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key } ?: return null
-+        return walletWriteAccess.write(generation) {
-+            if (!permits()) return@write null
-+            accountDataSource.selectAccount(target)
-+            if (permits()) NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(key))) else null
-+        }
-+    }
-+
 +    override suspend fun checkRecovery() {
 +        if (!resetProgress.isPending.value) {
 +            val wallet = walletWriteAccess.token()
@@ -5233,14 +5227,14 @@ index 294506ed1..3f8cf049c 100644
 +                        selected?.sdkAccount?.accountUuid?.toStorageKeyId() == ownerKey &&
 +                            walletWriteAccess.token() == wallet && !resetProgress.isPending.value &&
 +                            !MigrationAccountRetirement.blocks(ownerKey)
-@@ -176 +269,0 @@ class MigrationAppHooksImpl(
+@@ -176 +263,0 @@ class MigrationAppHooksImpl(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +270,0 @@ class MigrationAppHooksImpl(
+@@ -178 +264,0 @@ class MigrationAppHooksImpl(
 -                true
-@@ -179,0 +272,2 @@ class MigrationAppHooksImpl(
+@@ -179,0 +266,2 @@ class MigrationAppHooksImpl(
 +        }
 +    }
-@@ -181,2 +275,38 @@ class MigrationAppHooksImpl(
+@@ -181,2 +269,38 @@ class MigrationAppHooksImpl(
 -            else -> {
 -                false
 +    override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
@@ -5281,9 +5275,9 @@ index 294506ed1..3f8cf049c 100644
 +        } finally {
 +            if (retirementStarted && !deleted) {
 +                restoreRetirement(accountKeyId, generation)
-@@ -184,0 +315 @@ class MigrationAppHooksImpl(
+@@ -184,0 +309 @@ class MigrationAppHooksImpl(
 +    }
-@@ -186,23 +317,14 @@ class MigrationAppHooksImpl(
+@@ -186,23 +311,14 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -5321,12 +5315,12 @@ index 294506ed1..3f8cf049c 100644
 +                }
 +            } finally {
 +                if (!reopened) MigrationAccountRetirement.restore(accountKeyId)
-@@ -210,4 +331,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +325,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +335,9 @@ class MigrationAppHooksImpl(
+@@ -217 +329,9 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    @Suppress("TooGenericExceptionCaught") // The account is gone even if the OS rejects worker cleanup.
 +    private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
@@ -5337,7 +5331,7 @@ index 294506ed1..3f8cf049c 100644
 +            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
 +        }
 +    }
-@@ -220,5 +346,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +340,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -5360,11 +5354,11 @@ index 294506ed1..3f8cf049c 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -226,0 +365 @@ class MigrationAppHooksImpl(
+@@ -226,0 +359 @@ class MigrationAppHooksImpl(
 +            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
-@@ -227,0 +367 @@ class MigrationAppHooksImpl(
+@@ -227,0 +361 @@ class MigrationAppHooksImpl(
 +            migrationNotifier.cancelStepDue(key)
-@@ -229,6 +369 @@ class MigrationAppHooksImpl(
+@@ -229,6 +363 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
@@ -5372,17 +5366,17 @@ index 294506ed1..3f8cf049c 100644
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
 +        if (accountKeyId == null) migrationNotifier.cancelWalletMigrationNotices()
-@@ -236,0 +372,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +366,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +381 @@ class MigrationNavigatorImpl(
+@@ -242,3 +375 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -250,7 +387,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -250,7 +381,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSetupArgs> { MigrationSetupScreen() }
 -            composable<MigrationHowItWorksArgs> { MigrationHowItWorksScreen() }
 -            composable<MigrationReviewArgs> { MigrationReviewScreen(it.toRoute()) }
@@ -5397,13 +5391,13 @@ index 294506ed1..3f8cf049c 100644
 +            composable<MigrationKeystoneScanArgs> { MigrationKeystoneScanScreen(it.toRoute(), it.id) }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +396 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +390 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute(), entry.id) }
-@@ -261 +398 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +392 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { MigrationSendingScreen(it.toRoute(), it.id) }
-@@ -263,5 +400,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263,5 +394,5 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 -            composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
@@ -12084,10 +12078,10 @@ index 698a60fbd..66791cab1 100644
 +        }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..37d323c71
+index 000000000..0bb15452b
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,435 @@
+@@ -0,0 +1,434 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -12308,7 +12302,7 @@ index 000000000..37d323c71
 +            assertTrue(navigation.resolvingMigrationNotice == null)
 +            coVerify(exactly = 0) { accounts.selectAccount(target) }
 +            verify(exactly = 1) { readouts.clear(key) }
-+            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null) }
++            verify(exactly = 1) { navigation.finishMigrationProgress(any(), null, any()) }
 +        } finally {
 +            MigrationAccountRetirement.restore(key)
 +            unmockkConstructor(MigrationScheduler::class)
@@ -12406,7 +12400,7 @@ index 000000000..37d323c71
 +    }
 +
 +    @Test
-+    fun restoringProgressKeepsTheAccountAndRefusesSelectionAfterReset() = runTest {
++    fun restoringProgressUsesTheNoticeOwnerWithoutChangingSelectionOrOpeningAfterReset() = runTest {
 +        val uuid = AccountUuid.new(ByteArray(16))
 +        val ownerKey = uuid.toStorageKeyId()
 +        val target = mockk<WalletAccount> { every { sdkAccount } returns Account.new(uuid) }
@@ -12421,18 +12415,17 @@ index 000000000..37d323c71
 +            appAccess = notificationAccess(), navigationRouter = resumedRouter(),
 +        )
 +        val command = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
-+        coEvery { accounts.getAllAccounts() } returns listOf(target)
-+        coEvery { accounts.selectAccount(target) } throws IllegalStateException("fixture selection failed")
++        coEvery { accounts.getAllAccounts() } throws IllegalStateException("fixture lookup failed")
 +        hooks.restoreNotificationProgress(ownerKey, this)
 +        runCurrent()
-+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), null) }
-+        verify(exactly = 0) { launchNavigation.finishMigrationProgress(any(), command) }
++        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), null, any()) }
++        verify(exactly = 0) { launchNavigation.finishMigrationProgress(any(), command, any()) }
 +
-+        coEvery { accounts.selectAccount(target) } returns Unit
++        coEvery { accounts.getAllAccounts() } returns listOf(target)
 +        hooks.restoreNotificationProgress(ownerKey, this)
 +        runCurrent()
-+        coVerify(exactly = 2) { accounts.selectAccount(target) }
-+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
++        coVerify(exactly = 0) { accounts.selectAccount(target) }
++        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command, any()) }
 +
 +        val released = CompletableDeferred<List<WalletAccount>>()
 +        coEvery { accounts.getAllAccounts() } coAnswers { released.await() }
@@ -12442,8 +12435,8 @@ index 000000000..37d323c71
 +        writeAccess.beginReset()
 +        released.complete(listOf(target))
 +        runCurrent()
-+        coVerify(exactly = 2) { accounts.selectAccount(target) }
-+        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command) }
++        coVerify(exactly = 0) { accounts.selectAccount(target) }
++        verify(exactly = 1) { launchNavigation.finishMigrationProgress(any(), command, any()) }
 +    }
 +
 +    @Test
@@ -12481,9 +12474,9 @@ index 000000000..37d323c71
 +            hooks.restoreNotificationProgress(ownerKey, this)
 +            grants.emit { true }
 +            runCurrent()
-+            coVerify(exactly = 1) { accounts.selectAccount(target) }
++            coVerify(exactly = 0) { accounts.selectAccount(target) }
 +            val progress = NavigationCommand.ReplaceAll(listOf(MigrationProgressArgs(ownerKey)))
-+            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress) }
++            verify(exactly = 1) { navigation.finishMigrationProgress(any(), progress, any()) }
 +            verify(exactly = 0) { WorkManager.getInstance(any()) }
 +        } finally {
 +            unmockkObject(WorkManager.Companion)
@@ -41732,10 +41725,10 @@ index 000000000..61358bc6b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..2d1352e58
+index 000000000..6b91c7bf4
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,186 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.error.ErrorRoute
@@ -41804,10 +41797,15 @@ index 000000000..2d1352e58
 +    val resolvingMigrationNotice: MigrationNotice?
 +        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }?.migrationNotice
 +
-+    fun finishMigrationProgress(notice: MigrationNotice, command: NavigationCommand.ReplaceAll?) {
++    fun finishMigrationProgress(
++        notice: MigrationNotice,
++        command: NavigationCommand.ReplaceAll?,
++        stillApplies: () -> Boolean = { true },
++    ) {
 +        pending.update { queue ->
 +            queue.mapNotNull { request ->
-+                if (request.migrationNotice !== notice) request else command?.let { request.copy(command = it) }
++                if (request.migrationNotice !== notice) request
++                else command?.let { request.copy(command = it, stillApplies = stillApplies) }
 +            }
 +        }
 +    }
@@ -83337,7 +83335,7 @@ index 000000000..e834eb149
 +@Serializable
 +internal data class DeliveryMigrationWarning(val recoveryId: String)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
-index b983bc0a2..4588594b1 100644
+index b983bc0a2..39f5c6586 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui
@@ -83374,7 +83372,7 @@ index b983bc0a2..4588594b1 100644
 -                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(VKDetailArgs(VKType.INCOMING)))
 +                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(full)),
 +                    NavigationCommand.ReplaceFrom(ExportVKArgs::class, listOf(incoming)),
-@@ -78,0 +87,110 @@ class NavigationRouterImplTest {
+@@ -78,0 +87,138 @@ class NavigationRouterImplTest {
 +    @Test
 +    fun lockedWalletDropsOldCallbacksButRetainsAnExplicitLaunchRequest() =
 +        runTest(dispatcher) {
@@ -83485,7 +83483,35 @@ index b983bc0a2..4588594b1 100644
 +        assertEquals(listOf<NavigationCommand>(replacement, scanner), delivered)
 +    }
 +
-@@ -84,0 +203,2 @@ class NavigationRouterImplTest {
++    @Test
++    fun resolvedMigrationNoticeKeepsItsOriginalAuthorityUntilDelivery() = runTest(dispatcher) {
++        val requests = LaunchNavigationRequests()
++        val notice = requests.beginMigrationProgress("owner")
++        val replacement = NavigationCommand.ReplaceAll(listOf(TestMigrationProgress))
++        var originalEntryIsCurrent = true
++        requests.finishMigrationProgress(notice, replacement) { originalEntryIsCurrent }
++        val entered = CompletableDeferred<Unit>()
++        val resume = CompletableDeferred<Unit>()
++        val delivery = launch {
++            requests.deliver(walletReady = true, hasAppAccess = { true }) { _, isCurrent ->
++                entered.complete(Unit)
++                resume.await()
++                assertTrue(!isCurrent())
++                false
++            }
++        }
++        entered.await()
++        originalEntryIsCurrent = false
++        resume.complete(Unit)
++        delivery.join()
++
++        requests.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
++            error("Superseded notice reached navigation")
++        }
++        assertTrue(requests.changes.value.isEmpty())
++    }
++
+@@ -84,0 +231,2 @@ class NavigationRouterImplTest {
 +
 +    private data object TestMigrationProgress
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/QrCodeFullscreenLayoutTest.kt

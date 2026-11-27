@@ -194,6 +194,34 @@ class NavigationRouterImplTest {
         assertEquals(listOf<NavigationCommand>(replacement, scanner), delivered)
     }
 
+    @Test
+    fun resolvedMigrationNoticeKeepsItsOriginalAuthorityUntilDelivery() = runTest(dispatcher) {
+        val requests = LaunchNavigationRequests()
+        val notice = requests.beginMigrationProgress("owner")
+        val replacement = NavigationCommand.ReplaceAll(listOf(TestMigrationProgress))
+        var originalEntryIsCurrent = true
+        requests.finishMigrationProgress(notice, replacement) { originalEntryIsCurrent }
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val delivery = launch {
+            requests.deliver(walletReady = true, hasAppAccess = { true }) { _, isCurrent ->
+                entered.complete(Unit)
+                resume.await()
+                assertTrue(!isCurrent())
+                false
+            }
+        }
+        entered.await()
+        originalEntryIsCurrent = false
+        resume.complete(Unit)
+        delivery.join()
+
+        requests.deliver(walletReady = true, hasAppAccess = { true }) { _, _ ->
+            error("Superseded notice reached navigation")
+        }
+        assertTrue(requests.changes.value.isEmpty())
+    }
+
     private fun TestScope.collectedCommands(router: NavigationRouter): List<BaseNavigationCommand> {
         val commands = mutableListOf<BaseNavigationCommand>()
         backgroundScope.launch { router.observePipeline().collect { commands += it } }
