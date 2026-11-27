@@ -2376,7 +2376,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..293dd093a 100644
+index ec56161b5..9124b73ea 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -21598,16 +21598,25 @@ index 11ab4c65f..5fd28045f 100644
 -            .open(activity)
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
-index 36840dcc5..d40c31535 100644
+index 36840dcc5..f86e6175a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/OnboardingNavGraph.kt
 @@ -3,0 +4,2 @@ import androidx.activity.ComponentActivity
 +import androidx.compose.runtime.getValue
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
+@@ -12 +14 @@ import cash.z.ecc.sdk.type.fromResources
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.common.model.VersionInfo
 @@ -44,0 +47 @@ fun NavGraphBuilder.onboardingNavGraph(
 +            val initialization by walletViewModel.walletInitialization.collectAsStateWithLifecycle()
 @@ -45,0 +49 @@ fun NavGraphBuilder.onboardingNavGraph(
 +                initialization = initialization,
+@@ -47 +51 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
+@@ -60 +64 @@ fun NavGraphBuilder.onboardingNavGraph(
+-                    if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
++                    if (VersionInfo.testLabFixturesEnabled(activity)) {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
 index a93926c57..06dcb276d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/RootNavGraph.kt
@@ -21661,6 +21670,17 @@ index 5ec410de8..87abe5b0e 100644
 +                supportAction()
 @@ -158,0 +161 @@ private fun AccountNameWithSubtitle(
 +@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+index f441f6847..f6b5418e7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/CompositionLocalBinder.kt
+@@ -10 +9,0 @@ import androidx.navigation.compose.rememberNavController
+-import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
+@@ -11,0 +11 @@ import co.electriccoin.zcash.ui.MainActivity
++import co.electriccoin.zcash.ui.common.model.VersionInfo
+@@ -44 +44 @@ private fun ObserveScreenSecurityFlag() {
+-                        val isTest = FirebaseTestLabUtil.isFirebaseTestLab(context)
++                        val isTest = VersionInfo.testLabFixturesEnabled(context)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
 index a6896cfd7..61a711eb6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
@@ -22708,6 +22728,18 @@ index 000000000..435cd453b
 +}
 +
 +val SwapQuoteStatus.positiveRefund get() = refundedFormatted?.takeIf { it.signum() > 0 }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+index dc70b9506..148174338 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt
+@@ -41,0 +42,4 @@ data class VersionInfo(
++        internal fun testLabFixturesEnabled(context: Context): Boolean =
++            BuildConfig.DEBUG && NETWORK_DIMENSION == NetworkDimension.TESTNET &&
++                FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext)
++
+@@ -52 +56 @@ data class VersionInfo(
+-                isRunningUnderTestService = FirebaseTestLabUtil.isFirebaseTestLab(context.applicationContext),
++                isRunningUnderTestService = testLabFixturesEnabled(context),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
 index 01a2a6fa5..f8d45e6a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
@@ -28132,7 +28164,7 @@ index fc469c300..da65e7671 100644
 +                }
 +            ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
-index b6549dd8b..afa009818 100644
+index b6549dd8b..d08b7f433 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 @@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.R
@@ -28142,19 +28174,54 @@ index b6549dd8b..afa009818 100644
 -import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
 @@ -34,0 +36 @@ import java.math.MathContext
 +import java.math.RoundingMode
-@@ -148 +150 @@ internal class ExactOutputVMMapper {
+@@ -124 +126 @@ internal class ExactOutputVMMapper {
+-                amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
++                amount.multiply(asset.usdPrice)
+@@ -145,4 +147,4 @@ internal class ExactOutputVMMapper {
+-            if (fiat == null || asset?.usdPrice == null) {
+-                null
+-            } else {
 -                fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
-+                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
++            asset?.let { selected ->
++                selected.usdPrice?.takeIf { it.signum() > 0 }?.let { price ->
++                    fiat?.divide(price, selected.decimals, RoundingMode.DOWN)
++                }
 @@ -155 +157 @@ internal class ExactOutputVMMapper {
 -                            ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
 +                            ?.let { stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false) }
-@@ -227 +229 @@ internal class ExactOutputVMMapper {
+@@ -184 +186 @@ internal class ExactOutputVMMapper {
+-                        amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
++                        amount.multiply(asset.usdPrice)
+@@ -221,23 +223,2 @@ internal class ExactOutputVMMapper {
+-                val fiat = fiatInnerState.amount
+-                val asset = state.asset
+-                val amount =
+-                    if (fiat == null || asset?.usdPrice == null) {
+-                        null
+-                    } else {
 -                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
-+                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
-@@ -235 +237 @@ internal class ExactOutputVMMapper {
+-                    }
+-                onTextFieldChange(
+-                    state.amount.copy(
+-                        innerTextFieldState =
+-                            state.amount.innerTextFieldState.copy(
+-                                value =
+-                                    amount?.let {
 -                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
-+                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
-@@ -393 +395,6 @@ internal class ExactOutputVMMapper {
+-                                    } ?: stringRes(""),
+-                                selection = TextSelection.End
+-                            ),
+-                        amount = amount,
+-                        lastValidAmount = amount ?: state.amount.lastValidAmount
+-                    ),
+-                    fiatInnerState
+-                )
++                val amount = createAmountInnerState(fiatInnerState, state.amount, state.asset)
++                onTextFieldChange(amount, fiatInnerState)
+@@ -369 +350 @@ internal class ExactOutputVMMapper {
+-                    state.getOriginTokenAmount()?.let {
++                    amount?.takeIf { it.signum() > 0 }?.let {
+@@ -393 +374,6 @@ internal class ExactOutputVMMapper {
 -                            !mayContainGiftCardSecret(state.selectedABContact?.address ?: state.address) &&
 +                            validateSwapRecipient(
 +                                state.selectedABContact?.address ?: state.address,
@@ -28162,7 +28229,7 @@ index b6549dd8b..afa009818 100644
 +                                state.asset.tokenTicker,
 +                                state.selectedABContact?.blockchain?.chainTicker
 +                            ).isValid &&
-@@ -411,6 +418,6 @@ internal class ExactOutputVMMapper {
+@@ -411,6 +397,6 @@ internal class ExactOutputVMMapper {
 -                when {
 -                    text.isEmpty() -> null
 -                    text.isBlank() -> stringRes("")
@@ -28840,7 +28907,7 @@ index 79f574053..390036751 100644
 -                )
 +            val asset = navigateToSwapAssetPicker()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
-index d7080a80c..12946480d 100644
+index d7080a80c..63cf128da 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 @@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
@@ -28848,7 +28915,15 @@ index d7080a80c..12946480d 100644
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 @@ -14 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 -import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
-@@ -501 +502,7 @@ internal class SwapVMMapper {
+@@ -40,0 +42 @@ import java.math.MathContext
++import java.math.RoundingMode
+@@ -448 +450 @@ internal class SwapVMMapper {
+-        val amount = textField.textField.innerState.amount
++        val amount = state.getOriginTokenAmount()
+@@ -477 +479 @@ internal class SwapVMMapper {
+-                    state.getOriginTokenAmount()?.let {
++                    amount?.takeIf { it.signum() > 0 }?.let {
+@@ -501 +503,7 @@ internal class SwapVMMapper {
 -                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
 +                            validateSwapRecipient(
 +                                state.selectedContact?.address ?: state.addressText,
@@ -28857,7 +28932,7 @@ index d7080a80c..12946480d 100644
 +                                state.selectedContact?.blockchain?.chainTicker,
 +                                allowPaymentAmount = false
 +                            ).isValid &&
-@@ -517,6 +524,7 @@ internal class SwapVMMapper {
+@@ -517,6 +525,7 @@ internal class SwapVMMapper {
 -                when {
 -                    text.isEmpty() -> null
 -                    text.isBlank() -> stringRes("")
@@ -28871,6 +28946,16 @@ index d7080a80c..12946480d 100644
 +                    state.selectedContact?.blockchain?.chainTicker,
 +                    allowPaymentAmount = false
 +                ).errorText(state.swapAsset?.chainTicker),
+@@ -616 +625 @@ private data class SwapInternalState(
+-                    tokenAmount.multiply(usdPrice, MathContext.DECIMAL128)
++                    tokenAmount.multiply(usdPrice)
+@@ -633 +642,2 @@ private data class SwapInternalState(
+-                val usdPrice = originAsset?.usdPrice
++                val asset = originAsset ?: return null
++                val usdPrice = asset.usdPrice?.takeIf { it.signum() > 0 }
+@@ -637 +647 @@ private data class SwapInternalState(
+-                    fiatAmount.divide(usdPrice, MathContext.DECIMAL128)
++                    fiatAmount.divide(usdPrice, asset.decimals, RoundingMode.DOWN)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
 index b3aed2335..860b74202 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
@@ -37312,6 +37397,44 @@ index 000000000..57ac7cfd6
 +        assertTrue(validateSwapRecipient(request, "btc", "btc", allowPaymentAmount = true).isValid)
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+new file mode 100644
+index 000000000..5c8f76cb1
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TestLabWalletFixturePolicyTest.kt
+@@ -0,0 +1,32 @@
++package co.electriccoin.zcash.ui.common.model
++
++import android.content.Context
++import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
++import co.electriccoin.zcash.ui.BuildConfig
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
++import io.mockk.verify
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class TestLabWalletFixturePolicyTest {
++    @Test
++    fun onlyDebugTestnetUsesTheTestServiceSignal() {
++        val eligible = BuildConfig.DEBUG && BuildConfig.FLAVOR_network == "zcashtestnet"
++        val context = mockk<Context> {
++            every { applicationContext } returns this
++        }
++
++        mockkObject(FirebaseTestLabUtil)
++        try {
++            every { FirebaseTestLabUtil.isFirebaseTestLab(context) } returnsMany listOf(true, false)
++            assertEquals(eligible, VersionInfo.testLabFixturesEnabled(context))
++            assertEquals(false, VersionInfo.testLabFixturesEnabled(context))
++            verify(exactly = if (eligible) 2 else 0) { FirebaseTestLabUtil.isFirebaseTestLab(context) }
++        } finally {
++            unmockkObject(FirebaseTestLabUtil)
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
 new file mode 100644
 index 000000000..0ecbe3d01
@@ -42121,17 +42244,21 @@ index acc8741c2..430fc754d 100644
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
-index d59e700c3..c246efafa 100644
+index d59e700c3..ef6479a7e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
-@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
+@@ -11,0 +13 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.component.TextSelection
+@@ -12,0 +15 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
-@@ -23,0 +25 @@ import kotlin.test.assertNull
+@@ -23,0 +27 @@ import kotlin.test.assertNull
 +import kotlin.test.assertNotNull
-@@ -64 +66 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -64 +68 @@ class ExactOutputVMMapperGiftCardLinkTest {
 -        GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
 +        listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
-@@ -71,0 +74,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -71,0 +76,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
 +    @Test
 +    fun wrongNetworkShowsInlineErrorAndDisablesReview() {
 +        val state = mapper.createState(
@@ -42142,13 +42269,13 @@ index d59e700c3..c246efafa 100644
 +        assertFalse(state.primaryButton?.isEnabled ?: true)
 +    }
 +
-@@ -92,0 +105,39 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -92,0 +107,94 @@ class ExactOutputVMMapperGiftCardLinkTest {
 +    @Test
 +    fun computedTokenInputMatchesRequestedAtomicAmount() {
-+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
-+        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
++        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 8)
++        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
 +        val computed = mapper.createAmountInnerState(fiat, NumberTextFieldInnerState(), asset)
-+        val expected = BigDecimal("0.12283949")
++        val expected = BigDecimal("0.99999999")
 +        assertEquals(expected, computed.amount)
 +        assertEquals(
 +            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
@@ -42161,25 +42288,80 @@ index d59e700c3..c246efafa 100644
 +                fiatAmount = fiat),
 +            callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
 +        )
-+        assertNotNull(state.primaryButton).onClick()
++        val review = assertNotNull(state.primaryButton)
++        assertTrue(review.isEnabled)
++        review.onClick()
 +        assertEquals(expected, requested)
 +    }
 +
 +    @Test
 +    fun fiatEditUsesExactAtomicTokenAmount() {
-+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
++        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 6)
 +        var updated: NumberTextFieldInnerState? = null
 +        val state = mapper.createState(
 +            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
 +            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
 +        )
-+        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
-+        val expected = BigDecimal("0.122839")
++        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
++        val expected = BigDecimal("0.999999")
 +        assertEquals(expected, assertNotNull(updated).amount)
 +        assertEquals(
 +            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
 +            assertNotNull(updated).innerTextFieldState.value
 +        )
++    }
++
++    @Test
++    fun movingTheDerivedFiatCursorPreservesTheReviewedTokenAmount() {
++        val token = BigDecimal("1.123456789012345678901234")
++        val price = BigDecimal("5.123456789010")
++        val asset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
++            .copy(usdPrice = price)
++        var draft = internalState("fixture.near").copy(
++            asset = asset,
++            swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
++        )
++        var requested: BigDecimal? = null
++        val controls = callbacks.copy(
++            onTextFieldChange = { amount, fiat -> draft = draft.copy(amount = amount, fiatAmount = fiat) },
++            onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
++        )
++        val typed = NumberTextFieldInnerState.fromAmount(token)
++        val recomputed = mapper.createFiatAmountInnerState(typed, NumberTextFieldInnerState(), asset)
++        assertEquals(token.multiply(price), recomputed.amount)
++        mapper.createState(draft, controls).amount.onValueChange(typed)
++        val before = draft.fiatAmount
++        assertEquals(recomputed.amount, before.amount)
++
++        val selectionOnly = before.copy(innerTextFieldState =
++            before.innerTextFieldState.copy(selection = TextSelection.Start))
++        mapper.createState(draft, controls).amountFiat.onValueChange(selectionOnly)
++        assertEquals(TextSelection.Start, draft.fiatAmount.innerTextFieldState.selection)
++        assertEquals(token, draft.amount.amount)
++
++        val review = assertNotNull(mapper.createState(draft, controls).primaryButton)
++        assertTrue(review.isEnabled)
++        review.onClick()
++        assertEquals(token, requested)
++    }
++
++    private val nearBoundaryPrice = BigDecimal("1.00000000000000000000000000000000000001")
++
++    @Test
++    fun invalidFiatEditClearsTheTokenWhileItsPriceIsUnavailable() {
++        val asset = SwapAssetTestFixture.asset(usdPrice = null)
++        var updated: NumberTextFieldInnerState? = null
++        val state = mapper.createState(
++            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
++            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount }),
++        )
++        val invalid = state.amountFiat.innerState.let {
++            it.copy(innerTextFieldState = it.innerTextFieldState.copy(value = stringRes(".")))
++        }
++
++        state.amountFiat.onValueChange(invalid)
++
++        assertNull(assertNotNull(updated).amount)
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt
@@ -42763,6 +42945,106 @@ index 000000000..5ea41a2da
 +        assertEquals("Report date (UTC): 2026-11-10\n", report)
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
+index 35abdfd66..3e0d04f5f 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperChangeModeTest.kt
+@@ -5,0 +6 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
+@@ -18,0 +20 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFalse
+@@ -20,0 +23 @@ import kotlin.test.assertNull
++import kotlin.test.assertTrue
+@@ -62,0 +66,89 @@ class SwapVMMapperChangeModeTest {
++    @Test
++    fun fiatQuoteFloorsExactTokenAmountInBothDirections() {
++        val price = BigDecimal("1.00000000000000000000000000000000000001")
++        val asset = SwapAssetTestFixture.asset(usdPrice = price, decimals = 8)
++        val zec = SwapAssetTestFixture.asset(tokenTicker = "zec", chainTicker = "zec", usdPrice = price)
++        val requested = mutableListOf<BigDecimal>()
++        val quoteCallbacks = callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested += amount })
++        SwapDirection.entries.forEach { direction ->
++            val input = internalState(account(isSpendable = true)).copy(
++                swapAsset = asset,
++                swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset), zecAsset = zec),
++                currencyType = CurrencyType.FIAT,
++                swapDirection = direction,
++                addressText = btcAddress,
++            )
++            val button = assertNotNull(mapper.createState(input, quoteCallbacks).primaryButton)
++            assertTrue(button.isEnabled, direction.name)
++            button.onClick()
++        }
++        assertEquals(listOf(BigDecimal("0.99999999"), BigDecimal("0.99999999")), requested)
++    }
++
++    @Test
++    fun switchingToFiatWithoutEditingPreservesTheQuotedTokenAmount() {
++        val token = BigDecimal("1.123456789012345678901234")
++        val exactAsset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
++        for (price in listOf(BigDecimal("5.123456789010"), BigDecimal("9.123456789064"))) {
++            val asset = exactAsset.copy(usdPrice = price)
++            val tokenDraft = internalState(account(isSpendable = true)).copy(
++                swapAsset = asset,
++                swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
++                amountTextState = NumberTextFieldInnerState.fromAmount(token),
++                addressText = "fixture.near",
++            )
++            var switchedAmount: BigDecimal? = null
++            var requested: BigDecimal? = null
++            val controls = callbacks.copy(
++                onSwapCurrencyTypeClick = { switchedAmount = it },
++                onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
++            )
++            mapper.createState(tokenDraft, controls).amountTextField.onSwapChange()
++            val fiatDraft = tokenDraft.copy(
++                currencyType = CurrencyType.FIAT,
++                amountTextState = NumberTextFieldInnerState.fromAmount(assertNotNull(switchedAmount)),
++            )
++            val fiatView = mapper.createState(fiatDraft, controls)
++            val quote = assertNotNull(fiatView.primaryButton)
++            assertTrue(quote.isEnabled)
++            quote.onClick()
++            assertEquals(token, requested)
++            fiatView.amountTextField.onSwapChange()
++            assertEquals(token, switchedAmount)
++        }
++    }
++
++    @Test
++    fun fiatBelowOneAtomicUnitCannotRequestAQuote() {
++        val input = internalState(account(isSpendable = true)).copy(
++            currencyType = CurrencyType.FIAT,
++            amountTextState = NumberTextFieldInnerState.fromAmount(BigDecimal("0.00001")),
++            addressText = btcAddress,
++        )
++        val screen = mapper.createState(input, callbacks.copy(
++            onRequestSwapQuoteClick = { _, _, _ -> error("Sub-atomic fiat requested a quote") }
++        ))
++        val button = assertNotNull(screen.primaryButton)
++        assertFalse(button.isEnabled)
++        button.onClick()
++    }
++
++    @Test
++    fun tokenInputKeepsItsExactAmount() {
++        val amount = BigDecimal("0.01234567")
++        val input = internalState(account(isSpendable = true)).copy(
++            amountTextState = NumberTextFieldInnerState.fromAmount(amount),
++            addressText = btcAddress,
++        )
++        var requested: BigDecimal? = null
++        val screen = mapper.createState(input, callbacks.copy(
++            onRequestSwapQuoteClick = { value, _, _ -> requested = value }
++        ))
++        val button = assertNotNull(screen.primaryButton)
++        assertTrue(button.isEnabled)
++        button.onClick()
++        assertEquals(amount, requested)
++    }
++
++    private val btcAddress = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
 index 23393674d..6c082a48b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt

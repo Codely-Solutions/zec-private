@@ -89,5 +89,9 @@
   "v3.19.0-private.32": [
     "Keep swap status tied to the original deposit address when refreshing.",
     "Correct tax CSV amounts and report wallet-internal pool transfers as fees only."
+  ],
+  "v3.19.0-private.33": [
+    "Calculate quote amounts at each asset's precision and keep the swap amount when switching units.",
+    "Keep normal wallet setup, app lock, and screen protection active in Android test environments."
   ]
 }

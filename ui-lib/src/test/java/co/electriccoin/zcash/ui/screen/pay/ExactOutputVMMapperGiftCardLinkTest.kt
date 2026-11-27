@@ -4,11 +4,13 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.DEFAULT_SLIPPAGE
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretFixture
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
+import co.electriccoin.zcash.ui.design.component.TextSelection
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import io.mockk.every
@@ -104,10 +106,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
 
     @Test
     fun computedTokenInputMatchesRequestedAtomicAmount() {
-        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
-        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
+        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 8)
+        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
         val computed = mapper.createAmountInnerState(fiat, NumberTextFieldInnerState(), asset)
-        val expected = BigDecimal("0.12283949")
+        val expected = BigDecimal("0.99999999")
         assertEquals(expected, computed.amount)
         assertEquals(
             stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
@@ -120,25 +122,80 @@ class ExactOutputVMMapperGiftCardLinkTest {
                 fiatAmount = fiat),
             callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
         )
-        assertNotNull(state.primaryButton).onClick()
+        val review = assertNotNull(state.primaryButton)
+        assertTrue(review.isEnabled)
+        review.onClick()
         assertEquals(expected, requested)
     }
 
     @Test
     fun fiatEditUsesExactAtomicTokenAmount() {
-        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
+        val asset = SwapAssetTestFixture.asset(usdPrice = nearBoundaryPrice, decimals = 6)
         var updated: NumberTextFieldInnerState? = null
         val state = mapper.createState(
             internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
             callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
         )
-        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
-        val expected = BigDecimal("0.122839")
+        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
+        val expected = BigDecimal("0.999999")
         assertEquals(expected, assertNotNull(updated).amount)
         assertEquals(
             stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
             assertNotNull(updated).innerTextFieldState.value
         )
+    }
+
+    @Test
+    fun movingTheDerivedFiatCursorPreservesTheReviewedTokenAmount() {
+        val token = BigDecimal("1.123456789012345678901234")
+        val price = BigDecimal("5.123456789010")
+        val asset = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:wrap.near" }
+            .copy(usdPrice = price)
+        var draft = internalState("fixture.near").copy(
+            asset = asset,
+            swapAssets = SwapAssetTestFixture.assetsData(data = listOf(asset)),
+        )
+        var requested: BigDecimal? = null
+        val controls = callbacks.copy(
+            onTextFieldChange = { amount, fiat -> draft = draft.copy(amount = amount, fiatAmount = fiat) },
+            onRequestSwapQuoteClick = { amount, _, _ -> requested = amount },
+        )
+        val typed = NumberTextFieldInnerState.fromAmount(token)
+        val recomputed = mapper.createFiatAmountInnerState(typed, NumberTextFieldInnerState(), asset)
+        assertEquals(token.multiply(price), recomputed.amount)
+        mapper.createState(draft, controls).amount.onValueChange(typed)
+        val before = draft.fiatAmount
+        assertEquals(recomputed.amount, before.amount)
+
+        val selectionOnly = before.copy(innerTextFieldState =
+            before.innerTextFieldState.copy(selection = TextSelection.Start))
+        mapper.createState(draft, controls).amountFiat.onValueChange(selectionOnly)
+        assertEquals(TextSelection.Start, draft.fiatAmount.innerTextFieldState.selection)
+        assertEquals(token, draft.amount.amount)
+
+        val review = assertNotNull(mapper.createState(draft, controls).primaryButton)
+        assertTrue(review.isEnabled)
+        review.onClick()
+        assertEquals(token, requested)
+    }
+
+    private val nearBoundaryPrice = BigDecimal("1.00000000000000000000000000000000000001")
+
+    @Test
+    fun invalidFiatEditClearsTheTokenWhileItsPriceIsUnavailable() {
+        val asset = SwapAssetTestFixture.asset(usdPrice = null)
+        var updated: NumberTextFieldInnerState? = null
+        val state = mapper.createState(
+            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
+            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount }),
+        )
+        val invalid = state.amountFiat.innerState.let {
+            it.copy(innerTextFieldState = it.innerTextFieldState.copy(value = stringRes(".")))
+        }
+
+        state.amountFiat.onValueChange(invalid)
+
+        assertNull(assertNotNull(updated).amount)
     }
 
     private fun internalState(
