@@ -62,7 +62,7 @@ jobs:
           set -euo pipefail
           mkdir -m 700 "$RUNNER_TEMP/zec-fixture"
           python3 -B .private/hosted_fixture.py prepare --tag "$RELEASE_TAG" --directory "$RUNNER_TEMP/zec-fixture" >> "$GITHUB_OUTPUT"
-      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+      - uses: oras-project/setup-oras@ac735097e22fe643015b0d19645f7c9a69942128 # v2.0.4
         with:
           version: '1.3.6'
       - id: store
@@ -101,7 +101,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+      - uses: oras-project/setup-oras@ac735097e22fe643015b0d19645f7c9a69942128 # v2.0.4
         with:
           version: '1.3.6'
       - id: verify
@@ -150,7 +150,7 @@ jobs:
             exit 0
           fi
           test "$(git diff --name-only)" = '.private/hosted-fixture.json'
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         if: steps.record.outputs.updated == 'true'
         id: integrator
         with:
