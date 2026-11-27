@@ -40,10 +40,12 @@ import org.koin.dsl.module
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
+import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.assertNull
 import kotlin.test.assertIs
 import kotlin.test.Test
+import kotlin.test.AfterTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -51,6 +53,13 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class MigrationWorkerOwnershipTest {
+    private val noBackup = Files.createTempDirectory("migration-worker-owner-fixture")
+
+    @AfterTest
+    fun removeFixtureDirectory() {
+        Files.delete(noBackup)
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun theCurrentWorkerWaitsForItsSuccessorAndRetriesIfTheAppendFails() = runTest {
@@ -65,6 +74,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -153,6 +163,7 @@ class MigrationWorkerOwnershipTest {
             every { getString(any(), null) } returns retainedId.toString() + ":0"
         }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -200,6 +211,7 @@ class MigrationWorkerOwnershipTest {
             every { getLong("last_run_at_$owner", -1L) } answers { otherRunAt }
         }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -249,6 +261,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -298,6 +311,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -335,13 +349,16 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val preferences = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
         val notifier = mockk<MigrationNotifier>(relaxed = true)
         val sdk = mockk<OrchardMigrationSdk> {
             coEvery { nextStep() } returns MigrationAdvanceResult(MigrationAdvanceStep.Complete, null)
-            coEvery { getMigrationState() } returnsMany listOf(MigrationState.ReadyToPropose, MigrationState.Complete)
+            coEvery { getMigrationState() } returnsMany listOf(
+                MigrationState.ReadyToPropose, MigrationState.Complete, MigrationState.Complete,
+            )
         }
         val drive = MigrationDriveOnce(
             applicationContext = context,
@@ -356,10 +373,13 @@ class MigrationWorkerOwnershipTest {
 
         assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
         verify(exactly = 0) { editor.remove(any()) }
+        verify(exactly = 0) { notifier.notifyMigrationComplete(owner) }
         assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
         verify(exactly = 1) { editor.remove("next_wake_at_$owner") }
         verify(exactly = 1) { editor.remove("next_wake_request_$owner") }
         verify(exactly = 1) { notifier.cancelStepDue(owner) }
+        assertEquals(DriveOnceResult.Terminal, drive.run(sdk, owner))
+        verify(exactly = 1) { notifier.notifyMigrationComplete(owner) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -370,6 +390,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val preferences = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context> {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -408,6 +429,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context> {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }
@@ -429,6 +451,7 @@ class MigrationWorkerOwnershipTest {
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
         val prefs = mockk<SharedPreferences>(relaxed = true) { every { edit() } returns editor }
         val context = mockk<Context>(relaxed = true) {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns prefs
             every { getSystemService(Context.ALARM_SERVICE) } returns null
         }

@@ -41,10 +41,6 @@ import kotlin.time.toJavaDuration
 class MigrationScheduler(
     private val context: Context,
 ) {
-    private val resetPending = {
-        GlobalContext.getOrNull()?.getOrNull<ResetProgressStore>()?.isPending?.value == true ||
-            ResetProgressStore.hasPendingMarker(context)
-    }
     // Armed/cancelled alongside the WorkManager job below rather than threaded through every call
     // site separately — see MigrationDueAlarmScheduler's kdoc for why this needs its own
     // AlarmManager alarm instead of relying on the WorkManager job itself.
@@ -71,7 +67,7 @@ class MigrationScheduler(
     }
 
     internal suspend fun scheduleSuccessorAndAwait(accountKeyId: String, delay: Duration, version: Long) {
-        if (resetPending() || wakeVersion(accountKeyId) != version) return
+        if (migrationResetPending(context) || wakeVersion(accountKeyId) != version) return
         val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork(workId(accountKeyId)).await()
         // An interrupted worker may already have committed its child before acknowledging it.
         val existing = work.firstOrNull { it.state == WorkInfo.State.BLOCKED }
@@ -86,7 +82,7 @@ class MigrationScheduler(
     }
 
     internal suspend fun reconcileScheduledWake(accountKeyId: String, version: Long = wakeVersion(accountKeyId)) {
-        if (resetPending()) return
+        if (migrationResetPending(context)) return
         val manager = WorkManager.getInstance(context)
         val pending = manager.getWorkInfosForUniqueWork(workId(accountKeyId)).await()
             .filter { it.state == WorkInfo.State.ENQUEUED && it.nextScheduleTimeMillis != Long.MAX_VALUE }
@@ -107,7 +103,7 @@ class MigrationScheduler(
         val request by lazy { newWorkRequest(accountKeyId, delay) }
         val (operation, version) = MigrationAccountRetirement.keepWake(accountKeyId) {
             synchronized(wakeVersions) {
-                if (resetPending()) return@synchronized null
+                if (migrationResetPending(context)) return@synchronized null
                 val current = wakeVersion(accountKeyId)
                 if (startsPlan) completedPlans.remove(accountKeyId)
                 if (accountKeyId in completedPlans || expectedVersion != null && expectedVersion != current) {
@@ -135,12 +131,12 @@ class MigrationScheduler(
 
     @Suppress("TooGenericExceptionCaught") // The wake is already durable. An alarm failure must not enqueue again.
     private suspend fun armFallback(accountKeyId: String, version: Long, resolve: suspend () -> Wake?) {
-        if (resetPending()) return
+        if (migrationResetPending(context)) return
         try {
             val wake = resolve() ?: return
             MigrationAccountRetirement.keepWake(accountKeyId) {
                 synchronized(wakeVersions) {
-                    if (resetPending()) return@synchronized
+                    if (migrationResetPending(context)) return@synchronized
                     val stillPending = accountKeyId !in completedPlans && wakeVersion(accountKeyId) == version &&
                         !MigrationWorkerHeartbeat.hasStarted(context, accountKeyId, wake.request, wake.attempt)
                     if (stillPending) {
@@ -195,7 +191,7 @@ class MigrationScheduler(
 
         internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
             synchronized(wakeVersions) {
-                if (accountKeyId in completedPlans) {
+                if (accountKeyId in completedPlans || migrationResetPending(context)) {
                     null
                 } else {
                     MigrationWorkerHeartbeat.stampRun(context, accountKeyId, requestId, attempt)
@@ -223,15 +219,16 @@ class MigrationScheduler(
         internal fun withdrawCompletedFallback(
             context: Context,
             accountKeyId: String,
-            onCleared: () -> Unit,
+            onCleared: (firstCompletion: Boolean) -> Unit,
         ) {
             MigrationAccountRetirement.admit(accountKeyId) {
                 synchronized(wakeVersions) {
-                    completedPlans.add(accountKeyId)
+                    if (migrationResetPending(context)) return@synchronized
+                    val firstCompletion = completedPlans.add(accountKeyId)
                     advanceWakeVersion(accountKeyId)
                     MigrationDueAlarmScheduler(context).cancel(accountKeyId)
                     MigrationWorkerHeartbeat.clear(context, accountKeyId)
-                    onCleared()
+                    onCleared(firstCompletion)
                 }
             }
         }
@@ -270,3 +267,7 @@ class MigrationScheduler(
             }
     }
 }
+
+private fun migrationResetPending(context: Context): Boolean =
+    GlobalContext.getOrNull()?.getOrNull<ResetProgressStore>()?.isPending?.value == true ||
+        ResetProgressStore.hasPendingMarker(context)

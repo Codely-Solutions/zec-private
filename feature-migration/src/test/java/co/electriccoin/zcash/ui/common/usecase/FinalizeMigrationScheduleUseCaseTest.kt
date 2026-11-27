@@ -27,6 +27,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -34,6 +36,13 @@ import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.seconds
 
 class FinalizeMigrationScheduleUseCaseTest {
+    private val noBackup = Files.createTempDirectory("migration-schedule-fixture")
+
+    @AfterTest
+    fun removeFixtureDirectory() {
+        Files.delete(noBackup)
+    }
+
     private fun schedule() =
         MigrationSchedule(
             transfers =
@@ -81,6 +90,7 @@ class FinalizeMigrationScheduleUseCaseTest {
     fun aFailedEnqueueCannotAcknowledgeACommittedSchedule() = runTest {
         val account = "fixture-owner"
         val context = mockk<Context> {
+            every { noBackupFilesDir } returns noBackup.toFile()
             every { getSystemService(Context.ALARM_SERVICE) } returns null
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns mockk {
                 every { edit() } returns mockk(relaxed = true)

@@ -829,8 +829,9 @@ private suspend fun handleCompleteStep(
 ): DriveOnceResult {
     // The caller holds the drive lock, so a new plan cannot replace this completion.
     if (isMigrationActuallyComplete(sdk.getMigrationState())) {
-        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId) {
+        MigrationScheduler.withdrawCompletedFallback(context, accountKeyId) { firstCompletion ->
             migrationNotifier.cancelStepDue(accountKeyId)
+            if (firstCompletion) migrationNotifier.notifyMigrationComplete(accountKeyId)
         }
         migrationLog("MigrationDriveOnce: migration complete. Stopping the work chain.")
     } else {

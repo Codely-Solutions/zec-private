@@ -377,6 +377,7 @@ class MigrationNotifier(
                 .setContentText(context.getString(R.string.migration_notification_completeText))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(mainActivityIntent(accountKeyId))
+                .setOnlyAlertOnce(true)
                 .setAutoCancel(true)
                 .build()
 
@@ -395,10 +396,8 @@ class MigrationNotifier(
         const val EXTRA_RUN_STEP = "co.electriccoin.zcash.migration.run_step"
 
         /**
-         * The storage-key id ([co.electriccoin.zcash.ui.common.model.toStorageKeyId]) of the
-         * account this notification belongs to. `handleIntent` selects that account before
-         * navigating, so tapping a Keystone account's migration notification while the Zodl
-         * account is selected lands on the RIGHT account's migration screens.
+         * The storage-key ID for the notification's migration. Progress reads that migration
+         * without changing the selected wallet account.
          */
         const val EXTRA_ACCOUNT_KEY_ID = "co.electriccoin.zcash.migration.account_key_id"
 
