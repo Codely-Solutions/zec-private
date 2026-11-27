@@ -34,6 +34,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -164,24 +165,29 @@ class CheckMigrationRecoveryUseCaseTest {
 
     @Test
     fun aCompletedPlanCannotRearmWhileItsOlderWorkStateIsBeingRead() = runTest {
-        val context = removalPreferences()
+        val noBackup = Files.createTempDirectory("migration-completion-fixture")
+        val context = removalPreferences().also { every { it.noBackupFilesDir } returns noBackup.toFile() }
         val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
             coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
         }
         var withdrawn = false
         val reconciled = mutableListOf<String>()
-        useCase(
-            sdk = sdk,
-            navigationRouter = mockk(relaxed = true),
-            context = context,
-            getWorkerRunState = { owner ->
-                MigrationScheduler.withdrawCompletedFallback(
-                    context, owner
-                ) { withdrawn = true }
-                MigrationWorkerRunState.SCHEDULED
-            },
-            reconcileScheduledWake = { owner, _ -> reconciled += owner },
-        ).invoke()
+        try {
+            useCase(
+                sdk = sdk,
+                navigationRouter = mockk(relaxed = true),
+                context = context,
+                getWorkerRunState = { owner ->
+                    MigrationScheduler.withdrawCompletedFallback(
+                        context, owner
+                    ) { withdrawn = true }
+                    MigrationWorkerRunState.SCHEDULED
+                },
+                reconcileScheduledWake = { owner, _ -> reconciled += owner },
+            ).invoke()
+        } finally {
+            Files.delete(noBackup)
+        }
 
         assertTrue(withdrawn)
         assertEquals(emptyList(), reconciled)

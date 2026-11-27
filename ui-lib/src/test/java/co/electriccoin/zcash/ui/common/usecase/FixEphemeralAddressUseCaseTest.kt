@@ -53,8 +53,12 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class FixEphemeralAddressUseCaseTest {
     @Test
-    fun aStaleVisibleSelectionCannotStartATransparentAddressScan() = runTest {
-        val visible = mockk<WalletAccount> { every { isSelected } returns true }
+    fun unavailableSelectionVerificationOffersRetryWithoutStartingATransparentAddressScan() = runTest {
+        val uuid = AccountUuid.new(ByteArray(16))
+        val visible = mockk<WalletAccount> {
+            every { isSelected } returns true
+            every { sdkAccount } returns Account.new(uuid)
+        }
         val accounts = mockk<AccountDataSource> {
             every { allAccounts } returns MutableStateFlow(listOf(visible))
             coEvery { confirmSelection(visible) } returns null
@@ -64,7 +68,7 @@ class FixEphemeralAddressUseCaseTest {
             provider, mockk(), accounts, mockk(), mockk(),
             AppAccessSession().apply { unlock() }, WalletWriteAccess(), mockk(),
         )
-        assertEquals(DiscoveryOutcome.Superseded, recovery("synthetic-address", "discover"))
+        assertEquals(DiscoveryOutcome.Unconfirmed, recovery("synthetic-address", "discover"))
         coVerify(exactly = 0) { provider.getSynchronizer() }
     }
 

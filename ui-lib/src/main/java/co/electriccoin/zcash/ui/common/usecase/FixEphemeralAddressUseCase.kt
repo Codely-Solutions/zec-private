@@ -41,22 +41,25 @@ class FixEphemeralAddressUseCase(
         val account = selectedAccount() ?: return DiscoveryOutcome.Unconfirmed
         val grant = appAccessSession.grant.value
         val token = walletWriteAccess.token()
-        val confirmedSelection = if (appAccessSession.permits(grant) && walletWriteAccess.permits(token)) {
-            accountDataSource.confirmSelection(account)
+        val ownsCurrentWallet = {
+            appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
+        }
+        val confirmedSelection = if (ownsCurrentWallet()) {
+            withTimeoutOrNull(PRE_SCAN_TIMEOUT) {
+                runCatchingRecoverable { accountDataSource.confirmSelection(account) }.getOrNull()
+            }
         } else {
             null
         }
-        val canRecover = {
-            appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
-                confirmedSelection?.canOperate() == true &&
-                selectedAccount()?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid
-        }
+        val canRecover = { ownsCurrentWallet() && confirmedSelection?.canOperate() == true }
         val confirmed = canRecover() && runCatchingRecoverable {
             recover(address, sourceEntryId, account, canRecover)
         }.getOrDefault(false)
+        val selectionChanged = confirmedSelection?.isSameSelection?.invoke() == false
         return when {
-            !canRecover() -> DiscoveryOutcome.Superseded
-            !confirmed -> DiscoveryOutcome.Unconfirmed
+            !ownsCurrentWallet() || selectionChanged -> DiscoveryOutcome.Superseded
+            !confirmed || !canRecover() -> DiscoveryOutcome.Unconfirmed
             else -> DiscoveryOutcome.Confirmed(
                 isCurrent = canRecover,
                 ownership = combine(

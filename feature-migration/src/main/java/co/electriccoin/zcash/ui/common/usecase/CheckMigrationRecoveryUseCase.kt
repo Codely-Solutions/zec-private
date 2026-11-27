@@ -36,7 +36,7 @@ import kotlin.time.TimeSource
 
 /**
  * Single source of truth for migration re-entry routing AND for starting/reviving migration
- * execution on app-lifecycle events — MainActivity's onStart() and RootNavGraph's
+ * execution on app-lifecycle events — MainActivity's onResume() and RootNavGraph's
  * secretState-driven redirect both delegate here instead of calling the SDK checks directly, so
  * the two never drift out of sync with each other or with this ordering. Cheap and idempotent
  * (NavigationRouter dedupes identical commands; the driver-start/worker-revival block below is

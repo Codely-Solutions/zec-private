@@ -158,15 +158,12 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         Twig.debug { "Activity state: Start" }
         authenticationViewModel.runAuthenticationRequiredCheck()
-        checkMigrationRecoveryOnStart()
         super.onStart()
     }
 
-    // RootNavGraph's secretState-driven redirect only re-fires when secretState changes
-    // identity, so it won't catch "a transfer became overdue while backgrounded, already
-    // unlocked." onStart() fires on every foreground transition and catches that case —
-    // isSyncBlocked() has already stopped sync regardless, this is routing only.
-    private fun checkMigrationRecoveryOnStart() {
+    override fun onResume() {
+        super.onResume()
+        // Recover committed work even when Android resumes the already-started activity.
         lifecycleScope.launch { migrationAppHooks.checkRecovery() }
     }
 
