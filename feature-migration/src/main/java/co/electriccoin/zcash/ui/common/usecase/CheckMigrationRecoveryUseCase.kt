@@ -109,18 +109,24 @@ class CheckMigrationRecoveryUseCase(
     }
 
     private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
+        val generation = MigrationScheduler.walletWakeVersion()
         if (persistableWalletProvider.getPersistableWallet() == null) return
         val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
         val initialOwner = accounts.firstOrNull { it.isSelected }
-        val reconciled = reviveAccountWorkers(accounts)
-        if (accounts.isNotEmpty() && !resetPending.value) reconcileRemovalNotices(accounts)
-        val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount)
-        val ownerKey = owner?.sdkAccount?.accountUuid?.toStorageKeyId()
-        if (ownerKey != null && !resetPending.value) {
-            recoverBroadcast(ownerKey, requestProgress)
-            if (reconciled && !resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
+        val reconciled = reviveAccountWorkers(accounts, generation)
+        if (ownsRecovery(generation)) {
+            if (accounts.isNotEmpty()) reconcileRemovalNotices(accounts, generation)
+            val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount)
+            val ownerKey = owner?.sdkAccount?.accountUuid?.toStorageKeyId()
+            if (ownerKey != null && ownsRecovery(generation)) {
+                recoverBroadcast(ownerKey, generation, requestProgress)
+                if (reconciled && ownsRecovery(generation)) lastRunMark = TimeSource.Monotonic.markNow()
+            }
         }
     }
+
+    private fun ownsRecovery(generation: Long): Boolean =
+        !resetPending.value && MigrationScheduler.walletWakeVersion() == generation
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>): T? =
@@ -128,34 +134,35 @@ class CheckMigrationRecoveryUseCase(
             if (pending) flowOf(null) else values.filterNotNull()
         }.first()
 
-    private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>) = withContext(Dispatchers.IO) {
-        val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
-        for (key in MigrationWorkerHeartbeat.accountKeyIds(context)) {
-            MigrationAccountRetirement.admit(key) {
-                if (!resetPending.value && MigrationWorkerHeartbeat.removalPending(context, key)) {
-                    if (key !in accountKeys) {
-                        migrationNotifier.cancel(key)
-                        migrationNotifier.cancelStepDue(key)
-                        cancelRemovedWake(key)
+    private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>, generation: Long) =
+        withContext(Dispatchers.IO) {
+            val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
+            for (key in MigrationWorkerHeartbeat.accountKeyIds(context)) {
+                MigrationAccountRetirement.admit(key) {
+                    if (ownsRecovery(generation) && MigrationWorkerHeartbeat.removalPending(context, key)) {
+                        if (key !in accountKeys) {
+                            migrationNotifier.cancel(key)
+                            migrationNotifier.cancelStepDue(key)
+                            cancelRemovedWake(key)
+                        }
+                        MigrationWorkerHeartbeat.clearRemovalPending(context, key)
                     }
-                    MigrationWorkerHeartbeat.clearRemovalPending(context, key)
                 }
             }
         }
-    }
 
     @Suppress("TooGenericExceptionCaught") // A transient failure stays with the owner that could not be restored.
-    private suspend fun reviveAccountWorkers(accounts: List<WalletAccount>): Boolean {
+    private suspend fun reviveAccountWorkers(accounts: List<WalletAccount>, generation: Long): Boolean {
         // The process-scoped driver accelerates committed migrations. WorkManager keeps the same work
         // alive after process death, reboot or an update. Recover both for every spendable account.
         var reconciled = true
         for (account in accounts.filter { it.isSpendable }) {
-            if (resetPending.value) return false
             try {
                 val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
-                val wakeVersion = MigrationScheduler.wakeVersion(accountKey)
+                val wakeVersion = MigrationScheduler.wakeVersion(accountKey, generation)
+                    ?.takeUnless { resetPending.value } ?: return false
                 val sdk = getOrchardMigrationSdk(accountKey)
-                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
+                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && ownsRecovery(generation)) {
                     migrationLiveDriver.startIfNotRunning(accountKey)
                     reviveScheduledWorker(accountKey, wakeVersion)
                 }
@@ -181,9 +188,10 @@ class CheckMigrationRecoveryUseCase(
 
     private suspend fun recoverBroadcast(
         ownerKey: String,
+        generation: Long,
         requestProgress: (String) -> Unit,
     ) {
-        if (!resetPending.value && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
+        if (ownsRecovery(generation) && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
             val sdk = getOrchardMigrationSdk(ownerKey) ?: return
             // The flag only records THAT a background attempt once failed on Tor, not what the
             // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -206,13 +214,13 @@ class CheckMigrationRecoveryUseCase(
             if (nextTransfer?.action == MigrationNextAction.BROADCAST) {
                 // The legacy flag has no plan identity. Surface current Progress without attempting a payment.
                 migrationLog("MigrationRecovery: pending background Tor failure — offering Progress.")
-                if (!resetPending.value) requestProgress(ownerKey)
+                if (ownsRecovery(generation)) requestProgress(ownerKey)
             } else {
                 migrationLog(
                     "MigrationRecovery: pending background Tor failure flag is stale " +
                         "(next transfer action=${nextTransfer?.action}) — clearing."
                 )
-                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
+                if (ownsRecovery(generation)) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
             }
         }
     }

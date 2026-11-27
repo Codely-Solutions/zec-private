@@ -377,7 +377,6 @@ class MigrationNotifier(
                 .setContentText(context.getString(R.string.migration_notification_completeText))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(mainActivityIntent(accountKeyId))
-                .setOnlyAlertOnce(true)
                 .setAutoCancel(true)
                 .build()
 

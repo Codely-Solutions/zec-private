@@ -166,6 +166,9 @@ class MigrationScheduler(
 
     suspend fun cancelWalletWorkAndWait() {
         val cancellation = synchronized(wakeVersions) {
+            walletWakeVersion = ++wakeClock
+            wakeVersions.clear()
+            completedPlans.clear()
             WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
         }
         cancellation.result.await()
@@ -185,9 +188,16 @@ class MigrationScheduler(
         // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
         private val wakeVersions = mutableMapOf<String, Long>()
         private val completedPlans = mutableSetOf<String>()
+        private var wakeClock = 0L
+        private var walletWakeVersion = 0L
+
+        internal fun walletWakeVersion(): Long = synchronized(wakeVersions) { walletWakeVersion }
 
         internal fun wakeVersion(accountKeyId: String): Long =
-            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: 0L }
+            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: walletWakeVersion }
+
+        internal fun wakeVersion(accountKeyId: String, generation: Long): Long? =
+            synchronized(wakeVersions) { if (walletWakeVersion == generation) wakeVersion(accountKeyId) else null }
 
         internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
             synchronized(wakeVersions) {
@@ -234,7 +244,7 @@ class MigrationScheduler(
         }
 
         private fun advanceWakeVersion(accountKeyId: String): Long =
-            (wakeVersion(accountKeyId) + 1).also { wakeVersions[accountKeyId] = it }
+            (++wakeClock).also { wakeVersions[accountKeyId] = it }
 
         /**
          * How long past the expected worker run the fallback alarm waits before concluding the
