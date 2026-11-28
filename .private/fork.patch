@@ -7008,7 +7008,7 @@ index 7c9893c8a..ebeb5198b 100644
 +            .onFailure { if (it is CancellationException) throw it }
 +            .getOrNull()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
-index c91da0f38..52b8a5c05 100644
+index c91da0f38..62c4db5c3 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCase.kt
 @@ -5 +4,0 @@ import co.electriccoin.zcash.migration.migrationLog
@@ -7025,7 +7025,8 @@ index c91da0f38..52b8a5c05 100644
 @@ -22,0 +22,2 @@ class OnMigrationSyncCompletedUseCase(
 +    private val drive: MigrationDriveOnce,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -24,0 +26,9 @@ class OnMigrationSyncCompletedUseCase(
+@@ -25 +26,10 @@ class OnMigrationSyncCompletedUseCase(
+-        val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
 +        val wallet = walletWriteAccess.token()
 +        drive.withIdleDrive {
 +            walletWriteAccess.write(wallet) {
@@ -7035,6 +7036,7 @@ index c91da0f38..52b8a5c05 100644
 +    }
 +
 +    private suspend fun reconcileAfterSync(accountKeyId: String) {
++        val sdk = getOrchardMigrationSdk.fromHydratedAccounts(accountKeyId) ?: return
 @@ -28 +38 @@ class OnMigrationSyncCompletedUseCase(
 -        migrationLog("ForegroundHook: SYNCED — proved=$proved, invalidated=$invalidated (account=$accountKeyId)")
 +        migrationLog("ForegroundHook: SYNCED — proved=$proved, invalidated=$invalidated")
@@ -13963,7 +13965,7 @@ index 420a39203..ce19709b1 100644
 -                    coEvery { this@mockk() } returns sdk
 +                    coEvery { this@mockk("account-1") } returns sdk
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCaseTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCaseTest.kt
-index b1ea58ea9..b6d126221 100644
+index b1ea58ea9..da44134dd 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCaseTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/OnMigrationSyncCompletedUseCaseTest.kt
 @@ -2,0 +3,4 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -13971,42 +13973,50 @@ index b1ea58ea9..b6d126221 100644
 +import androidx.work.WorkInfo
 +import androidx.work.WorkManager
 +import cash.z.ecc.android.sdk.MigrationState
-@@ -4 +7,0 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
+@@ -4 +8,2 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 -import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
-@@ -5,0 +9 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -5,0 +11,2 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.work.MigrationDriveOnce
-@@ -6,0 +11 @@ import co.electriccoin.zcash.work.MigrationScheduler
+@@ -6,0 +14 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import com.google.common.util.concurrent.Futures
-@@ -9,0 +15 @@ import io.mockk.coVerifyOrder
+@@ -9,0 +18 @@ import io.mockk.coVerifyOrder
 +import io.mockk.every
-@@ -10,0 +17,2 @@ import io.mockk.mockk
+@@ -10,0 +20,2 @@ import io.mockk.mockk
 +import io.mockk.mockkObject
 +import io.mockk.unmockkObject
-@@ -11,0 +20,4 @@ import io.mockk.verify
+@@ -11,0 +23,5 @@ import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.runCurrent
-@@ -12,0 +25,2 @@ import kotlinx.coroutines.test.runTest
+@@ -12,0 +29,2 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import java.io.IOException
-@@ -13,0 +28,2 @@ import kotlin.test.Test
+@@ -13,0 +32,3 @@ import kotlin.test.Test
 +import kotlin.test.assertFailsWith
++import kotlin.test.assertTrue
 +import kotlin.time.Duration.Companion.seconds
-@@ -18 +33,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -18 +38,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -        lastNetworkActivity: LastNetworkActivityStorageProvider = mockk(relaxed = true),
-@@ -20,0 +36,2 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -20,0 +41,2 @@ class OnMigrationSyncCompletedUseCaseTest {
 +        context: Context = mockk(relaxed = true),
 +        drive: MigrationDriveOnce = migrationDrive(),
-@@ -26 +42,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -24 +46 @@ class OnMigrationSyncCompletedUseCaseTest {
+-                coEvery { this@mockk(any()) } returns sdk
++                coEvery { fromHydratedAccounts(any()) } returns sdk
+@@ -26 +47,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -        lastNetworkActivity = lastNetworkActivity,
-@@ -29 +45,2 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -29 +50,2 @@ class OnMigrationSyncCompletedUseCaseTest {
 -        context = mockk(relaxed = true),
 +        context = context,
 +        drive = drive,
-@@ -31,0 +49 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -31,0 +54 @@ class OnMigrationSyncCompletedUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
-@@ -33 +51,31 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -33 +56,59 @@ class OnMigrationSyncCompletedUseCaseTest {
 -    fun happyPathCallsFinalizeThenReconcileThenStamp() =
 +    fun aSyncCannotReconcileWhileTheDriverOwnsTheSdkTransfer() = runTest {
 +        val drive = migrationDrive()
@@ -14026,6 +14036,34 @@ index b1ea58ea9..b6d126221 100644
 +        coVerify(exactly = 1) { sdk.reconcileInvalidations() }
 +    }
 +
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun withdrawnAccountSnapshotDoesNotBlockTheWalletReset() = runTest {
++        val accounts = mockk<AccountDataSource> {
++            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(null)
++            coEvery { getAllAccounts() } coAnswers { awaitCancellation() }
++        }
++        val access = WalletWriteAccess()
++        val resolver = GetOrchardMigrationSdkUseCase(mockk(), mockk(), mockk(), accounts, mockk())
++        val reconcile = OnMigrationSyncCompletedUseCase(
++            getOrchardMigrationSdk = resolver,
++            migrationNotifier = mockk(),
++            migrationScheduler = mockk(),
++            context = mockk(),
++            drive = migrationDrive(),
++            walletWriteAccess = access,
++        )
++
++        val oldSync = launch { reconcile("original-account") }
++        runCurrent()
++        val reset = launch { access.beginReset() }
++        runCurrent()
++
++        assertTrue(oldSync.isCompleted)
++        assertTrue(reset.isCompleted)
++        coVerify(exactly = 0) { accounts.getAllAccounts() }
++    }
++
 +    private fun migrationDrive() = MigrationDriveOnce(
 +        applicationContext = mockk(),
 +        migrationNotifier = mockk(),
@@ -14039,20 +14077,20 @@ index b1ea58ea9..b6d126221 100644
 +
 +    @Test
 +    fun finalizesProofBeforeReconciling() =
-@@ -40 +87,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -40 +120,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
-@@ -46 +92,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -46 +125,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -                lastNetworkActivity = lastNetworkActivity,
-@@ -54 +99,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -54 +132,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -                lastNetworkActivity.stampNow()
-@@ -61 +106 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -61 +139 @@ class OnMigrationSyncCompletedUseCaseTest {
 -    fun invalidationPathNotifiesCancelsBothLanesAndStillStamps() =
 +    fun invalidationPathNotifiesAndCancelsBothLanes() =
-@@ -68 +112,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -68 +145,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -            val lastNetworkActivity = mockk<LastNetworkActivityStorageProvider>(relaxed = true)
-@@ -74 +117,0 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -74 +150,0 @@ class OnMigrationSyncCompletedUseCaseTest {
 -                lastNetworkActivity = lastNetworkActivity,
-@@ -81 +124,33 @@ class OnMigrationSyncCompletedUseCaseTest {
+@@ -81 +157,33 @@ class OnMigrationSyncCompletedUseCaseTest {
 -            coVerify(exactly = 1) { lastNetworkActivity.stampNow() }
 +        }
 +

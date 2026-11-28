@@ -5,7 +5,10 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationScheduler
 import com.google.common.util.concurrent.Futures
@@ -19,6 +22,7 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -26,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class OnMigrationSyncCompletedUseCaseTest {
@@ -38,7 +43,7 @@ class OnMigrationSyncCompletedUseCaseTest {
     ) = OnMigrationSyncCompletedUseCase(
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk(any()) } returns sdk
+                coEvery { fromHydratedAccounts(any()) } returns sdk
             },
         migrationNotifier = migrationNotifier,
         migrationScheduler = migrationScheduler,
@@ -64,6 +69,34 @@ class OnMigrationSyncCompletedUseCaseTest {
         reconcile.join()
         coVerify(exactly = 1) { sdk.finalizeReadyTransfers() }
         coVerify(exactly = 1) { sdk.reconcileInvalidations() }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun withdrawnAccountSnapshotDoesNotBlockTheWalletReset() = runTest {
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(null)
+            coEvery { getAllAccounts() } coAnswers { awaitCancellation() }
+        }
+        val access = WalletWriteAccess()
+        val resolver = GetOrchardMigrationSdkUseCase(mockk(), mockk(), mockk(), accounts, mockk())
+        val reconcile = OnMigrationSyncCompletedUseCase(
+            getOrchardMigrationSdk = resolver,
+            migrationNotifier = mockk(),
+            migrationScheduler = mockk(),
+            context = mockk(),
+            drive = migrationDrive(),
+            walletWriteAccess = access,
+        )
+
+        val oldSync = launch { reconcile("original-account") }
+        runCurrent()
+        val reset = launch { access.beginReset() }
+        runCurrent()
+
+        assertTrue(oldSync.isCompleted)
+        assertTrue(reset.isCompleted)
+        coVerify(exactly = 0) { accounts.getAllAccounts() }
     }
 
     private fun migrationDrive() = MigrationDriveOnce(

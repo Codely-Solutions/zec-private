@@ -32,7 +32,7 @@ class OnMigrationSyncCompletedUseCase(
     }
 
     private suspend fun reconcileAfterSync(accountKeyId: String) {
-        val sdk = getOrchardMigrationSdk(accountKeyId) ?: return
+        val sdk = getOrchardMigrationSdk.fromHydratedAccounts(accountKeyId) ?: return
         val proved = sdk.finalizeReadyTransfers()
         val invalidated = sdk.reconcileInvalidations()
         migrationLog("ForegroundHook: SYNCED — proved=$proved, invalidated=$invalidated")
