@@ -65,11 +65,24 @@ class QuoteRecoveryTests(unittest.TestCase):
             'attestation': 'already has wallet or publication evidence',
             'quote': 'does not match the original release APKs',
             'repeated-dispatch': 'fresh dispatch',
+            'funded-success': None, 'funded-failure': None, 'funded-signing': None, 'funded-prepared': None,
+            'success-without-funded': 'requires qualified funded reuse',
+            'funded-downgrade': 'retain the original funded evidence and fixture',
+            'funded-other-fixture': 'retain the original funded evidence and fixture',
+            'funded-linked': 'cannot use a pre-claim recovery reservation',
+            'funded-signing-reservation': 'protected funding reservation',
+            'funded-prepared-wrong-upload': 'one successful producer upload',
         }
         for scenario, error in cases.items():
             first, second, artifacts = fixture()
             claims = []
-            if scenario in ('claim', 'repeated-link'):
+            funded = scenario.startswith('funded-')
+            signing = scenario.startswith('funded-signing')
+            run['conclusion'] = 'failure' if scenario == 'funded-failure' or not (
+                funded or scenario == 'success-without-funded') else 'success'
+            if run['conclusion'] == 'success':
+                second[3] = job('publish', 2, 'skipped')
+            if scenario in ('claim', 'repeated-link', 'funded-signing-reservation'):
                 claims = [dict(ref='refs/heads/testnet-claims/release-42-preclaim-recovery')]
             elif scenario == 'linked':
                 claims = [dict(ref='refs/heads/testnet-claims/release-42')]
@@ -89,6 +102,10 @@ class QuoteRecoveryTests(unittest.TestCase):
                 artifacts[0]['expired'] = True
             elif scenario == 'attestation':
                 artifacts.append(dict(name='release-attestation-1'))
+            elif scenario.startswith('funded-prepared'):
+                artifacts.append(dict(artifacts[0], id=14, name='core-direct-candidate'))
+                if scenario == 'funded-prepared':
+                    second.append(job('hosted_core / prepare-direct', 2, steps=[upload]))
             metadata = Mock()
             responses = {'/actions/runs/7': run, '/git/matching-refs/heads/testnet-claims/release-42': claims}
             responses.update({f'/actions/artifacts/{row["id"]}': row for row in artifacts if 'id' in row})
@@ -102,11 +119,18 @@ class QuoteRecoveryTests(unittest.TestCase):
                          quote_controller_sha=OLD, producer=proof[2], production_artifact=proof[0])
             if scenario == 'quote':
                 quote['artifact_run_id'] = 17
-            preclaim = '8' if scenario in ('linked', 'repeated-link') else ''
+            preclaim = '8' if scenario in ('linked', 'repeated-link', 'funded-linked') else ''
             quote_run = '9' if scenario == 'quote-override' else ''
+            evidence = dict(origin={'release': 'v3.19.0-private.33'}, fixture={'version_code': 41}) if funded else None
+            current = evidence
+            if scenario == 'funded-downgrade':
+                current = None
+            elif scenario == 'funded-other-fixture':
+                current = dict(evidence, fixture={'version_code': 40})
             with self.subTest(scenario=scenario), \
-                    patch.dict(os.environ, GITHUB_RUN_ATTEMPT='2' if scenario == 'repeated-dispatch' else '1'), \
+                    patch.dict(os.environ, GITHUB_RUN_ATTEMPT='2' if signing or scenario == 'repeated-dispatch' else '1'), \
                     patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta') as check, \
+                    patch('funded_reuse.select', side_effect=[evidence, current]), \
                     patch('release_inputs.version_code', return_value=42), \
                     patch('acceptance_policy.input_fingerprint', return_value='fixture-fingerprint'), \
                     patch('acceptance_policy.validate_quotes') as validate, \
@@ -114,17 +138,24 @@ class QuoteRecoveryTests(unittest.TestCase):
                     patch('quote_recovery.read_quote_archive', return_value=quote):
                 if error:
                     with self.assertRaisesRegex(ValueError, error):
-                        resolve(Path('.'), SOURCE, MAIN, '7', metadata, quote_run, preclaim_run=preclaim)
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata, quote_run,
+                                preclaim_run=preclaim, signing=signing)
                 else:
-                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, preclaim_run=preclaim)
-                    expected = dict(original_controller=OLD, run_missing_core='true', quote_controller=OLD,
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, preclaim_run=preclaim, signing=signing)
+                    expected = dict(original_controller=OLD, quote_controller=OLD,
                                     quote_run=7, production_id='10', core_id='11', quote_id='12', quote_receipt_id='13')
+                    expected['reuse_funded' if funded else 'run_missing_core'] = 'true'
+                    if scenario == 'funded-prepared':
+                        expected['prepared_id'] = '14'
                     if preclaim:
                         expected['previous_reservation'] = 'd' * 40
                         reservation.assert_called_once_with(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
                     self.assertEqual(result, expected)
-                    check.assert_called_once_with(Path('.'), SOURCE, OLD, MAIN)
-                    validate.assert_called_once_with(quote, 'fixture-fingerprint', use_tor=False)
+                    check.assert_called_once_with(Path('.'), SOURCE, OLD, MAIN, **({'funded': True} if funded else {}))
+                    if signing:
+                        validate.assert_not_called()
+                    else:
+                        validate.assert_called_once_with(quote, 'fixture-fingerprint', use_tor=False)
 
     def test_market_result_requires_visible_reference_or_warning(self):
         self.assertIsNone(market_reference_state({'quote details', 'market reference'}))

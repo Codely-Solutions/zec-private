@@ -100,14 +100,23 @@ def verify_delta(root, source, original, controller, *, funded=False):
 def rerun_before_wallet(root, source, controller, run, latest_jobs, metadata, *, signing, preclaim_run=''):
     """Start one fresh wallet execution after build reruns with no previous wallet entry."""
     from acceptance_policy import input_fingerprint, validate_quotes
+    from funded_reuse import select
     from hosted_claim import PREFIX
     from hosted_release import artifact
     from release_inputs import version_code
 
     original = run['head_sha']
-    verify_delta(root, source, original, controller)
     require(signing or os.environ['GITHUB_RUN_ATTEMPT'] == '1',
             'Wallet recovery must start on a fresh dispatch')
+    original_funded = select(source, original, metadata, root=root)
+    if original_funded is not None:
+        require(not preclaim_run, 'Funded reuse cannot use a pre-claim recovery reservation')
+        verify_delta(root, source, original, controller, funded=True)
+        require(select(source, controller, metadata, root=root) == original_funded,
+                'Build rerun recovery must retain the original funded evidence and fixture')
+    else:
+        require(run['conclusion'] == 'failure', 'Successful build rerun requires qualified funded reuse')
+        verify_delta(root, source, original, controller)
     run_id = str(run['id'])
     jobs_by_attempt = {}
     for number in range(1, run['run_attempt'] + 1):
@@ -133,12 +142,12 @@ def rerun_before_wallet(root, source, controller, run, latest_jobs, metadata, *,
     require(not any(row['name'] in ('hosted-core-receipt', 'hosted-upgrade-receipt')
                     or row['name'].startswith('release-attestation-') for row in artifacts),
             'Original attempt already has wallet or publication evidence')
-    outputs = dict(original_controller=original, run_missing_core='true',
-                   quote_controller=original, quote_run=run['id'])
+    outputs = dict(original_controller=original, quote_controller=original, quote_run=run['id'])
+    outputs['reuse_funded' if original_funded is not None else 'run_missing_core'] = 'true'
     if preclaim_run:
         outputs['previous_reservation'] = unused_reservation(root, source, controller, run_id, original,
                                                              preclaim_run, metadata)
-    if not signing:
+    if not signing or original_funded is not None:
         ref = PREFIX + 'release-' + str(version_code(root, source))
         reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
         forbidden = (ref + '-preclaim-recovery',) if preclaim_run else (ref, ref + '-preclaim-recovery')
@@ -153,6 +162,14 @@ def rerun_before_wallet(root, source, controller, run, latest_jobs, metadata, *,
         verify_rerun_upload(row, (jobs.get(job_name) for jobs in jobs_by_attempt.values()))
         archives[key] = artifact(metadata, row['id'], name, run_id, original)
         outputs[key] = str(archives[key]['id'])
+    if original_funded is not None:
+        prepared = [row for row in artifacts if row['name'] == 'core-direct-candidate']
+        require(len(prepared) <= 1, 'Expected at most one original direct preparation artifact')
+        if prepared and prepared[0]['expired'] is False:
+            row = prepared[0]
+            verify_rerun_upload(row, (jobs.get('build / hosted_core / prepare-direct')
+                                      for jobs in jobs_by_attempt.values()))
+            outputs['prepared_id'] = str(artifact(metadata, row['id'], row['name'], run_id, original)['id'])
     if not signing:
         quote = read_quote_archive(metadata, archives['quote_receipt_id'])
         validate_quotes(quote, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=False)
@@ -217,7 +234,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
               if job['run_id'] == int(run_id) and job['head_sha'] == original}
     wallet = states.get('build / hosted_core / wallet')
     if (not same and run['run_attempt'] > 1
-            and run['conclusion'] == 'failure' and wallet in (None, 'skipped')):
+            and run['conclusion'] in ('failure', 'success') and wallet in (None, 'skipped')):
         require(not quote_run, 'Build rerun recovery uses the original passing quote receipt')
         return rerun_before_wallet(root, source, controller, run, jobs, metadata, signing=signing,
                                    preclaim_run=preclaim_run)
