@@ -123600,13 +123600,14 @@ index 000000000..83383e97a
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt
 new file mode 100644
-index 000000000..9b04cd1d3
+index 000000000..2e6c6140d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,246 @@
 +package co.electriccoin.zcash.ui.screen.transactionhistory
 +
 +import androidx.lifecycle.ViewModelStore
++import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.model.TransactionId
 +import cash.z.ecc.android.sdk.model.TransactionOverview
 +import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -123647,9 +123648,12 @@ index 000000000..9b04cd1d3
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.Job
 +import kotlinx.coroutines.flow.filterIsInstance
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.job
++import kotlinx.coroutines.joinAll
 +import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runTest
@@ -123670,6 +123674,7 @@ index 000000000..9b04cd1d3
 +class ActivityHistoryVMTest {
 +    private val dispatcher = StandardTestDispatcher()
 +    private val store = ViewModelStore()
++    private val viewModelJobs = mutableListOf<Job>()
 +    private val router = mockk<NavigationRouter>(relaxed = true)
 +    private val updateMetadata = mockk<UpdateSwapActivityMetadataUseCase>(relaxed = true)
 +
@@ -123681,10 +123686,14 @@ index 000000000..9b04cd1d3
 +    }
 +
 +    @AfterTest
-+    fun tearDown() {
-+        store.clear()
-+        unmockkObject(FiatCurrency.USD)
-+        Dispatchers.resetMain()
++    fun tearDown() = runTest(dispatcher) {
++        try {
++            store.clear()
++            viewModelJobs.joinAll()
++        } finally {
++            unmockkObject(FiatCurrency.USD)
++            Dispatchers.resetMain()
++        }
 +    }
 +
 +    @Test
@@ -123831,7 +123840,8 @@ index 000000000..9b04cd1d3
 +            restoreTimestampDataSource = restoreTimestamp,
 +            updateSwapActivityMetadata = updateMetadata
 +        )
-+        store.put("history", vm)
++        viewModelJobs += vm.viewModelScope.coroutineContext.job
++        store.put("history-${viewModelJobs.size}", vm)
 +        // The VM explicitly maps on Dispatchers.Default. Bound that real dispatcher without
 +        // advancing a virtual timeout ahead of its work.
 +        val state = withContext(Dispatchers.Default) {

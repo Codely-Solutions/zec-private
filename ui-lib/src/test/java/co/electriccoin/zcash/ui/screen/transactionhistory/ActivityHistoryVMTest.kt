@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.transactionhistory
 
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -41,9 +42,12 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -64,6 +68,7 @@ import kotlin.test.assertIs
 class ActivityHistoryVMTest {
     private val dispatcher = StandardTestDispatcher()
     private val store = ViewModelStore()
+    private val viewModelJobs = mutableListOf<Job>()
     private val router = mockk<NavigationRouter>(relaxed = true)
     private val updateMetadata = mockk<UpdateSwapActivityMetadataUseCase>(relaxed = true)
 
@@ -75,10 +80,14 @@ class ActivityHistoryVMTest {
     }
 
     @AfterTest
-    fun tearDown() {
-        store.clear()
-        unmockkObject(FiatCurrency.USD)
-        Dispatchers.resetMain()
+    fun tearDown() = runTest(dispatcher) {
+        try {
+            store.clear()
+            viewModelJobs.joinAll()
+        } finally {
+            unmockkObject(FiatCurrency.USD)
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
@@ -225,7 +234,8 @@ class ActivityHistoryVMTest {
             restoreTimestampDataSource = restoreTimestamp,
             updateSwapActivityMetadata = updateMetadata
         )
-        store.put("history", vm)
+        viewModelJobs += vm.viewModelScope.coroutineContext.job
+        store.put("history-${viewModelJobs.size}", vm)
         // The VM explicitly maps on Dispatchers.Default. Bound that real dispatcher without
         // advancing a virtual timeout ahead of its work.
         val state = withContext(Dispatchers.Default) {

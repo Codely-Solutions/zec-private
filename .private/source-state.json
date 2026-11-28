@@ -3118,7 +3118,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt": "1e0b2c369397759ef027f7ef66e996b2c7b165e22dff3ee3cc6b7811bcefc576",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt": "00f123096d7a2982d9f374e38a4cd3b733df19ab9241c78b497dad642d31c358",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt": "b6044bb2cfe81e7eb70052f639f15590aca9ef4e7413bfc343a89b7bdb29c6ef",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt": "3fe1554adaad0dd8e1af5990851fa4035e8447a87ee772a080df04cd8ae0ed7f",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt": "39fe5065bbab7022c4529af3327fed60a5eacf9fea98482bc5a2ad7c2d37a85b",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/view/TransactionNoteViewTest.kt": "c556192d44f709b9b50add1897be54b08b084050f7dbe6bd18e96b0d6175da4d",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/viewmodel/NotePersistenceBoundaryTest.kt": "0e8071908ead3d71ce9a5384b263f9c26b4b0fa3522a8440fa14c9082266135e",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/viewmodel/TransactionNoteViewModelTest.kt": "0eeab4d07bb98e5e28feffd9a5c6aded2e78dd99ee02b3f3b3588c31816e79fa",
