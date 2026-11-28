@@ -10,6 +10,22 @@ import gradle_resolution as resolution
 ROOT=Path(__file__).resolve().parents[1]
 
 class ToolchainPolicyTests(unittest.TestCase):
+    def test_release_staging_keeps_native_runtime_pins_and_strict_exact_scope(self):
+        release = (ROOT/'.private/release_checks.sh').read_text()
+        stage = (ROOT/'.private/stage_robolectric_release.sh').read_text()
+        resolver = (ROOT/'.private/robolectric-ci.gradle').read_text()
+        verification = resolution.ET.parse(ROOT/'gradle/verification-metadata.xml')
+        component = verification.find(".//{*}component[@group='org.robolectric']"
+                                      "[@name='nativeruntime-dist-compat'][@version='1.0.19']")
+        self.assertEqual(len(component.findall('.//{*}sha256')), 2)
+        for digest in component.findall('.//{*}sha256'):
+            self.assertIn(digest.get('value'), stage)
+        self.assertLess(release.index('stage_robolectric_release.sh'), release.index('./gradlew'))
+        self.assertIn('--dependency-verification strict', release)
+        self.assertIn('repositories.exclusiveContent', resolver)
+        self.assertIn("includeVersion('org.robolectric', 'nativeruntime-dist-compat', '1.0.19')", resolver)
+        self.assertIn("systemProperty 'robolectric.offline', 'true'", resolver)
+
     def test_proposals_exclude_majors_and_runtime_dependency_sweep(self):
         config=(ROOT/'.github/dependabot.yml').read_text()
         self.assertIn('dependency-name: gradle-wrapper',config)

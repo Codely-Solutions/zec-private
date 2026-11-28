@@ -1,7 +1,38 @@
-// Maven Central canonical endpoint; avoid repo1 rate limiting in the test JVM.
+import org.gradle.api.artifacts.verification.DependencyVerificationMode
+
+def staged = System.getenv('ZEC_RELEASE_ROBOLECTRIC_DIR')
+if (staged) {
+    if (gradle.startParameter.dependencyVerificationMode != DependencyVerificationMode.STRICT ||
+        !gradle.startParameter.writeDependencyVerifications.isEmpty()) {
+        throw new GradleException('Staged Robolectric release dependencies require strict verification')
+    }
+    gradle.settingsEvaluated { settings ->
+        def repositories = settings.dependencyResolutionManagement.repositories
+        repositories.exclusiveContent {
+            forRepository {
+                repositories.maven {
+                    name = 'verifiedRobolectricReleaseRuntime'
+                    url = new File(staged, 'maven').toURI()
+                    metadataSources { mavenPom() }
+                }
+            }
+            filter { includeVersion('org.robolectric', 'nativeruntime-dist-compat', '1.0.19') }
+        }
+    }
+}
+
 allprojects {
     tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
         jvmArgs '-XX:+ExitOnOutOfMemoryError', '-XX:-HeapDumpOnOutOfMemoryError'
-        systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+        if (staged) {
+            def sdkDirectory = new File(staged, 'sdk')
+            inputs.files(project.fileTree(sdkDirectory).matching { include '*.jar' })
+                .withPropertyName('verifiedRobolectricReleaseSandboxes')
+                .withNormalizer(org.gradle.api.tasks.ClasspathNormalizer)
+            systemProperty 'robolectric.offline', 'true'
+            systemProperty 'robolectric.dependency.dir', sdkDirectory.absolutePath
+        } else {
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+        }
     }
 }
