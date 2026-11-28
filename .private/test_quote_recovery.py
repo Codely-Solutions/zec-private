@@ -814,6 +814,23 @@ class QuoteRecoveryTests(unittest.TestCase):
                     delta.assert_called_once_with(Path('.'), SOURCE, OLD, MAIN, funded=True, preclaim_stage=None)
                     self.verify_receipts.assert_called_once()
 
+    def test_cancelled_initial_build_keeps_existing_funded_recovery_after_an_unsigned_rerun(self):
+        original = self.recovery_run(7, OLD, dict(BUILD_JOBS, unsigned='cancelled', hosted_core='skipped'),
+                                     (), conclusion='cancelled')
+        later = self.rerun(original, dict(BUILD_JOBS, publish='skipped', **{QUOTE: 'success'}))
+        later[0]['conclusion'] = 'success'
+        _, _, artifacts = self.recovery_run(7, OLD, {}, (*BUILD_ARTIFACTS, 'hosted-quote-receipt'))
+        for artifact in artifacts:
+            artifact['created_at'] = '2026-11-22T08:10:00Z'
+        metadata = self.recovery_metadata(original, (*later[:2], artifacts), refs=[])
+        with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
+                patch('release_inputs.version_code', return_value=42), \
+                patch('funded_reuse.select', return_value={'core': {}}) as select:
+            result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+        self.assertEqual(result['reuse_funded'], 'true')
+        self.assertEqual(result['quote_receipt_id'], '74')
+        select.assert_called_once_with(SOURCE, MAIN, metadata, root=Path('.'))
+
     def test_quote_archive_must_be_uploaded_by_exact_eligible_execution(self):
         quote_controller = 'd' * 40
         build = self.recovery_run(7, OLD, BUILD_JOBS, BUILD_ARTIFACTS)

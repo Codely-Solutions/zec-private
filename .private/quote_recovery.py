@@ -345,7 +345,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     original_preclaim = preclaim_run == run_id
     approved_upgrade = wallet == 'success' and reserve == 'skipped' and history.contains('hosted-upgrade-receipt')
     builds = {key: history.retained(name) for key, name in ARTIFACTS.items() if key != 'core_receipt_id'}
-    funded_build_rerun = (not same and not core_run and wallet in (None, 'skipped') and state('hosted_core') == 'skipped'
+    funded_build_rerun = (not same and not core_run and initial['conclusion'] == 'failure'
+                          and wallet in (None, 'skipped') and state('hosted_core') == 'skipped'
                           and builds['production_id'][1]['run_attempt'] > 1)
     outputs = {'original_controller': original, **{key: value[0] for key, value in builds.items()}}
     if wallet == 'success':
