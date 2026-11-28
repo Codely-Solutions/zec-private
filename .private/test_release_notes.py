@@ -18,6 +18,14 @@ exec(compile(ast.Module(body=functions,type_ignores=[]),'release_notes','exec'),
 
 
 class ReleaseNotesTest(unittest.TestCase):
+    def test_complete_notes_preserve_all_entries_and_necessary_detail(self):
+        tag = 'v3.19.0-private.22'
+        proof = {'release_tag': tag, 'versionCode': 3234022, 'upstream': {'tag': '3.19.0'}}
+        entries = [f'Explain shipped change {number}. ' + 'Additional details. ' * 25 for number in range(1, 9)]
+        body = namespace['release_notes'](proof, changes_for({tag: entries}, tag, required=True))
+        self.assertEqual([line[2:] for line in body.splitlines() if line.startswith('- ')], entries)
+        self.assertEqual(body.splitlines().count('Android versionCode: 3234022'), 1)
+
     def test_curated_changes_and_update_marker(self):
         proof={'release_tag':'v3.19.0-private.11','versionCode':3234011,'upstream':{'tag':'3.19.0'}}
         body=namespace['release_notes'](proof)
@@ -25,7 +33,6 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertIn('Android versionCode: 3234011\n',body)
         self.assertIn('/release-evidence/v3.19.0-private.11.json',body)
         self.assertNotIn('Validated:',body)
-        self.assertLess(len(body),1200)
 
     def test_new_upstream_describes_the_verified_changes(self):
         proof={'release_tag':'v3.20.0-private.1','versionCode':3240001,'upstream':{'tag':'3.20.0-3240'}}

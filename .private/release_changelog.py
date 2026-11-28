@@ -10,10 +10,10 @@ PATH = '.private/release-notes.json'
 
 def changes_for(records, tag, *, required=False):
     changes = records.get(tag, [])
-    require(isinstance(changes, list) and len(changes) <= 6
-            and all(isinstance(item, str) and item.strip() and len(item) <= 300
+    require(isinstance(changes, list)
+            and all(isinstance(item, str) and item.strip()
                     and not any(ord(char) < 32 for char in item) for item in changes),
-            'Release changes must contain up to six single-line entries')
+            'Release changes must contain non-empty single-line entries')
     require(not required or changes, f'Add a user-facing changelog for {tag} in {PATH}')
     return changes
 
