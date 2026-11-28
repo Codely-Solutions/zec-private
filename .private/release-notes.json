@@ -93,5 +93,8 @@
   "v3.19.0-private.33": [
     "Calculate quote amounts at each asset's precision and keep the swap amount when switching units.",
     "Keep normal wallet setup, app lock, and screen protection active in Android test environments."
+  ],
+  "v3.19.0-private.34": [
+    "Restore live Appearance updates after a temporary settings read failure."
   ]
 }

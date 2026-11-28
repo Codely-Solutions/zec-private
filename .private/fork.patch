@@ -2376,7 +2376,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..9124b73ea 100644
+index ec56161b5..b611668c3 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -30150,6 +30150,42 @@ index 1fa0df8d6..39b5738dc 100644
 @@ -316 +495 @@ private fun SuccessPreview() =
 -                                description = stringRes("ZEC transaction fee"),
 +                                description = stringRes(R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
+index 378d19dd4..2bb6022de 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/theme/ThemeVM.kt
+@@ -14 +13,0 @@ import kotlinx.coroutines.flow.WhileSubscribed
+-import kotlinx.coroutines.flow.catch
+@@ -17,0 +17 @@ import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.retryWhen
+@@ -40,6 +40,2 @@ internal class ThemeVM(
+-     * That fallback has a sharp edge: once `.catch` emits [DEFAULT_THEME_APPEARANCE], the combined flow
+-     * completes, so if only one of the two stores throws, the other store's still-healthy value is discarded
+-     * for the rest of the session too, with no retry, instead of being kept on its own. This is accepted
+-     * because this flow exists only to release the splash gate, not to serve as a durable source of truth,
+-     * and `ThemeVMTest` pins it: a stored [AppearanceMode.DARK] alongside a throwing OLED store still
+-     * resolves to [AppearanceMode.SYSTEM].
++     * After a throwing store, reconnect both observations. Keep the last resolved pair while
++     * reconnecting, and space out retries if storage remains unavailable.
+@@ -48,0 +45 @@ internal class ThemeVM(
++            var resolved = false
+@@ -52,0 +50 @@ internal class ThemeVM(
++                    resolved = true
+@@ -64,3 +62,7 @@ internal class ThemeVM(
+-            }.catch { error ->
+-                Twig.error(error) { "Unable to read the stored app theme, falling back to the default appearance" }
+-                emit(DEFAULT_THEME_APPEARANCE)
++            }.retryWhen { error, attempt ->
++                if (attempt == 0L) {
++                    Twig.error { "Stored app theme observation failed (${error.javaClass.simpleName}); reconnecting" }
++                }
++                if (!resolved) emit(DEFAULT_THEME_APPEARANCE)
++                delay(if (attempt == 0L) THEME_READ_TIMEOUT else THEME_RECONNECT_INTERVAL)
++                true
+@@ -68,0 +71 @@ internal class ThemeVM(
++                resolved = true
+@@ -127,0 +131 @@ internal val THEME_READ_TIMEOUT = 2.seconds
++internal val THEME_RECONNECT_INTERVAL = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
 index c9e6612fa..63eee36c5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
@@ -44576,6 +44612,94 @@ index 3027e6cda..3018ad12d 100644
 +            submitProposal = submit,
 @@ -132,0 +285 @@ class SwapQuoteVMTest {
 +            independentPrices = prices,
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
+index e415d74b4..3d5f71cd5 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.theme
++import androidx.lifecycle.viewModelScope
+@@ -5,0 +7,3 @@ import co.electriccoin.zcash.ui.design.theme.AppearanceMode
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.CompletableDeferred
+@@ -7,0 +12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
+@@ -9,0 +15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -133 +139 @@ class ThemeVMTest {
+-                    oledProvider = FakeIsOledEnabledStorageProvider(failure = IllegalStateException("no store")),
++                    oledProvider = FakeIsOledEnabledStorageProvider(observationFailures = Int.MAX_VALUE),
+@@ -139,0 +146 @@ class ThemeVMTest {
++            vm.viewModelScope.cancel()
+@@ -141,0 +149,56 @@ class ThemeVMTest {
++    @Test
++    fun transientObservationFailureKeepsTheLiveThemeUpdatable() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(stored = AppearanceMode.SYSTEM)
++        val oled = FakeIsOledEnabledStorageProvider(stored = false, observationFailures = 1)
++        val vm = startedVm(mode, oled, advanceToIdle = false)
++
++        assertTrue(vm.isThemeResolved.value)
++        assertEquals(AppearanceMode.SYSTEM, vm.appearanceMode.value)
++
++        mode.store(AppearanceMode.DARK)
++        oled.store(true)
++        advanceTimeBy(THEME_READ_TIMEOUT)
++        runCurrent()
++        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
++        assertTrue(vm.isOledEnabled.value)
++
++        mode.store(AppearanceMode.LIGHT)
++        oled.store(false)
++        runCurrent()
++        assertEquals(AppearanceMode.LIGHT, vm.appearanceMode.value)
++        assertFalse(vm.isOledEnabled.value)
++    }
++
++    @Test
++    fun anObservationFailureKeepsTheLastRenderedPairUntilReconnected() = runTest(dispatcher) {
++        val mode = FakeAppearanceModeStorageProvider(stored = AppearanceMode.DARK)
++        val oledValue = MutableStateFlow(true)
++        val failRead = CompletableDeferred<Unit>()
++        var observations = 0
++        val oled = mockk<IsOledEnabledStorageProvider> {
++            every { observe() } returns flow {
++                if (++observations == 1) {
++                    emit(oledValue.value)
++                    failRead.await()
++                    error("Preference temporarily unavailable")
++                }
++                emitAll(oledValue)
++            }
++        }
++        val vm = startedVm(mode, oled, advanceToIdle = false)
++        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
++        assertTrue(vm.isOledEnabled.value)
++
++        failRead.complete(Unit)
++        runCurrent()
++        assertEquals(AppearanceMode.DARK, vm.appearanceMode.value)
++        assertTrue(vm.isOledEnabled.value)
++
++        mode.store(AppearanceMode.LIGHT)
++        oledValue.value = false
++        advanceTimeBy(THEME_READ_TIMEOUT)
++        runCurrent()
++        assertEquals(AppearanceMode.LIGHT, vm.appearanceMode.value)
++        assertFalse(vm.isOledEnabled.value)
++    }
++
+@@ -173 +236 @@ class ThemeVMTest {
+-        oledProvider: FakeIsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
++        oledProvider: IsOledEnabledStorageProvider = FakeIsOledEnabledStorageProvider(stored = null),
+@@ -219 +282 @@ private class FakeIsOledEnabledStorageProvider(
+-    private val failure: Throwable? = null,
++    private var observationFailures: Int = 0,
+@@ -242 +305,4 @@ private class FakeIsOledEnabledStorageProvider(
+-            failure?.let { throw it }
++            if (observationFailures > 0) {
++                observationFailures--
++                error("Preference temporarily unavailable")
++            }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
 new file mode 100644
 index 000000000..4cafec370
