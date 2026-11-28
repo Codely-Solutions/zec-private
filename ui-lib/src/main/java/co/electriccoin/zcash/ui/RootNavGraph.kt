@@ -5,8 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -22,6 +24,7 @@ import androidx.navigation.toRoute
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
+import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
@@ -36,6 +39,8 @@ import co.electriccoin.zcash.ui.design.theme.LocalOledEnabled
 import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetFromWalletRecovery
+import co.electriccoin.zcash.ui.screen.deletewallet.awaitWalletRecoveryHost
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
@@ -206,18 +211,35 @@ private fun UnavailableWalletRecovery(
     val support = koinInject<SendEmailUseCase>()
     val activity = LocalActivity.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val appState = koinInject<ApplicationStateProvider>()
+    val appForeground by appState.isInForeground.collectAsStateWithLifecycle(false)
     val retryPending by walletViewModel.isWalletReadPending.collectAsStateWithLifecycle()
-    val canAct = {
+    var reviewingReset by remember { mutableStateOf(false) }
+    val permits = {
         hasAppAccess() && !resetProgress.isPending.value &&
-            walletViewModel.secretState.value == SecretState.UNAVAILABLE &&
-            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            walletViewModel.secretState.value == SecretState.UNAVAILABLE
     }
-    StoredWalletUnavailableView(
-        onRetry = { if (canAct()) walletViewModel.retryWalletRead(canAct) },
-        onSupport = { support.sendBlankSupport(canAct) },
-        onBack = activity::finish,
-        isRetrying = retryPending,
-    )
+    val canAct = {
+        permits() && appForeground && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+    }
+    val canReset = { canAct() && walletViewModel.canResetUnavailableWallet() }
+    if (reviewingReset) {
+        ResetFromWalletRecovery(
+            canReview = { reviewingReset && canReset() },
+            awaitHost = {
+                awaitWalletRecoveryHost(lifecycle, appState) { reviewingReset && permits() }
+            },
+            onBack = { reviewingReset = false },
+        )
+    } else {
+        StoredWalletUnavailableView(
+            onRetry = { if (canAct()) walletViewModel.retryWalletRead(canAct) },
+            onSupport = { support.sendBlankSupport(canAct) },
+            onBack = activity::finish,
+            isRetrying = retryPending,
+            onReset = { if (canReset() && !walletViewModel.isWalletReadPending.value) reviewingReset = true },
+        )
+    }
 }
 
 @Composable

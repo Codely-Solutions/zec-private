@@ -121,6 +121,64 @@ class ResetZashiVMTest {
     }
 
     @Test
+    fun recoveryResetRefusesABiometricResultAfterTheOriginalGrantIsRevoked() = runBlocking {
+        createViewModel()
+        val requested = CompletableDeferred<Unit>()
+        val approved = CompletableDeferred<Unit>()
+        var grantIsCurrent = true
+        coEvery { biometrics.requestBiometrics(any()) } coAnswers {
+            requested.complete(Unit)
+            approved.await()
+        }
+        val initial = assertNotNull(vm.state.value.content)
+        val recovery = vm.bindRecovery(initial, { grantIsCurrent }, { true }, {})
+        recovery.buttonState.onClick()
+        val sheet = assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
+        sheet.primaryAction.onClick()
+        requested.await()
+        grantIsCurrent = false
+        approved.complete(Unit)
+        awaitState { it.content?.buttonState?.isLoading == false }
+
+        assertFalse(progress.isPending.value)
+        coVerify(exactly = 0) { sdkData() }
+    }
+
+    @Test
+    fun recoveryResetWaitsForTheOwningHostToResumeAfterAuthentication() = runBlocking {
+        createViewModel()
+        val waiting = CompletableDeferred<Unit>()
+        val hostResumed = CompletableDeferred<Boolean>()
+        val erasing = CompletableDeferred<Unit>()
+        val releaseErase = CompletableDeferred<Unit>()
+        coEvery { sdkData() } coAnswers {
+            erasing.complete(Unit)
+            releaseErase.await()
+        }
+        val initial = assertNotNull(vm.state.value.content)
+        val recovery = vm.bindRecovery(initial, { true }, {
+            waiting.complete(Unit)
+            hostResumed.await()
+        }, {})
+        recovery.buttonState.onClick()
+        val sheet = assertNotNull(awaitState { it.content?.confirmationDialog != null }.content?.confirmationDialog)
+        sheet.primaryAction.onClick()
+        try {
+            waiting.await()
+            assertFalse(progress.isPending.value)
+            coVerify(exactly = 0) { sdkData() }
+            hostResumed.complete(true)
+            erasing.await()
+            assertTrue(progress.isPending.value)
+        } finally {
+            hostResumed.cancel()
+            releaseErase.complete(Unit)
+        }
+        awaitState { it.content?.isPending == false }
+        coVerify(exactly = 1) { sdkData() }
+    }
+
+    @Test
     fun confirmingWithTheDefaultCheckboxPreservesLocalFiles() = runBlocking {
         val erase = CompletableDeferred<Boolean>()
         coEvery { sdkData() } coAnswers { check(erase.await()) }

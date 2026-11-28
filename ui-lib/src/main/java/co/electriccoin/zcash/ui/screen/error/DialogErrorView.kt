@@ -1,6 +1,9 @@
 package co.electriccoin.zcash.ui.screen.error
 
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.stringResource
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -12,7 +15,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import org.koin.compose.koinInject
 
 @Composable
-fun DialogView(state: ErrorState?) {
+fun DialogView(state: ErrorState?, bodyAction: @Composable (() -> Unit)? = null) {
     ZashiScreenDialog(
         state =
             state?.let {
@@ -24,6 +27,7 @@ fun DialogView(state: ErrorState?) {
                     onDismissRequest = it.onBack
                 )
             },
+        bodyAction = bodyAction,
     )
 }
 
@@ -47,6 +51,7 @@ internal fun StoredWalletUnavailableView(
     onSupport: () -> Unit,
     onBack: () -> Unit,
     isRetrying: Boolean = false,
+    onReset: () -> Unit,
 ) {
     DialogView(
         ErrorState(
@@ -61,7 +66,11 @@ internal fun StoredWalletUnavailableView(
             negative = ButtonState(text = stringRes(R.string.support_header), onClick = onSupport),
             onBack = onBack,
         )
-    )
+    ) {
+        TextButton(onClick = onReset, enabled = !isRetrying) {
+            Text(stringResource(R.string.deleteWallet_title))
+        }
+    }
 }
 
 @PreviewScreens

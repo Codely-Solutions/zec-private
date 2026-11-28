@@ -51,7 +51,12 @@ class ResetZashiUseCase(
     internal fun dismissFailure(failure: PendingResetFailure) = pendingFailure.compareAndSet(failure, null)
 
     @Suppress("TooGenericExceptionCaught", "ReturnCount")
-    suspend operator fun invoke(keepFiles: Boolean) {
+    suspend operator fun invoke(
+        keepFiles: Boolean,
+        permitsNewReset: () -> Boolean = { true },
+        awaitConfirmationHost: suspend () -> Boolean = { true },
+    ) {
+        if (!permitsNewReset()) return
         if (!resetMutex.tryLock()) return
         running.value = true
         pendingFailure.value = null
@@ -59,11 +64,15 @@ class ResetZashiUseCase(
             val stage = runCatchingRecoverable { progressStore.getStage() }
                 .onFailure(::reportPendingFailure)
                 .getOrThrow()
-            if (stage == null) requestBiometrics()
+            if (stage == null) {
+                requestBiometrics()
+                if (!awaitConfirmationHost()) return
+            }
 
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
+                if (stage == null && !permitsNewReset()) return@withContext
                 runCatchingRecoverable {
                     progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
                     prepareReset(keepFiles, stage)

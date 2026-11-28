@@ -4,6 +4,7 @@ package co.electriccoin.zcash.ui.design.component
 
 import android.view.WindowManager
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,7 +26,8 @@ import co.electriccoin.zcash.ui.design.util.getValue
 @Composable
 fun ZashiScreenDialog(
     state: DialogState?,
-    properties: DialogProperties = DialogProperties()
+    properties: DialogProperties = DialogProperties(),
+    bodyAction: @Composable (() -> Unit)? = null,
 ) {
     val parent = LocalView.current.parent
     SideEffect {
@@ -41,6 +43,7 @@ fun ZashiScreenDialog(
             title = state.title,
             message = state.message,
             properties = properties,
+            bodyAction = bodyAction,
         )
     }
 }
@@ -53,7 +56,8 @@ private fun Dialog(
     message: StringResource,
     onDismissRequest: (() -> Unit),
     modifier: Modifier = Modifier,
-    properties: DialogProperties = DialogProperties()
+    properties: DialogProperties = DialogProperties(),
+    bodyAction: @Composable (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -93,12 +97,15 @@ private fun Dialog(
             )
         },
         text = {
-            Text(
-                text = message.getValue(),
-                color = ZashiColors.Text.textTertiary,
-                style = ZashiTypography.textMd,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+            Column {
+                Text(
+                    text = message.getValue(),
+                    color = ZashiColors.Text.textTertiary,
+                    style = ZashiTypography.textMd,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                bodyAction?.invoke()
+            }
         },
         properties = properties,
         containerColor = ZashiColors.Surfaces.bgPrimary,

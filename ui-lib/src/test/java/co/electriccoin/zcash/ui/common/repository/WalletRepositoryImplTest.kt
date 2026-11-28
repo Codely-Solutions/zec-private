@@ -11,9 +11,9 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
+import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.configuration.model.map.Configuration
-import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 import co.electriccoin.zcash.global.WalletSdkTransportGate
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
@@ -34,7 +34,6 @@ import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
-import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -42,6 +41,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
+import co.electriccoin.zcash.ui.common.provider.hasInactiveSdkWalletData
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationUIState
@@ -59,7 +59,6 @@ import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -90,6 +89,7 @@ import kotlin.test.Test
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -113,8 +113,6 @@ class WalletRepositoryImplTest {
 
         mockkObject(Synchronizer.Companion)
         mockkObject(SlipstreamSynchronizer.Companion)
-        mockkObject(GlobalCrashReporter)
-        every { GlobalCrashReporter.reportCaughtException(any()) } returns Unit
     }
 
     @AfterTest
@@ -128,7 +126,7 @@ class WalletRepositoryImplTest {
     @Test
     fun `resolveSecretState combines the onboarding flag and wallet presence`() {
         assertEquals(SecretState.READY, resolveSecretState(true, OnboardingState.READY, true))
-        assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.READY, false))
+        assertEquals(SecretState.UNAVAILABLE, resolveSecretState(true, OnboardingState.READY, false))
         assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.NONE, false))
         assertEquals(SecretState.INCOMPLETE, resolveSecretState(true, OnboardingState.NONE, true))
         assertEquals(SecretState.INCOMPLETE, resolveSecretState(true, OnboardingState.NEEDS_WARN, true))
@@ -141,12 +139,11 @@ class WalletRepositoryImplTest {
     }
 
     @Test
-    fun secretStateFlowResolvesNoneWhenWalletIsMissing() =
-        runTest {
-            val (repository, _) = newRepository(onboardingState = OnboardingState.READY, initialWallet = null)
+    fun priorReadyWalletWithAnEmptyStoreShowsRecovery() = runTest {
+        val (repository, _) = newRepository(onboardingState = OnboardingState.READY, initialWallet = null)
 
-            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
-        }
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING })
+    }
 
     @Test
     fun secretStateFlowResolvesReadyWhenWalletIsPresent() =
@@ -543,121 +540,104 @@ class WalletRepositoryImplTest {
     }
 
     @Test
-    fun walletlessRecoveryBlocksSetupAndRetriesAnUnconfirmedSdkEraseAfterRestart() = runTest {
-        val (original, harness) = newRepository(OnboardingState.READY, null)
-        original.useTestScope(testScheduler)
-        coEvery { SlipstreamSynchronizer.erase(any(), ZcashNetwork.Testnet, any()) } returns false
+    fun missingInstalledWalletStaysInRecoveryAfterRetryAndReopen() = runTest {
+        val key = StandardPreferenceKeys.ONBOARDING_STATE.key
+        for (priorState in listOf(OnboardingState.READY, OnboardingState.CLEARING_STALE_DATA)) {
+            val (repository, harness) = newRepository(priorState, null)
+            repository.useTestScope(testScheduler)
+            repository.init()
+            repository.retryWalletRead()
+            repository.createNewWallet()
+            advanceUntilIdle()
+            repository.continueWalletSetup()
+            advanceUntilIdle()
+            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture().await() }
 
-        original.init()
-        advanceUntilIdle()
-        original.walletInitialization.first { it == WalletInitializationState.FAILED }
-        assertFailsWith<IllegalStateException> { original.restoreFixture().await() }
-        assertNull(harness.walletProvider.getPersistableWallet())
+            assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING })
+            assertEquals(priorState.toNumber().toString(), harness.fakePrefs.committedString(key))
+            assertTrue(harness.events.isEmpty())
+
+            val (reopened, reopenedHarness) = newRepository(priorState, null)
+            reopened.useTestScope(testScheduler)
+            reopened.init()
+            advanceUntilIdle()
+            assertEquals(SecretState.UNAVAILABLE, reopened.secretState.first { it != SecretState.LOADING })
+            assertEquals(priorState.toNumber().toString(), reopenedHarness.fakePrefs.committedString(key))
+            assertTrue(reopenedHarness.events.isEmpty())
+        }
+        coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
         coVerify(exactly = 0) { Synchronizer.erase(any(), any(), any()) }
-        val key = StandardPreferenceKeys.ONBOARDING_STATE.key
-        val committed = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
-        assertEquals(OnboardingState.CLEARING_STALE_DATA, committed)
-        assertEquals(listOf("onboarding=4", "sdkRepair", "sdkRepair"), harness.events)
-        original.scope.cancel()
-        original.sharingScope.cancel()
-
-        val (reopened, reopenedHarness) = newRepository(committed, null)
-        reopened.useTestScope(testScheduler)
-        // With no classic files, the classic erase return need not acknowledge a deletion.
-        coEvery { Synchronizer.erase(any(), ZcashNetwork.Testnet, any()) } returns false
-        reopened.init()
-        advanceUntilIdle()
-        assertEquals(listOf("sdkRepair", "eraseSlipstream", "onboarding=0"), reopenedHarness.events)
-        coVerify(exactly = 1) { Synchronizer.erase(any(), ZcashNetwork.Testnet, any()) }
-
-        reopened.restoreFixture().await()
-        assertEquals(SecretState.READY, reopened.secretState.first { it == SecretState.READY })
-        assertEquals(OnboardingState.READY.toNumber().toString(), reopenedHarness.fakePrefs.committedString(key))
-        coVerify(exactly = 3) { SlipstreamSynchronizer.erase(any(), ZcashNetwork.Testnet, any()) }
-    }
-
-    @Test
-    fun walletlessRecoveryWaitsForTheRecoveryStageCommit() = runTest {
-        val (repository, harness) = newRepository(OnboardingState.READY, null)
-        repository.useTestScope(testScheduler)
-        val key = StandardPreferenceKeys.ONBOARDING_STATE.key
-        harness.fakePrefs.beforeStringCommit = { _, _ -> throw IOException("Cannot commit recovery stage") }
-
-        repository.init()
-        advanceUntilIdle()
-        repository.walletInitialization.first { it == WalletInitializationState.FAILED }
-        assertEquals(OnboardingState.READY.toNumber().toString(), harness.fakePrefs.committedString(key))
         coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any(), any()) }
-
-        harness.fakePrefs.beforeStringCommit = { _, _ -> }
-        repository.retryWalletInitialization()
-        advanceUntilIdle()
-        repository.walletInitialization.first { it == WalletInitializationState.IDLE }
-        assertEquals(
-            listOf("onboarding=4", "onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"),
-            harness.events
-        )
     }
 
     @Test
-    fun interruptedWalletlessEraseKeepsTheRecoveryStageOnRestart() = runTest {
-        val (repository, harness) = newRepository(OnboardingState.READY, null)
+    fun walletlessLegacyInstallRetainsNativeSidecar() = verifyWalletlessRemnant(
+        "co.electricoin.zcash", "zcash_sdk_testnet_data.sqlite3-wal"
+    )
+
+    @Test
+    fun walletlessLegacyInstallRetainsSubmitPlanBackup() = verifyWalletlessRemnant(
+        "shared_prefs", "com.zodl.slipstream.submit_plan_0_zcash_sdk.xml.bak"
+    )
+
+    private fun verifyWalletlessRemnant(folder: String, filename: String) = runTest {
+        val remnant = File(directory.newFolder(folder), filename)
+        remnant.writeText("retained synthetic wallet state")
+        val writes = WalletWriteAccess()
+        val (repository, harness) = newRepository(OnboardingState.NONE, null, walletWriteAccess = writes)
         repository.useTestScope(testScheduler)
-        val eraseStarted = CompletableDeferred<Unit>()
-        coEvery { SlipstreamSynchronizer.erase(any(), any(), any()) } coAnswers {
-            eraseStarted.complete(Unit)
-            awaitCancellation()
-        }
-
         repository.init()
-        eraseStarted.await()
-        repository.scope.cancel()
-        repository.sharingScope.cancel()
-        val key = StandardPreferenceKeys.ONBOARDING_STATE.key
-        val committed = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
-        assertEquals(OnboardingState.CLEARING_STALE_DATA, committed)
+        val installedNetwork = ZcashNetwork.fromResources(harness.application)
+        assertEquals(ZcashNetwork.Testnet, installedNetwork, filename)
+        assertTrue(hasInactiveSdkWalletData(harness.application, installedNetwork), filename)
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING }, filename)
+        assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture(true).await() }
+        assertTrue(harness.events.isEmpty())
+        assertEquals("retained synthetic wallet state", remnant.readText())
 
-        val (reopened, reopenedHarness) = newRepository(committed, null)
-        reopened.useTestScope(testScheduler)
-        reopened.init()
-        advanceUntilIdle()
-        assertEquals(listOf("sdkRepair", "eraseSlipstream", "erase", "onboarding=0"), reopenedHarness.events)
-        assertEquals(OnboardingState.NONE.toNumber().toString(), reopenedHarness.fakePrefs.committedString(key))
+        writes.beginReset()
+        check(remnant.delete())
+        writes.finishReset()
+        assertEquals(SecretState.NONE, repository.secretState.first { it == SecretState.NONE }, filename)
     }
 
     @Test
-    fun walletlessRecoveryVerifiesClassicDataAndWaitsForTheFinalCommit() = runTest {
-        val (repository, harness) = newRepository(OnboardingState.READY, null)
+    fun recoveryResetWaitsForTheCurrentWalletReadGeneration() = runTest {
+        val generation = MutableStateFlow(0L)
+        val reads = MutableStateFlow(StoredWalletAvailabilityRead(0L, StoredWalletAvailability.UNAVAILABLE))
+        val wallet = fixtureWallet()
+        val provider = mockk<PersistableWalletProvider> {
+            every { readGeneration } returns generation
+            every { writeVersion } returns 0L
+            every { availabilityRead } returns reads
+            every { retryRead() } answers { generation.value++ }
+            coEvery { getPersistableWallet() } returns wallet
+        }
+        val (repository, _) = newRepository(OnboardingState.READY, null, provider)
         repository.useTestScope(testScheduler)
-        val root = directory.newFolder("co.electricoin.zcash")
-        val residual = File(root, "zcash_sdk_testnet_data.sqlite3-wal").apply { writeText("stale") }
-        val key = StandardPreferenceKeys.ONBOARDING_STATE.key
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.first { it != SecretState.LOADING })
+        assertTrue(repository.canResetUnavailableWallet())
 
+        repository.retryWalletRead()
+        assertFalse(repository.canResetUnavailableWallet())
+        reads.value = StoredWalletAvailabilityRead(1L, StoredWalletAvailability.PRESENT)
+        assertEquals(SecretState.READY, repository.secretState.first { it == SecretState.READY })
+        assertFalse(repository.canResetUnavailableWallet())
+    }
+
+    @Test
+    fun recoveredLegacyWalletContinuesWithoutReclassifyingItsRecord() = runTest {
+        val existingWallet = fixtureWallet().copy(walletInitMode = WalletInitMode.ExistingWallet, birthday = null)
+        val (repository, harness) = newRepository(OnboardingState.CLEARING_STALE_DATA, existingWallet)
+        repository.useTestScope(testScheduler)
         repository.init()
         advanceUntilIdle()
-        repository.walletInitialization.first { it == WalletInitializationState.FAILED }
-        assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
-
-        check(residual.delete())
-        val completionCommit = CompletableDeferred<Pair<PreferenceKey, String?>>()
-        val failCompletion = CompletableDeferred<Unit>()
-        harness.fakePrefs.beforeStringCommit = { preference, value ->
-            completionCommit.complete(preference to value)
-            failCompletion.await()
-            throw IOException("Cannot commit recovery completion")
-        }
-        repository.retryWalletInitialization()
-        assertEquals(key to OnboardingState.NONE.toNumber().toString(), completionCommit.await())
-        repository.walletInitialization.first { it == WalletInitializationState.RUNNING }
-        failCompletion.complete(Unit)
-        repository.walletInitialization.first { it == WalletInitializationState.FAILED }
-        assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
-
-        harness.fakePrefs.beforeStringCommit = { _, _ -> }
-        repository.retryWalletInitialization()
-        advanceUntilIdle()
-        repository.walletInitialization.first { it == WalletInitializationState.IDLE }
-        assertEquals(OnboardingState.NONE.toNumber().toString(), harness.fakePrefs.committedString(key))
+        assertEquals(SecretState.INCOMPLETE, repository.secretState.first { it != SecretState.LOADING })
+        assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture().await() }
+        repository.continueWalletSetup()
+        assertEquals(SecretState.READY, repository.secretState.first { it == SecretState.READY })
+        assertEquals(existingWallet, harness.walletProvider.getPersistableWallet())
+        assertEquals(listOf("onboarding=3"), harness.events)
     }
 
     private fun appAccessViewModels(
@@ -795,37 +775,6 @@ class WalletRepositoryImplTest {
         }
 
     @Test
-    fun pendingCreationWaitsForStartupRecoveryWithoutQueueingDuplicates() =
-        runTest {
-            val recoveryStarted = CompletableDeferred<Unit>()
-            val finishRecovery = CompletableDeferred<Unit>()
-            val (repository, harness) = newRepository(OnboardingState.READY, null)
-            coEvery { harness.recoveryProvider.ensureReadable() } coAnswers {
-                recoveryStarted.complete(Unit)
-                finishRecovery.await()
-            }
-            repository.useTestScope(testScheduler)
-            repository.init()
-            runCurrent()
-            recoveryStarted.await()
-
-            repeat(3) { repository.createNewWallet() }
-            runCurrent()
-            repository.walletInitialization.first { it == WalletInitializationState.RUNNING }
-            assertEquals(0, harness.events.count { it == "wallet" })
-
-            finishRecovery.complete(Unit)
-            advanceUntilIdle()
-            assertEquals(
-                listOf(
-                    "onboarding=4", "eraseSlipstream", "erase", "onboarding=0",
-                    "wallet", "restoring=INITIATING", "onboarding=3"
-                ),
-                harness.events
-            )
-        }
-
-    @Test
     fun conflictingRestoreIsRejectedAndTheOriginalRequestCanBeRetried() =
         runTest {
             val (repository, harness) = newRepository(OnboardingState.NONE, null)
@@ -862,21 +811,6 @@ class WalletRepositoryImplTest {
             WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
             enableTor = enableTor
         )
-
-    @Test
-    fun initResetsOnboardingAndErasesSdkDataWhenWalletIsMissing() =
-        runTest {
-            val (repository, harness) = newRepository(onboardingState = OnboardingState.READY, initialWallet = null)
-            repository.useTestScope(testScheduler)
-
-            repository.init()
-            advanceUntilIdle()
-
-            assertEquals(
-                listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"),
-                harness.events
-            )
-        }
 
     @Test
     fun startupLeavesWalletlessErasureToAPendingReset() = runTest {
@@ -916,32 +850,6 @@ class WalletRepositoryImplTest {
             coVerify(exactly = 0) { Synchronizer.erase(any(), any(), any()) }
         }
 
-    @Test
-    fun initSkipsEraseWhenAWalletIsStoredWhileSelfHealing() =
-        runTest {
-            val (repository, harness) =
-                newRepository(
-                    onboardingState = OnboardingState.READY,
-                    initialWallet = null,
-                    persistableWalletProviderOverride =
-                        WalletStoredAfterFirstReadProvider(mockk(relaxed = true)),
-                )
-            repository.useTestScope(testScheduler)
-
-            repository.init()
-            advanceUntilIdle()
-
-            assertEquals(listOf("onboarding=4", "sdkRepair", "onboarding=0"), harness.events)
-            coVerify(exactly = 0) { Synchronizer.erase(any(), any(), any()) }
-        }
-
-    /**
-     * The fail-safe hinge of the whole self-heal: "no wallet" must only ever mean "the store said
-     * there is no wallet", never "reading the store failed". Nothing in
-     * `PersistableWalletProviderImpl.getPersistableWallet` catches, so a read failure propagates
-     * out of [WalletRepositoryImpl.init] today — this pins that against a future well-meaning
-     * `runCatching` turning an unreadable store into a reset to onboarding and an erase.
-     */
     @Test
     fun initNeitherResetsOnboardingNorErasesWhenTheWalletReadFails() =
         runTest {
@@ -1044,7 +952,7 @@ class WalletRepositoryImplTest {
     }
 
     @Test
-    fun retryFromUnreadableToAbsentRunsStartupRecoveryBeforeSetup() = runTest {
+    fun retryFromUnreadableToAnEmptyReplacementPreservesTheInstalledWallet() = runTest {
         val walletAvailability = MutableStateFlow(StoredWalletAvailability.UNAVAILABLE)
         val walletProvider = mockk<PersistableWalletProvider> {
             every { availabilityRead } returns walletAvailability.map {
@@ -1067,12 +975,11 @@ class WalletRepositoryImplTest {
         repository.retryWalletRead()
         advanceUntilIdle()
 
-        assertEquals(SecretState.NONE, repository.secretState.first { it == SecretState.NONE })
-        assertEquals(
-            WalletInitializationState.IDLE,
-            repository.walletInitialization.first { it == WalletInitializationState.IDLE },
-        )
-        assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"), harness.events)
+        assertEquals(SecretState.UNAVAILABLE, repository.secretState.value)
+        assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
+        assertEquals("3", harness.fakePrefs.committedString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+        assertTrue(harness.events.isEmpty())
+        coVerify(exactly = 0) { SlipstreamSynchronizer.erase(any(), any(), any()) }
     }
 
     @Test
@@ -1196,25 +1103,6 @@ class WalletRepositoryImplTest {
             assertEquals(true, IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
         }
 
-    @Test
-    fun initReportsAFailedEraseWithoutExposingSdkErrorDetails() =
-        runTest {
-            val (repository, harness) = newRepository(onboardingState = OnboardingState.READY, initialWallet = null)
-            val eraseFailure = RuntimeException("erasing the SDK databases failed")
-            coEvery { Synchronizer.erase(any(), any(), any()) } throws eraseFailure
-            repository.useTestScope(testScheduler)
-
-            repository.init()
-            advanceUntilIdle()
-
-            assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream"), harness.events)
-            verify(exactly = 1) {
-                GlobalCrashReporter.reportCaughtException(match {
-                    it.message == "Wallet data recovery failed" && it.cause == null
-                })
-            }
-        }
-
     /**
      * Replaces the repository's production scope with one driven by the test's scheduler, and
      * registers both for cancellation in [tearDown] so no test leaves a live scope behind.
@@ -1253,6 +1141,8 @@ class WalletRepositoryImplTest {
 
         val application = mockk<Application>(relaxed = true) {
             every { noBackupFilesDir } returns directory.root
+            every { dataDir } returns directory.root
+            every { filesDir } returns File(directory.root, "files")
             every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
             every { resources.getBoolean(any()) } returns true
         }
@@ -1289,9 +1179,6 @@ class WalletRepositoryImplTest {
                 every { observe() } returns flowOf(null)
             }
 
-        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
-        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-
         val repository =
             WalletRepositoryImpl(
                 configurationRepository = configurationRepository,
@@ -1304,7 +1191,6 @@ class WalletRepositoryImplTest {
                 walletRestoringStateProvider = walletRestoringStateProvider,
                 walletBackupFlagStorageProvider = walletBackupFlagStorageProvider,
                 isIronwoodAnnouncementShownStorageProvider = isIronwoodAnnouncementShownStorageProvider,
-                sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
                 isTorEnabledStorageProvider = torPreference,
                 resetProgressStore = mockk { every { isPending } returns MutableStateFlow(resetPending) },
                 transportGate = transportGate,
@@ -1318,7 +1204,7 @@ class WalletRepositoryImplTest {
 
         return repository to TestHarness(
             events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
-            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
+            walletBackupFlagStorageProvider, application
         )
     }
 
@@ -1327,8 +1213,8 @@ class WalletRepositoryImplTest {
         val fakePrefs: RecordingPreferenceProvider,
         val walletProvider: PersistableWalletProvider,
         val restoringProvider: WalletRestoringStateProvider,
-        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
         val backupProvider: WalletBackupFlagStorageProvider,
+        val application: Application,
     )
 }
 
@@ -1390,34 +1276,6 @@ private class FakePersistableWalletProvider(
         if (failWrites) throw IOException("Synthetic persistence failure")
         events += "wallet"
     }
-}
-
-/**
- * Reports no wallet on the first read and a stored wallet on every read after it, which is the
- * shape of the self-heal race: [WalletRepositoryImpl.init] sees an empty encrypted store, and by
- * the time the erase would run a wallet has been stored under it. The erase must not happen.
- */
-private class WalletStoredAfterFirstReadProvider(
-    private val storedLater: PersistableWallet
-) : PersistableWalletProvider {
-    private val walletFlow = MutableStateFlow<PersistableWallet?>(null)
-
-    override val persistableWallet: Flow<PersistableWallet?> = walletFlow
-
-    override suspend fun store(persistableWallet: PersistableWallet) {
-        walletFlow.value = persistableWallet
-    }
-
-    override suspend fun storeIfCurrent(
-        expected: PersistableWallet,
-        replacement: PersistableWallet,
-        version: Long,
-    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
-
-    override suspend fun getPersistableWallet(): PersistableWallet? =
-        walletFlow.value.also { walletFlow.value = storedLater }
-
-    override suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(walletFlow.value)
 }
 
 /**

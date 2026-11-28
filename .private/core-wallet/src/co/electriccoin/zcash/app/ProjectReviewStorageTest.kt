@@ -19,7 +19,7 @@ import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.model.OnboardingState
-import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
+import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
@@ -48,7 +48,7 @@ import kotlin.time.Instant
 
 class ProjectReviewStorageTest {
     @Test
-    fun walletlessRecoveryErasesStaleSdkStores() = runBlocking {
+    fun absentWalletPreservesSdkStoresAcrossRecoveryReads() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val network = ZcashNetwork.fromResources(context)
         check(context.packageName == "com.personal.zecprivate.testnet.foss.debug")
@@ -64,6 +64,7 @@ class ProjectReviewStorageTest {
         val onboarding = StandardPreferenceKeys.ONBOARDING_STATE
         check(wallet.getPersistableWallet() == null)
         check(onboarding.getValue(prefs) == OnboardingState.NONE.toNumber())
+        withTimeout(30_000) { repository.secretState.first { it == SecretState.NONE } }
 
         val root = File(context.noBackupFilesDir, "co.electricoin.zcash")
         val activeDb = File(root, "zcash_sdk_testnet_data.sqlite3")
@@ -86,15 +87,22 @@ class ProjectReviewStorageTest {
         activeShm.writeText("synthetic stale shared memory")
         check(context.getSharedPreferences(planPrefsName, Context.MODE_PRIVATE).edit().putBoolean("fixture", true).commit())
         check(staleFiles.all(File::isFile))
+        val original = staleFiles.associateWith(File::readBytes)
+        try {
+            repository.retryWalletRead()
+            withTimeout(30_000) { repository.secretState.first { it == SecretState.UNAVAILABLE } }
+            check(onboarding.getValue(prefs) == OnboardingState.NONE.toNumber())
 
-        onboarding.putValue(prefs, OnboardingState.READY.toNumber())
-        repository.init()
-        withTimeout(30_000) {
-            onboarding.observe(prefs).first { it == OnboardingState.NONE.toNumber() }
-            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
+            onboarding.putValue(prefs, OnboardingState.READY.toNumber())
+            repository.init()
+            check(wallet.getPersistableWallet() == null)
+            check(onboarding.getValue(prefs) == OnboardingState.READY.toNumber())
+            check(original.all { (file, contents) -> file.readBytes().contentEquals(contents) })
+        } finally {
+            check(context.deleteSharedPreferences(planPrefsName))
+            check(staleFiles.filterNot { it == planFile }.all(File::delete))
+            onboarding.putValue(prefs, OnboardingState.NONE.toNumber())
         }
-        check(staleFiles.none(File::exists))
-        check(wallet.getPersistableWallet() == null)
     }
 
     @Test

@@ -104,7 +104,7 @@ class ResetZashiVM(
                     stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
                 },
                 isLoading = isLoading,
-                onClick = ::onConfirmClicked
+                onClick = { onConfirmClicked() }
             ),
         confirmationDialog = confirmationDialog,
         isPending = isPending,
@@ -112,18 +112,38 @@ class ResetZashiVM(
 
     private fun onCheckboxToggled() = isKeepFilesChecked.update { !it }
 
-    private fun onConfirmClicked() {
-        if (resetZashi.isRunning.value || resetZashi.failedAttempt.value?.requiresRestart == true) return
-        if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
+    internal fun bindRecovery(
+        state: ResetZashiState,
+        canReview: () -> Boolean,
+        awaitHost: suspend () -> Boolean,
+        onBack: () -> Unit,
+    ) = state.copy(
+        onBack = { if (!resetZashi.isRunning.value && !resetZashi.isPending.value) onBack() },
+        buttonState = state.buttonState.copy(onClick = { onConfirmClicked(canReview, awaitHost) }),
+    )
+
+    private fun onConfirmClicked(
+        canReview: () -> Boolean = { true },
+        awaitHost: suspend () -> Boolean = { true },
+    ) {
+        if (!canReview() || resetZashi.isRunning.value || resetZashi.failedAttempt.value?.requiresRestart == true) {
+            return
+        }
+        if (resetZashi.isPending.value) onConfirmReset() else {
+            confirmationDialogFlow.value = createConfirmationState(canReview, awaitHost)
+        }
     }
 
-    private fun createConfirmationState(): ZashiConfirmationState =
+    private fun createConfirmationState(
+        canReview: () -> Boolean,
+        awaitHost: suspend () -> Boolean,
+    ): ZashiConfirmationState =
         ZashiConfirmationState.destructive(
             title = stringRes(R.string.deleteWallet_sheet_title),
             message = stringRes(R.string.deleteWallet_sheet_msg),
             primaryText = stringRes(R.string.deleteWallet_actionButtonTitle),
             secondaryText = stringRes(co.electriccoin.zcash.ui.design.R.string.general_cancel),
-            onPrimary = ::onConfirmReset,
+            onPrimary = { if (canReview()) onConfirmReset(canReview, awaitHost) else onDismissConfirmation() },
             onBack = ::onDismissConfirmation,
         )
 
@@ -131,12 +151,15 @@ class ResetZashiVM(
         confirmationDialogFlow.value = null
     }
 
-    private fun onConfirmReset() {
+    private fun onConfirmReset(
+        permits: () -> Boolean = { true },
+        awaitHost: suspend () -> Boolean = { true },
+    ) {
         confirmationDialogFlow.value = null
         resetLce.guardLoading {
             val keepFiles = isKeepFilesChecked.value
             resetLce.execute {
-                runCatchingRecoverable { resetZashi(keepFiles) }.onFailure {
+                runCatchingRecoverable { resetZashi(keepFiles, permits, awaitHost) }.onFailure {
                     if (!resetZashi.isPending.value) throw it
                 }
             }

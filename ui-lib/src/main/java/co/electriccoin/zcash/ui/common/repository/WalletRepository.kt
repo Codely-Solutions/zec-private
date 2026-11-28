@@ -11,7 +11,6 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import cash.z.ecc.sdk.type.fromResources
-import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.global.WalletSdkTransportGate
@@ -27,13 +26,14 @@ import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailability
-import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
+import co.electriccoin.zcash.ui.common.provider.StoredWalletAvailabilityRead
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletTransportAccess
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-import co.electriccoin.zcash.ui.common.provider.eraseInactiveSdkData
+import co.electriccoin.zcash.ui.common.provider.hasInactiveSdkWalletData
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
@@ -88,6 +88,8 @@ interface WalletRepository {
 
     suspend fun retryWalletRead(canRetry: () -> Boolean = { true })
 
+    fun canResetUnavailableWallet(): Boolean = false
+
     suspend fun markIronwoodAnnouncementShown()
 
     fun restoreWallet(
@@ -115,7 +117,6 @@ class WalletRepositoryImpl(
     private val walletRestoringStateProvider: WalletRestoringStateProvider,
     private val walletBackupFlagStorageProvider: WalletBackupFlagStorageProvider,
     private val isIronwoodAnnouncementShownStorageProvider: IsIronwoodAnnouncementShownStorageProvider,
-    private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     private val resetProgressStore: ResetProgressStore,
     private val transportGate: WalletSdkTransportGate? = null,
@@ -131,13 +132,10 @@ class WalletRepositoryImpl(
     @VisibleForTesting
     internal val sharingScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /**
-     * Serializes startup repair with wallet creation and restore.
-     */
+    /** Serializes startup checks with wallet creation and restore. */
     private val walletMutation = Mutex()
 
     private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
-    private val startupRecovery = MutableStateFlow(WalletInitializationState.CHECKING)
 
     // Keep the accepted operation across failures, including failures after the wallet was stored.
     private val initializationLock = Any()
@@ -181,7 +179,8 @@ class WalletRepositoryImpl(
             persistableWalletProvider.availabilityRead,
             transportChanges,
             accountAvailability,
-        ) { state, wallet, transport, account ->
+            walletWriteAccess.resetCompletions,
+        ) { state, wallet, transport, account, _ ->
             val generation = if (wallet.generation != null || account.generation != null || transportGate != null) {
                 persistableWalletProvider.readGeneration.value
             } else {
@@ -189,6 +188,8 @@ class WalletRepositoryImpl(
             }
             val walletAvailability = when {
                 wallet.generation != null && wallet.generation != generation -> StoredWalletAvailability.CHECKING
+                wallet.availability == StoredWalletAvailability.ABSENT && hasWalletWithoutRecord(state) ->
+                    StoredWalletAvailability.UNAVAILABLE
                 wallet.availability != StoredWalletAvailability.PRESENT -> wallet.availability
                 transportGate != null && (transport == null || transport.generation != generation) ->
                     StoredWalletAvailability.CHECKING
@@ -198,39 +199,36 @@ class WalletRepositoryImpl(
                 account.state == AccountSelectionReadState.CHECKING -> StoredWalletAvailability.CHECKING
                 else -> StoredWalletAvailability.PRESENT
             }
-            state to walletAvailability
-        }
+            state to StoredWalletAvailabilityRead(generation, walletAvailability)
+        }.stateIn(
+            sharingScope,
+            SharingStarted.Eagerly,
+            OnboardingState.NONE to StoredWalletAvailabilityRead(null, StoredWalletAvailability.CHECKING)
+        )
 
     override val walletInitialization =
-        combine(
-            initialization,
-            startupRecovery,
-            onboardingWithWallet
-        ) { operation, recovery, (state, availability) ->
+        combine(initialization, onboardingWithWallet) { operation, (state, read) ->
             when {
                 operation != WalletInitializationState.IDLE -> operation
-                availability == StoredWalletAvailability.CHECKING ||
-                    availability == StoredWalletAvailability.UNAVAILABLE -> WalletInitializationState.CHECKING
-                availability == StoredWalletAvailability.ABSENT && state.requiresWalletlessRecovery() ->
-                    recovery.takeUnless { it == WalletInitializationState.IDLE } ?: WalletInitializationState.CHECKING
-                availability == StoredWalletAvailability.PRESENT && state != OnboardingState.READY ->
+                read.availability == StoredWalletAvailability.CHECKING ||
+                    read.availability == StoredWalletAvailability.UNAVAILABLE -> WalletInitializationState.CHECKING
+                read.availability == StoredWalletAvailability.PRESENT && state != OnboardingState.READY ->
                     WalletInitializationState.INCOMPLETE
                 else -> WalletInitializationState.IDLE
             }
         }.stateIn(sharingScope, SharingStarted.Eagerly, WalletInitializationState.CHECKING)
 
     /**
-     * READY additionally requires a stored wallet ([resolveSecretState]), because the plain
-     * onboarding flag and the encrypted wallet store can diverge when the encrypted store is
-     * recreated after provable corruption (MOB-1836). An unreadable store takes the dedicated recovery
-     * route and preserves the existing data. Only a confirmed absent record can enter walletless setup.
+     * Recovery preserves the SDK wallet when the encrypted record is unreadable or previous
+     * setup or database data still exists. Confirmed Reset owns deletion.
      */
     override val secretState: StateFlow<SecretState> =
         combine(
             configurationRepository.configurationFlow,
             onboardingWithWallet,
             storedByCurrentSetup
-        ) { config, (onboardingState, availability), _ ->
+        ) { config, (onboardingState, read), _ ->
+            val availability = read.availability
             when (availability) {
                 StoredWalletAvailability.CHECKING -> SecretState.LOADING
                 StoredWalletAvailability.UNAVAILABLE -> SecretState.UNAVAILABLE
@@ -338,6 +336,12 @@ class WalletRepositoryImpl(
         if (restarted == true) init()
     }
 
+    override fun canResetUnavailableWallet(): Boolean {
+        val (_, read) = onboardingWithWallet.value
+        return read.availability == StoredWalletAvailability.UNAVAILABLE &&
+            read.generation == persistableWalletProvider.readGeneration.value && !resetProgressStore.isPending.value
+    }
+
     @Suppress("TooGenericExceptionCaught")
     override fun init() {
         scope.launch {
@@ -346,9 +350,7 @@ class WalletRepositoryImpl(
                     if (resetProgressStore.isPending.value) return@withLock
                     val version = persistableWalletProvider.writeVersion
                     val wallet = persistableWalletProvider.getPersistableWallet()
-                    val onboarding = readOnboardingState()
                     migrateDecommissionedEndpointIfNeeded(wallet, version)
-                    recoverMissingWalletIfNeeded(wallet, onboarding)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -379,40 +381,10 @@ class WalletRepositoryImpl(
         }
     }
 
-    /** Called under [walletMutation] before setup can store a replacement wallet. */
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun recoverMissingWalletIfNeeded(
-        wallet: PersistableWallet?,
-        onboardingState: OnboardingState
-    ) {
-        val needsRecovery = onboardingState.requiresWalletlessRecovery() &&
-            (onboardingState != OnboardingState.READY || wallet == null)
-        if (!needsRecovery || resetProgressStore.isPending.value) return
-
-        startupRecovery.value = WalletInitializationState.RUNNING
-        try {
-            if (onboardingState != OnboardingState.CLEARING_STALE_DATA) {
-                persistOnboardingStateInternal(OnboardingState.CLEARING_STALE_DATA)
-            }
-            if (wallet == null) {
-                sdkEncryptedPreferenceRecoveryProvider.ensureReadable()
-                // Recheck after Keystore repair in case an external wallet writer won the race.
-                if (persistableWalletProvider.getPersistableWallet() == null) {
-                    eraseInactiveSdkData(application, ZcashNetwork.fromResources(application))
-                }
-            }
-            currentCoroutineContext().ensureActive()
-            persistOnboardingStateInternal(OnboardingState.NONE)
-            startupRecovery.value = WalletInitializationState.IDLE
-        } catch (e: CancellationException) {
-            startupRecovery.value = WalletInitializationState.FAILED
-            throw e
-        } catch (e: Exception) {
-            startupRecovery.value = WalletInitializationState.FAILED
-            GlobalCrashReporter.reportCaughtException(IllegalStateException("Wallet data recovery failed"))
-            throw e
-        }
-    }
+    private fun hasWalletWithoutRecord(onboarding: OnboardingState): Boolean =
+        onboarding != OnboardingState.NONE || runCatchingRecoverable {
+            hasInactiveSdkWalletData(application, ZcashNetwork.fromResources(application))
+        }.getOrDefault(true)
 
     private suspend fun persistWalletInternal(persistableWallet: PersistableWallet) {
         storedByCurrentSetup.value = true
@@ -450,7 +422,11 @@ class WalletRepositoryImpl(
     override fun continueWalletSetup() {
         initializeWallet(WalletInitializationRequest.Continue) { stored, version ->
             if (stored == null) throw WalletInitializationConflictException()
-            finishExistingWalletInitialization(stored, version)
+            if (readOnboardingState() == OnboardingState.CLEARING_STALE_DATA) {
+                finishLegacyWalletRecovery(stored, version)
+            } else {
+                finishExistingWalletInitialization(stored, version)
+            }
         }
     }
 
@@ -459,8 +435,6 @@ class WalletRepositoryImpl(
             val accepted = acceptedInitialization
             if (accepted != null && activeInitialization == null) {
                 startWalletInitialization(accepted)
-            } else if (startupRecovery.value == WalletInitializationState.FAILED) {
-                init()
             }
         }
     }
@@ -470,12 +444,7 @@ class WalletRepositoryImpl(
     }
 
     private suspend fun persistOnboardingStateInternal(onboardingState: OnboardingState) {
-        onboardingStateBeforeCommit.value = when (onboardingState) {
-            OnboardingState.READY -> OnboardingState.NONE
-            OnboardingState.NONE -> OnboardingState.CLEARING_STALE_DATA
-            OnboardingState.CLEARING_STALE_DATA -> OnboardingState.READY
-            else -> null
-        }
+        onboardingStateBeforeCommit.value = readOnboardingState()
         StandardPreferenceKeys.ONBOARDING_STATE.putValue(
             preferenceProvider = standardPreferenceProvider(),
             newValue = onboardingState.toNumber()
@@ -560,6 +529,19 @@ class WalletRepositoryImpl(
         persistOnboardingStateInternal(OnboardingState.READY)
     }
 
+    private suspend fun finishLegacyWalletRecovery(wallet: PersistableWallet, version: Long) {
+        // The legacy marker was written only after a READY wallet lost its stored record.
+        val restored = walletWriteAccess.write(version) {
+            if (persistableWalletProvider.getPersistableWallet() != wallet) {
+                false
+            } else {
+                persistOnboardingStateInternal(OnboardingState.READY)
+                true
+            }
+        }
+        if (restored != true) throw WalletInitializationConflictException()
+    }
+
     private fun initializeWallet(
         request: WalletInitializationRequest,
         operation: suspend (PersistableWallet?, Long) -> Unit
@@ -584,20 +566,7 @@ class WalletRepositoryImpl(
         var failure: Exception? = null
         scope.launch {
             try {
-                walletMutation.withLock {
-                    val beforeRecovery = readOnboardingState()
-                    recoverMissingWalletIfNeeded(persistableWalletProvider.getPersistableWallet(), beforeRecovery)
-                    val version = persistableWalletProvider.writeVersion
-                    val stored = persistableWalletProvider.getPersistableWallet()
-                    if (readOnboardingState() != OnboardingState.READY || stored == null) {
-                        accepted.operation(stored, version)
-                    } else {
-                        val request = accepted.request
-                        if (request is WalletInitializationRequest.Restore && !request.matches(stored)) {
-                            throw WalletInitializationConflictException()
-                        }
-                    }
-                }
+                walletMutation.withLock { initializeAcceptedWallet(accepted) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: WalletInitializationConflictException) {
@@ -620,6 +589,26 @@ class WalletRepositoryImpl(
         }
         return result
     }
+
+    private suspend fun initializeAcceptedWallet(accepted: WalletInitializationOperation) {
+        val version = persistableWalletProvider.writeVersion
+        val stored = persistableWalletProvider.getPersistableWallet()
+        val onboarding = readOnboardingState()
+        val request = accepted.request
+        val interruptedRecovery = onboarding == OnboardingState.CLEARING_STALE_DATA &&
+            request != WalletInitializationRequest.Continue
+        if (resetProgressStore.isPending.value || hasMissingWalletRecord(stored, onboarding) || interruptedRecovery) {
+            throw WalletInitializationConflictException()
+        }
+        if (onboarding != OnboardingState.READY || stored == null) {
+            accepted.operation(stored, version)
+        } else if (request is WalletInitializationRequest.Restore && !request.matches(stored)) {
+            throw WalletInitializationConflictException()
+        }
+    }
+
+    private fun hasMissingWalletRecord(stored: PersistableWallet?, onboarding: OnboardingState): Boolean =
+        stored == null && hasWalletWithoutRecord(onboarding)
 
     private class WalletInitializationOperation(
         val request: WalletInitializationRequest,
@@ -676,9 +665,7 @@ internal fun resolveSecretState(
     when {
         !isConfigurationLoaded -> SecretState.LOADING
         onboardingState == OnboardingState.READY && hasWallet -> SecretState.READY
+        onboardingState != OnboardingState.NONE && !hasWallet -> SecretState.UNAVAILABLE
         hasWallet && !storedByCurrentSetup -> SecretState.INCOMPLETE
         else -> SecretState.NONE
     }
-
-private fun OnboardingState.requiresWalletlessRecovery() =
-    this == OnboardingState.READY || this == OnboardingState.CLEARING_STALE_DATA

@@ -82,6 +82,8 @@ class WalletViewModel(
 
     fun retryWalletInitialization() = walletRepository.retryWalletInitialization()
 
+    fun canResetUnavailableWallet() = walletRepository.canResetUnavailableWallet()
+
     fun retryWalletRead(canRetry: () -> Boolean) = viewModelScope.launch {
         if (!walletReadPending.compareAndSet(expect = false, update = true)) return@launch
         try {

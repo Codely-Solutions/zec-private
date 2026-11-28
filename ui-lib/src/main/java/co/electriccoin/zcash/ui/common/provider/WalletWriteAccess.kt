@@ -13,7 +13,9 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
     private val mutex = Mutex()
     private val sdkRecovery = Mutex()
     private val generation = MutableStateFlow(0L)
+    private val completedResets = MutableStateFlow(0L)
     val version = generation.asStateFlow()
+    internal val resetCompletions = completedResets.asStateFlow()
     internal val admissionChanges = combine(generation, progressStore?.isPending ?: flowOf(false)) { _, _ -> Unit }
     @Volatile private var blocked = false
     @Volatile private var resetting = false
@@ -50,7 +52,12 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
         }
     }
 
-    suspend fun finishReset() = mutex.withLock { resetting = false }
+    suspend fun finishReset() = mutex.withLock {
+        if (resetting) {
+            resetting = false
+            completedResets.value += 1
+        }
+    }
 
     /** Only an explicit create/restore operation may open a new wallet session. */
     suspend fun replaceWallet(block: suspend () -> Unit) = sdkRecovery.withLock {

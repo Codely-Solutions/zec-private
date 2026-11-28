@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.provider
 
 import android.content.Context
 import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.ext.ZcashSdk
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import com.zodl.slipstream.SlipstreamSynchronizer
 import java.io.File
@@ -15,6 +16,14 @@ internal suspend fun eraseInactiveSdkData(context: Context, network: ZcashNetwor
     check(classicWalletFiles(context, network).all { Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }) {
         "Could not confirm classic wallet data erasure"
     }
+}
+
+/** A missing app wallet record does not establish that the native wallet is absent. */
+internal fun hasInactiveSdkWalletData(context: Context, network: ZcashNetwork): Boolean {
+    val preferences = File(context.dataDir, "shared_prefs")
+    val submitPlan = "com.zodl.slipstream.submit_plan_${network.id}_${ZcashSdk.DEFAULT_ALIAS}.xml"
+    return (classicWalletFiles(context, network) + File(preferences, submitPlan) + File(preferences, "$submitPlan.bak"))
+        .any { !Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
 }
 
 /**
