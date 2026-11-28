@@ -11,10 +11,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
@@ -37,19 +37,17 @@ internal class ThemeVM(
      * and a store that simply never answers is given [THEME_READ_TIMEOUT] before the same fallback is
      * emitted. A genuine value arriving afterwards still replaces the fallback.
      *
-     * That fallback has a sharp edge: once `.catch` emits [DEFAULT_THEME_APPEARANCE], the combined flow
-     * completes, so if only one of the two stores throws, the other store's still-healthy value is discarded
-     * for the rest of the session too, with no retry, instead of being kept on its own. This is accepted
-     * because this flow exists only to release the splash gate, not to serve as a durable source of truth,
-     * and `ThemeVMTest` pins it: a stored [AppearanceMode.DARK] alongside a throwing OLED store still
-     * resolves to [AppearanceMode.SYSTEM].
+     * After a throwing store, reconnect both observations. Keep the last resolved pair while
+     * reconnecting, and space out retries if storage remains unavailable.
      */
     private val theme: StateFlow<ThemeAppearance?> =
         channelFlow {
+            var resolved = false
             val fallback =
                 launch {
                     delay(THEME_READ_TIMEOUT)
                     Twig.error { "Stored app theme not read in time, falling back to the default appearance" }
+                    resolved = true
                     send(DEFAULT_THEME_APPEARANCE)
                 }
 
@@ -61,11 +59,16 @@ internal class ThemeVM(
                     appearanceMode = appearanceMode ?: AppearanceMode.SYSTEM,
                     isOledEnabled = isOledEnabled == true
                 )
-            }.catch { error ->
-                Twig.error(error) { "Unable to read the stored app theme, falling back to the default appearance" }
-                emit(DEFAULT_THEME_APPEARANCE)
+            }.retryWhen { error, attempt ->
+                if (attempt == 0L) {
+                    Twig.error { "Stored app theme observation failed (${error.javaClass.simpleName}); reconnecting" }
+                }
+                if (!resolved) emit(DEFAULT_THEME_APPEARANCE)
+                delay(if (attempt == 0L) THEME_READ_TIMEOUT else THEME_RECONNECT_INTERVAL)
+                true
             }.collect {
                 fallback.cancel()
+                resolved = true
                 send(it)
             }
         }.stateIn(
@@ -125,6 +128,7 @@ private data class ThemeAppearance(
  * Short enough not to read as a hang, long enough for a healthy preference store to win the race.
  */
 internal val THEME_READ_TIMEOUT = 2.seconds
+internal val THEME_RECONNECT_INTERVAL = 30.seconds
 
 private val DEFAULT_THEME_APPEARANCE =
     ThemeAppearance(
