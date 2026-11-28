@@ -69,16 +69,20 @@
     "Refresh an expired fiat rate automatically when you return to the app."
   ],
   "v3.19.0-private.28": [
-    "Make wallet setup more reliable and require valid authentication on devices with a screen lock.",
-    "Check swap asset identity, offer a fresh quote after expiry, and keep swap tracking available from the start.",
-    "Show when an update check fails and clarify gift redemption and Android backups."
+    "Keep wallet setup retryable if saving the seed fails.",
+    "Require a valid authentication result on devices with a screen lock.",
+    "Verify the assets in each swap quote and save tracking before showing deposit instructions or submitting payment.",
+    "Offer a fresh quote after expiry and keep checking pending swaps for settlement or refunds after the funding deadline.",
+    "Hide stale update offers and show failed update checks with a retry option.",
+    "Clarify how to scan or paste gift links for redemption.",
+    "Document Android backups of encrypted contacts, notes, and swap metadata."
   ],
   "v3.19.0-private.29": [
     "Show the independent market comparison on one row in Quote details, with price sources available on tap.",
     "Clarify how the percentage beside the received dollar amount is calculated."
   ],
   "v3.19.0-private.30": [
-    "Fix incoming BTC swap details when the provider lists multiple BTC assets.",
+    "Prefer exact asset IDs in incoming swap details. This fixes BTC details when the provider lists multiple BTC assets.",
     "Keep saved swap amounts and status visible when refreshing is unavailable, with an option to retry.",
     "Display long swap timestamps without truncation."
   ],
@@ -88,11 +92,13 @@
   ],
   "v3.19.0-private.32": [
     "Keep swap status tied to the original deposit address when refreshing.",
-    "Correct tax CSV amounts and report wallet-internal pool transfers as fees only."
+    "Correct sent amounts and fees in tax CSV exports. Report wallet-internal pool transfers as fees only.",
+    "Export exact ZEC decimals, escape CSV fields, and use UTC consistently to select the tax year."
   ],
   "v3.19.0-private.33": [
-    "Calculate quote amounts at each asset's precision and keep the swap amount when switching units.",
-    "Keep normal wallet setup, app lock, and screen protection active in Android test environments."
+    "Use each asset's precision when converting fiat amounts for Swap and CrossPay quotes.",
+    "Keep the swap amount when switching between fiat and token units.",
+    "Keep normal wallet setup, app lock, and screen protection active in production builds. Limit test shortcuts to debug testnet builds."
   ],
   "v3.19.0-private.34": [
     "Restore live Appearance updates after a temporary settings read failure."

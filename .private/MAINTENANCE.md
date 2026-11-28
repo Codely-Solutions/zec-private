@@ -139,7 +139,11 @@ Keep the README product definition, GitHub About description and repository topi
 
 ## Release descriptions
 
-Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. A custom candidate may add or edit only its own entry, and hosted admission requires it. Automated maintenance uses curated notes when supplied and otherwise describes its verified upstream, toolchain or security changes. Keep the `Android versionCode: N` line for the updater. Put user help in the [wallet guide](../docs/WALLET-GUIDE.md) and test provenance in release evidence.
+Compare the exact candidate with the latest verified public tag. Include changes inherited from the controller base when they affect the shipped app. Review the changed production code, resources, manifest and resolved dependencies for user-visible fixes and changes to funds, recovery, security, privacy or compatibility. Cover each material outcome in `release-notes.json`, keyed by the exact private tag. Prefer short bullets and group related effects when their meaning stays clear. Give readers the detail they need to understand the change or act on it. Keep detailed tests, build and recovery work in the release evidence, and explain supported actions in the [wallet guide](../docs/WALLET-GUIDE.md).
+
+Check the rendered notes against that comparison before dispatching a custom release. Hosted admission requires the candidate's own entry and validates its format. Automated maintenance uses curated notes when supplied and otherwise describes the verified upstream, toolchain or security changes and links to the upstream release. In the handoff, identify the released tag and describe review-branch work separately.
+
+For a factual correction to an existing release, use the source at its published tag. Edit the published description and update the maintained notes catalog in a separate controller commit. Preserve the updater's `Android versionCode: N` line, release links and original verification evidence. Read back the body, tag, APK and checksum identities, and latest-release selection.
 
 ## Dependency update policy
 

@@ -198,7 +198,7 @@ class PublishMetadataTest(unittest.TestCase):
 
     def test_notes_preserve_change_limits(self):
         proof={'release_tag':'v2.3.4-private.18','versionCode':123456,'upstream':{'tag':'v2.3.4'}}
-        for changes in (['Change']*7,['x'*301],[''],[1],{}):
+        for changes in (['First line\nSecond line'],[''],[1],{}):
             with self.subTest(changes=changes):
                 with patch.object(Path,'read_text',return_value=json.dumps({proof['release_tag']:changes})):
                     with self.assertRaisesRegex(ValueError, 'Release changes must contain'):
