@@ -727,11 +727,92 @@ class QuoteRecoveryTests(unittest.TestCase):
         for artifact in artifacts:
             artifact['created_at'] = '2026-11-22T08:10:00Z'
         metadata = self.recovery_metadata(original, (*later[:2], artifacts), refs=[])
-        with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
+        for job in (*original[1], *later[1]):
+            if job['conclusion'] == 'skipped':
+                job['steps'] = []
+        with patch_environment(GITHUB_RUN_ATTEMPT='1'), patch('funded_reuse.select', return_value=None), \
+                patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
                 patch('release_inputs.version_code', return_value=42):
             with self.assertRaisesRegex(ValueError, 'Fresh wallet acceptance requires the original build attempt'):
                 resolve(Path('.'), SOURCE, MAIN, '7', metadata)
         self.verify_receipts.assert_not_called()
+
+    def test_later_unsigned_build_reuses_only_the_original_qualified_funded_evidence(self):
+        evidence = dict(core={'workflow_run_id': 6}, origin={'release': 'v3.19.0-private.33'},
+                        fixture={'version_code': 41})
+        for case, error in (
+            ('successful rerun', None), ('stopped publisher', None), ('signer retry', None),
+            ('missing current funded evidence', 'retain the original funded evidence'),
+            ('different fixture', 'retain the original funded evidence'),
+            ('primary reservation', 'already has a protected funding reservation'),
+            ('linked reservation', 'already has a protected funding reservation'),
+            ('wallet steps ran', 'already entered wallet acceptance'),
+            ('started reservation', 'required boundary: build / hosted_core / reserve'),
+            ('publisher not verified', 'does not prove signing and publication stopped'),
+            ('wallet receipt', 'already has wallet acceptance evidence'),
+            ('missing quotes', 'requires the original passing quote'),
+            ('override', 'without overrides'), ('admission rerun', 'requires a fresh dispatch'),
+        ):
+            original = self.recovery_run(7, OLD, dict(BUILD_JOBS, unsigned='failure', publish='skipped',
+                                                          hosted_core='skipped'), ())
+            later = self.rerun(original, dict(BUILD_JOBS, publish='skipped', **{
+                WALLET: 'skipped', RESERVE: 'skipped', PREPARE: 'success', QUOTE: 'success',
+            }))
+            if case != 'stopped publisher':
+                later[0]['conclusion'] = 'success'
+            for job in (*original[1], *later[1]):
+                if job['conclusion'] == 'skipped':
+                    job['steps'] = []
+            publisher = next(job for job in later[1] if job['name'] == 'build / publish')
+            if case in ('stopped publisher', 'publisher not verified'):
+                publisher['conclusion'] = 'failure'
+            if case == 'stopped publisher':
+                publisher['steps'] = [
+                    {'name': 'Sign and verify the validated APK', 'conclusion': 'failure'},
+                    {'name': 'Publish the signed APK and checksum', 'conclusion': 'skipped'},
+                ]
+            if case == 'wallet steps ran':
+                next(job for job in later[1] if job['name'] == 'build / ' + WALLET)['steps'] = [{'name': 'Fixture'}]
+            if case == 'started reservation':
+                next(job for job in later[1] if job['name'] == 'build / ' + RESERVE)['conclusion'] = 'failure'
+            names = (*BUILD_ARTIFACTS, 'core-direct-candidate')
+            if case != 'missing quotes':
+                names += ('hosted-quote-receipt',)
+            if case == 'wallet receipt':
+                names += ('hosted-upgrade-receipt',)
+            _, _, artifacts = self.recovery_run(7, OLD, {}, names)
+            for artifact in artifacts:
+                artifact['created_at'] = '2026-11-22T08:10:00Z'
+            base = 'refs/heads/testnet-claims/release-42'
+            refs = {
+                'primary reservation': [{'ref': base}],
+                'linked reservation': [{'ref': base + '-preclaim-recovery'}],
+            }.get(case, [])
+            selected = {
+                'missing current funded evidence': None,
+                'different fixture': dict(evidence, fixture={'version_code': 40}),
+            }.get(case, evidence)
+            metadata = self.recovery_metadata(original, (*later[:2], artifacts), refs=refs)
+            signing = case == 'signer retry'
+            attempt = '2' if signing or case == 'admission rerun' else '1'
+            self.verify_receipts.reset_mock()
+            with self.subTest(case=case), patch_environment(GITHUB_RUN_ATTEMPT=attempt), \
+                    patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta') as delta, \
+                    patch('funded_reuse.select', side_effect=[evidence, selected]), \
+                    patch('release_inputs.version_code', return_value=42):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata, '8' if case == 'override' else '',
+                                signing=signing)
+                    self.verify_receipts.assert_not_called()
+                else:
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, signing=signing)
+                    self.assertEqual(result, dict(
+                        original_controller=OLD, production_id='71', core_id='72', quote_id='73',
+                        quote_receipt_id='75', quote_controller=OLD, quote_run=7, reuse_funded='true',
+                    ))
+                    delta.assert_called_once_with(Path('.'), SOURCE, OLD, MAIN, funded=True, preclaim_stage=None)
+                    self.verify_receipts.assert_called_once()
 
     def test_quote_archive_must_be_uploaded_by_exact_eligible_execution(self):
         quote_controller = 'd' * 40

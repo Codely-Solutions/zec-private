@@ -267,6 +267,49 @@ class UnpublishedRun:
         return str(value['id']), producer
 
 
+def require_funded_build_rerun(root, source, controller, history, metadata, *, signing):
+    from funded_reuse import select
+    from hosted_claim import PREFIX
+    from release_inputs import version_code
+
+    require(signing or os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Wallet recovery requires a fresh dispatch')
+    require(history.attempt(1)['conclusion'] == 'failure', 'Expected a failed initial build attempt')
+    history.state('admit_hosted', ('success',))
+    history.state('unsigned', ('failure',))
+    history.state('hosted_core', ('skipped',))
+    require(not history.contains(*WALLET_RECEIPTS), 'Build rerun already has wallet acceptance evidence')
+    for number in history.jobs:
+        for role in ('hosted_core / reserve', 'hosted_core / wallet'):
+            job = history.job(role, number)
+            require(history.state(role, (None, 'skipped'), attempt=number) is None or not job.get('steps'),
+                    'Build rerun already entered wallet acceptance')
+        require(stopped_build_publisher(history.job('publish', number)),
+                'Build rerun does not prove signing and publication stopped')
+    prior = select(source, history.run['head_sha'], metadata, root=root)
+    require(prior is not None, 'Fresh wallet acceptance requires the original build attempt')
+    require(prior == select(source, controller, metadata, root=root),
+            'Build rerun must retain the original funded evidence and upgrade fixture')
+    ref = PREFIX + 'release-' + str(version_code(root, source))
+    reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
+    require(not any(row['ref'] in (ref, ref + '-preclaim-recovery') for row in reservations),
+            'This release already has a protected funding reservation')
+
+
+def stopped_build_publisher(job):
+    if job is None or job['status'] != 'completed':
+        return False
+    if job['conclusion'] == 'skipped':
+        return not job.get('steps')
+    if job['conclusion'] != 'failure':
+        return False
+    steps = job.get('steps', ())
+    signing = [step['conclusion'] for step in steps if step['name'] == 'Sign and verify the validated APK']
+    publication = [step['conclusion'] for step in steps if step['name'] == 'Publish the signed APK and checksum']
+    return (signing in (['failure'], ['skipped']) and publication == ['skipped']
+            and not any(step['conclusion'] == 'success' and step['name'].startswith('Run actions/upload-artifact@')
+                        for step in steps))
+
+
 def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing=False, preclaim_run='', core_run=''):
     from hosted_release import require_current_hosted_upgrade, verify_recovered_receipts
 
@@ -302,6 +345,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     original_preclaim = preclaim_run == run_id
     approved_upgrade = wallet == 'success' and reserve == 'skipped' and history.contains('hosted-upgrade-receipt')
     builds = {key: history.retained(name) for key, name in ARTIFACTS.items() if key != 'core_receipt_id'}
+    funded_build_rerun = (not same and not core_run and wallet in (None, 'skipped') and state('hosted_core') == 'skipped'
+                          and builds['production_id'][1]['run_attempt'] > 1)
     outputs = {'original_controller': original, **{key: value[0] for key, value in builds.items()}}
     if wallet == 'success':
         verify_receipt_delta(root, original, controller, 'Wallet')
@@ -313,7 +358,12 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         if prepared == 'success':
             outputs['prepared_id'] = history.retained('core-direct-candidate', first_attempt=True)[0]
     funded = False
-    if core_run:
+    if funded_build_rerun:
+        require(not preclaim_run and not quote_run,
+                'Build rerun recovery uses the original evidence without overrides')
+        require_funded_build_rerun(root, source, controller, history, metadata, signing=signing)
+        funded = True
+    elif core_run:
         require(wallet != 'success' and core_run != run_id and not history.contains(*WALLET_RECEIPTS),
                 'The original run already has wallet acceptance evidence')
         outputs.update(resolve_core(root, source, controller, original, core_run, metadata,
@@ -332,7 +382,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     if not same and not preclaim_run:
         verify_delta(root, source, original, controller, funded=funded,
                      preclaim_stage=outputs.get('preclaim_diagnostic'))
-    if approved_upgrade:
+    if approved_upgrade or funded_build_rerun:
         outputs['reuse_funded'] = 'true'
     elif funded and not core_run:
         outputs.update(funded_recovery_artifacts(root, source, history, metadata))
@@ -376,6 +426,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         require(not quote_run, 'The original run already has a passing quote receipt')
         outputs.update(quote_receipt_id=history.retained('hosted-quote-receipt', QUOTE_JOBS[0])[0],
                        quote_controller=original, quote_run=int(run_id))
+    if funded_build_rerun:
+        require('quote_receipt_id' in outputs, 'Build rerun requires the original passing quote receipt')
     if quote_run:
         outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata, original_run=run_id,
                                       retry_allowed=quote_result == 'failure', funded=funded,
