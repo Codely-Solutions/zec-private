@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationWorker
@@ -37,6 +38,57 @@ class MigrationRecoveryResetFenceTest {
     @Test
     fun oldSdkReadCannotRestartADeletedWalletDriver() = verifyResetDuringLookup(waitsForSdk = true)
 
+    @Test
+    fun resetInvalidatesWaitingAllAccountsAcrossAConflatedPulse() = verifyResetDuringHydration(allAccounts = null)
+
+    @Test
+    fun resetInvalidatesWaitingSelectionAcrossAConflatedPulse() = verifyResetDuringHydration(allAccounts = emptyList())
+
+    private fun verifyResetDuringHydration(allAccounts: List<WalletAccount>?) = runTest {
+        CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
+        val context = mockk<Context>(relaxed = true)
+        val reset = MutableStateFlow(false)
+        val accounts = MutableStateFlow(allAccounts)
+        val selection = MutableStateFlow<WalletAccount?>(null)
+        val provider = mockk<PersistableWalletProvider> {
+            coEvery { getPersistableWallet() } returns mockk()
+        }
+        val recovery = CheckMigrationRecoveryUseCase(
+            getOrchardMigrationSdk = mockk(),
+            persistableWalletProvider = provider,
+            navigationRouter = mockk(),
+            pendingMigrationTorFailureStorageProvider = mockk(),
+            accountDataSource = mockk {
+                every { this@mockk.allAccounts } returns accounts
+                every { selectedAccount } returns selection
+            },
+            context = context,
+            migrationLiveDriver = mockk(),
+            migrationNotifier = mockk(),
+            resetPending = reset,
+        )
+        mockkObject(WorkManager.Companion)
+        try {
+            every { WorkManager.getInstance(context) } returns workManagerWithAcknowledgedCancellation()
+            val oldRecovery = async { recovery() }
+            runCurrent()
+            assertFalse(oldRecovery.isCompleted)
+
+            reset.value = true
+            MigrationScheduler(context).cancelWalletWorkAndWait()
+            reset.value = false
+            runCurrent()
+
+            assertTrue(oldRecovery.isCompleted)
+            val nextRecovery = async { recovery() }
+            runCurrent()
+            assertFalse(nextRecovery.isCompleted)
+            nextRecovery.cancel()
+        } finally {
+            unmockkObject(WorkManager.Companion)
+        }
+    }
+
     private fun verifyResetDuringLookup(waitsForSdk: Boolean) = runTest {
         CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
         val sdkAccount = AccountFixture.new(accountUuid = UUID.fromString("00000000-0000-4000-8000-000000000151"))
@@ -49,11 +101,7 @@ class MigrationRecoveryResetFenceTest {
         val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
         val context = mockk<Context>(relaxed = true)
         val reset = MutableStateFlow(false)
-        val manager = mockk<WorkManager> {
-            every { cancelAllWorkByTag(MigrationWorker::class.java.name) } returns mockk<Operation> {
-                every { result } returns Futures.immediateFuture(Operation.SUCCESS)
-            }
-        }
+        val manager = workManagerWithAcknowledgedCancellation()
         val inProgress = MigrationState.InProgress(mockk(relaxed = true))
         val workerState = CompletableDeferred<MigrationWorkerRunState>()
         val sdkState = CompletableDeferred<MigrationState>()
@@ -97,6 +145,12 @@ class MigrationRecoveryResetFenceTest {
             verify(exactly = if (waitsForSdk) 0 else 1) { driver.startIfNotRunning(owner) }
         } finally {
             unmockkObject(WorkManager.Companion)
+        }
+    }
+
+    private fun workManagerWithAcknowledgedCancellation(): WorkManager = mockk {
+        every { cancelAllWorkByTag(MigrationWorker::class.java.name) } returns mockk<Operation> {
+            every { result } returns Futures.immediateFuture(Operation.SUCCESS)
         }
     }
 }

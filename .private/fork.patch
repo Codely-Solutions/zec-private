@@ -6059,7 +6059,7 @@ index fd3ae4479..32096c85c 100644
 +    override fun clearOwner(accountKeyId: String) {
 +        pending.update { entries -> entries.filterKeys { it.first != accountKeyId } }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
-index 9451c3bae..512f9e0d8 100644
+index 9451c3bae..dc4783f0f 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/CheckMigrationRecoveryUseCase.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -6074,27 +6074,28 @@ index 9451c3bae..512f9e0d8 100644
 @@ -17,0 +20,2 @@ import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 +import kotlinx.coroutines.CancellationException
-@@ -18,0 +23,8 @@ import kotlinx.coroutines.Dispatchers
+@@ -18,0 +23,9 @@ import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.combine
 +import kotlinx.coroutines.flow.filterNotNull
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flatMapLatest
 +import kotlinx.coroutines.flow.flowOf
-@@ -20 +31,0 @@ import kotlinx.coroutines.sync.Mutex
+@@ -20 +32,0 @@ import kotlinx.coroutines.sync.Mutex
 -import kotlinx.coroutines.sync.withLock
-@@ -28 +39 @@ import kotlin.time.TimeSource
+@@ -28 +40 @@ import kotlin.time.TimeSource
 - * execution on app-lifecycle events — MainActivity's onStart() and RootNavGraph's
 + * execution on app-lifecycle events — MainActivity's onResume() and RootNavGraph's
-@@ -61,0 +73 @@ class CheckMigrationRecoveryUseCase(
+@@ -61,0 +74 @@ class CheckMigrationRecoveryUseCase(
 +    private val migrationNotifier: MigrationNotifier,
-@@ -67,2 +79 @@ class CheckMigrationRecoveryUseCase(
+@@ -67,2 +80 @@ class CheckMigrationRecoveryUseCase(
 -     * Extracted for testability — production default enqueues an immediate WorkManager run
 -     * (`Duration.ZERO`), replacing whatever delay the worker last armed for itself.
 +     * Extracted for testability. Production confirms the new wake and preserves work already scheduled for this owner.
-@@ -70 +81,8 @@ class CheckMigrationRecoveryUseCase(
+@@ -70 +82,8 @@ class CheckMigrationRecoveryUseCase(
 -    private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
 +    private val scheduleNow: suspend (String, Long) -> Unit = { owner, version ->
 +        MigrationScheduler(context).scheduleIfMissing(owner, expectedVersion = version)
@@ -6104,7 +6105,7 @@ index 9451c3bae..512f9e0d8 100644
 +    private val reconcileScheduledWake: suspend (String, Long) -> Unit = { owner, version ->
 +        MigrationScheduler(context).reconcileScheduledWake(owner, version)
 +    },
-@@ -72,7 +90,8 @@ class CheckMigrationRecoveryUseCase(
+@@ -72,11 +91,12 @@ class CheckMigrationRecoveryUseCase(
 -    suspend operator fun invoke() {
 -        // Three independent triggers exist (MainActivity.onStart, RootNavGraph unlock, and any
 -        // future caller); without a throttle they cascade — each replaceAll builds a fresh Home
@@ -6112,6 +6113,10 @@ index 9451c3bae..512f9e0d8 100644
 -        // duplicate catch-up shifts) within 8 seconds. One pass per window is enough: routing is
 -        // idempotent for the user and isSyncBlocked() protects sync regardless.
 -        throttleMutex.withLock {
+-            val elapsed = lastRunMark?.elapsedNow()
+-            if (elapsed != null && elapsed < RUN_THROTTLE) {
+-                migrationLog("MigrationRecovery: throttled (ran ${elapsed.inWholeMilliseconds}ms ago)")
+-                return
 +    @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
 +    suspend operator fun invoke(
 +        requestProgress: (String) -> Unit = {
@@ -6120,13 +6125,11 @@ index 9451c3bae..512f9e0d8 100644
 +    ) {
 +        if (!recoveryMutex.tryLock()) return
 +        try {
-@@ -80,3 +99,2 @@ class CheckMigrationRecoveryUseCase(
--            if (elapsed != null && elapsed < RUN_THROTTLE) {
--                migrationLog("MigrationRecovery: throttled (ran ${elapsed.inWholeMilliseconds}ms ago)")
--                return
++            val generation = MigrationScheduler.walletWakeVersion()
++            val elapsed = lastRun?.takeIf { it.first == generation }?.second?.elapsedNow()
 +            if (!resetPending.value && (elapsed == null || elapsed >= RUN_THROTTLE)) {
-+                recoverPersistedWallet(requestProgress)
-@@ -84 +102,6 @@ class CheckMigrationRecoveryUseCase(
++                recoverPersistedWallet(generation, requestProgress)
+@@ -84 +104,6 @@ class CheckMigrationRecoveryUseCase(
 -            lastRunMark = TimeSource.Monotonic.markNow()
 +        } catch (e: CancellationException) {
 +            throw e
@@ -6134,7 +6137,7 @@ index 9451c3bae..512f9e0d8 100644
 +            migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
 +        } finally {
 +            recoveryMutex.unlock()
-@@ -86,13 +109,16 @@ class CheckMigrationRecoveryUseCase(
+@@ -86,13 +111,15 @@ class CheckMigrationRecoveryUseCase(
 -        // No wallet YET — on a cold start this fires before the synchronizer initializes, and
 -        // silently consuming the throttle window here left recovery permanently ineffective
 -        // (observed live: 1st call = SDK null + throttle stamped, 2nd call 3s later = throttled;
@@ -6150,24 +6153,23 @@ index 9451c3bae..512f9e0d8 100644
 -            return
 +    }
 +
-+    private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
-+        val generation = MigrationScheduler.walletWakeVersion()
++    private suspend fun recoverPersistedWallet(generation: Long, requestProgress: (String) -> Unit) {
 +        if (persistableWalletProvider.getPersistableWallet() == null) return
-+        val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
++        val accounts = awaitWithoutReset(accountDataSource.allAccounts, generation) ?: return
 +        val initialOwner = accounts.firstOrNull { it.isSelected }
 +        val reconciled = reviveAccountWorkers(accounts, generation)
 +        if (ownsRecovery(generation)) {
 +            if (accounts.isNotEmpty()) reconcileRemovalNotices(accounts, generation)
-+            val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount)
++            val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount, generation)
 +            val ownerKey = owner?.sdkAccount?.accountUuid?.toStorageKeyId()
 +            if (ownerKey != null && ownsRecovery(generation)) {
 +                recoverBroadcast(ownerKey, generation, requestProgress)
-+                if (reconciled && ownsRecovery(generation)) lastRunMark = TimeSource.Monotonic.markNow()
++                if (reconciled && ownsRecovery(generation)) lastRun = generation to TimeSource.Monotonic.markNow()
 +            }
-@@ -100 +126 @@ class CheckMigrationRecoveryUseCase(
+@@ -100 +127 @@ class CheckMigrationRecoveryUseCase(
 -        val sdk = getOrchardMigrationSdk()
 +    }
-@@ -102,46 +128,8 @@ class CheckMigrationRecoveryUseCase(
+@@ -102,46 +129,10 @@ class CheckMigrationRecoveryUseCase(
 -        // The whole engine-reading/routing body below is guarded (2026-08-07): a "database is
 -        // locked" throw here used to be unguarded and would crash the app-open/foreground-return
 -        // path — this use case drives navigation, not a screen with its own LCE error state to
@@ -6218,11 +6220,13 @@ index 9451c3bae..512f9e0d8 100644
 +        !resetPending.value && MigrationScheduler.walletWakeVersion() == generation
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)
-+    private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>): T? =
-+        resetPending.flatMapLatest { pending ->
-+            if (pending) flowOf(null) else values.filterNotNull()
++    private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>, generation: Long): T? =
++        combine(resetPending, MigrationScheduler.walletWakeVersions) { pending, current ->
++            !pending && current == generation
++        }.flatMapLatest { current ->
++            if (current) values.filterNotNull() else flowOf(null)
 +        }.first()
-@@ -149,8 +137,10 @@ class CheckMigrationRecoveryUseCase(
+@@ -149,8 +140,10 @@ class CheckMigrationRecoveryUseCase(
 -                        MigrationWorkerRunState.ABSENT -> {
 -                            // Revival: recovers the DURABLE background chain after process kill, device
 -                            // reboot, or an app upgrade that cleared WorkManager state — the live driver
@@ -6241,11 +6245,11 @@ index 9451c3bae..512f9e0d8 100644
 +                            migrationNotifier.cancel(key)
 +                            migrationNotifier.cancelStepDue(key)
 +                            cancelRemovedWake(key)
-@@ -157,0 +148 @@ class CheckMigrationRecoveryUseCase(
+@@ -157,0 +151 @@ class CheckMigrationRecoveryUseCase(
 +                        MigrationWorkerHeartbeat.clearRemovalPending(context, key)
-@@ -160,0 +152 @@ class CheckMigrationRecoveryUseCase(
+@@ -160,0 +155 @@ class CheckMigrationRecoveryUseCase(
 +        }
-@@ -162,35 +154,14 @@ class CheckMigrationRecoveryUseCase(
+@@ -162,35 +157,14 @@ class CheckMigrationRecoveryUseCase(
 -            if (pendingMigrationTorFailureStorageProvider.get()) {
 -                // The flag only records THAT a background attempt once failed on Tor, not what the
 -                // engine's next due transfer needs NOW — the plan moves on (proving, dependency
@@ -6295,7 +6299,7 @@ index 9451c3bae..512f9e0d8 100644
 +                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && ownsRecovery(generation)) {
 +                    migrationLiveDriver.startIfNotRunning(accountKey)
 +                    reviveScheduledWorker(accountKey, wakeVersion)
-@@ -197,0 +169,55 @@ class CheckMigrationRecoveryUseCase(
+@@ -197,0 +172,55 @@ class CheckMigrationRecoveryUseCase(
 +            } catch (e: CancellationException) {
 +                throw e
 +            } catch (e: Exception) {
@@ -6351,7 +6355,7 @@ index 9451c3bae..512f9e0d8 100644
 +                        "(next transfer action=${nextTransfer?.action}) — clearing."
 +                )
 +                if (ownsRecovery(generation)) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
-@@ -199,10 +224,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -199,10 +227,0 @@ class CheckMigrationRecoveryUseCase(
 -            // No stale write-ahead plan clearing anymore: nothing plan-shaped is persisted app-side —
 -            // the engine's own state is the single, authoritative record (a commit that never happened
 -            // simply leaves the engine NotStarted, and every screen renders that live).
@@ -6362,10 +6366,16 @@ index 9451c3bae..512f9e0d8 100644
 -                e
 -            )
 -            throttleMutex.withLock { lastRunMark = null }
-@@ -215 +231 @@ class CheckMigrationRecoveryUseCase(
+@@ -215 +234 @@ class CheckMigrationRecoveryUseCase(
 -        private val throttleMutex = Mutex()
 +        private val recoveryMutex = Mutex()
-@@ -227,15 +242,0 @@ class CheckMigrationRecoveryUseCase(
+@@ -218 +237 @@ class CheckMigrationRecoveryUseCase(
+-        private var lastRunMark: TimeSource.Monotonic.ValueTimeMark? = null
++        private var lastRun: Pair<Long, TimeSource.Monotonic.ValueTimeMark>? = null
+@@ -222 +241 @@ class CheckMigrationRecoveryUseCase(
+-            lastRunMark = null
++            lastRun = null
+@@ -227,15 +245,0 @@ class CheckMigrationRecoveryUseCase(
 -/**
 - * Production implementation of the migration-worker active check — reads WorkManager unique work
 - * state (per-account unique work name). Extracted so [CheckMigrationRecoveryUseCase] tests can
@@ -6381,7 +6391,7 @@ index 9451c3bae..512f9e0d8 100644
 -            ).get()
 -    }.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
 -
-@@ -247,3 +248 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
+@@ -247,3 +251 @@ internal suspend fun isMigrationWorkerActiveInWorkManager(context: Context, acco
 - * [isMigrationWorkerActiveInWorkManager] collapses the first two together, which is all
 - * [OnMigrationSyncCompletedUseCase] needs; this finer state is what
 - * [CheckMigrationRecoveryUseCase]'s app-open trigger needs.
@@ -11484,7 +11494,7 @@ index 41f7bb347..844ad09d1 100644
 -                    e
 +                    "MigrationLiveDriver: step failed (${e.javaClass.simpleName}). Retrying."
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
-index 1886de6a8..e7740ca1b 100644
+index 1886de6a8..139bac236 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationScheduler.kt
 @@ -8,0 +9,2 @@ import androidx.work.OneTimeWorkRequestBuilder
@@ -11492,20 +11502,22 @@ index 1886de6a8..e7740ca1b 100644
 +import androidx.work.WorkInfo
 @@ -9,0 +12 @@ import androidx.work.WorkManager
 +import androidx.work.WorkRequest
-@@ -12,0 +16,7 @@ import co.electriccoin.zcash.migration.migrationLog
+@@ -12,0 +16,9 @@ import co.electriccoin.zcash.migration.migrationLog
 +import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 +import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 +import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.guava.await
 +import org.koin.core.context.GlobalContext
 +import java.util.UUID
-@@ -13,0 +24 @@ import kotlin.time.Duration
+@@ -13,0 +26 @@ import kotlin.time.Duration
 +import kotlin.time.Duration.Companion.milliseconds
-@@ -31 +42 @@ class MigrationScheduler(
+@@ -31 +44 @@ class MigrationScheduler(
 -    private val context: Context
 +    private val context: Context,
-@@ -38,17 +49,108 @@ class MigrationScheduler(
+@@ -38,17 +51,108 @@ class MigrationScheduler(
 -    fun schedule(accountKeyId: String, delay: Duration) {
 -        migrationLog("MigrationScheduler: scheduling next migration transfer for $accountKeyId in $delay")
 -        WorkManager.getInstance(context).enqueueUniqueWork(
@@ -11631,7 +11643,7 @@ index 1886de6a8..e7740ca1b 100644
 +        } catch (e: Exception) {
 +            migrationLog("MigrationScheduler: fallback alarm unavailable (${e.javaClass.simpleName}).")
 +        }
-@@ -58,2 +160,22 @@ class MigrationScheduler(
+@@ -58,2 +162,22 @@ class MigrationScheduler(
 -        migrationLog("MigrationScheduler: cancelling the migration work chain for $accountKeyId")
 -        WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
 +        cancelWork(accountKeyId)
@@ -11643,9 +11655,9 @@ index 1886de6a8..e7740ca1b 100644
 +
 +    suspend fun cancelWalletWorkAndWait() {
 +        val cancellation = synchronized(wakeVersions) {
-+            walletWakeVersion = ++wakeClock
 +            wakeVersions.clear()
 +            completedPlans.clear()
++            walletWakeVersion.value = ++wakeClock
 +            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
 +        }
 +        cancellation.result.await()
@@ -11656,22 +11668,25 @@ index 1886de6a8..e7740ca1b 100644
 +        completedPlans.remove(accountKeyId)
 +        migrationLog("MigrationScheduler: cancelling a migration work chain.")
 +        val operation = WorkManager.getInstance(context).cancelUniqueWork(workId(accountKeyId))
-@@ -61,0 +184 @@ class MigrationScheduler(
+@@ -61,0 +186 @@ class MigrationScheduler(
 +        operation
-@@ -64,0 +188,61 @@ class MigrationScheduler(
+@@ -64,0 +190,64 @@ class MigrationScheduler(
 +        // A resumed WorkManager read cannot arm an alarm for a chain already replaced or cancelled.
 +        private val wakeVersions = mutableMapOf<String, Long>()
 +        private val completedPlans = mutableSetOf<String>()
 +        private var wakeClock = 0L
-+        private var walletWakeVersion = 0L
++        private val walletWakeVersion = MutableStateFlow(0L)
++        internal val walletWakeVersions = walletWakeVersion.asStateFlow()
 +
-+        internal fun walletWakeVersion(): Long = synchronized(wakeVersions) { walletWakeVersion }
++        internal fun walletWakeVersion(): Long = walletWakeVersion.value
 +
 +        internal fun wakeVersion(accountKeyId: String): Long =
-+            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: walletWakeVersion }
++            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: walletWakeVersion.value }
 +
 +        internal fun wakeVersion(accountKeyId: String, generation: Long): Long? =
-+            synchronized(wakeVersions) { if (walletWakeVersion == generation) wakeVersion(accountKeyId) else null }
++            synchronized(wakeVersions) {
++                if (walletWakeVersion.value == generation) wakeVersion(accountKeyId) else null
++            }
 +
 +        internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
 +            synchronized(wakeVersions) {
@@ -11720,10 +11735,10 @@ index 1886de6a8..e7740ca1b 100644
 +        private fun advanceWakeVersion(accountKeyId: String): Long =
 +            (++wakeClock).also { wakeVersions[accountKeyId] = it }
 +
-@@ -70,0 +255,2 @@ class MigrationScheduler(
+@@ -70,0 +260,2 @@ class MigrationScheduler(
 +        private const val RETRY_BACKOFF_SHIFT_LIMIT = 20
 +
-@@ -93,0 +280,4 @@ class MigrationScheduler(
+@@ -93,0 +285,4 @@ class MigrationScheduler(
 +
 +private fun migrationResetPending(context: Context): Boolean =
 +    GlobalContext.getOrNull()?.getOrNull<ResetProgressStore>()?.isPending?.value == true ||
@@ -13720,10 +13735,10 @@ index 72c0afaaa..37149e174 100644
 +            pendingSchedule = PendingMigrationScheduleRepositoryImpl(),
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationRecoveryResetFenceTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationRecoveryResetFenceTest.kt
 new file mode 100644
-index 000000000..04339aaf4
+index 000000000..64d69de2a
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/common/usecase/MigrationRecoveryResetFenceTest.kt
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,156 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.Context
@@ -13734,6 +13749,7 @@ index 000000000..04339aaf4
 +import cash.z.ecc.android.sdk.fixture.AccountFixture
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.toStorageKeyId
++import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 +import co.electriccoin.zcash.work.MigrationLiveDriver
 +import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.work.MigrationWorker
@@ -13763,6 +13779,57 @@ index 000000000..04339aaf4
 +    @Test
 +    fun oldSdkReadCannotRestartADeletedWalletDriver() = verifyResetDuringLookup(waitsForSdk = true)
 +
++    @Test
++    fun resetInvalidatesWaitingAllAccountsAcrossAConflatedPulse() = verifyResetDuringHydration(allAccounts = null)
++
++    @Test
++    fun resetInvalidatesWaitingSelectionAcrossAConflatedPulse() = verifyResetDuringHydration(allAccounts = emptyList())
++
++    private fun verifyResetDuringHydration(allAccounts: List<WalletAccount>?) = runTest {
++        CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
++        val context = mockk<Context>(relaxed = true)
++        val reset = MutableStateFlow(false)
++        val accounts = MutableStateFlow(allAccounts)
++        val selection = MutableStateFlow<WalletAccount?>(null)
++        val provider = mockk<PersistableWalletProvider> {
++            coEvery { getPersistableWallet() } returns mockk()
++        }
++        val recovery = CheckMigrationRecoveryUseCase(
++            getOrchardMigrationSdk = mockk(),
++            persistableWalletProvider = provider,
++            navigationRouter = mockk(),
++            pendingMigrationTorFailureStorageProvider = mockk(),
++            accountDataSource = mockk {
++                every { this@mockk.allAccounts } returns accounts
++                every { selectedAccount } returns selection
++            },
++            context = context,
++            migrationLiveDriver = mockk(),
++            migrationNotifier = mockk(),
++            resetPending = reset,
++        )
++        mockkObject(WorkManager.Companion)
++        try {
++            every { WorkManager.getInstance(context) } returns workManagerWithAcknowledgedCancellation()
++            val oldRecovery = async { recovery() }
++            runCurrent()
++            assertFalse(oldRecovery.isCompleted)
++
++            reset.value = true
++            MigrationScheduler(context).cancelWalletWorkAndWait()
++            reset.value = false
++            runCurrent()
++
++            assertTrue(oldRecovery.isCompleted)
++            val nextRecovery = async { recovery() }
++            runCurrent()
++            assertFalse(nextRecovery.isCompleted)
++            nextRecovery.cancel()
++        } finally {
++            unmockkObject(WorkManager.Companion)
++        }
++    }
++
 +    private fun verifyResetDuringLookup(waitsForSdk: Boolean) = runTest {
 +        CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
 +        val sdkAccount = AccountFixture.new(accountUuid = UUID.fromString("00000000-0000-4000-8000-000000000151"))
@@ -13775,11 +13842,7 @@ index 000000000..04339aaf4
 +        val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
 +        val context = mockk<Context>(relaxed = true)
 +        val reset = MutableStateFlow(false)
-+        val manager = mockk<WorkManager> {
-+            every { cancelAllWorkByTag(MigrationWorker::class.java.name) } returns mockk<Operation> {
-+                every { result } returns Futures.immediateFuture(Operation.SUCCESS)
-+            }
-+        }
++        val manager = workManagerWithAcknowledgedCancellation()
 +        val inProgress = MigrationState.InProgress(mockk(relaxed = true))
 +        val workerState = CompletableDeferred<MigrationWorkerRunState>()
 +        val sdkState = CompletableDeferred<MigrationState>()
@@ -13823,6 +13886,12 @@ index 000000000..04339aaf4
 +            verify(exactly = if (waitsForSdk) 0 else 1) { driver.startIfNotRunning(owner) }
 +        } finally {
 +            unmockkObject(WorkManager.Companion)
++        }
++    }
++
++    private fun workManagerWithAcknowledgedCancellation(): WorkManager = mockk {
++        every { cancelAllWorkByTag(MigrationWorker::class.java.name) } returns mockk<Operation> {
++            every { result } returns Futures.immediateFuture(Operation.SUCCESS)
 +        }
 +    }
 +}

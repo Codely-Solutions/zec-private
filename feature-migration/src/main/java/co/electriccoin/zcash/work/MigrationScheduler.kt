@@ -17,6 +17,8 @@ import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.guava.await
 import org.koin.core.context.GlobalContext
 import java.util.UUID
@@ -166,9 +168,9 @@ class MigrationScheduler(
 
     suspend fun cancelWalletWorkAndWait() {
         val cancellation = synchronized(wakeVersions) {
-            walletWakeVersion = ++wakeClock
             wakeVersions.clear()
             completedPlans.clear()
+            walletWakeVersion.value = ++wakeClock
             WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
         }
         cancellation.result.await()
@@ -189,15 +191,18 @@ class MigrationScheduler(
         private val wakeVersions = mutableMapOf<String, Long>()
         private val completedPlans = mutableSetOf<String>()
         private var wakeClock = 0L
-        private var walletWakeVersion = 0L
+        private val walletWakeVersion = MutableStateFlow(0L)
+        internal val walletWakeVersions = walletWakeVersion.asStateFlow()
 
-        internal fun walletWakeVersion(): Long = synchronized(wakeVersions) { walletWakeVersion }
+        internal fun walletWakeVersion(): Long = walletWakeVersion.value
 
         internal fun wakeVersion(accountKeyId: String): Long =
-            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: walletWakeVersion }
+            synchronized(wakeVersions) { wakeVersions[accountKeyId] ?: walletWakeVersion.value }
 
         internal fun wakeVersion(accountKeyId: String, generation: Long): Long? =
-            synchronized(wakeVersions) { if (walletWakeVersion == generation) wakeVersion(accountKeyId) else null }
+            synchronized(wakeVersions) {
+                if (walletWakeVersion.value == generation) wakeVersion(accountKeyId) else null
+            }
 
         internal fun recordWorkerStart(context: Context, accountKeyId: String, requestId: UUID, attempt: Int): Long? =
             synchronized(wakeVersions) {

@@ -24,6 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -95,9 +96,10 @@ class CheckMigrationRecoveryUseCase(
     ) {
         if (!recoveryMutex.tryLock()) return
         try {
-            val elapsed = lastRunMark?.elapsedNow()
+            val generation = MigrationScheduler.walletWakeVersion()
+            val elapsed = lastRun?.takeIf { it.first == generation }?.second?.elapsedNow()
             if (!resetPending.value && (elapsed == null || elapsed >= RUN_THROTTLE)) {
-                recoverPersistedWallet(requestProgress)
+                recoverPersistedWallet(generation, requestProgress)
             }
         } catch (e: CancellationException) {
             throw e
@@ -108,19 +110,18 @@ class CheckMigrationRecoveryUseCase(
         }
     }
 
-    private suspend fun recoverPersistedWallet(requestProgress: (String) -> Unit) {
-        val generation = MigrationScheduler.walletWakeVersion()
+    private suspend fun recoverPersistedWallet(generation: Long, requestProgress: (String) -> Unit) {
         if (persistableWalletProvider.getPersistableWallet() == null) return
-        val accounts = awaitWithoutReset(accountDataSource.allAccounts) ?: return
+        val accounts = awaitWithoutReset(accountDataSource.allAccounts, generation) ?: return
         val initialOwner = accounts.firstOrNull { it.isSelected }
         val reconciled = reviveAccountWorkers(accounts, generation)
         if (ownsRecovery(generation)) {
             if (accounts.isNotEmpty()) reconcileRemovalNotices(accounts, generation)
-            val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount)
+            val owner = initialOwner ?: awaitWithoutReset(accountDataSource.selectedAccount, generation)
             val ownerKey = owner?.sdkAccount?.accountUuid?.toStorageKeyId()
             if (ownerKey != null && ownsRecovery(generation)) {
                 recoverBroadcast(ownerKey, generation, requestProgress)
-                if (reconciled && ownsRecovery(generation)) lastRunMark = TimeSource.Monotonic.markNow()
+                if (reconciled && ownsRecovery(generation)) lastRun = generation to TimeSource.Monotonic.markNow()
             }
         }
     }
@@ -129,9 +130,11 @@ class CheckMigrationRecoveryUseCase(
         !resetPending.value && MigrationScheduler.walletWakeVersion() == generation
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>): T? =
-        resetPending.flatMapLatest { pending ->
-            if (pending) flowOf(null) else values.filterNotNull()
+    private suspend fun <T : Any> awaitWithoutReset(values: Flow<T?>, generation: Long): T? =
+        combine(resetPending, MigrationScheduler.walletWakeVersions) { pending, current ->
+            !pending && current == generation
+        }.flatMapLatest { current ->
+            if (current) values.filterNotNull() else flowOf(null)
         }.first()
 
     private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>, generation: Long) =
@@ -231,11 +234,11 @@ class CheckMigrationRecoveryUseCase(
         private val recoveryMutex = Mutex()
 
         @Volatile
-        private var lastRunMark: TimeSource.Monotonic.ValueTimeMark? = null
+        private var lastRun: Pair<Long, TimeSource.Monotonic.ValueTimeMark>? = null
 
         /** Tests run in one JVM — reset the shared throttle between them. */
         internal fun resetRunThrottleForTests() {
-            lastRunMark = null
+            lastRun = null
         }
     }
 }
