@@ -24,6 +24,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ResetWalletSdkDataUseCaseTest {
@@ -89,13 +90,55 @@ class ResetWalletSdkDataUseCaseTest {
     }
 
     @Test
-    fun survivingClassicSidecarBlocksCompletionAndRetryCanRecheck() = runBlocking {
+    fun resetDeletesKnownOrphanSidecarsAfterBothSdkErasers() = runBlocking {
+        val context = fileContext()
+        coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
+        coEvery { Synchronizer.erase(context, network) } returns false
+        val oldRoot = directory.newFolder("co.electricoin.zcash")
+        val orphaned = listOf(
+            File(directory.root, "ZcashSdk_${network.networkName}_Data.db-wal"),
+            File(directory.root, "ZcashSdk_${network.networkName}_Cache.db-journal"),
+            File(oldRoot, "zcash_sdk_${network.networkName}_cache.sqlite3-shm"),
+        )
+        orphaned.forEach { it.writeText("synthetic residue") }
+        val unrelated = File(directory.root, "another-account.db-wal").apply { writeText("synthetic sentinel") }
+
+        useCase(context)()
+
+        orphaned.forEach { assertFalse(it.exists()) }
+        assertTrue(unrelated.isFile)
+        coVerify(exactly = 1) { Synchronizer.erase(context, network) }
+    }
+
+    @Test
+    fun oldBaseDatabaseUsesTheSdkAgainAfterItErasesThePreferredDatabase() = runBlocking {
+        val context = fileContext()
+        coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
+        val preferred = File(
+            directory.newFolder("co.electricoin.zcash"),
+            "zcash_sdk_${network.networkName}_data.sqlite3"
+        ).apply { writeText("current synthetic database") }
+        val legacy = File(directory.root, "ZcashSdk_${network.networkName}_Data.db")
+            .apply { writeText("old synthetic database") }
+        coEvery { Synchronizer.erase(context, network) } coAnswers {
+            if (preferred.exists()) preferred.delete() else legacy.delete()
+        }
+
+        useCase(context)()
+
+        assertFalse(preferred.exists())
+        assertFalse(legacy.exists())
+        coVerify(exactly = 2) { Synchronizer.erase(context, network) }
+    }
+
+    @Test
+    fun unexpectedClassicSidecarDirectoryBlocksCompletionAndRetryCanRecheck() = runBlocking {
         val context = fileContext()
         coEvery { SlipstreamSynchronizer.erase(context, network) } returns true
         coEvery { Synchronizer.erase(context, network) } returns true
         val reset = useCase(context)
         val sidecar = File(directory.root, "ZcashSdk_${network.networkName}_Data.db-wal")
-        sidecar.writeText("synthetic residue")
+        assertTrue(sidecar.mkdir())
 
         assertFailsWith<IllegalStateException> { reset() }
         assertTrue(sidecar.delete())
