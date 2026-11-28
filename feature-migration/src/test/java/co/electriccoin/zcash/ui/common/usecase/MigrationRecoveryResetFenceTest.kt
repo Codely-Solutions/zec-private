@@ -6,6 +6,7 @@ import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.fixture.AccountFixture
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -14,6 +15,7 @@ import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationWorker
 import com.google.common.util.concurrent.Futures
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -28,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,6 +46,20 @@ class MigrationRecoveryResetFenceTest {
 
     @Test
     fun resetInvalidatesWaitingSelectionAcrossAConflatedPulse() = verifyResetDuringHydration(allAccounts = emptyList())
+
+    @Test
+    fun foregroundResolverDoesNotWaitForAccountHydrationAgain() = runTest {
+        val accounts = mockk<AccountDataSource> {
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(null)
+        }
+        val wallet = mockk<PersistableWalletProvider>()
+        val resolver = GetOrchardMigrationSdkUseCase(mockk(), wallet, mockk(), accounts, mockk())
+
+        assertNull(resolver.fromHydratedAccounts("00000000000040008000000000000151"))
+
+        coVerify(exactly = 0) { accounts.getAllAccounts() }
+        coVerify(exactly = 0) { wallet.requirePersistableWallet() }
+    }
 
     private fun verifyResetDuringHydration(allAccounts: List<WalletAccount>?) = runTest {
         CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
@@ -111,7 +128,7 @@ class MigrationRecoveryResetFenceTest {
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         val oldWakes = mutableListOf<String>()
         val recovery = CheckMigrationRecoveryUseCase(
-            getOrchardMigrationSdk = mockk { coEvery { this@mockk(owner) } returns sdk },
+            getOrchardMigrationSdk = mockk { coEvery { fromHydratedAccounts(owner) } returns sdk },
             persistableWalletProvider = mockk { coEvery { getPersistableWallet() } returns mockk() },
             navigationRouter = mockk(),
             pendingMigrationTorFailureStorageProvider = mockk(),

@@ -109,11 +109,7 @@ class MigrationBackgroundRecoveryScenarioTest {
     ) = CheckMigrationRecoveryUseCase(
         getOrchardMigrationSdk =
             mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk() } returns driver.sdk
-                // Explicit-account overload — used by the driver-start/worker-revival loop, which
-                // now enumerates accountDataSource.allAccounts instead of only the selected
-                // account.
-                coEvery { this@mockk(any()) } returns driver.sdk
+                coEvery { fromHydratedAccounts(any()) } returns driver.sdk
             },
         persistableWalletProvider =
             mockk<PersistableWalletProvider>(relaxed = true) {

@@ -164,8 +164,12 @@ class CheckMigrationRecoveryUseCase(
                 val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
                 val wakeVersion = MigrationScheduler.wakeVersion(accountKey, generation)
                     ?.takeUnless { resetPending.value } ?: return false
-                val sdk = getOrchardMigrationSdk(accountKey)
-                if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && ownsRecovery(generation)) {
+                val sdk = getOrchardMigrationSdk.fromHydratedAccounts(accountKey)
+                if (sdk == null) {
+                    reconciled = false
+                    continue
+                }
+                if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress && ownsRecovery(generation)) {
                     migrationLiveDriver.startIfNotRunning(accountKey)
                     reviveScheduledWorker(accountKey, wakeVersion)
                 }
@@ -195,7 +199,7 @@ class CheckMigrationRecoveryUseCase(
         requestProgress: (String) -> Unit,
     ) {
         if (ownsRecovery(generation) && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
-            val sdk = getOrchardMigrationSdk(ownerKey) ?: return
+            val sdk = getOrchardMigrationSdk.fromHydratedAccounts(ownerKey) ?: return
             // The flag only records THAT a background attempt once failed on Tor, not what the
             // engine's next due transfer needs NOW — the plan moves on (proving, dependency
             // mining, rescheduling) between when it was set and the next app open, and the flag

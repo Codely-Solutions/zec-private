@@ -95,9 +95,19 @@ class GetOrchardMigrationSdkUseCase(
      * self-rechaining workers; this one-shot form suits callers that already know the account
      * must exist right now and simply degrade on absence.
      */
-    suspend operator fun invoke(accountKeyId: String): OrchardMigrationSdk? {
+    suspend operator fun invoke(accountKeyId: String): OrchardMigrationSdk? =
+        resolveAccount(accountKeyId) { accountDataSource.getAllAccounts() }
+
+    /** Foreground recovery has already waited for hydration and must release its mutex on withdrawal. */
+    internal suspend fun fromHydratedAccounts(accountKeyId: String): OrchardMigrationSdk? =
+        resolveAccount(accountKeyId) { accountDataSource.allAccounts.value.orEmpty() }
+
+    private suspend fun resolveAccount(
+        accountKeyId: String,
+        accounts: suspend () -> List<WalletAccount>,
+    ): OrchardMigrationSdk? {
         if (MigrationAccountRetirement.blocks(accountKeyId)) return null
-        val account = accountDataSource.getAllAccounts().findByAccountKeyId(accountKeyId)
+        val account = accounts().findByAccountKeyId(accountKeyId)
         return if (account == null) {
             migrationLog("GetOrchardMigrationSdk: no account for the requested migration")
             null

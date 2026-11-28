@@ -101,10 +101,8 @@ class CheckMigrationRecoveryUseCaseTest {
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk<GetOrchardMigrationSdkUseCase> {
                 if (sdk != null) {
-                    // Explicit-account overload — used by the driver-start/worker-revival loop,
-                    // which now enumerates accountDataSource.getAllAccounts() instead of only the
-                    // selected account.
-                    coEvery { this@mockk(any()) } returns sdk
+                    // The worker-revival loop resolves each spendable account in the hydrated snapshot.
+                    coEvery { fromHydratedAccounts(any()) } returns sdk
                 }
             },
     ) = CheckMigrationRecoveryUseCase(
@@ -283,7 +281,7 @@ class CheckMigrationRecoveryUseCaseTest {
         work.await()
         selection.value = testWalletAccount
 
-        coVerify(exactly = 0) { acquire(any()) }
+        coVerify(exactly = 0) { acquire.fromHydratedAccounts(any()) }
     }
 
     @Test
@@ -293,7 +291,7 @@ class CheckMigrationRecoveryUseCaseTest {
         }
         var opens = 0
         val acquire = mockk<GetOrchardMigrationSdkUseCase> {
-            coEvery { this@mockk(ownerKey) } coAnswers {
+            coEvery { fromHydratedAccounts(ownerKey) } coAnswers {
                 if (++opens == 1) error("fixture wallet disappeared before SDK open")
                 sdk
             }
@@ -327,11 +325,11 @@ class CheckMigrationRecoveryUseCaseTest {
         for (openFailure in listOf(false, true)) {
             CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
             val resolver = mockk<GetOrchardMigrationSdkUseCase> {
-                coEvery { this@mockk(ownerKey) } coAnswers {
+                coEvery { fromHydratedAccounts(ownerKey) } coAnswers {
                     if (openFailure) error("Preference temporarily unavailable")
                     null
                 }
-                coEvery { this@mockk(otherKey) } returns sdk
+                coEvery { fromHydratedAccounts(otherKey) } returns sdk
             }
             val router = mockk<NavigationRouter>(relaxed = true)
             val scheduled = mutableListOf<String>()
@@ -696,7 +694,7 @@ class CheckMigrationRecoveryUseCaseTest {
                 }
             val getOrchardMigrationSdk =
                 mockk<GetOrchardMigrationSdkUseCase> {
-                    coEvery { this@mockk(any()) } returns sdk
+                    coEvery { fromHydratedAccounts(any()) } returns sdk
                 }
             val startedAccountKeyIds = mutableListOf<String>()
             val scheduledAccountKeyIds = mutableListOf<String>()
@@ -717,7 +715,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             val spendableKeyId = testSdkAccount.accountUuid.toStorageKeyId()
             val viewOnlyKeyId = viewOnlySdkAccount.accountUuid.toStorageKeyId()
-            coVerify(exactly = 0) { getOrchardMigrationSdk(viewOnlyKeyId) }
+            coVerify(exactly = 0) { getOrchardMigrationSdk.fromHydratedAccounts(viewOnlyKeyId) }
             kotlin.test.assertEquals(listOf(spendableKeyId), startedAccountKeyIds)
             kotlin.test.assertEquals(listOf(spendableKeyId), scheduledAccountKeyIds)
         }
